@@ -11,6 +11,10 @@ firebase deploy
 
 KOYEB DEPLOY: 
 JWT_SECRET: 21LuglioFra@ 
+DATABASE_URL: postgresql://postgres.flfhrwzlrftuhkrfwzse:21LuglioFra@aws-1-eu-central-1.pooler.supabase.com:6543/postgres
+PORT: 8000
+CORS_ORIGIN: https://pizzamanager.it
+
 
 0683a615-d08a-488d-b9df-3a486b35a461  superadmin
 9bad7fd3-d2c2-409b-9402-adedbb4f196f admin (associato al punto vendita 1) 

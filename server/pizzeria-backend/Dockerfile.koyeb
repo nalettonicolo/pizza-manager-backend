@@ -11,8 +11,8 @@ RUN npx prisma generate
 COPY . .
 RUN npm run build
 
-# Verifica che il build abbia prodotto dist/main.js (fallisce il build altrimenti)
-RUN test -f /app/dist/main.js || (echo "ERRORE: dist/main.js non trovato dopo npm run build" && exit 1)
+# Nest con tsconfig senza rootDir produce dist/src/main.js, non dist/main.js
+RUN test -f /app/dist/src/main.js || (echo "ERRORE: dist/src/main.js non trovato dopo npm run build" && exit 1)
 
 # Run stage: solo dist + dipendenze necessarie
 FROM node:20-alpine
@@ -26,10 +26,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
-# Verifica che dist sia stato copiato (fallisce il build altrimenti)
-RUN test -f /app/dist/main.js || (echo "ERRORE: dist/main.js mancante nell'immagine finale" && exit 1)
+RUN test -f /app/dist/src/main.js || (echo "ERRORE: dist/src/main.js mancante nell'immagine finale" && exit 1)
 
 EXPOSE 8000
 
-# Come package.json "start:prod": node dist/main (Node risolve .js)
-CMD ["node", "dist/main.js"]
+# Entry point: Nest compila in dist/src/main.js
+CMD ["node", "dist/src/main.js"]

@@ -98,13 +98,15 @@ Dopo la pulizia (e dopo aver fatto push del codice su GitHub, se hai usato l’a
 1. **Koyeb** → **Create App** (o **New App**).
 2. **GitHub** → autorizza se richiesto → scegli il repository (es. `pizza-manager-backend`) e branch **main**.
 3. **Builder**: **Dockerfile**.
-4. **Build directory**: **`server/pizzeria-backend`**.
-5. **Dockerfile path**: **`Dockerfile.koyeb`** (solo così).
-6. **Port**: **8000**.
-7. **Environment variables**:  
-   `PORT` = **8000**  
-   `DATABASE_URL` = (connection string Supabase)  
-   `JWT_SECRET` = (stringa segreta)  
+4. Nella sezione **Customize Dockerfile settings**:
+   - **Work directory**: attiva **Override** e inserisci **`server/pizzeria-backend`** (cartella del repo da cui parte il build).
+   - **Dockerfile location**: attiva **Override** e inserisci **`Dockerfile.koyeb`** (solo il nome del file, perché il contesto è già la Work directory).
+   - **Entrypoint**, **Command**, **Target**: lascia **Override disattivato** (usa i valori del Dockerfile).
+5. **Port**: **8000** (nella configurazione del servizio, se richiesto).
+6. **Environment variables**:
+   `PORT` = **8000**
+   `DATABASE_URL` = (connection string Postgres Supabase)
+   `JWT_SECRET` = (stringa segreta lunga)
    `CORS_ORIGIN` = **https://pizzamanager.it**
 8. **Deploy** → attendi il build (nessuna cache) e che lo stato diventi **Running**.
 9. Copia l’URL del servizio (es. `https://xxx.koyeb.app`) e usalo in **VITE_API_URL** per il frontend.
@@ -121,11 +123,11 @@ Repo con tutto il progetto, branch **main**. In `server/pizzeria-backend` devono
 
 1. [koyeb.com](https://www.koyeb.com) → **Continue with GitHub** → autorizza.
 2. **Create App** → sorgente **GitHub** → scegli repo e branch **main** → Next.
-3. **Build**:
-   - **Builder**: **Dockerfile**
-   - **Build directory**: **`server/pizzeria-backend`**
-   - **Dockerfile path**: **`Dockerfile.koyeb`** (solo così, senza `server/...` davanti)
-   - **Port**: **8000**
+3. **Build** → **Customize Dockerfile settings** (nomi esatti nell’interfaccia Koyeb):
+   - **Work directory**: attiva **Override** → inserisci **`server/pizzeria-backend`**
+   - **Dockerfile location**: attiva **Override** → inserisci **`Dockerfile.koyeb`**
+   - **Entrypoint**, **Command**, **Target**: lascia Override **disattivato**
+   - **Port** (nella config del servizio): **8000**
 4. **Environment variables** → aggiungi:
 
    | Nome            | Valore |
@@ -136,6 +138,114 @@ Repo con tutto il progetto, branch **main**. In `server/pizzeria-backend` devono
    | `CORS_ORIGIN`   | `https://pizzamanager.it` (il tuo sito frontend) |
 
 5. **Deploy** → attendi “Running” → copia l’URL (es. `https://xxx.koyeb.app`).
+
+---
+
+## Guida dettagliata: compilare la pagina di deploy Koyeb
+
+Segui i passi nell’ordine in cui compaiono nella schermata (dall’alto verso il basso). Ogni blocco può avere un’icona **Ctrl + numero** per aprirlo.
+
+---
+
+### 1. Service type
+
+- **Valore da selezionare:** **Web service** (icona globo).
+- Significa che l’app espone un servizio HTTP e Koyeb assegnerà un URL pubblico.
+
+---
+
+### 2. Source
+
+- Clicca sul blocco **Source** per modificarlo.
+- **GitHub**: connetti/autorizza il tuo account se richiesto.
+- **Repository:** seleziona **`nalettonicolo/pizza-manager-backend`** (o il nome del tuo repo).
+- **Branch:** **`main`**.
+- Conferma. In questo modo Koyeb userà il codice da quel repo e branch.
+
+---
+
+### 3. Builder
+
+- **Valore:** **Dockerfile** (icona Docker).
+- Poi apri **Customize Dockerfile settings** (o la sezione Build/Advanced):
+  - **Work directory**: attiva **Override** (toggle ON) e nel campo scrivi **`server/pizzeria-backend`**.
+  - **Dockerfile location**: attiva **Override** e scrivi **`Dockerfile.koyeb`**.
+  - **Entrypoint**, **Command**, **Target**: lascia **Override disattivato** e i campi vuoti.
+- Salva/Applica se richiesto.
+
+---
+
+### 4. Environment variables and files
+
+- Clicca sul blocco **Environment variables and files** (se vedi “No variables, no files”).
+- Clicca **Add variable** (o **Add secret**) e aggiungi **una variabile per volta**:
+
+| Nome (Key)   | Valore (Value) / Note |
+|--------------|------------------------|
+| `PORT`       | `8000`                 |
+| `DATABASE_URL` | La connection string Postgres (Supabase → Project Settings → Database → Connection string URI). Usa la modalità “Transaction” o “Session” se indicata. |
+| `JWT_SECRET` | Una stringa lunga e casuale (es. generata da un password manager). Non usare password reali. |
+| `CORS_ORIGIN`| `https://pizzamanager.it` (senza slash finale) |
+
+- Salva. La sezione non deve più mostrare “No variables”.
+- **Files**: lascia vuoto (non servono file aggiuntivi).
+
+---
+
+### 5. Instance
+
+- Clicca sul blocco **Instance**.
+- **Piano:** **Free** (0.1 vCPU, 512MB RAM, 2000MB Disk).
+- **Region:** scegli una regione vicina (es. **Eco Frankfurt**). Va bene anche un’altra “Eco” nella stessa area.
+- Conferma. Per il backend NestJS il piano Free è sufficiente per iniziare.
+
+---
+
+### 6. Scaling
+
+- **Valore consigliato:** **Autoscaling (0–1 instances/region)**.
+- Significa: può andare a 0 istanze quando non c’è traffico e tornare a 1 quando arriva una richiesta (possibile cold start di qualche secondo).
+- Se preferisci sempre un’istanza attiva, imposta **1–1** (min e max 1); in genere non è disponibile sul piano Free.
+
+---
+
+### 7. Volumes
+
+- Lascia **No volumes configured**.
+- Il backend non scrive file sul disco; il database è su Supabase, quindi non servono volumi.
+
+---
+
+### 8. Ports
+
+- Clicca sul blocco **Ports** (es. “1 configured”).
+- Deve esserci **una porta** configurata: **8000** (TCP).
+- Se la pagina chiede “Application port” o “Port”, inserisci **8000**.
+- Salva. Il health check (punto 9) userà questa porta.
+
+---
+
+### 9. Health checks
+
+- **Valore consigliato:** **TCP health check on port 8000**.
+- Koyeb controlla che l’app sia in ascolto sulla porta 8000. Non serve configurare un path HTTP se non richiesto.
+- Se c’è un campo “Path” per HTTP health check, puoi lasciarlo vuoto o usare `/api` se preferisci un check HTTP.
+
+---
+
+### 10. Service name
+
+- **Valore:** **`pizza-manager-backend`** (o un nome a piacere, senza spazi).
+- Questo nome compare nell’URL del servizio, es. `https://pizza-manager-backend-xxx.koyeb.app`.
+
+---
+
+### 11. Deploy
+
+- Controlla che **Environment variables** non sia più “No variables” e che **Port** sia 8000.
+- Clicca il pulsante verde **Deploy**.
+- Attendi che lo stato passi da **Building** a **Running** (può richiedere alcuni minuti).
+- Quando è **Running**, copia l’URL del servizio (es. dall’header o dalla scheda del servizio) e usalo come **VITE_API_URL** nel frontend (senza slash finale).
 
 ---
 
@@ -170,8 +280,8 @@ Koyeb mostra **“An error occurred while deploying your application”**. Contr
 
 Se nei log vedi: `open server/pizzeria-backend/Dockerfile.koyeb: no such file or directory`:
 
-- Con Build directory = `server/pizzeria-backend`, il path del Dockerfile è **rispetto a quella cartella**.  
-- In Koyeb → servizio → **Edit** → **Dockerfile path** imposta **solo** **`Dockerfile.koyeb`** (niente `server/...`). Salva e **Redeploy**.
+- **Work directory** deve essere **`server/pizzeria-backend`** (Override attivo).
+- **Dockerfile location** deve essere **solo** **`Dockerfile.koyeb`** (niente `server/...`). Salva e **Redeploy**.
 
 ---
 
