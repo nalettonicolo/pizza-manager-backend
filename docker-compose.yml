@@ -1,0 +1,33 @@
+# Deploy locale o su VPS: backend + (opzionale) frontend servito da nginx
+# Per solo backend: docker compose up backend
+
+services:
+  backend:
+    build:
+      context: ./server/pizzeria-backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173}
+    restart: unless-stopped
+
+  # Frontend: build Vite e servizio con nginx (opzionale se usi Firebase/Vercel)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

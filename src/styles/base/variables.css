@@ -1,0 +1,32 @@
+:root {
+  /* 🎨 Brand Colors */
+  --color-primary: #d35400;
+  --color-primary-dark: #a84300;
+  --color-accent: #f39c12;
+
+  --color-background: #fdf2e9;
+  --color-surface: #ffffff;
+
+  --color-success: #27ae60;
+  --color-warning: #f1c40f;
+  --color-danger: #e74c3c;
+
+  --color-text: #2c3e50;
+  --color-text-light: #7f8c8d;
+
+  /* 📏 Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 40px;
+
+  /* 🔲 Border */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* 🌫 Shadow */
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 10px rgba(0,0,0,0.12);
+}

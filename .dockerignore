@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env
+.env.*
+*.md
+server
+supabase
+.firebase
+.firebaserc
+docs
+*.txt

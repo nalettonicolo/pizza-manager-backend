@@ -1,0 +1,104 @@
+/* LAYOUT BASE */
+.layout {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #ff7a00, #ffd65a);
+  font-family: "Segoe UI", sans-serif;
+}
+
+/* TOPBAR */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 30px;
+  background: linear-gradient(90deg, #ff4d00, #ff9900);
+  color: white;
+  font-weight: 500;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.topnav span {
+  margin: 0 15px;
+  cursor: pointer;
+}
+
+.user {
+  font-size: 14px;
+}
+
+/* BODY */
+.body {
+  display: flex;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 240px;
+  background: linear-gradient(180deg, #ff6a00, #ffb347);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-item {
+  padding: 12px 15px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+  transition: 0.2s;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.menu-item.active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* CONTENT */
+.content {
+  flex: 1;
+  padding: 40px;
+  background: linear-gradient(135deg, #fff4e6, #ffe0b3);
+  min-height: calc(100vh - 70px);
+}
+
+/* SUCCESS BOX */
+.success-box {
+  background: linear-gradient(135deg, #c6f5c6, #a8e6a1);
+  padding: 25px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.success-box h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.success-box p {
+  margin: 5px 0 0;
+  font-size: 16px;
+}
+
+.check {
+  background: #2ecc71;
+  color: white;
+  font-size: 24px;
+  width: 45px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}

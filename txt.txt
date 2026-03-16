@@ -1,0 +1,47 @@
+backend: 
+cd "D:\APP_PIZZERIA\PizzaManagerApp\server\pizzeria-backend"
+npm run start:dev per prisma 
+
+fontend:  npm run dev
+
+per deploy: 
+npm run build
+firebase deploy
+
+
+KOYEB DEPLOY: 
+JWT_SECRET: 21LuglioFra@ 
+
+0683a615-d08a-488d-b9df-3a486b35a461  superadmin
+9bad7fd3-d2c2-409b-9402-adedbb4f196f admin (associato al punto vendita 1) 
+
+PizzaManager Pizzeria Demo
+
+pizzaioli@pizzamanager.it   a573dc82-7779-4e34-8e06-3ae4d5af081a
+bancone@pizzamanager.it     64e4379c-3434-412e-8dcf-03d68455e2d2
+cassa@pizzamanager.it       07027829-66f0-4516-95c8-82a259c3f3bb
+cucina@pizzamanager.it      a9dbeebe-e24c-4336-9cf9-1adc1d92291c
+pony1@pizzamanager.it       9332986e-51cf-47b3-8f66-a01d39ffdf4c
+pony2@pizzamanager.it       9a3e9bc4-93c3-42af-8515-f3cdd7709ef7
+
+La Password è stata inserita in supabase authentication se serve la carichiamo 21LuglioFra!
+
+🔐 Credenziali Demo - da creare
+
+Admin:
+
+admin@bellanapoli.it
+Password123!
+
+Operatori:
+
+pizzaioli@bellanapoli.it
+bancone@bellanapoli.it
+cassa@bellanapoli.it
+cucina@bellanapoli.it
+pony1@bellanapoli.it
+pony2@bellanapoli.it
+Password123!
+
+3. Blocco CSV per Excel
+Blocco commentato in formato nome_ingrediente;costo_eur;allergeni (separatore ;), con più allergeni separati da ; nella terza colonna. Puoi copiarlo in Excel (separatore ;) e usarlo come base per il file da caricare sul portale.

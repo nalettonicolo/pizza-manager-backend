@@ -1,0 +1,7 @@
+3. Deploy da zero su Koyeb
+Create App → GitHub → scegli repo e branch main.
+Builder: Dockerfile | Build directory: server/pizzeria-backend | Dockerfile path: Dockerfile.koyeb | Port: 8000.
+Environment variables: PORT=8000, DATABASE_URL, JWT_SECRET, CORS_ORIGIN=https://pizzamanager.it.
+Deploy e attendi Running.
+Copia l’URL del servizio per usarlo in VITE_API_URL nel frontend.
+Ordine consigliato: prima Koyeb (elimina servizio), poi GitHub (pulizia o nuovo repo), infine Create App su Koyeb e di nuovo il deploy. I dettagli sono nella sezione che ho aggiunto in DEPLOY.md.

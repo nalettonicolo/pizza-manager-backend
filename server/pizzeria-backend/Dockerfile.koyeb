@@ -1,0 +1,35 @@
+# Build stage (Node 20: richiesto da NestJS 11)
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma/
+RUN npm install
+RUN npx prisma generate
+
+COPY . .
+RUN npm run build
+
+# Verifica che il build abbia prodotto dist/main.js (fallisce il build altrimenti)
+RUN test -f /app/dist/main.js || (echo "ERRORE: dist/main.js non trovato dopo npm run build" && exit 1)
+
+# Run stage: solo dist + dipendenze necessarie
+FROM node:20-alpine
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/prisma ./prisma
+
+# Verifica che dist sia stato copiato (fallisce il build altrimenti)
+RUN test -f /app/dist/main.js || (echo "ERRORE: dist/main.js mancante nell'immagine finale" && exit 1)
+
+EXPOSE 8000
+
+# Come package.json "start:prod": node dist/main (Node risolve .js)
+CMD ["node", "dist/main.js"]

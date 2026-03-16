@@ -1,0 +1,38 @@
+{
+  "name": "pizza-manager",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.14",
+    "@nestjs/core": "^11.1.14",
+    "@nestjs/platform-express": "^11.1.14",
+    "@prisma/client": "^7.4.1",
+    "@supabase/supabase-js": "^2.95.3",
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.575.0",
+    "pg": "^8.18.0",
+    "prisma": "^6.19.2",
+    "prop-types": "^15.8.1",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.30.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "baseline-browser-mapping": "^2.10.0",
+    "supabase": "^2.76.12",
+    "ts-node": "^10.9.2",
+    "vite": "^7.3.1"
+  }
+}

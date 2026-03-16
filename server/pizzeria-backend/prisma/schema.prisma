@@ -1,0 +1,301 @@
+// ============================================
+// PIZZAMANAGER – SCHEMA PRISMA ENTERPRISE 10/10
+// Multi-tenant logico + soft delete + audit + subscription
+// DB: schema core (Supabase) – tabelle snake_case
+//
+// Routing app: dominio pizzamanager.it → landing page;
+// SUPERADMIN → pagine gestione piattaforma;
+// ADMIN / OPERATORE → area operativa del proprio tenant.
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["core"]
+}
+
+/////////////////////////////
+// ENUM
+/////////////////////////////
+
+enum Ruolo {
+  SUPERADMIN  // dominio pizzamanager.it: vede le sue pagine (gestione piattaforma)
+  OWNER
+  ADMIN       // area operativa tenant
+  OPERATORE   // area operativa tenant
+
+  @@schema("core")
+  @@map("ruolo")
+}
+
+enum PianoSaaS {
+  FREE
+  PRO
+  ENTERPRISE
+
+  @@schema("core")
+  @@map("piano_saas")
+}
+
+enum StatoOrdine {
+  IN_ATTESA
+  IN_PREPARAZIONE
+  PRONTO
+  CONSEGNATO
+  ANNULLATO
+
+  @@schema("core")
+  @@map("stato_ordine")
+}
+
+enum StatoSubscription {
+  ATTIVA
+  SCADUTA
+  SOSPESA
+  CANCELLATA
+
+  @@schema("core")
+  @@map("stato_subscription")
+}
+
+/////////////////////////////
+// TENANTS
+/////////////////////////////
+
+model Tenant {
+  id        String    @id @default(uuid())
+  nome      String
+  slug      String    @unique
+  piano     PianoSaaS @default(FREE)
+  attivo    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt      @map("updated_at")
+  deletedAt DateTime?                 @map("deleted_at")
+
+  users               User[]
+  prodotti            Prodotto[]
+  ingredienti         Ingrediente[]
+  ordini              Ordine[]
+  subscriptions       Subscription[]
+  auditLogs           AuditLog[]
+  configurazioneCosti ConfigurazioneCosti?
+  prodottoIngredienti ProdottoIngrediente[]
+  righeOrdine         RigaOrdine[]
+
+  @@schema("core")
+  @@map("tenants")
+  @@index([slug])
+  @@index([attivo])
+}
+
+/////////////////////////////
+// USERS
+/////////////////////////////
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String?  @default("")
+  nome      String?
+  ruolo     Ruolo
+  tenantId  String   @map("tenant_id")
+  attivo    Boolean  @default(true)
+  lastLogin DateTime? @map("last_login")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt     @map("updated_at")
+  deletedAt DateTime?               @map("deleted_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+
+  @@schema("core")
+  @@map("users")
+  @@index([tenantId])
+  @@index([email])
+  @@index([tenantId, deletedAt])
+}
+
+/////////////////////////////
+// SUBSCRIPTIONS (1:1 Tenant)
+/////////////////////////////
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  tenantId             String             @unique @map("tenant_id")
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  piano                PianoSaaS          @default(FREE)
+  stato                StatoSubscription  @default(ATTIVA)
+  rinnovoIl            DateTime?         @map("rinnovo_il")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt     @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@schema("core")
+  @@map("subscriptions")
+  @@index([tenantId])
+  @@index([stato])
+}
+
+/////////////////////////////
+// AUDIT LOG
+/////////////////////////////
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String?  @map("user_id")
+  azione    String
+  entita    String
+  entitaId  String?  @map("entita_id")
+  meta      Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@schema("core")
+  @@map("audit_logs")
+  @@index([tenantId])
+  @@index([createdAt])
+  @@index([entita, entitaId])
+}
+
+/////////////////////////////
+// CONFIGURAZIONE COSTI
+/////////////////////////////
+
+model ConfigurazioneCosti {
+  id           String   @id @default(uuid())
+  tenantId     String   @unique @map("tenant_id")
+  costoImpasto Float    @map("costo_impasto")
+  costoEnergia Float    @map("costo_energia")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+  deletedAt    DateTime?                @map("deleted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@schema("core")
+  @@map("configurazione_costi")
+}
+
+/////////////////////////////
+// INGREDIENTI
+// In creazione ingredienti: prezzo = UNITARIO (label "Prezzo unitario", non "al chilo").
+// In area admin Calcolo costi e margini: OK mostrare "Prezzo al chilo" (es. se unita_misura = kg).
+/////////////////////////////
+
+model Ingrediente {
+  id            String   @id @default(uuid())
+  nome          String
+  costoUnitario Float    @map("costo_unitario")  // Prezzo unitario (in form creazione)
+  unitaMisura   String?  @map("unita_misura")    // Es. kg → in calcolo costi/margini: "prezzo al chilo"
+  tenantId      String   @map("tenant_id")
+  attivo        Boolean? @default(true)
+  deletedAt     DateTime? @map("deleted_at")
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  prodotti ProdottoIngrediente[]
+
+  @@schema("core")
+  @@map("ingredienti")
+  @@index([tenantId])
+}
+
+/////////////////////////////
+// PRODOTTI
+/////////////////////////////
+
+model Prodotto {
+  id                   String   @id @default(uuid())
+  nome                 String
+  prezzo               Float?
+  tenantId             String   @map("tenant_id")
+  costoBaseProduzione  Float    @map("costo_base_produzione")
+  attivo               Boolean? @default(true)
+  createdAt            DateTime? @default(now()) @map("created_at")
+  deletedAt            DateTime? @map("deleted_at")
+
+  tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ingredienti ProdottoIngrediente[]
+  righeOrdine RigaOrdine[]
+
+  @@schema("core")
+  @@map("prodotti")
+  @@index([tenantId])
+  @@index([attivo])
+  @@index([tenantId, attivo])
+}
+
+/////////////////////////////
+// PIVOT PRODOTTO ↔ INGREDIENTE (BLINDATO)
+/////////////////////////////
+
+model ProdottoIngrediente {
+  id            String  @id @default(uuid())
+  tenantId      String  @map("tenant_id")
+  prodottoId    String  @map("prodotto_id")
+  ingredienteId String  @map("ingrediente_id")
+  quantita      Float
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  prodotto    Prodotto    @relation(fields: [prodottoId], references: [id], onDelete: Cascade)
+  ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id], onDelete: Cascade)
+
+  @@schema("core")
+  @@map("prodotto_ingrediente")
+  @@unique([prodottoId, ingredienteId])
+  @@index([tenantId])
+}
+
+/////////////////////////////
+// ORDINI
+/////////////////////////////
+
+model Ordine {
+  id        String       @id @default(uuid())
+  numero    Int
+  stato     StatoOrdine  @default(IN_ATTESA)
+  totale    Float
+  tenantId  String       @map("tenant_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt     @map("updated_at")
+  deletedAt DateTime?                   @map("deleted_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  righe  RigaOrdine[]
+
+  @@schema("core")
+  @@map("ordini")
+  @@unique([tenantId, numero])
+  @@index([tenantId])
+  @@index([tenantId, stato])
+  @@index([tenantId, createdAt])
+}
+
+/////////////////////////////
+// RIGHE ORDINE (BLINDATE)
+/////////////////////////////
+
+model RigaOrdine {
+  id         String  @id @default(uuid())
+  tenantId   String  @map("tenant_id")
+  ordineId   String  @map("ordine_id")
+  prodottoId String  @map("prodotto_id")
+  quantita   Int
+  prezzo     Float
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ordine   Ordine   @relation(fields: [ordineId], references: [id], onDelete: Cascade)
+  prodotto Prodotto @relation(fields: [prodottoId], references: [id], onDelete: Restrict)
+
+  @@schema("core")
+  @@map("riga_ordine")
+  @@index([tenantId])
+}
