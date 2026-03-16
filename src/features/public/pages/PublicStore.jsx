@@ -27,6 +27,7 @@ export default function PublicStore() {
   const [error, setError] = useState(null);
   const [closedToday, setClosedToday] = useState(false);
   const [tenantName, setTenantName] = useState(null);
+  const [branding, setBranding] = useState(null);
 
   useEffect(() => {
     async function loadData() {
@@ -42,6 +43,14 @@ export default function PublicStore() {
           if (tenant.orari_settimana) {
             setClosedToday(isTodayClosed(tenant.orari_settimana));
           }
+          setBranding({
+            nome: tenant.nome,
+            logo_url: tenant.logo_url ?? null,
+            indirizzo: tenant.indirizzo ?? null,
+            ordinazione_attiva: true,
+          });
+        } else {
+          setBranding(null);
         }
       } catch (err) {
         console.error(err);
@@ -59,7 +68,7 @@ export default function PublicStore() {
 
   return (
     <div style={styles.wrapper}>
-      <HeroStore />
+      <HeroStore branding={branding} />
 
       {closedToday && (
         <div style={styles.closedBanner}>

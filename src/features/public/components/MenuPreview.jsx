@@ -4,16 +4,18 @@ import { formatPrice } from "@/utils/format";
 
 export default function MenuPreview({ branding }) {
   const [prodotti, setProdotti] = useState([]);
+  const safe = branding ?? {};
 
   useEffect(() => {
-    loadMenu();
-  }, []);
+    if (safe.id) loadMenu();
+  }, [safe.id]);
 
   async function loadMenu() {
+    if (!safe.id) return;
     const { data } = await supabase
       .from("Prodotto")
       .select("*")
-      .eq("azienda_id", branding.id)
+      .eq("azienda_id", safe.id)
       .eq("attivo", true);
 
     setProdotti(data || []);

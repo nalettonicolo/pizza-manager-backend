@@ -4,9 +4,7 @@ npm run start:dev per prisma
 
 fontend:  npm run dev
 
-per deploy: 
-npm run build
-firebase deploy
+per deploy: vedi DEPLOY_COMANDI.md
 
 
 KOYEB DEPLOY: 
@@ -21,6 +19,7 @@ CORS_ORIGIN: https://pizzamanager.it
 
 PizzaManager Pizzeria Demo
 
+admin.puntovendita1@pizzamanager.it    passw. 21LuglioFra
 pizzaioli@pizzamanager.it   a573dc82-7779-4e34-8e06-3ae4d5af081a
 bancone@pizzamanager.it     64e4379c-3434-412e-8dcf-03d68455e2d2
 cassa@pizzamanager.it       07027829-66f0-4516-95c8-82a259c3f3bb

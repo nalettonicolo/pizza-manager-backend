@@ -289,8 +289,10 @@ Se nei log vedi: `open server/pizzeria-backend/Dockerfile.koyeb: no such file or
 
 1. Nella root del progetto imposta l’URL del backend (es. in `.env.production`):  
    `VITE_API_URL=https://TUO-URL.koyeb.app` (URL del backend Koyeb, senza slash finale).
-2. Poi: `npm run build` → `firebase deploy`.  
+2. Poi: `npm run build` → `firebase deploy --only hosting`.  
    Il frontend è già online su **https://pizzamanager.it**.
+
+**Comandi da terminale (dalla root `PizzaManagerApp`):** vedi **[DEPLOY_COMANDI.md](DEPLOY_COMANDI.md)** per il riepilogo unico (backend, frontend, DB).
 
 ---
 

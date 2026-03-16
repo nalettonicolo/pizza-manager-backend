@@ -3,9 +3,8 @@ import { sortByOrdine } from "@/utils/sortByOrdine";
 
 export async function getPublicMenu() {
   const { data, error } = await supabase
-    .from("Prodotto")
+    .from("prodotti_menu_pubblico")
     .select("*")
-    .eq("visibile_online", true)
     .order("nome", { ascending: true });
 
   if (error) {
@@ -21,7 +20,7 @@ export async function getPublicMenu() {
 export async function getPublicTenantInfo() {
   const { data, error } = await supabase
     .from("tenants")
-    .select("id, nome, orari_settimana")
+    .select("id, nome, logo_url, indirizzo, orari_settimana")
     .limit(1)
     .maybeSingle();
 

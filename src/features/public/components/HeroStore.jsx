@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 
 export default function HeroStore({ branding }) {
   const navigate = useNavigate();
+  const safe = branding ?? {};
 
   return (
     <section
@@ -12,23 +13,23 @@ export default function HeroStore({ branding }) {
         textAlign: "center",
       }}
     >
-      {branding.logo_url && (
+      {safe.logo_url && (
         <img
-          src={branding.logo_url}
+          src={safe.logo_url}
           alt="Logo"
           style={{ width: 120, marginBottom: 20 }}
         />
       )}
 
-      <h1 style={{ fontSize: 40 }}>{branding.nome}</h1>
+      <h1 style={{ fontSize: 40 }}>{safe.nome ?? "Pizzeria"}</h1>
 
-      <p style={{ marginTop: 15 }}>
-        {branding.indirizzo}
-      </p>
+      {safe.indirizzo && (
+        <p style={{ marginTop: 15 }}>{safe.indirizzo}</p>
+      )}
 
       <div style={{ marginTop: 30, display: "flex", gap: 15, justifyContent: "center", flexWrap: "wrap" }}>
         
-        {branding.ordinazione_attiva !== false && (
+        {safe.ordinazione_attiva !== false && (
           <button
             className="button-primary"
             onClick={() => navigate("/ordina")}

@@ -1,4 +1,5 @@
 export default function StoreFooter({ branding }) {
+  const safe = branding ?? {};
   return (
     <footer
       style={{
@@ -9,13 +10,13 @@ export default function StoreFooter({ branding }) {
         marginTop: 80,
       }}
     >
-      <h3>{branding.nome}</h3>
-      <p>{branding.indirizzo}</p>
-      <p>{branding.telefono}</p>
-      <p>{branding.email_assistenza}</p>
+      {safe.nome && <h3>{safe.nome}</h3>}
+      {safe.indirizzo && <p>{safe.indirizzo}</p>}
+      {safe.telefono && <p>{safe.telefono}</p>}
+      {safe.email_assistenza && <p>{safe.email_assistenza}</p>}
 
       <p style={{ marginTop: 20, fontSize: 14, opacity: 0.6 }}>
-        © {new Date().getFullYear()} {branding.nome}
+        © {new Date().getFullYear()} {safe.nome ?? "Pizzeria"}
       </p>
     </footer>
   );

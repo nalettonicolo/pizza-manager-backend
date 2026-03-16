@@ -21,7 +21,9 @@ const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  if (!allowedRoles.includes(ruolo)) {
+  const ruoloNorm = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
+  const allowed = allowedRoles.some((r) => (r && typeof r === "string" ? r.toLowerCase().trim() : "") === ruoloNorm)
+  if (!allowed) {
     devLog("ProtectedRoute", "ruolo non consentito → /login", { ruolo, allowedRoles })
     return <Navigate to="/login" state={{ from: location }} replace />
   }

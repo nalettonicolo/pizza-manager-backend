@@ -74,7 +74,7 @@ const isLocal =
   host.includes("localhost") ||
   host.includes("127.0.0.1");
 
-const isSaaS = host.startsWith("app.") || isLocal;
+const isSaaS = host === "pizzamanager.it" || host.startsWith("app.") || isLocal;
 
 /* =========================================================
    HOST RESOLVER
@@ -107,6 +107,7 @@ export default function AppRouter() {
         {isSaaS && (
           <>
             <Route path="/home" element={<Home />} />
+            <Route path="/negozio" element={<PublicStore />} />
             <Route path="/contatti" element={<Contatti />} />
             <Route path="/login" element={<Login />} />
             <Route path="/select-pv" element={<SelectPuntoVendita />} />

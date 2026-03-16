@@ -1,110 +1,83 @@
 # PizzaManager – Punto della situazione (enterprise)
 
-## Cosa è stato fatto in questa sessione
-
-### 1. Schema Prisma enterprise
-- **Tenants**: aggiunti `slug` (unique), `piano` (FREE/PRO/ENTERPRISE), `updatedAt`, `deletedAt`.
-- **Users**: aggiunti `attivo`, `last_login`, `updatedAt`, `deletedAt`; email univoca globale.
-- **Subscriptions**: nuova tabella (Stripe-ready: `stripeCustomerId`, `stripeSubscriptionId`, `piano`, `stato`, `rinnovoIl`).
-- **AuditLog**: nuova tabella (`tenantId`, `userId`, `azione`, `entita`, `entitaId`, `meta` JSON).
-- **Soft delete**: `deletedAt` su Tenant, User, ConfigurazioneCosti, Ingrediente, Prodotto, Ordine.
-- **Indici**: su `tenantId`, `slug`, `stato`, `createdAt`, `email` dove serve.
-
-### 2. Backend NestJS
-- **Auth**: `AuthService` aggiornato per usare il modello `User` (non più `utente`/`userTenant`), con `argon2`, `lastLogin`, controllo tenant attivo.
-- **Tenant**: decorator `@TenantId()` e `TenantGuard` per leggere/integrare il `tenantId` dal JWT nelle route protette.
-- **Audit**: `AuditService` per scrivere in `audit_logs` (da iniettare dove serve).
-
-### 3. Sicurezza e DB
-- **SQL**: file `supabase/migrations/20250211000000_rls_and_indexes_enterprise.sql` con indici consigliati e esempio RLS (da adattare ai nomi reali delle tabelle).
-- **Middleware tenant**: uso obbligatorio di `tenantId` dalle route protette (decorator + guard); ogni query deve filtrare per `tenantId`.
-
-### 4. Documentazione
-- **Migrazioni**: `server/pizzeria-backend/prisma/migrations/README_MIGRATION.md`.
-- **Installazione**: `INSTALLAZIONE_PACCHETTI.md` con i comandi da eseguire in Cursor.
+**Ultimo aggiornamento:** stato di sviluppo dell’applicazione rispetto a quanto richiesto.
 
 ---
 
-## Cosa resta da fare (ordine suggerito)
+## Comportamento richiesto e stato attuale
 
-1. **Middleware tenant “blindato”**  
-   Applicare `TenantGuard` e `@TenantId()` a tutte le route protette e passare sempre `tenantId` ai servizi (findMany/create/update con `where: { tenantId }`).
-
-2. **RLS su Supabase**  
-   Decidere se isolare per tenant anche lato DB con RLS; in caso positivo, adattare le policy in `20250211000000_rls_and_indexes_enterprise.sql` ai nomi reali delle tabelle/schema.
-
-3. **Onboarding SaaS**  
-   Flusso: registrazione → creazione Tenant + User OWNER → trial (opzionale) → redirect in dashboard.
-
-4. **Billing Stripe**  
-   Integrazione Stripe, webhook, blocco accesso se subscription scaduta/sospesa.
-
-5. **Audit log**  
-   Chiamare `AuditService.log()` in create/update/delete sensibili (ordini, utenti, prodotti, ecc.).
-
-6. **Soft delete**  
-   Nelle query leggere usare `where: { deletedAt: null }` (o middleware Prisma per applicarlo in automatico).
-
-7. **Dashboard KPI**  
-   Fatturato, ticket medio, coperti, performance operatori (query su `ordini`/righe per tenant).
-
-8. **Sicurezza chiave API Google Maps**  
-   La chiave `VITE_GOOGLE_MAPS_API_KEY` è usata per Places Autocomplete nella pagina **Dati pizzeria** (Impostazioni). In **Google Cloud Console**: restringere la chiave per **referrer HTTP** (solo i domini dell’app, es. `https://tuodominio.com/*`) e limitare le API a **Maps JavaScript API** e **Places API**. Valutare la **rotazione della chiave** se è stata esposta in chat o in repository pubblici.
+- **pizzamanager.it (root):** deve mostrare la **landing page** (marketing SaaS). ✅ Implementato: su dominio `pizzamanager.it`, `app.*` e localhost la route `/` mostra la Landing (hero, piani, CTA).
+- **Home della pizzeria:** si raggiunge **cliccando un pulsante nella landing**. ✅ Implementato: in Landing i link **«Prova gratuita»** (nav) e **«Inizia gratis» / «Prova Pro»** (pricing) puntano a **`/home`**, che è la home della pizzeria (benvenuto, Scegli punto vendita, Anteprima, area admin se loggato come admin).
+- **Menu pubblico (negozio):** disponibile su **`/negozio`** quando si è su pizzamanager.it (o localhost). Su domini diverso da pizzamanager.it/app/localhost, la root `/` mostra direttamente il PublicStore (storefront pizzeria).
 
 ---
 
-## Comandi da eseguire (Cursor)
+## Architettura attuale
 
-Vedi **`INSTALLAZIONE_PACCHETTI.md`**. In sintesi:
+- **Frontend:** Vite + React, deploy su **Firebase Hosting** (https://pizzamanager.it).
+- **Backend:** NestJS + Prisma, deploy su **Koyeb** (Docker, branch main da GitHub).
+- **Database:** Postgres su **Supabase** (schema `core` + tabelle/viste `public`, RLS dove previsto).
+- **Auth:** JWT lato backend; Supabase Auth per utenti frontend (utenti_ruoli, clienti) dove richiesto.
 
-```bash
-# Root (frontend)
-cd d:\APP_PIZZERIA\PizzaManagerApp
-npm install
-
-# Backend Nest + Prisma
-cd d:\APP_PIZZERIA\PizzaManagerApp\server\pizzeria-backend
-npm install
-npx prisma generate
-npx prisma migrate dev --name enterprise_saas
-npx prisma db seed
-```
-
-Poi configurare `.env` con `DATABASE_URL` e `JWT_SECRET` e andare online (build + deploy).
+Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chiama l’API Nest (base URL in `VITE_API_URL`) e Supabase per auth/dati condivisi (tenant, menu pubblico, ordini dove previsto).
 
 ---
 
-## Cassa, Homepage, Ruoli e Piani (aggiornamento)
+## Cosa è stato fatto
 
-### Cassa operativa
-- **Cerca pizza**: barra di ricerca sopra la griglia prodotti (filtro per nome).
-- **Modifica pizza**: modale con per ogni ingrediente **Poco / Abbondante / Senza** e **In cottura / A fine cottura**; **Aggiungi ingrediente** con barra di ricerca sotto la pizza (stesse opzioni).
-- **Checkout**: **Note ordine** (textarea), **Tipo pagamento** (Contanti, Carta, Altro). Lato cassa **nessun limite** sulla selezione orario (slot illimitati).
-- **Creazione ordine**: `adminService.createOrder(tenantId, { totale, stato, items, note, tipoPagamento })` chiama la RPC `create_order_with_items`.
+### Backend NestJS
+- Auth (login/register), JWT, TenantGuard e decorator `@TenantId()`.
+- Moduli: auth, users, platform, prisma. Schema Prisma multi-tenant (tenants, users, ordini, prodotti, ingredienti, audit_logs, subscriptions, configurazione_costi, riga_ordine).
+- Deploy: Dockerfile multi-stage (`Dockerfile.koyeb`), entry `dist/src/main.js`, porta 8000. Build e deploy su Koyeb da GitHub.
 
-### SQL da eseguire su Supabase (ordine)
-1. **`prisma/ordini_note_tipo_pagamento.sql`** – Aggiunge colonne `note`, `tipo_pagamento` a `core.ordini` e aggiorna la vista `public."Ordine"` per esporle.
-2. **`prisma/create_order_with_items_rpc.sql`** – Crea la funzione `create_order_with_items(p_tenant_id, p_totale, p_stato, p_items, p_note, p_tipo_pagamento)` che inserisce in `core.ordini` e `core.riga_ordine`.
+### Frontend
+- App React con contesti (Auth, Tenant, User, Operative). Aree: public, admin, operative (cassa, cucina, bancone, delivery, pizzaiolo, pony), superadmin.
+- **Routing (AppRouter):** dominio SaaS = `pizzamanager.it` oppure `app.*` oppure localhost. Su SaaS: `/` = Landing, `/home` = Home pizzeria, `/negozio` = PublicStore (menu pubblico), `/login`, `/contatti`, `/select-pv`, `/preview`. Su altri domini (es. storefront dedicato): `/` = PublicStore.
+- Variabili build: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_MAPS_API_KEY`. Build con `npm run build`, deploy con `firebase deploy --only hosting`.
+- **Menu pubblico:** lettura da vista `prodotti_menu_pubblico` (servizio `publicService.getPublicMenu()`). Info tenant pubblico con `getPublicTenantInfo()` (id, nome, logo_url, indirizzo, orari_settimana).
+- **Hero store / branding:** PublicStore passa `branding` a HeroStore (da tenant pubblico); HeroStore, StoreFooter e MenuPreview gestiscono `branding` undefined con oggetto sicuro (`branding ?? {}`).
+- **Realtime Ordine:** subscription su `table: "Ordine"` (non "ordini") in `OrdinePage.jsx`.
+- **Supabase in produzione:** messaggio in console se `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY` mancano nel build.
 
-### Homepage pizzeria (`/home`)
-- Mostra **Pizzeria** (da tenantData) e **Piano** (Free/Pro/Enterprise) se diverso da Free.
-- Link rapidi: **Scegli punto vendita**, **Anteprima store**.
-- Se l’utente è **admin**: card **Dashboard**, **Impostazioni**, **Ruoli**.
+### Database (Supabase)
+- **Schema completo:** `sql/schema_completo_pizzamanager.sql` (compattato). Include: core + public, vista `Prodotto` con `visibile_online`, vista **`prodotti_menu_pubblico`** per menu anonimo, **GRANT anon** su schema public e su tenants, Prodotto, punti_vendita, prodotti_menu_pubblico.
+- **Colonna:** `core.prodotti.visibile_online` (BOOLEAN DEFAULT true).
+- **Script incrementali:** `sql/add_visibile_online_and_public_menu.sql` (colonna + vista Prodotto aggiornata + vista prodotti_menu_pubblico + grant anon sulla vista), `sql/grant_anon_public.sql` (solo permessi anon). Integrazioni idempotenti in `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+- Supabase: core + public (utenti_ruoli, clienti, anagrafica_clienti, viste, trigger, RPC `create_order_with_items`, ruoli_pizzeria, tenant_admins, chiusure_giornata).
 
-### Piani e feature (enterprise)
-- **`src/app/hooks/usePlan.js`**: hook `usePlan()` che espone `plan`, `level`, `canUseFeature(nome)`, `isFree`, `isPro`, `isEnterprise`.
-- **Piano** letto da `tenantData.piano` (FREE | PRO | ENTERPRISE).
-- Feature esempi: `slot_illimitati_cliente` (PRO+), `report_avanzati` (PRO), `multi_punto_vendita` / `white_label` (ENTERPRISE). Utilizzabili con `canUseFeature('nome_feature')` per abilitare/disabilitare funzioni in base all’abbonamento.
+### Deploy e documentazione
+- **DEPLOY_COMANDI.md:** comandi da incollare in VS Code (backend + frontend) e spiegazione.
+- **DEPLOY.md:** guida dettagliata Koyeb e Firebase. Script `deploy-firebase.ps1` per build + deploy frontend.
 
-### Pagine operative per ruolo
-- **Cucina**: elenco ordini in stato **IN_PREPARAZIONE**; pulsante **Segna come pronto** → stato **PRONTO**.
-- **Bancone**: elenco ordini **PRONTO**; pulsante **Ritirato** → **CONSEGNATO**.
-- **Pony / Delivery**: elenco ordini **PRONTO**; pulsante **Segna consegnato** → **CONSEGNATO** (identificativo operatore da email, es. pony1, pony2).
-- **Cassa**: vedi sopra (ricerca, modale modifica pizza, note, tipo pagamento, conferma ordine).
+---
 
-### Test rapidi
-1. **Cassa**: login come cassa → aggiungi prodotto con ingredienti → modifica varianti/cottura e/o aggiungi ingrediente → note e tipo pagamento → Conferma ordine (dopo aver eseguito i due SQL sopra).
-2. **Cucina**: ordine creato da cassa (stato IN_PREPARAZIONE) → login cucina → vedi ordine → Segna come pronto.
-3. **Bancone**: ordine in PRONTO → login bancone → Ritirato.
-4. **Pony/Delivery**: ordine in PRONTO → login pony/delivery → Segna consegnato.
-5. **Home**: login admin → `/home` → vedi card Punto vendita, Anteprima, Dashboard, Impostazioni, Ruoli; piano mostrato se Pro/Enterprise.
+## Correzioni applicate (riferimento)
+
+| Problema | Soluzione |
+|----------|-----------|
+| 404 su `ordini?select=...` | Realtime in OrdinePage: `table: "Ordine"` invece di "ordini". |
+| 42501 permission denied for schema public | Script `sql/grant_anon_public.sql`: GRANT USAGE ON SCHEMA public TO anon; GRANT SELECT su tenants, Prodotto, punti_vendita, prodotti_menu_pubblico. |
+| 401 Unauthorized su Prodotto/tenants | Build con `.env.production` (VITE_SUPABASE_*); messaggio in console se chiavi mancanti in prod. |
+| 42703 column Prodotto.visibile_online does not exist | Colonna `visibile_online` su core.prodotti; vista `prodotti_menu_pubblico`; frontend usa `prodotti_menu_pubblico` per getPublicMenu(). |
+| TypeError reading 'logo_url' (branding undefined) | PublicStore passa `branding` da tenant a HeroStore; HeroStore/StoreFooter/MenuPreview usano `branding ?? {}` e optional display. |
+| getPublicTenantInfo senza logo/indirizzo | Select estesa a `id, nome, logo_url, indirizzo, orari_settimana`. |
+| pizzamanager.it mostrava store invece della landing | AppRouter: `isSaaS` include `pizzamanager.it`; `/` = Landing, `/home` = Home pizzeria (link da Landing «Prova gratuita» / «Inizia gratis»); `/negozio` = PublicStore. |
+
+---
+
+## Cosa fare dopo (ordine suggerito)
+
+1. **Tenant e route:** applicare TenantGuard e `@TenantId()` a tutte le route protette; filtrare sempre per `tenantId` nelle query.
+2. **Audit:** chiamare AuditService in create/update/delete sensibili (ordini, utenti, prodotti).
+3. **Soft delete:** usare `deletedAt` nelle query di lettura dove previsto.
+4. **RLS Supabase:** verificare policy su tabelle core/public e allineare a `app.current_tenant_id` se si usa RLS lato DB.
+5. **Billing Stripe:** integrazione subscription, webhook, blocco accesso se scaduta/sospesa.
+6. **Sicurezza chiave Google Maps:** in Google Cloud Console restringere la chiave a referrer (es. https://pizzamanager.it/*) e alle sole API necessarie (Maps, Places).
+
+---
+
+## Comandi di riferimento
+
+- **Deploy dopo modifiche:** vedi **DEPLOY_COMANDI.md** (backend git push, frontend build + firebase deploy, SQL su Supabase).
+- **Installazione locale:** root `npm install`; in `server/pizzeria-backend`: `npm install`, `npx prisma generate`, `npx prisma db seed`. Variabili in `.env` e `.env.production` come da DEPLOY.md.
+- **SQL Supabase:** reset completo → `sql/schema_completo_pizzamanager.sql`; solo integrazioni → `sql/add_visibile_online_and_public_menu.sql` e/o `sql/grant_anon_public.sql`; altre integrazioni → `server/pizzeria-backend/prisma/schema_integrazioni.sql`.

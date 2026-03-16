@@ -13,6 +13,7 @@ export default function Login() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [noProfileError, setNoProfileError] = useState(false)
 
   // ===================================================
   // REDIRECT AUTOMATICO DOPO LOGIN
@@ -44,7 +45,8 @@ export default function Login() {
         delivery: "/operative/delivery",
         pony: "/operative/pony",
       }
-      const targetRoute = roleRoutes[ruolo] || "/operative/dashboard"
+      const ruoloNorm = (ruolo && typeof ruolo === "string") ? ruolo.toLowerCase().trim() : ""
+      const targetRoute = roleRoutes[ruoloNorm] || "/operative/dashboard"
 
       devLog("Login", "redirect →", targetRoute, { ruolo })
       navigate(targetRoute, { replace: true })
@@ -62,19 +64,31 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
+    setNoProfileError(false)
     setSubmitting(true)
     devLog("Login", "submit", { email })
 
-    const { data, error } = await login(email, password)
+    const result = await login(email, password)
+    const err = result?.error
+    const data = result?.data
 
-    if (error) {
-      devLog("Login", "submit error", error.message)
-      setError(error.message)
+    if (err) {
+      devLog("Login", "submit error", err.message)
+      setError(err.message || "Errore di accesso")
     } else {
       devLog("Login", "submit ok, in attesa redirect", { userId: data?.user?.id })
     }
     setSubmitting(false)
   }
+
+  // Messaggio se autenticato ma senza profilo (utenti_ruoli/clienti)
+  useEffect(() => {
+    if (!loading && user && tipoUtente === null && ruolo === null) {
+      setNoProfileError(true)
+    } else {
+      setNoProfileError(false)
+    }
+  }, [loading, user, tipoUtente, ruolo])
 
   // ===================================================
   // LOADING SESSIONE
@@ -123,6 +137,11 @@ export default function Login() {
           {error && (
             <p className="text-red-600 text-sm">
               {error}
+            </p>
+          )}
+          {noProfileError && (
+            <p className="text-amber-700 text-sm bg-amber-50 p-2 rounded mt-2">
+              Accesso effettuato ma nessun profilo attivo. Verifica in Supabase che il tuo utente sia presente in <strong>public.utenti_ruoli</strong> (campo <strong>ruolo</strong> = superadmin) con il tuo user_id.
             </p>
           )}
 

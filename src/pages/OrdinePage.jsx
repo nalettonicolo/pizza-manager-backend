@@ -44,7 +44,7 @@ export default function OrdinePage() {
         {
           event: "UPDATE",
           schema: "public",
-          table: "ordini",
+          table: "Ordine",
         },
         (payload) => {
           console.log("Ordine aggiornato:", payload)
