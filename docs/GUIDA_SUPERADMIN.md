@@ -32,7 +32,7 @@ Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase c
 |------|----------|--------|
 | Riepilogo | `/superadmin/dashboard` | Panoramica numeri e link rapidi |
 | Clienti | `/superadmin/tenants` | Elenco e gestione tenant (pizzerie) |
-| Piani | `/superadmin/piani` | Descrizione piani Free / Pro / Enterprise |
+| Piani | `/superadmin/piani` | Piani commerciali (modale: nome, prezzo, validità, servizi a flag) |
 | Abbonamenti | `/superadmin/licenses` | Tabella subscription con stato e rinnovi |
 | Impostazioni | `/superadmin/settings` | Parametri globali (placeholder / bozza UI) |
 
@@ -59,12 +59,13 @@ Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase c
 **Funzioni:**
 
 - Visualizzazione elenco **tutti i tenant** (pizzerie) non eliminati (`deleted_at` nullo).
-- **Creazione** nuovo cliente: nome, **slug** (identificativo URL-friendly), **piano** (default: prova **TRIAL** / 7 giorni, poi Pro o Enterprise), flag **attivo**.
-- **Modifica** cliente esistente: stessi campi.
+- **Creazione / modifica** tramite modale: oltre a nome, **slug**, **piano** (default prova **TRIAL** / 7 giorni, poi Pro o Enterprise) e **attivo**, sono disponibili i **dati fiscali e di contatto** della pizzeria: **partita IVA**, **email** (fatturazione/azienda), **PEC**, **codice univoco / SDI** (fatturazione elettronica).
+- **Abbonamento:** flag **pagamento online con addebito automatico mensile** (rinnovo a inizio mese solare dalla **data di attivazione** indicata; l’integrazione con il gateway va completata lato piattaforma), e **sconto percentuale** sul canone se concordato con il cliente.
+- Tabella principale con colonne riassuntive (P.IVA, email, PEC, addebito automatico, sconto, ecc.).
 
 **Comportamento slug:** in creazione, se lo slug è vuoto può essere derivato dal nome (solo lettere minuscole, numeri e trattini).
 
-**Dati persistiti:** tabella `tenants` (schema `public` o `core`, in base all’installazione; il servizio prova entrambi).
+**Dati persistiti:** tabella `core.tenants` (colonne aggiunte dalla migrazione `20260322120000_tenants_anagrafica_fatturazione.sql`). Il client prova anche `public.tenants` se presente; dopo la migrazione su Supabase eseguire **SQL Editor** o `supabase db push` come da workflow del progetto.
 
 ---
 
@@ -72,12 +73,14 @@ Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase c
 
 **Funzioni attuali:**
 
-- **Definizione piani commerciali**: per ogni piano puoi impostare nome, prezzo (testo libero), descrizione e **elenco punti** (“cosa include”). Aggiunta, modifica, eliminazione piani.
-- Persistenza in **localStorage** del browser (per allineare il team; la pubblicazione su DB/landing globale va estesa in seguito).
+- **Aggiungi piano** apre un **modale** unico dove compili: **nome**, **prezzo** (testo libero), **validità in giorni**, flag **piano abilitato** (se disattivato non è proponibile per nuove sottoscrizioni), **descrizione** (facoltativa), e la sezione **Cosa include**: **tutti i servizi** disponibili come **checkbox** (es. report, multi-sede, API, ecc.).
+- **Modifica** riapre lo stesso modale con i dati salvati. Sulle **schede** in elenco puoi ancora attivare/disattivare rapidamente il piano senza aprire il modale.
+- **Elimina** rimuove il piano dall’elenco locale.
+- Persistenza in **localStorage** del browser (allineamento team; pubblicazione su DB/landing globale da estendere in seguito).
 - **Nessun piano Free permanente** in prodotto: i nuovi clienti usano la **prova di 7 giorni** (codice piano tipico `TRIAL` sui tenant), poi un abbonamento (es. `PRO`, `ENTERPRISE`).
 - Link di navigazione verso altre sezioni Super Admin.
 
-**Codici piano sui tenant** (campo `piano`): `TRIAL`, `PRO`, `ENTERPRISE`; eventuali valori `FREE` in database sono considerati **legacy**.
+**Codici piano sui tenant** (campo `piano` in anagrafica clienti): `TRIAL`, `PRO`, `ENTERPRISE`; eventuali valori `FREE` in database sono considerati **legacy**. I nomi configurati nella pagina Piani sono descrittivi in UI; l’associazione tenant ↔ codice enum resta sul campo `piano` del tenant finché non si collega un DB `piani`.
 
 ---
 
@@ -113,7 +116,7 @@ Per evitare aspettative errate, queste capacità **non** sono esposte come sezio
 - Dashboard **MRR / fatturazione SaaS** dettagliata
 - **Monitor infrastruttura** (log errori, performance API, utilizzo database)
 - **Fatture PDF** e storico pagamenti integrato
-- Modifica **prezzi piani** con persistenza centralizzata (la pagina Piani è descrittiva)
+- Modifica **prezzi piani** con persistenza **centralizzata su server** (oggi i piani in UI sono salvati in **localStorage** del browser)
 
 Quando una di queste viene implementata, aggiungere una sottosezione in §4 e una riga nel registro aggiornamenti.
 
@@ -147,6 +150,7 @@ Compila una riga per ogni modifica significativa all’area Super Admin.
 | 2026-03-22 | — | Prima stesura guida: Riepilogo, Clienti, Piani, Abbonamenti, Impostazioni; note su limiti e sicurezza. |
 | 2026-03-22 | — | Collegamento a `ARCHITETTURA_E_STATO.md` per allineamento roadmap / codice. |
 | 2026-03-22 | — | Piani: gestione contenuti in Super Admin (localStorage); TRIAL 7 giorni; niente Free permanente. |
+| 2026-03-22 | — | Piani: modale unico per creazione/modifica (nome, prezzo, validità gg, abilitazione, servizi a flag); schede con toggle rapido abilitato. |
 
 ---
 

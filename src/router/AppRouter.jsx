@@ -47,6 +47,7 @@ const DolciPage = lazy(() => import("@/features/admin/pages/menu/DolciPage"));
 const FrittiPage = lazy(() => import("@/features/admin/pages/menu/FrittiPage"));
 const AllergeniPage = lazy(() => import("@/features/admin/pages/menu/AllergeniPage"));
 const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
+const GuidaUtentePage = lazy(() => import("@/features/admin/pages/GuidaUtentePage"));
 
 /* ================= OPERATIVE (lazy) ================= */
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
@@ -157,6 +158,7 @@ export default function AppRouter() {
         >
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/dashboard" element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
+          <Route path="/admin/guida" element={<Suspense fallback={<PageFallback />}><GuidaUtentePage /></Suspense>} />
           <Route path="/admin/menu" element={<Navigate to="/admin/menu/categorie" replace />} />
           <Route path="/admin/menu/categorie" element={<Suspense fallback={<PageFallback />}><CategoriePage /></Suspense>} />
           <Route path="/admin/menu/formati" element={<Suspense fallback={<PageFallback />}><FormatiPage /></Suspense>} />

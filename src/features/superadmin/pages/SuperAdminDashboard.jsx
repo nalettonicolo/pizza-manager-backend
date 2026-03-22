@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getPlatformStats } from "@/features/superadmin/services/superadminService";
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
-
-const PIANO_LABEL = {
-  TRIAL: "Prova (7 gg)",
-  PRO: "Pro",
-  ENTERPRISE: "Enterprise",
-  FREE: "Free (legacy)",
-};
+import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
 const STATO_LABEL = { ATTIVA: "Attiva", SCADUTA: "Scaduta", SOSPESA: "Sospesa", CANCELLATA: "Cancellata" };
 
 const SUPERADMIN_NAV = [
@@ -92,7 +86,7 @@ export default function SuperAdminDashboard() {
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {Object.entries(stats.byPlan || {}).map(([piano, count]) => (
               <li key={piano} className="dashboard-list-item">
-                <span>{PIANO_LABEL[piano] ?? piano}</span>
+                <span>{pianoDisplayLabel(piano)}</span>
                 <span>{count}</span>
               </li>
             ))}
@@ -127,7 +121,7 @@ export default function SuperAdminDashboard() {
             {stats.recentTenants.map((t) => (
               <li key={t.id} className="dashboard-list-item">
                 <span style={{ fontWeight: 600 }}>{t.nome}</span>
-                <span style={{ color: "#666" }}>{t.slug} · {PIANO_LABEL[t.piano] ?? t.piano}</span>
+                <span style={{ color: "#666" }}>{t.slug} · {pianoDisplayLabel(t.piano)}</span>
               </li>
             ))}
           </ul>

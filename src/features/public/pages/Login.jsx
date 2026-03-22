@@ -23,7 +23,6 @@ export default function Login() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [noProfileError, setNoProfileError] = useState(false)
 
   useEffect(() => {
     if (loading) return
@@ -58,7 +57,6 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
-    setNoProfileError(false)
     setSubmitting(true)
     devLog("Login", "submit", { email })
 
@@ -73,14 +71,6 @@ export default function Login() {
     }
     setSubmitting(false)
   }
-
-  useEffect(() => {
-    if (!loading && user && tipoUtente === null && ruolo === null) {
-      setNoProfileError(true)
-    } else {
-      setNoProfileError(false)
-    }
-  }, [loading, user, tipoUtente, ruolo])
 
   if (loading) {
     devLog("Login", "in attesa sessione (loading=true)...")
@@ -144,13 +134,6 @@ export default function Login() {
             {error && (
               <p className="login-error" role="alert">
                 {error}
-              </p>
-            )}
-            {noProfileError && (
-              <p className="login-warning" role="status">
-                Accesso effettuato ma nessun profilo attivo. Verifica in Supabase che il tuo utente sia presente in{" "}
-                <code>public.utenti_ruoli</code> (campo <code>ruolo</code>, es. <code>superadmin</code>) con il tuo{" "}
-                <code>user_id</code>.
               </p>
             )}
 

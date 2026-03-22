@@ -1657,3 +1657,102 @@ body {
   background: #fff8e1;
   color: #f57c00;
 }
+
+/* Guida utente (Admin → Guida) */
+.guida-utente-lead {
+  font-size: 14px;
+  color: #64748b;
+  max-width: 720px;
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.guida-utente-body {
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.guida-utente-body h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.guida-utente-body h2:first-child {
+  margin-top: 0;
+}
+
+.guida-utente-body hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 20px 0;
+}
+
+.guida-utente-body ul,
+.guida-utente-body ol {
+  margin: 8px 0 16px;
+  padding-left: 1.25rem;
+}
+
+.guida-utente-body li {
+  margin: 6px 0;
+}
+
+.guida-utente-body p {
+  margin: 0 0 12px;
+}
+
+.guida-utente-body strong {
+  color: #1e293b;
+}
+
+.guida-utente-table-wrap {
+  overflow-x: auto;
+  margin: 12px 0 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.guida-utente-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.guida-utente-body th,
+.guida-utente-body td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.guida-utente-body th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+}
+
+.guida-utente-body tr:last-child td {
+  border-bottom: none;
+}
+
+.guida-utente-body a {
+  color: #c0392b;
+  text-decoration: none;
+}
+
+.guida-utente-body a:hover {
+  text-decoration: underline;
+}
+
+.guida-utente-body code {
+  font-size: 0.9em;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}

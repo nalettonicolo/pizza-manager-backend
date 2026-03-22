@@ -30,12 +30,13 @@ npm run deploy
 - **Cosa fa:** `npm run deploy` esegue build (cartella `dist`) e pubblica su Firebase Hosting.
 - **Prima del deploy:** verifica che `.env.production` abbia `VITE_API_URL` con l’URL del backend Koyeb (senza slash finale).
 - **Sito:** https://pizzamanager.it (se il dominio è configurato in Firebase).
+- **Guida utente in app (Admin → Guida):** il testo è in `src/content/guidaUtente.md`; aggiornalo lì e ridistribuisci il frontend.
 
 ---
 
 ## Database (Supabase)
 
-Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario (es. `sql/schema_completo_pizzamanager.sql` o `server/pizzeria-backend/prisma/schema_integrazioni.sql`).
+Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. Integrazioni solo (idempotente, codice unico): `sql/PM_UNIFIED_INCREMENTAL.sql`. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
 
 ---
 

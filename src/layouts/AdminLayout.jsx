@@ -9,6 +9,7 @@ const HEADER_HEIGHT = 56;
 /** Voci allineate alle route reali: roadmap “ideale” mappata su pagine esistenti (vedi docs/ARCHITETTURA_E_STATO.md). */
 const topNavItems = [
   { to: "/admin/dashboard", label: "Riepilogo" },
+  { to: "/admin/guida", label: "Guida" },
   { to: "/admin/report", label: "Report" },
   { to: "/admin/menu", label: "Menu" },
   { to: "/admin/menu/ingredienti", label: "Magazzino" },

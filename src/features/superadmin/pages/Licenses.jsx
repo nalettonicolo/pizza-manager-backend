@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSubscriptions } from "@/features/superadmin/services/superadminService";
+import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
 
 const STATO_LABEL = {
   ATTIVA: "Attiva",
   SCADUTA: "Scaduta",
   SOSPESA: "Sospesa",
   CANCELLATA: "Cancellata",
-};
-const PIANO_LABEL = {
-  TRIAL: "Prova (7 gg)",
-  PRO: "Pro",
-  ENTERPRISE: "Enterprise",
-  FREE: "Free (legacy)",
 };
 
 const STATO_BADGE = {
@@ -84,23 +79,47 @@ export default function Licenses() {
 
       {error && <div className="dashboard-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      <div className="dashboard-table-wrap">
-        <table>
+      {list.some((s) => s._fromTenantOnly) && (
+        <div
+          className="dashboard-error"
+          style={{
+            marginBottom: 16,
+            background: "#fffbeb",
+            borderColor: "#fcd34d",
+            color: "#92400e",
+          }}
+        >
+          Le righe sono ricavate dai dati cliente: in database non risultano ancora record in{" "}
+          <code style={{ fontSize: 13 }}>subscriptions</code> (controlla policy RLS o esegui il salvataggio da Clienti).
+        </div>
+      )}
+
+      <p style={{ margin: "0 0 16px", fontSize: 14, color: "#555", maxWidth: 720 }}>
+        Ogni cliente ha una riga di abbonamento collegata al tenant. Il <strong>rinnovo automatico</strong> e la data di
+        attivazione si impostano in <Link to="/superadmin/tenants">Clienti</Link> (modifica cliente → sezione Abbonamento).
+        All’apertura di questa pagina vengono create le righe mancanti in base ai clienti già presenti.
+      </p>
+
+      <div className="dashboard-table-wrap" style={{ overflowX: "auto" }}>
+        <table style={{ minWidth: 900 }}>
           <thead>
             <tr>
               <th>Cliente</th>
               <th>Slug</th>
               <th>Piano</th>
               <th>Stato</th>
-              <th>Rinnovo</th>
+              <th>Rinnovo automatico</th>
+              <th>Prossimo rinnovo</th>
+              <th>Attivazione</th>
               <th>Creata</th>
             </tr>
           </thead>
           <tbody>
             {list.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
-                  Nessun abbonamento. Gli abbonamenti sono collegati ai clienti.
+                <td colSpan={8} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
+                  Nessun abbonamento al momento. Verifica che esistano clienti e che la tabella subscriptions sia
+                  accessibile (vedi anche Clienti dopo un salvataggio).
                 </td>
               </tr>
             ) : (
@@ -108,16 +127,28 @@ export default function Licenses() {
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600 }}>{s.tenant_nome}</td>
                   <td style={{ color: "#666" }}>{s.tenant_slug}</td>
-                  <td>{PIANO_LABEL[s.piano] ?? s.piano}</td>
+                  <td>{pianoDisplayLabel(s.piano)}</td>
                   <td>
                     <span className={STATO_BADGE[s.stato] ?? "badge badge-neutral"}>
                       {STATO_LABEL[s.stato] ?? s.stato}
                     </span>
                   </td>
-                  <td style={{ color: "#666" }}>
+                  <td style={{ fontSize: 13 }}>
+                    {s.rinnovo_automatico ? (
+                      <span className="badge badge-success">Sì</span>
+                    ) : (
+                      <span className="badge badge-neutral">No</span>
+                    )}
+                  </td>
+                  <td style={{ color: "#666", fontSize: 13 }}>
                     {s.rinnovo_il ? new Date(s.rinnovo_il).toLocaleDateString("it-IT") : "—"}
                   </td>
-                  <td style={{ color: "#666" }}>
+                  <td style={{ color: "#666", fontSize: 13 }}>
+                    {s.data_attivazione_abbonamento
+                      ? new Date(s.data_attivazione_abbonamento).toLocaleDateString("it-IT")
+                      : "—"}
+                  </td>
+                  <td style={{ color: "#666", fontSize: 13 }}>
                     {s.created_at ? new Date(s.created_at).toLocaleDateString("it-IT") : "—"}
                   </td>
                 </tr>

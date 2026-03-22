@@ -437,7 +437,7 @@ function mapSupabaseRuoliError(error) {
   const msg = error.message || ""
   if (code === "42703" || /column .* does not exist/i.test(msg)) {
     const hint =
-      "Mancano le colonne permessi su public.utenti_ruoli. Esegui in Supabase lo script sql/add_accesso_aree_utenti_ruoli.sql (SQL Editor)."
+      "Mancano le colonne permessi su public.utenti_ruoli. Esegui in Supabase lo script sql/PM_UNIFIED_INCREMENTAL.sql (SQL Editor)."
     return new Error(hint + (msg ? ` Dettaglio: ${msg}` : ""))
   }
   if (code === "42501" || /permission denied/i.test(msg)) {

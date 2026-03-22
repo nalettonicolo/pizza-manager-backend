@@ -76,6 +76,14 @@ model Tenant {
   updatedAt DateTime  @updatedAt      @map("updated_at")
   deletedAt DateTime?                 @map("deleted_at")
 
+  partitaIva                  String?   @map("partita_iva")
+  emailFatturazione           String?   @map("email_fatturazione")
+  pec                         String?   @map("pec")
+  codiceUnivocoSdi            String?   @map("codice_univoco_sdi")
+  addebitoAutomaticoMensile   Boolean   @default(false) @map("addebito_automatico_mensile")
+  dataAttivazioneAbbonamento  DateTime? @map("data_attivazione_abbonamento") @db.Date
+  scontoPercentuale           Decimal?  @map("sconto_percentuale") @db.Decimal(5, 2)
+
   users               User[]
   prodotti            Prodotto[]
   ingredienti         Ingrediente[]

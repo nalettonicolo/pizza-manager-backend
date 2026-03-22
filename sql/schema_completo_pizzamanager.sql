@@ -1,4 +1,8 @@
--- PIZZAMANAGER – Schema SQL completo (compattato). Esegui in Supabase → SQL Editor. Reset: FASE 1; DB esistente: commenta FASE 1. Include: visibile_online, prodotti_menu_pubblico, GRANT anon. Fonte: schema_unico + add_visibile_online_and_public_menu + grant_anon_public.
+-- PIZZAMANAGER – Schema SQL completo (compattato). Esegui in Supabase → SQL Editor.
+-- Reset: FASE 1; DB esistente: commenta FASE 1.
+--
+-- Integrazioni incrementali idempotenti (colonne accesso, viste menu, GRANT anon):
+--   → sql/PM_UNIFIED_INCREMENTAL.sql  (PM-SQL-REF: UNIFIED-INCR-v1-2026-03-22)
 
 -- #############################################################################
 -- FASE 1: RESET TOTALE (opzionale – solo in sviluppo)
