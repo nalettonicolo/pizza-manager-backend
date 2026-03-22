@@ -811,7 +811,10 @@ export default function CassaPage() {
     return groupOrdersBySlotOrarioRitiro(delivery, slotDeliveryMin)
   }, [ordiniOggiFiltered, slotDeliveryMin])
   const ordiniPerSlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiFiltered || []).filter((o) => (o.tipo_ordine || "").toLowerCase() === "negozio")
+    const negozio = (ordiniOggiFiltered || []).filter((o) => {
+      const t = (o.tipo_ordine || "").toLowerCase()
+      return t === "negozio" || t === ""
+    })
     return groupOrdersBySlotOrarioRitiro(negozio, slotNegozioMin)
   }, [ordiniOggiFiltered, slotNegozioMin])
   const ordiniBySlotDelivery = useMemo(() => {
@@ -819,7 +822,10 @@ export default function CassaPage() {
     return groupOrdiniBySlotOrarioRitiro(delivery, slotDeliveryMin)
   }, [ordiniOggiFiltered, slotDeliveryMin])
   const ordiniBySlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiFiltered || []).filter((o) => (o.tipo_ordine || "").toLowerCase() === "negozio")
+    const negozio = (ordiniOggiFiltered || []).filter((o) => {
+      const t = (o.tipo_ordine || "").toLowerCase()
+      return t === "negozio" || t === ""
+    })
     return groupOrdiniBySlotOrarioRitiro(negozio, slotNegozioMin)
   }, [ordiniOggiFiltered, slotNegozioMin])
   const pizzePerSlotDelivery = useMemo(() => {
@@ -827,13 +833,21 @@ export default function CassaPage() {
     return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, slotDeliveryMin)
   }, [ordiniOggiFiltered, pizzePerOrdine, slotDeliveryMin])
   const pizzePerSlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiFiltered || []).filter((o) => (o.tipo_ordine || "").toLowerCase() === "negozio")
+    const negozio = (ordiniOggiFiltered || []).filter((o) => {
+      const t = (o.tipo_ordine || "").toLowerCase()
+      return t === "negozio" || t === ""
+    })
     return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, slotNegozioMin)
   }, [ordiniOggiFiltered, pizzePerOrdine, slotNegozioMin])
 
   const pizzePerSlotRiepilogo = useMemo(() => {
     const slotMin = tipoOrdine === "delivery" ? slotDeliveryMin : slotNegozioMin
-    return groupPizzeBySlotOrarioRitiro(ordiniOggiFiltered, pizzePerOrdine, slotMin)
+    const filtered = (ordiniOggiFiltered || []).filter((o) => {
+      const t = (o.tipo_ordine || "").toLowerCase()
+      if (tipoOrdine === "delivery") return t === "delivery"
+      return t === "negozio" || t === ""
+    })
+    return groupPizzeBySlotOrarioRitiro(filtered, pizzePerOrdine, slotMin)
   }, [tipoOrdine, ordiniOggiFiltered, pizzePerOrdine, slotDeliveryMin, slotNegozioMin])
 
   const ordiniFiltratiPerPagina = useMemo(() => {
@@ -1091,7 +1105,7 @@ export default function CassaPage() {
               </div>
             </div>
             <p style={styles.planningHint}>
-              Fasce da apertura a chiusura. Verde: ok, giallo: quasi pieno, rosso: pieno (soglia pizze).
+              Fasce da apertura a chiusura. Per ogni colonna: ordini e pizze già prenotate in quella fascia. Verde: ok, giallo: quasi pieno, rosso: pieno (soglia pizze).
             </p>
             {!orariOggi.aperto && (
               <p style={{ margin: "0 0 12px", color: "#c62828", fontWeight: 500 }}>Oggi chiuso (nessuna fascia disponibile).</p>
@@ -1277,11 +1291,6 @@ export default function CassaPage() {
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
           onCheckout={() => setShowRiepilogo(true)}
           onClear={clearCart}
-          checkoutNote={checkoutNote}
-          onCheckoutNoteChange={setCheckoutNote}
-          checkoutTipoPagamento={checkoutTipoPagamento}
-          onCheckoutTipoPagamentoChange={setCheckoutTipoPagamento}
-          tipiPagamento={TIPI_PAGAMENTO}
           checkoutError={checkoutError}
           loading={false}
         />

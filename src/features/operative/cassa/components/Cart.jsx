@@ -11,11 +11,6 @@ export default function Cart({
   onRemove,
   onCheckout,
   onClear,
-  checkoutNote = "",
-  onCheckoutNoteChange,
-  checkoutTipoPagamento,
-  onCheckoutTipoPagamentoChange,
-  tipiPagamento = ["Contanti", "Carta", "Altro"],
   checkoutError,
   loading = false,
 }) {
@@ -44,33 +39,6 @@ export default function Cart({
       ))}
 
       <hr />
-
-      {cart.length > 0 && (
-        <>
-          <label style={{ display: "block", marginTop: 8, marginBottom: 4, fontSize: 13 }}>
-            {tipoOrdine === "delivery" ? "Note ordine (solo negozio)" : "Note ordine"}
-          </label>
-          <textarea
-            value={checkoutNote}
-            onChange={(e) => onCheckoutNoteChange?.(e.target.value)}
-            placeholder="Note per la cucina..."
-            rows={2}
-            style={{ width: "100%", padding: 8, resize: "vertical", marginBottom: 8 }}
-          />
-          <label style={{ display: "block", marginBottom: 4, fontSize: 13 }}>
-            Tipo pagamento
-          </label>
-          <select
-            value={checkoutTipoPagamento}
-            onChange={(e) => onCheckoutTipoPagamentoChange?.(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 8 }}
-          >
-            {(tipiPagamento || []).map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </>
-      )}
 
       <strong>Totale: € {formatPrice(total)}</strong>
 

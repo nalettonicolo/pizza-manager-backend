@@ -112,17 +112,6 @@ export default function RiepilogoOrdinePage({
       )}
 
       <div style={styles.section}>
-        <label style={styles.label}>Note ordine</label>
-        <textarea
-          value={checkoutNote}
-          onChange={(e) => onCheckoutNoteChange?.(e.target.value)}
-          placeholder="Note per la cucina..."
-          rows={3}
-          style={styles.textarea}
-        />
-      </div>
-
-      <div style={styles.section}>
         <label style={styles.label}>Tipo pagamento</label>
         <select
           value={checkoutTipoPagamento}
@@ -136,6 +125,17 @@ export default function RiepilogoOrdinePage({
       </div>
 
       <div style={styles.section}>
+        <label style={styles.label}>Note ordine</label>
+        <textarea
+          value={checkoutNote}
+          onChange={(e) => onCheckoutNoteChange?.(e.target.value)}
+          placeholder="Note per la cucina..."
+          rows={3}
+          style={styles.textarea}
+        />
+      </div>
+
+      <div style={styles.section}>
         <h3 style={styles.sectionTitle}>
           {tipoOrdine === "delivery" ? "Fasce orarie consegna" : "Fasce orarie ritiro"}
         </h3>
@@ -143,7 +143,7 @@ export default function RiepilogoOrdinePage({
           Il tuo ordine: <strong>{totalPizzeOrdine} {totalPizzeOrdine === 1 ? "pizza" : "pizze"}</strong>
         </p>
         <p style={styles.hint}>
-          Seleziona un orario (obbligatorio). Solo fasce nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. Max {maxPizzePerSlot} pizze ogni {slotMinutes} min.
+          Seleziona un orario (obbligatorio). Solo fasce nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. Max {maxPizzePerSlot} pizze ogni {slotMinutes} min. In ogni fascia il numero indica le pizze già impegnate oggi per quell’orario ({tipoOrdine === "delivery" ? "solo consegne" : "solo ritiro in negozio"}), per organizzare il carico.
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>
@@ -169,7 +169,7 @@ export default function RiepilogoOrdinePage({
                 }}
               >
                 <div style={styles.slotTime}>{slot.label}</div>
-                <div style={styles.slotCount}>{count} pizze</div>
+                <div style={styles.slotCount}>{count} {count === 1 ? "pizza già prenotata" : "pizze già prenotate"}</div>
                 {isSelected && <div style={{ fontSize: 11, marginTop: 4, color: "#1565c0", fontWeight: 600 }}>✓</div>}
               </button>
             )
