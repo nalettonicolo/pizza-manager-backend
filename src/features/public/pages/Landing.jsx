@@ -13,10 +13,11 @@ export default function Landing() {
           <a href="#perche" className="nav-anchor">Perché noi</a>
           <a href="#funzionalita" className="nav-anchor">Funzionalità</a>
           <a href="#piani" className="nav-anchor">Piani</a>
+          <Link to="/negozio" className="nav-anchor">Menu online</Link>
         </div>
         <div className="nav-links">
           <Link to="/login" className="btn-outline">Accedi</Link>
-          <Link to="/home" className="btn-primary">Prova gratuita</Link>
+          <Link to="/contatti#prova-gratuita" className="btn-primary">Prova gratuita</Link>
         </div>
       </nav>
 
@@ -31,14 +32,19 @@ export default function Landing() {
           </p>
 
           <div className="hero-buttons">
-            <Link to="/contatti" className="btn-primary big">
-              Parla con noi
+            <Link to="/contatti#prova-gratuita" className="btn-primary big">
+              Richiedi prova gratuita
             </Link>
             <Link to="/login" className="btn-outline big">
               Accedi al pannello
             </Link>
+            <Link to="/negozio" className="btn-ghost big landing-hero-menu-btn">
+              Home menu pizzeria
+            </Link>
           </div>
-          <p className="hero-hint">Nessuna carta richiesta per iniziare. Onboarding guidato in pochi minuti.</p>
+          <p className="hero-hint">
+            La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per entrare in app. Apri il menu pubblico della pizzeria con il pulsante sopra.
+          </p>
 
           <ul className="hero-trust" aria-label="Punti di forza">
             <li><span className="trust-dot" /> Multi-tenant pronto</li>
@@ -139,24 +145,26 @@ export default function Landing() {
 
       <section className="section-roles">
         <div className="section-head">
-          <p className="section-eyebrow">Un prodotto, più livelli</p>
-          <h2 className="section-title">Costruito per piattaforma, locale e squadra</h2>
+          <p className="section-eyebrow">Il tuo locale e la squadra</p>
+          <h2 className="section-title">Due livelli: chi gestisce e chi opera</h2>
+          <p className="section-lead section-lead-roles">
+            <strong>Cosa sono i «tenant»?</strong> In pratica, ogni <strong>pizzeria iscritta</strong> (o ogni marchio che usi il servizio) ha uno <strong>spazio riservato</strong>: menu, ordini e impostazioni restano <strong>separati</strong> da quelli degli altri locali. È il modo in cui il software tiene i dati al sicuro e ordinati, locale per locale.
+          </p>
         </div>
-        <div className="roles-grid">
-          <div className="role-card">
-            <span className="role-tag">Piattaforma</span>
-            <h3>Super Admin</h3>
-            <p>Visione d’insieme su tenant, piani e abbonamenti: ideale per chi gestisce il SaaS.</p>
-          </div>
+        <div className="roles-grid roles-grid-two">
           <div className="role-card role-card-highlight">
-            <span className="role-tag">Pizzeria</span>
-            <h3>Admin tenant</h3>
-            <p>Menu, report, impostazioni e ruoli del personale: il centro di comando del locale.</p>
+            <span className="role-tag">Gestione</span>
+            <h3>Titolare e amministratori</h3>
+            <p>
+              Chi gestisce il locale: menu, listini, report, orari, dati della pizzeria e chi può accedere alle varie aree (cassa, cucina, …). È il pannello di comando del <strong>tuo</strong> spazio — quello della tua attività, non mescolato con altri clienti.
+            </p>
           </div>
           <div className="role-card">
             <span className="role-tag">Sala &amp; cucina</span>
             <h3>Operatori</h3>
-            <p>Cassa, cucina, bancone e delivery con interfacce pensate per la velocità.</p>
+            <p>
+              Cassa, cucina, bancone e delivery: schermate pensate per velocità e meno errori in servizio. Ogni operatore vede solo ciò che serve al proprio ruolo.
+            </p>
           </div>
         </div>
       </section>
@@ -167,43 +175,40 @@ export default function Landing() {
           Scala quando sei pronto
         </h2>
         <p className="pricing-subtitle">
-          Prezzi trasparenti, nessuna sorpresa in fattura. Passa al piano superiore quando il volume lo richiede.
+          Nessun piano “free” permanente: inizi con <strong>7 giorni di prova</strong>, poi scegli l’abbonamento tra i piani che offriamo (definiti lato piattaforma). Contattaci per i dettagli.
         </p>
         <div className="pricing-grid">
-          <div className="pricing-card">
-            <div className="pricing-card-header">
-              <span className="pricing-name">Free</span>
-              <div className="pricing-price">
-                <span className="pricing-amount">0€</span>
-                <span className="pricing-period">/mese</span>
-              </div>
-              <p className="pricing-desc">Per provare senza impegno</p>
-            </div>
-            <ul className="pricing-features">
-              <li>1 punto vendita</li>
-              <li>Ordini e cucina base</li>
-              <li>Supporto community</li>
-            </ul>
-            <Link to="/home" className="pricing-cta secondary">Inizia gratis</Link>
-          </div>
-
           <div className="pricing-card featured">
             <div className="pricing-card-header">
-              <span className="pricing-tag">Più scelto</span>
-              <span className="pricing-name">Pro</span>
+              <span className="pricing-tag">Per iniziare</span>
+              <span className="pricing-name">Prova 7 giorni</span>
               <div className="pricing-price">
-                <span className="pricing-amount">29€</span>
-                <span className="pricing-period">/mese</span>
+                <span className="pricing-amount">7 giorni</span>
               </div>
-              <p className="pricing-desc">Per locali in crescita</p>
+              <p className="pricing-desc">Per conoscere la piattaforma</p>
             </div>
             <ul className="pricing-features">
-              <li>Punti vendita illimitati</li>
-              <li>Ruoli e permessi avanzati</li>
-              <li>Report e analisi</li>
-              <li>Supporto prioritario</li>
+              <li>Accesso completo per valutare il servizio</li>
+              <li>Non è un piano a tempo indeterminato: serve per decidere</li>
+              <li>Al termine attivi un piano a pagamento con l’admin</li>
             </ul>
-            <Link to="/home" className="pricing-cta primary">Prova Pro</Link>
+            <Link to="/contatti#prova-gratuita" className="pricing-cta primary">Richiedi la prova</Link>
+          </div>
+
+          <div className="pricing-card">
+            <div className="pricing-card-header">
+              <span className="pricing-name">Piani Pro / Business</span>
+              <div className="pricing-price">
+                <span className="pricing-amount">Da concordare</span>
+              </div>
+              <p className="pricing-desc">Funzioni e limiti per sede</p>
+            </div>
+            <ul className="pricing-features">
+              <li>Piani commerciali definiti dalla piattaforma (es. Pro)</li>
+              <li>Ogni piano elenca cosa include (punti vendita, report, …)</li>
+              <li>Gestione da area Super Admin</li>
+            </ul>
+            <Link to="/contatti#prova-gratuita" className="pricing-cta secondary">Chiedi un preventivo</Link>
           </div>
 
           <div className="pricing-card">
@@ -212,19 +217,18 @@ export default function Landing() {
               <div className="pricing-price">
                 <span className="pricing-amount">Su misura</span>
               </div>
-              <p className="pricing-desc">Per gruppi e franchising</p>
+              <p className="pricing-desc">Gruppi e franchising</p>
             </div>
             <ul className="pricing-features">
-              <li>Tutto di Pro</li>
-              <li>API e integrazioni</li>
-              <li>Account manager</li>
-              <li>SLA dedicato</li>
+              <li>Integrazioni e volumi dedicati</li>
+              <li>Account e SLA concordati</li>
+              <li>Personalizzazioni sul modello</li>
             </ul>
             <Link to="/contatti" className="pricing-cta secondary">Contattaci</Link>
           </div>
         </div>
         <p className="pricing-note">
-          Tutti i piani includono aggiornamenti continui e strategie di backup. Cambi piano quando vuoi.
+          Gli abbonamenti includono aggiornamenti del prodotto. I dettagli economici e le funzioni per piano sono gestiti in piattaforma insieme all’amministratore.
         </p>
       </section>
 
@@ -233,8 +237,8 @@ export default function Landing() {
           <h2>Porta ordine e cucina sulla stessa frequenza</h2>
           <p>Scopri come PizzaManager può adattarsi al tuo locale: dalla singola sede al modello multi-punto.</p>
           <div className="cta-buttons">
-            <Link to="/contatti" className="btn-primary big">Richiedi una demo</Link>
-            <Link to="/home" className="btn-ghost big">Esplora l’area pubblica</Link>
+            <Link to="/contatti#prova-gratuita" className="btn-primary big">Richiedi prova o demo</Link>
+            <Link to="/negozio" className="btn-ghost big">Vedi home menu pizzeria</Link>
           </div>
         </div>
       </section>

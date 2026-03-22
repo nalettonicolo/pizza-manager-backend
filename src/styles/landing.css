@@ -417,6 +417,18 @@
   font-size: 1rem;
 }
 
+/* Terzo pulsante hero: menu pizzeria, ben visibile su sfondo chiaro */
+.landing-hero-menu-btn {
+  border: 1.5px solid #cbd5e1 !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: var(--text-dark) !important;
+}
+
+.landing-hero-menu-btn:hover {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
 /* ================= STATS STRIP ================= */
 
 .section-stats {
@@ -563,10 +575,28 @@
   margin: 0 auto;
 }
 
+.section-roles .section-head {
+  max-width: 48rem;
+}
+
 .roles-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+}
+
+.roles-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.section-lead-roles {
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
 }
 
 .role-card {
@@ -606,7 +636,8 @@
 }
 
 @media (max-width: 768px) {
-  .roles-grid {
+  .roles-grid,
+  .roles-grid-two {
     grid-template-columns: 1fr;
   }
 }

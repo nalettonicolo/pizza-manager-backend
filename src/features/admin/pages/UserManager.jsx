@@ -56,7 +56,10 @@ export default function UserManager() {
 
   return (
     <div style={styles.wrapper}>
-      <h1>Gestione Utenti</h1>
+      <h1 className="dashboard-page-title">Dipendenti</h1>
+      <p style={{ margin: "0 0 20px 0", fontSize: 14, color: "#666" }}>
+        Utenti del tenant: ruolo operativo e attivazione. Per i permessi sulle aree (cassa, cucina, …) usa anche <strong>Ruoli</strong> nel menu.
+      </p>
 
       {users.length === 0 ? (
         <p>Nessun utente presente.</p>

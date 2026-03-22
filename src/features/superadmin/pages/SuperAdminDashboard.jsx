@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 import { getPlatformStats } from "@/features/superadmin/services/superadminService";
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 
-const PIANO_LABEL = { FREE: "Free", PRO: "Pro", ENTERPRISE: "Enterprise" };
+const PIANO_LABEL = {
+  TRIAL: "Prova (7 gg)",
+  PRO: "Pro",
+  ENTERPRISE: "Enterprise",
+  FREE: "Free (legacy)",
+};
 const STATO_LABEL = { ATTIVA: "Attiva", SCADUTA: "Scaduta", SOSPESA: "Sospesa", CANCELLATA: "Cancellata" };
 
 const SUPERADMIN_NAV = [

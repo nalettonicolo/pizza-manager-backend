@@ -43,4 +43,5 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 
 - **Guida dettagliata deploy:** `DEPLOY.md`
 - **Guida utente Super Admin (console piattaforma):** `docs/GUIDA_SUPERADMIN.md`
+- **Architettura e stato (roadmap vs codice):** `docs/ARCHITETTURA_E_STATO.md`
 - **Punto della situazione:** `PUNTO_SITUAZIONE_ENTERPRISE.md`

@@ -5,10 +5,14 @@ import DashboardNavCards from "@/components/dashboard/DashboardNavCards"
 import { formatPrice } from "@/utils/format"
 
 const ADMIN_NAV = [
-  { to: "/admin/dashboard", label: "Riepilogo", description: "Ordini e fatturato" },
-  { to: "/admin/menu", label: "Menu", description: "Prodotti e categorie" },
-  { to: "/admin/report", label: "Report", description: "Statistiche e resoconti" },
-  { to: "/admin/settings", label: "Impostazioni", description: "Configurazione pizzeria" },
+  { to: "/admin/dashboard", label: "Riepilogo", description: "KPI giornalieri (ordini, fatturato, utenti)" },
+  { to: "/admin/report", label: "Report vendite", description: "Totali ordini, fatturato, prodotto top" },
+  { to: "/admin/menu", label: "Menu", description: "Categorie, listini, allergeni" },
+  { to: "/admin/menu/ingredienti", label: "Magazzino", description: "Ingredienti, quantità, costi unitari" },
+  { to: "/admin/menu/pizze", label: "Pizze e prezzi", description: "Composizione e ricavi" },
+  { to: "/admin/dipendenti", label: "Dipendenti", description: "Utenti del locale e ruoli" },
+  { to: "/admin/ruoli", label: "Ruoli e permessi", description: "Accesso alle aree operative" },
+  { to: "/admin/settings", label: "Impostazioni", description: "Dati pizzeria, orari, parametri" },
 ]
 
 export default function Dashboard() {
@@ -51,6 +55,10 @@ export default function Dashboard() {
       <h1 className="dashboard-page-title">Riepilogo</h1>
 
       <DashboardNavCards items={ADMIN_NAV} columns={4} />
+
+      <p style={{ margin: "20px 0 0", fontSize: 13, color: "#64748b", maxWidth: 640 }}>
+        KPI avanzati (ticket medio, pizze vendute, fasce orarie) e margini analitici sono in roadmap; il report attuale resta su totali e best seller.
+      </p>
 
       {loading ? (
         <div className="dashboard-loading">

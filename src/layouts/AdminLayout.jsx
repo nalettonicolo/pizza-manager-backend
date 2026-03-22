@@ -5,11 +5,15 @@ import { useTenant } from "@/app/contexts/TenantContext";
 
 const HEADER_HEIGHT = 56;
 
+/** Voci allineate alle route reali: roadmap “ideale” mappata su pagine esistenti (vedi docs/ARCHITETTURA_E_STATO.md). */
 const topNavItems = [
   { to: "/admin/dashboard", label: "Riepilogo" },
-  { to: "/admin/ruoli", label: "Ruoli" },
-  { to: "/admin/menu", label: "Menu" },
   { to: "/admin/report", label: "Report" },
+  { to: "/admin/menu", label: "Menu" },
+  { to: "/admin/menu/ingredienti", label: "Magazzino" },
+  { to: "/admin/menu/pizze", label: "Costi" },
+  { to: "/admin/dipendenti", label: "Dipendenti" },
+  { to: "/admin/ruoli", label: "Ruoli" },
   { to: "/admin/settings", label: "Impostazioni" },
 ];
 
@@ -70,7 +74,7 @@ export default function AdminLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to !== "/admin/menu"}
+                end={!item.to.startsWith("/admin/menu")}
                 className={({ isActive }) => (isActive ? "active" : "")}
               >
                 {item.label}

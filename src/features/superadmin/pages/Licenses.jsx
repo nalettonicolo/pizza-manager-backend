@@ -8,7 +8,12 @@ const STATO_LABEL = {
   SOSPESA: "Sospesa",
   CANCELLATA: "Cancellata",
 };
-const PIANO_LABEL = { FREE: "Free", PRO: "Pro", ENTERPRISE: "Enterprise" };
+const PIANO_LABEL = {
+  TRIAL: "Prova (7 gg)",
+  PRO: "Pro",
+  ENTERPRISE: "Enterprise",
+  FREE: "Free (legacy)",
+};
 
 const STATO_BADGE = {
   ATTIVA: "badge badge-success",

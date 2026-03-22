@@ -46,6 +46,7 @@ const BibitePage = lazy(() => import("@/features/admin/pages/menu/BibitePage"));
 const DolciPage = lazy(() => import("@/features/admin/pages/menu/DolciPage"));
 const FrittiPage = lazy(() => import("@/features/admin/pages/menu/FrittiPage"));
 const AllergeniPage = lazy(() => import("@/features/admin/pages/menu/AllergeniPage"));
+const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
 
 /* ================= OPERATIVE (lazy) ================= */
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
@@ -55,6 +56,7 @@ const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"));
 const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"));
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"));
 const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"));
+const OperativeTurniPage = lazy(() => import("@/features/operative/pages/OperativeTurniPage"));
 
 /* ================= LEGACY ================= */
 import OrdinePage from "@/pages/OrdinePage";
@@ -167,6 +169,7 @@ export default function AppRouter() {
           <Route path="/admin/menu/fritti" element={<Suspense fallback={<PageFallback />}><FrittiPage /></Suspense>} />
           <Route path="/admin/menu/allergeni" element={<Suspense fallback={<PageFallback />}><AllergeniPage /></Suspense>} />
           <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
+          <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
           <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
           <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
             <Route index element={<Navigate to="dati-pizzeria" replace />} />
@@ -197,6 +200,7 @@ export default function AppRouter() {
           <Route path="/operative/cassa" element={<Suspense fallback={<PageFallback />}><CassaPage /></Suspense>} />
           <Route path="/operative/cassa/prodotti-esauriti" element={<Suspense fallback={<PageFallback />}><ProdottiEsauritiPage /></Suspense>} />
           <Route path="/operative/cassa/ingredienti-esauriti" element={<Navigate to="/operative/cassa/prodotti-esauriti" replace />} />
+          <Route path="/operative/turni" element={<Suspense fallback={<PageFallback />}><OperativeTurniPage /></Suspense>} />
           <Route path="/operative/cucina" element={<Suspense fallback={<PageFallback />}><Cucina /></Suspense>} />
           <Route path="/operative/bancone" element={<Suspense fallback={<PageFallback />}><Bancone /></Suspense>} />
           <Route path="/operative/pizzaioli" element={<Suspense fallback={<PageFallback />}><PizzaioloDashboard /></Suspense>} />

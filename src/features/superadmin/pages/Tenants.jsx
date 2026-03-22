@@ -7,10 +7,18 @@ import {
 } from "@/features/superadmin/services/superadminService";
 
 const PIANO_OPTIONS = [
-  { value: "FREE", label: "Free" },
+  { value: "TRIAL", label: "Prova (7 giorni)" },
   { value: "PRO", label: "Pro" },
   { value: "ENTERPRISE", label: "Enterprise" },
 ];
+
+/** Etichette visualizzazione; FREE = dati legacy prima della prova a pagamento */
+const PIANO_LABEL = {
+  TRIAL: "Prova (7 gg)",
+  PRO: "Pro",
+  ENTERPRISE: "Enterprise",
+  FREE: "Free (legacy)",
+};
 
 function slugify(s) {
   return s
@@ -49,7 +57,7 @@ export default function Tenants() {
       mode: "create",
       nome: "",
       slug: "",
-      piano: "FREE",
+      piano: "TRIAL",
       attivo: true,
     });
   };
@@ -60,7 +68,7 @@ export default function Tenants() {
       id: t.id,
       nome: t.nome,
       slug: t.slug,
-      piano: t.piano ?? "FREE",
+      piano: t.piano ?? "TRIAL",
       attivo: !!t.attivo,
     });
   };
@@ -170,7 +178,7 @@ export default function Tenants() {
                 <tr key={t.id}>
                   <td style={{ fontWeight: 600 }}>{t.nome}</td>
                   <td style={{ color: "#666" }}>{t.slug}</td>
-                  <td>{t.piano ?? "FREE"}</td>
+                  <td>{PIANO_LABEL[t.piano] ?? t.piano ?? "—"}</td>
                   <td>
                     <span className={t.attivo ? "badge badge-success" : "badge badge-neutral"}>
                       {t.attivo ? "Attivo" : "Disattivo"}

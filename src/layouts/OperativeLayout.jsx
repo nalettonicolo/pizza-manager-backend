@@ -18,6 +18,7 @@ const ROLE_NAV = [
   { to: "/operative/dashboard", label: "Riepilogo", areaKey: "riepilogo" },
   { to: "/operative/cassa", label: "Cassa", areaKey: "cassa" },
   { to: "/operative/cassa/prodotti-esauriti", label: "Prodotti esauriti", areaKey: "cassa" },
+  { to: "/operative/turni", label: "Turni", areaKey: "cassa" },
   { to: "/operative/cucina", label: "Cucina", areaKey: "cucina" },
   { to: "/operative/bancone", label: "Bancone", areaKey: "bancone" },
   { to: "/operative/pizzaioli", label: "Pizzaioli", areaKey: "pizzaiolo" },

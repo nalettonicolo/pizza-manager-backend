@@ -1,24 +1,25 @@
-import { Outlet } from "react-router-dom"
+import { Outlet, Link } from "react-router-dom"
+import "@/styles/public-layout.css"
 
 export default function PublicLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      
-      {/* Header pubblico (puoi personalizzarlo dopo) */}
-      <header className="bg-white shadow px-6 py-4">
-        <h1 className="text-xl font-bold">PizzaManager</h1>
+    <div className="public-layout-root">
+      <header className="public-layout-header">
+        <Link to="/" className="public-layout-logo">
+          PizzaManager
+        </Link>
+        <Link to="/contatti" className="public-layout-header-link">
+          Contatti
+        </Link>
       </header>
 
-      {/* Contenuto pagina */}
-      <main className="flex-1 p-6">
+      <main className="public-layout-main">
         <Outlet />
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t px-6 py-4 text-sm text-gray-500 text-center">
+      <footer className="public-layout-footer">
         © {new Date().getFullYear()} PizzaManager
       </footer>
-
     </div>
   )
 }

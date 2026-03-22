@@ -21,7 +21,16 @@ export default function Home() {
   const { plan, isPro, isEnterprise } = usePlan();
 
   const isAdmin = ruolo === "admin";
-  const pianoLabel = plan === "PRO" ? "Pro" : plan === "ENTERPRISE" ? "Enterprise" : "Free";
+  const pianoLabel =
+    plan === "PRO"
+      ? "Pro"
+      : plan === "ENTERPRISE"
+        ? "Enterprise"
+        : plan === "TRIAL"
+          ? "Prova (7 giorni)"
+          : plan === "FREE"
+            ? "Free (legacy)"
+            : plan
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">

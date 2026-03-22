@@ -73,7 +73,7 @@ export default function Settings() {
       <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
         <h2 style={{ marginBottom: 4 }}>Piani di abbonamento</h2>
         <p style={{ margin: "0 0 12px 0", fontSize: 14, color: "#666" }}>
-          Definisci i piani (Free, Pro, Enterprise) e i limiti associati. Ogni cliente è collegato a un piano.
+          Crea e modifica i piani commerciali (nome, prezzo, cosa include ogni piano). Non esiste un piano free permanente: i nuovi clienti partono con la <strong>prova di 7 giorni</strong>, poi passano a un abbonamento. Ogni cliente è associato a un codice piano (es. Prova, Pro, Enterprise).
         </p>
         <Link to="/superadmin/piani" className="btn-primary-dashboard" style={{ display: "inline-block", textDecoration: "none" }}>
           Vai a Piani di abbonamento →
@@ -85,7 +85,7 @@ export default function Settings() {
         <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: "#555", lineHeight: 1.8 }}>
           <li><strong>Riepilogo</strong> — Statistiche globali: numero clienti, abbonamenti attivi, ordini totali.</li>
           <li><strong>Clienti</strong> — Elenco pizzerie registrate; puoi creare, modificare e disattivare clienti.</li>
-          <li><strong>Piani di abbonamento</strong> — Definizione dei piani (Free, Pro, Enterprise) offerti ai clienti.</li>
+          <li><strong>Piani di abbonamento</strong> — Definizione dei piani e delle funzioni incluse; prova 7 giorni poi abbonamento.</li>
           <li><strong>Abbonamenti</strong> — Stato delle licenze per ogni cliente (attiva, scaduta, sospesa).</li>
           <li><strong>Impostazioni</strong> — Configurazione globale (supporto, nome app, parametri piattaforma).</li>
         </ul>

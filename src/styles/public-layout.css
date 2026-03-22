@@ -1,0 +1,76 @@
+/* Layout pagine pubbliche (login, home, …) — senza Tailwind */
+
+.public-layout-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.public-layout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.public-layout-logo {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  background: linear-gradient(115deg, #962d22, #e85d4c);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.public-layout-header-link {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  text-decoration: none;
+}
+
+.public-layout-header-link:hover {
+  color: #c0392b;
+}
+
+.public-layout-main {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.public-layout-footer {
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  background: #fff;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .public-layout-root {
+    background: #0f172a;
+  }
+
+  .public-layout-header,
+  .public-layout-footer {
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(148, 163, 184, 0.1);
+    color: #94a3b8;
+  }
+
+  .public-layout-header-link {
+    color: #94a3b8;
+  }
+}

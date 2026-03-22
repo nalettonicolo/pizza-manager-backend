@@ -61,7 +61,7 @@ export async function createTenant(payload) {
   const row = {
     nome: payload.nome,
     slug: payload.slug,
-    piano: payload.piano ?? "FREE",
+    piano: payload.piano ?? "TRIAL",
     attivo: payload.attivo ?? true,
   };
   const { data, error } = await supabase.from("tenants").insert(row).select().single();
@@ -120,7 +120,7 @@ export async function getPlatformStats() {
   const totalTenants = tenants.length;
   const activeTenants = tenants.filter((t) => t.attivo).length;
   const byPlan = tenants.reduce((acc, t) => {
-    const p = t.piano ?? "FREE";
+    const p = t.piano ?? "TRIAL";
     acc[p] = (acc[p] || 0) + 1;
     return acc;
   }, {});

@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import "../../../styles/landing.css";
 
 const DEFAULT_EMAIL = "info@pizzamanager.it";
 
 export default function Contatti() {
+  const location = useLocation();
   const [sent, setSent] = useState(false);
   const [form, setForm] = useState({
     nome: "",
@@ -13,6 +14,16 @@ export default function Contatti() {
     telefono: "",
     messaggio: "",
   });
+
+  useEffect(() => {
+    if (location.hash !== "#prova-gratuita") return;
+    const el = document.getElementById("prova-gratuita");
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [location.pathname, location.hash]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -27,10 +38,11 @@ export default function Contatti() {
   return (
     <div className="landing-wrapper">
       <nav className="landing-nav">
-        <Link to="/" className="logo">🍕 PizzaManager</Link>
+        <Link to="/" className="logo">PizzaManager</Link>
         <div className="nav-links">
+          <Link to="/negozio" className="btn-outline">Menu online</Link>
           <Link to="/login" className="btn-outline">Accedi</Link>
-          <Link to="/home" className="btn-primary">Prova gratuita</Link>
+          <Link to="/contatti#prova-gratuita" className="btn-primary">Prova gratuita</Link>
         </div>
       </nav>
 
@@ -38,8 +50,33 @@ export default function Contatti() {
         <div className="hero-text" style={{ maxWidth: 560, margin: "0 auto" }}>
           <h1 style={{ fontSize: "1.75rem", marginBottom: 8 }}>Contattaci</h1>
           <p className="hero-desc" style={{ marginBottom: 24 }}>
-            Richiedi informazioni sul servizio, prezzi o supporto. Compila il modulo e ti risponderemo via email.
+            Richiedi informazioni sul servizio, una demo o la licenza di prova. Compila il modulo e apri il messaggio in posta per inviarci una email.
           </p>
+
+          <div
+            id="prova-gratuita"
+            className="dashboard-box"
+            style={{
+              marginBottom: 28,
+              padding: 20,
+              textAlign: "left",
+              borderColor: "rgba(192, 57, 43, 0.25)",
+              background: "linear-gradient(145deg, #fff8f6 0%, #fff 100%)",
+            }}
+          >
+            <h2 style={{ fontSize: "1.125rem", margin: "0 0 10px", color: "#0f172a" }}>
+              Prova 7 giorni (licenza di prova)
+            </h2>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
+              Non esiste un piano free permanente: l’ingresso è una <strong>prova di 7 giorni</strong> per valutare il servizio, poi si attiva un <strong>piano a pagamento</strong> (definito in piattaforma).
+            </p>
+            <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
+              Per entrare in prova <strong>non basta registrarsi da soli</strong>: l’<strong>amministratore della piattaforma</strong> abilita il tenant e ti invia <strong>email e password</strong> (o invito).
+            </p>
+            <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
+              Scrivici qui sotto con <strong>“Richiesta prova 7 giorni”</strong> nel messaggio: ti rispondiamo con i passaggi e, se previsto, le credenziali.
+            </p>
+          </div>
 
           {sent ? (
             <div className="dashboard-box" style={{ padding: 24, background: "#f0fdf4", borderColor: "#86efac" }}>
@@ -106,7 +143,7 @@ export default function Contatti() {
                   rows={4}
                   value={form.messaggio}
                   onChange={(e) => setForm((f) => ({ ...f, messaggio: e.target.value }))}
-                  placeholder="Descrivi la tua richiesta..."
+                  placeholder="Es. Richiesta licenza di prova per il mio locale…"
                   style={{ padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, resize: "vertical" }}
                 />
               </label>

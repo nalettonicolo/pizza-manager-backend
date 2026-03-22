@@ -1,9 +1,10 @@
 // 📍 src/features/public/pages/Login.jsx
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { devLog } from "@/lib/devLog"
+import "@/styles/login.css"
 
 export default function Login() {
   const { login, ruolo, tipoUtente, user, loading } = useAuth()
@@ -15,24 +16,18 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [noProfileError, setNoProfileError] = useState(false)
 
-  // ===================================================
-  // REDIRECT AUTOMATICO DOPO LOGIN
-  // ===================================================
-
   useEffect(() => {
     if (loading) return
     if (!user || !tipoUtente) return
 
     devLog("Login", "redirect check", { tipoUtente, ruolo, email: user?.email })
 
-    // ================= CLIENTE =================
     if (tipoUtente === "cliente") {
       devLog("Login", "redirect → /cliente/dashboard")
       navigate("/cliente/dashboard", { replace: true })
       return
     }
 
-    // ================= STAFF =================
     if (tipoUtente === "staff") {
       const roleRoutes = {
         superadmin: "/superadmin/dashboard",
@@ -57,10 +52,6 @@ export default function Login() {
     navigate("/", { replace: true })
   }, [user, ruolo, tipoUtente, loading, navigate])
 
-  // ===================================================
-  // SUBMIT LOGIN
-  // ===================================================
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
@@ -70,18 +61,16 @@ export default function Login() {
 
     const result = await login(email, password)
     const err = result?.error
-    const data = result?.data
 
     if (err) {
       devLog("Login", "submit error", err.message)
       setError(err.message || "Errore di accesso")
     } else {
-      devLog("Login", "submit ok, in attesa redirect", { userId: data?.user?.id })
+      devLog("Login", "submit ok, in attesa redirect", { userId: result?.data?.user?.id })
     }
     setSubmitting(false)
   }
 
-  // Messaggio se autenticato ma senza profilo (utenti_ruoli/clienti)
   useEffect(() => {
     if (!loading && user && tipoUtente === null && ruolo === null) {
       setNoProfileError(true)
@@ -90,70 +79,89 @@ export default function Login() {
     }
   }, [loading, user, tipoUtente, ruolo])
 
-  // ===================================================
-  // LOADING SESSIONE
-  // ===================================================
-
   if (loading) {
     devLog("Login", "in attesa sessione (loading=true)...")
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Verifica sessione...</p>
+      <div className="login-loading-screen">
+        <div className="login-spinner" aria-hidden="true" />
+        <p>Verifica sessione…</p>
       </div>
     )
   }
 
-  // ===================================================
-  // UI
-  // ===================================================
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded shadow-md w-96">
-        <h1 className="text-xl font-bold mb-6 text-center">
-          Login
-        </h1>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="border p-2 rounded"
-            required
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="border p-2 rounded"
-            required
-          />
-
-          {error && (
-            <p className="text-red-600 text-sm">
-              {error}
+    <div className="login-page">
+      <div className="login-page-inner">
+        <div className="login-card">
+          <div className="login-brand">
+            <div className="login-brand-mark" aria-hidden="true">
+              🍕
+            </div>
+            <h1 className="login-brand-title">PizzaManager</h1>
+            <p className="login-brand-sub">
+              Accedi con le credenziali del tuo account staff o cliente.
             </p>
-          )}
-          {noProfileError && (
-            <p className="text-amber-700 text-sm bg-amber-50 p-2 rounded mt-2">
-              Accesso effettuato ma nessun profilo attivo. Verifica in Supabase che il tuo utente sia presente in <strong>public.utenti_ruoli</strong> (campo <strong>ruolo</strong> = superadmin) con il tuo user_id.
-            </p>
-          )}
+          </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="bg-black text-white p-2 rounded disabled:opacity-50"
-          >
-            {submitting ? "Accesso..." : "Accedi"}
-          </button>
+          <form className="login-form" onSubmit={handleSubmit} noValidate>
+            <div className="login-field">
+              <label className="login-label" htmlFor="login-email">
+                Email
+              </label>
+              <input
+                id="login-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="nome@esempio.it"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="login-input"
+                required
+              />
+            </div>
 
-        </form>
+            <div className="login-field">
+              <label className="login-label" htmlFor="login-password">
+                Password
+              </label>
+              <input
+                id="login-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="login-input"
+                required
+              />
+            </div>
+
+            {error && (
+              <p className="login-error" role="alert">
+                {error}
+              </p>
+            )}
+            {noProfileError && (
+              <p className="login-warning" role="status">
+                Accesso effettuato ma nessun profilo attivo. Verifica in Supabase che il tuo utente sia presente in{" "}
+                <code>public.utenti_ruoli</code> (campo <code>ruolo</code>, es. <code>superadmin</code>) con il tuo{" "}
+                <code>user_id</code>.
+              </p>
+            )}
+
+            <button type="submit" className="login-submit" disabled={submitting}>
+              {submitting ? "Accesso in corso…" : "Accedi"}
+            </button>
+          </form>
+
+          <div className="login-footer-links">
+            <Link to="/" className="login-back">
+              ← Torna alla home
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   )

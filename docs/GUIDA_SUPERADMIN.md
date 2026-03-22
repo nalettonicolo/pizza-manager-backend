@@ -59,7 +59,7 @@ Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase c
 **Funzioni:**
 
 - Visualizzazione elenco **tutti i tenant** (pizzerie) non eliminati (`deleted_at` nullo).
-- **Creazione** nuovo cliente: nome, **slug** (identificativo URL-friendly), **piano**, flag **attivo**.
+- **Creazione** nuovo cliente: nome, **slug** (identificativo URL-friendly), **piano** (default: prova **TRIAL** / 7 giorni, poi Pro o Enterprise), flag **attivo**.
 - **Modifica** cliente esistente: stessi campi.
 
 **Comportamento slug:** in creazione, se lo slug è vuoto può essere derivato dal nome (solo lettere minuscole, numeri e trattini).
@@ -72,10 +72,12 @@ Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase c
 
 **Funzioni attuali:**
 
-- Pagina **informativa** sui tre piani predefiniti: **Free**, **Pro**, **Enterprise** (prezzo indicativo, limiti ordini descritti nel testo).
+- **Definizione piani commerciali**: per ogni piano puoi impostare nome, prezzo (testo libero), descrizione e **elenco punti** (“cosa include”). Aggiunta, modifica, eliminazione piani.
+- Persistenza in **localStorage** del browser (per allineare il team; la pubblicazione su DB/landing globale va estesa in seguito).
+- **Nessun piano Free permanente** in prodotto: i nuovi clienti usano la **prova di 7 giorni** (codice piano tipico `TRIAL` sui tenant), poi un abbonamento (es. `PRO`, `ENTERPRISE`).
 - Link di navigazione verso altre sezioni Super Admin.
 
-**Nota per il team prodotto:** la pagina indica che l’estensione con **salvataggio piani su database** è possibile in futuro; oggi è principalmente **consultazione** e allineamento commerciale.
+**Codici piano sui tenant** (campo `piano`): `TRIAL`, `PRO`, `ENTERPRISE`; eventuali valori `FREE` in database sono considerati **legacy**.
 
 ---
 
@@ -131,6 +133,7 @@ Quando una di queste viene implementata, aggiungere una sottosezione in §4 e un
 |-----------|-----------|
 | `DEPLOY_COMANDI.md` | Deploy frontend (Firebase) e push backend (Koyeb) |
 | `DEPLOY.md` | Procedura deploy dettagliata |
+| `ARCHITETTURA_E_STATO.md` | Roadmap vs implementazione (admin tenant, operativo, gap) |
 | Migrazioni SQL in `supabase/migrations/` | Schema, RLS, `utenti_ruoli` |
 
 ---
@@ -142,6 +145,8 @@ Compila una riga per ogni modifica significativa all’area Super Admin.
 | Data | Versione / commit | Cosa è cambiato |
 |------|-------------------|-----------------|
 | 2026-03-22 | — | Prima stesura guida: Riepilogo, Clienti, Piani, Abbonamenti, Impostazioni; note su limiti e sicurezza. |
+| 2026-03-22 | — | Collegamento a `ARCHITETTURA_E_STATO.md` per allineamento roadmap / codice. |
+| 2026-03-22 | — | Piani: gestione contenuti in Super Admin (localStorage); TRIAL 7 giorni; niente Free permanente. |
 
 ---
 
