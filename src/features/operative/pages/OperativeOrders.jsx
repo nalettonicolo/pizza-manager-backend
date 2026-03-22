@@ -9,9 +9,16 @@ export default function OperativeOrders() {
   }, [])
 
   const fetchOrdini = async () => {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 1)
+
     const { data, error } = await supabase
       .from("v_ordini_stato_live")
       .select("*")
+      .gte("created_at", start.toISOString())
+      .lt("created_at", end.toISOString())
       .order("created_at", { ascending: false })
 
     if (error) {

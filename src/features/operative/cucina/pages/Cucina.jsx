@@ -25,7 +25,7 @@ export default function Cucina() {
     setLoading(true)
     setError(null)
     try {
-      const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, limit: 50 })
+      const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 50 })
       setOrders(data || [])
     } catch (err) {
       console.error(err)

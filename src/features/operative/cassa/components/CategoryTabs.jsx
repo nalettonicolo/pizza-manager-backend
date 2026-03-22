@@ -20,6 +20,7 @@ export default function CategoryTabs({
   categories = [],
   activeCategory,
   onSelect,
+  accentColor = "#e65100",
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -47,8 +48,8 @@ export default function CategoryTabs({
   return (
     <div style={styles.section}>
       <div style={styles.menuTitle}>
-        <UtensilsCrossed size={20} style={{ color: "#e65100", flexShrink: 0 }} />
-        <span style={styles.menuTitleText}>Menú</span>
+        <UtensilsCrossed size={20} style={{ color: accentColor, flexShrink: 0 }} />
+        <span style={{ ...styles.menuTitleText, color: accentColor }}>Menù</span>
       </div>
       <div style={styles.wrapper}>
         {/* Tasto Categorie: apre elenco categorie esistenti */}
@@ -137,9 +138,8 @@ const styles = {
     marginBottom: 10,
   },
   menuTitleText: {
-    fontSize: 16,
-    fontWeight: 600,
-    color: "#e65100",
+    fontSize: 18,
+    fontWeight: 700,
   },
   wrapper: {
     display: "flex",

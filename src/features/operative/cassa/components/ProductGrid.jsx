@@ -10,6 +10,7 @@ export default function ProductGrid({
   canAdd = true,
   showModifica = true,
   disabledProductIds = new Set(),
+  storefront = false,
 }) {
   const disabledSet = disabledProductIds instanceof Set ? disabledProductIds : new Set(disabledProductIds || [])
   if (!products.length) {
@@ -33,6 +34,7 @@ export default function ProductGrid({
               ...styles.row,
               background: rowBackground,
               opacity: isDisabled ? 0.75 : 1,
+              ...(storefront ? { boxShadow: "0 1px 3px rgba(0,0,0,0.08)" } : {}),
             }}
           >
             <div style={styles.rowLeft}>
@@ -97,6 +99,7 @@ ProductGrid.propTypes = {
   canAdd: PropTypes.bool,
   showModifica: PropTypes.bool,
   disabledProductIds: PropTypes.oneOfType([PropTypes.instanceOf(Set), PropTypes.array]),
+  storefront: PropTypes.bool,
 }
 
 const styles = {

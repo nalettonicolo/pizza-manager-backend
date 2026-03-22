@@ -16,7 +16,7 @@ export default function DeliveryDashboard() {
     if (!tenantId) return
     setLoading(true)
     try {
-      const data = await getOrders(tenantId, { stato: STATO_PRONTO, limit: 30 })
+      const data = await getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 30 })
       setOrders(data || [])
     } catch (err) {
       console.error(err)

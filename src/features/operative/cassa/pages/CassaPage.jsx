@@ -32,6 +32,7 @@ import {
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
+import { getLocalYYYYMMDD, orderCreatedLocalDateKey } from "@/utils/localDate"
 import {
   buildPlanningSlots,
   buildSlotsInOpeningHours,
@@ -202,10 +203,7 @@ export default function CassaPage() {
   const loadOrdini = useCallback(async () => {
     if (!tenantId) return
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      const fromDate = `${today}T00:00:00.000Z`
-      const toDate = `${today}T23:59:59.999Z`
-      const data = await getOrders(tenantId, { fromDate, toDate, limit: 200 })
+      const data = await getOrders(tenantId, { todayOnly: true, limit: 200 })
       setOrdiniOggi(Array.isArray(data) ? data : [])
     } catch (e) {
       console.error(e)
@@ -247,7 +245,7 @@ export default function CassaPage() {
     setLastOrderLoading(true)
     setLastOrderModalDetail(null)
     try {
-      const data = await getOrders(tenantId, { limit: 100 })
+      const data = await getOrders(tenantId, { todayOnly: true, limit: 100 })
       const nomeNorm = (selectedCliente.nome || "").trim()
       const indirizzoNorm = (selectedCliente.indirizzo || "").trim()
       const match = (o) => {
@@ -332,15 +330,9 @@ export default function CassaPage() {
     }
   }, [loadOrdini])
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const todayStr = useMemo(() => getLocalYYYYMMDD(), [])
   const ordiniOggiFiltered = useMemo(() => {
-    return (ordiniOggi || []).filter((o) => {
-      const raw = o.createdAt ?? o.created_at
-      if (!raw) return false
-      const d = new Date(raw)
-      const orderDate = d.toISOString().slice(0, 10)
-      return orderDate === todayStr
-    })
+    return (ordiniOggi || []).filter((o) => orderCreatedLocalDateKey(o) === todayStr)
   }, [ordiniOggi, todayStr])
 
   const buildPayloadContabilita = useCallback(() => {

@@ -1,24 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { UtensilsCrossed } from "lucide-react";
 
 import { useAuth } from "@/app/contexts/AuthContext";
 import HeroStore from "@/features/public/components/HeroStore";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid";
+import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs";
 
 import { getPublicMenu, getPublicTenantInfo } from "@/features/services/publicService";
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
+import { sortByOrdine } from "@/utils/sortByOrdine";
 
 function isTodayClosed(orariSettimana) {
   if (!Array.isArray(orariSettimana) || !orariSettimana.length) return false;
-  // In orari_settimana: giorno 0 = Lunedì ... 6 = Domenica
-  const jsDay = new Date().getDay(); // 0=Dom ... 6=Sab
-  const giornoKey = (jsDay + 6) % 7; // 0=Lun ... 6=Dom
+  const jsDay = new Date().getDay();
+  const giornoKey = (jsDay + 6) % 7;
   const row = orariSettimana.find(
     (o) => Number(o.giorno) === giornoKey
   );
   if (!row) return false;
   return !row.aperto;
+}
+
+function buildCategoriesFromMenu(menu) {
+  const byId = new Map();
+  for (const p of menu) {
+    const cid = p.categoria_id;
+    if (!cid) continue;
+    const ord = Number(p.ordine) || 0;
+    const cur = byId.get(cid);
+    if (!cur) {
+      byId.set(cid, { id: cid, nome: p.categoria_nome || "Altro", ordine: ord });
+    } else {
+      cur.ordine = Math.min(cur.ordine, ord);
+      if (p.categoria_nome) cur.nome = p.categoria_nome;
+    }
+  }
+  return sortByOrdine([...byId.values()]);
 }
 
 export default function PublicStore() {
@@ -30,6 +49,7 @@ export default function PublicStore() {
   const [tenantName, setTenantName] = useState(null);
   const [branding, setBranding] = useState(null);
   const [menuTheme, setMenuTheme] = useState(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(null);
 
   useEffect(() => {
     async function loadData() {
@@ -67,6 +87,49 @@ export default function PublicStore() {
     loadData();
   }, []);
 
+  const categories = useMemo(() => buildCategoriesFromMenu(menu), [menu]);
+
+  const defaultCategoryId = useMemo(() => {
+    if (!categories.length) return null;
+    const key = (n) => (n || "").toLowerCase().trim();
+    const classiche = categories.find((c) => key(c.nome) === "classiche");
+    const pizzaFirst = categories.find((c) =>
+      ["classiche", "speciali", "bianche", "chiuse"].includes(key(c.nome))
+    );
+    return (classiche || pizzaFirst || categories[0]).id;
+  }, [categories]);
+
+  const activeCategoryId = selectedCategoryId ?? defaultCategoryId;
+
+  useEffect(() => {
+    if (selectedCategoryId && !categories.some((c) => c.id === selectedCategoryId)) {
+      setSelectedCategoryId(null);
+    }
+  }, [categories, selectedCategoryId]);
+
+  const accent = menuTheme?.accent || "#e65100";
+  const cardBg = menuTheme?.cardBackground ?? "#ffffff";
+  const pageBg = menuTheme?.background;
+
+  const filteredProducts = useMemo(() => {
+    if (!menu.length) return [];
+    if (!categories.length) return menu;
+    if (!activeCategoryId) return [];
+    return menu.filter((p) => p.categoria_id === activeCategoryId);
+  }, [menu, categories.length, activeCategoryId]);
+
+  const ingredientiMap = useMemo(
+    () =>
+      menu.reduce(
+        (acc, p) => ({
+          ...acc,
+          [p.id]: p.descrizione ? [p.descrizione] : [],
+        }),
+        {}
+      ),
+    [menu]
+  );
+
   if (loading) return <Loader />;
   if (error) return <ErrorState message={error} />;
 
@@ -74,7 +137,7 @@ export default function PublicStore() {
     <div
       style={{
         ...styles.wrapper,
-        ...(menuTheme?.background ? { background: menuTheme.background } : {}),
+        ...(pageBg ? { background: pageBg } : {}),
       }}
     >
       <HeroStore branding={branding} menuTheme={menuTheme} />
@@ -86,29 +149,40 @@ export default function PublicStore() {
       )}
 
       <div style={styles.menuSection}>
-        <h2 style={styles.menuTitle}>Menù</h2>
+        {categories.length > 0 ? (
+          <CategoryTabs
+            categories={categories}
+            activeCategory={activeCategoryId}
+            onSelect={setSelectedCategoryId}
+            accentColor={accent}
+          />
+        ) : (
+          <div style={styles.menuHeaderRow}>
+            <UtensilsCrossed size={22} style={{ color: accent, flexShrink: 0 }} />
+            <span style={{ ...styles.menuTitleFallback, color: accent }}>Menù</span>
+          </div>
+        )}
         {!user && (
           <p style={styles.loginHint}>Accedi per ordinare</p>
         )}
         <ProductGrid
-          products={menu}
-          ingredientiMap={menu.reduce((acc, p) => ({ ...acc, [p.id]: p.descrizione ? [p.descrizione] : [] }), {})}
-          rowBackground={menuTheme?.cardBackground ?? "#f8f9fa"}
+          products={filteredProducts}
+          ingredientiMap={ingredientiMap}
+          rowBackground={cardBg}
           canAdd={!!user}
           onAdd={() => {}}
+          showModifica={false}
+          storefront
         />
       </div>
     </div>
   );
 }
 
-/* =========================
-   STYLES
-========================= */
-
 const styles = {
   wrapper: {
-    padding: "30px",
+    padding: "24px 16px 40px",
+    minHeight: "40vh",
   },
   closedBanner: {
     marginTop: 24,
@@ -121,12 +195,23 @@ const styles = {
     fontSize: 14,
   },
   menuSection: {
-    marginTop: 30,
+    marginTop: 28,
+    maxWidth: 920,
+    marginLeft: "auto",
+    marginRight: "auto",
   },
-  menuTitle: {
-    marginBottom: 8,
-    fontSize: 22,
-    fontWeight: 600,
+  menuHeaderRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottom: "1px solid #eee",
+  },
+  menuTitleFallback: {
+    fontSize: 18,
+    fontWeight: 700,
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   },
   loginHint: {
     fontSize: 14,

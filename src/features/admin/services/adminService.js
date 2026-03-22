@@ -79,17 +79,23 @@ export async function getRecentOrders(tenantId, limit = 5) {
  * Ordini con filtro opzionale per stato e/o intervallo date (per Cassa giornata odierna, Cucina/Bancone).
  * stati: IN_ATTESA | IN_PREPARAZIONE | PRONTO | CONSEGNATO | ANNULLATO
  * fromDate / toDate: stringhe ISO (es. "2025-03-06T00:00:00.000Z") per filtrare la giornata
+ * todayOnly: solo ordini creati nel giorno locale del browser (00:00–24:00, escluso fine intervallo)
  */
 export async function getOrders(tenantId, opts = {}) {
-  const { stato, limit = 50, fromDate, toDate } = opts
+  const { stato, limit = 50, fromDate, toDate, todayOnly } = opts
   let q = supabase
     .from("Ordine")
     .select("*")
     .eq("tenantId", tenantId)
     .order("createdAt", { ascending: false })
   if (stato) q = q.eq("stato", stato)
-  if (fromDate != null) q = q.gte("createdAt", fromDate)
-  if (toDate != null) q = q.lte("createdAt", toDate)
+  if (todayOnly) {
+    const { start, end } = getTodayRange()
+    q = q.gte("createdAt", start).lt("createdAt", end)
+  } else {
+    if (fromDate != null) q = q.gte("createdAt", fromDate)
+    if (toDate != null) q = q.lte("createdAt", toDate)
+  }
   if (limit) q = q.limit(limit)
   const { data, error } = await q
   if (error) throw error
@@ -1218,6 +1224,89 @@ function getDefaultReportRange() {
   return { start: start.toISOString(), end: end.toISOString() }
 }
 
+/** Categorie da escludere dalla classifica vendite (solo prodotti “ingrediente”, non pizze/bibite/ecc.). */
+function isIngredientCategoryForReport(cat) {
+  if (!cat) return false
+  const slug = (cat.slug || "").toLowerCase().trim()
+  const nome = (cat.nome || "").toLowerCase().trim()
+  if (slug === "ingredienti" || slug === "ingrediente") return true
+  if (nome === "ingredienti" || nome === "ingrediente") return true
+  if (nome.includes("ingredient") && !nome.includes("pizza")) return true
+  return false
+}
+
+/**
+ * Top N prodotti venduti (per nome prodotto + formato), esclude righe la cui categoria è “ingredienti”.
+ */
+async function computeTopProdottiVenduti(tenantId, ordineIds, topN = 5) {
+  if (!tenantId || !ordineIds?.length) return []
+
+  let righe
+  try {
+    righe = await getRigheByOrdineIds(ordineIds)
+  } catch (e) {
+    console.warn("computeTopProdottiVenduti righe:", e)
+    return []
+  }
+  if (!righe?.length) return []
+
+  const productIds = [...new Set(righe.map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean))]
+  if (!productIds.length) return []
+
+  let prodottiRows = []
+  try {
+    const { data, error } = await supabase
+      .from("Prodotto")
+      .select("id, nome, categoria_id")
+      .eq("tenant_id", tenantId)
+      .in("id", productIds)
+    if (error) throw error
+    prodottiRows = data || []
+  } catch (e) {
+    console.warn("computeTopProdottiVenduti prodotti:", e)
+    return []
+  }
+
+  let categorie = []
+  try {
+    categorie = await getCategories(tenantId)
+  } catch {
+    categorie = []
+  }
+  const catById = {}
+  for (const c of categorie) {
+    catById[c.id] = c
+  }
+
+  const byId = {}
+  for (const p of prodottiRows) {
+    byId[p.id] = p
+  }
+
+  const counts = new Map()
+
+  for (const r of righe) {
+    const pid = r.prodottoId ?? r.prodotto_id
+    if (!pid) continue
+    const p = byId[pid]
+    if (!p) continue
+    const cid = p.categoria_id ?? p.categoriaId
+    const cat = cid ? catById[cid] : null
+    if (isIngredientCategoryForReport(cat)) continue
+
+    const formatoNome = r.formatoNome ?? r.formato_nome
+    const baseNome = (p.nome || "Prodotto").trim()
+    const label = formatoNome ? `${baseNome} (${formatoNome})` : baseNome
+    const q = Number(r.quantita) || 0
+    counts.set(label, (counts.get(label) || 0) + q)
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([nome, quantita]) => ({ nome, quantita }))
+}
+
 export async function getReportData(
   tenantId,
   startDate,
@@ -1239,13 +1328,18 @@ export async function getReportData(
     0
   )
 
+  const ordineIds = orders.map((o) => o.id).filter(Boolean)
+  const topProdotti = await computeTopProdottiVenduti(tenantId, ordineIds, 5)
+  const topProdotto = topProdotti[0]?.nome ?? "-"
+
   return {
     orders,
     totalOrders,
     totalRevenue,
     totaleOrdini: totalOrders,
     fatturato: totalRevenue,
-    topProdotto: "-",
+    topProdotti,
+    topProdotto,
   }
 }
 

@@ -50,7 +50,7 @@ export default function PizzaioloDashboard() {
     setLoading(true)
     setError(null)
     try {
-      const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, limit: 100 })
+      const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 })
       const ids = (data || []).map((o) => o.id).filter(Boolean)
       const [pizze, righe] = await Promise.all([
         ids.length ? getRigheAggregateByOrdineIds(ids) : {},
