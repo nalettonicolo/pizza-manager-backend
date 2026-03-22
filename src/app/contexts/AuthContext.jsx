@@ -263,29 +263,34 @@ export function AuthProvider({ children }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (cancelled) return
-        devLog("Auth", "onAuthStateChange", event, { userId: session?.user?.id, email: session?.user?.email })
-        const currentUser = session?.user ?? null
-        setUser(currentUser)
-        latestUserIdRef.current = currentUser?.id ?? null
-        if (retryTimeoutIdRef.current) {
-          clearTimeout(retryTimeoutIdRef.current)
-          retryTimeoutIdRef.current = null
-        }
-        if (currentUser) {
-          if (event === "INITIAL_SESSION" && lastLoadedUserIdRef.current === currentUser.id) {
-            forceLoadingFalse()
-            return
+        try {
+          if (cancelled) return
+          devLog("Auth", "onAuthStateChange", event, { userId: session?.user?.id, email: session?.user?.email })
+          const currentUser = session?.user ?? null
+          setUser(currentUser)
+          latestUserIdRef.current = currentUser?.id ?? null
+          if (retryTimeoutIdRef.current) {
+            clearTimeout(retryTimeoutIdRef.current)
+            retryTimeoutIdRef.current = null
           }
-          loadUserDataInProgressRef.current = false
-          await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
-          await loadUserData(currentUser.id)
-        } else {
-          lastLoadedUserIdRef.current = null
-          setTipoUtente(null)
-          setRuolo(null)
-          setTenantId(null)
-          setPermessiAree(null)
+          if (currentUser) {
+            if (event === "INITIAL_SESSION" && lastLoadedUserIdRef.current === currentUser.id) {
+              forceLoadingFalse()
+              return
+            }
+            loadUserDataInProgressRef.current = false
+            await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
+            await loadUserData(currentUser.id)
+          } else {
+            lastLoadedUserIdRef.current = null
+            setTipoUtente(null)
+            setRuolo(null)
+            setTenantId(null)
+            setPermessiAree(null)
+            forceLoadingFalse()
+          }
+        } catch (e) {
+          devWarn("Auth", "onAuthStateChange errore (evita promise rejection non gestita)", e?.message ?? e, e)
           forceLoadingFalse()
         }
       }

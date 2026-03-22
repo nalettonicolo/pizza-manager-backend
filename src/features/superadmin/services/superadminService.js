@@ -3,15 +3,22 @@ import { supabase } from "@/lib/supabaseClient";
 const SCHEMA_CORE = "core";
 
 /**
- * Restituisce il client Supabase per le tabelle nello schema core (se necessario).
- * Prova prima public (tenants/subscriptions), poi core.
+ * Usa lo schema `core` solo se abilitato in build E esposto in Supabase (Settings → API → Exposed schemas).
+ * Altrimenti `supabase.schema("core")` genera: "The schema must be one of the following: public, graphql_public".
+ */
+const USE_CORE_SCHEMA = import.meta.env.VITE_SUPABASE_USE_CORE_SCHEMA === "true";
+
+function isSchemaNotExposedError(err) {
+  const m = String(err?.message ?? err ?? "");
+  return /schema must be one of/i.test(m);
+}
+
+/**
+ * Query builder per `core.<table>` oppure `null` se il fallback core è disattivo.
  */
 function fromCore(table) {
-  try {
-    return supabase.schema(SCHEMA_CORE).from(table);
-  } catch {
-    return supabase.from(table);
-  }
+  if (!USE_CORE_SCHEMA) return null;
+  return supabase.schema(SCHEMA_CORE).from(table);
 }
 
 const TENANT_SELECT_FULL =
@@ -25,9 +32,11 @@ async function fetchTenantsList(selectCols) {
   const q = supabase.from("tenants").select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
   const { data, error } = await q;
   if (!error) return data ?? [];
-  const coreQ = fromCore("tenants").select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
-  const res = await coreQ;
+  const core = fromCore("tenants");
+  if (!core) throw error;
+  const res = await core.select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
   if (!res.error) return res.data ?? [];
+  if (isSchemaNotExposedError(res.error)) throw error;
   throw res.error;
 }
 
@@ -54,8 +63,13 @@ export async function getTenant(id) {
     .single();
 
   if (!error) return data;
-  const res = await fromCore("tenants").select("*").eq("id", id).is("deleted_at", null).single();
-  if (res.error) throw res.error;
+  const core = fromCore("tenants");
+  if (!core) throw error;
+  const res = await core.select("*").eq("id", id).is("deleted_at", null).single();
+  if (res.error) {
+    if (isSchemaNotExposedError(res.error)) throw error;
+    throw res.error;
+  }
   return res.data;
 }
 
@@ -117,8 +131,17 @@ async function upsertSubscriptionForTenant(tenantRow, payload) {
   const opts = { onConflict: "tenant_id" };
   let r = await supabase.from("subscriptions").upsert(subRow, opts).select().single();
   if (!r.error) return;
-  r = await fromCore("subscriptions").upsert(subRow, opts).select().single();
+  const subCore = fromCore("subscriptions");
+  if (!subCore) {
+    console.warn("subscriptions upsert (solo public):", r.error?.message ?? r.error);
+    return;
+  }
+  r = await subCore.upsert(subRow, opts).select().single();
   if (r.error) {
+    if (isSchemaNotExposedError(r.error)) {
+      console.warn("subscriptions upsert: schema core non disponibile, ignorato");
+      return;
+    }
     console.warn("subscriptions upsert:", r.error.message ?? r.error);
   }
 }
@@ -128,8 +151,13 @@ export async function createTenant(payload) {
   const { data, error } = await supabase.from("tenants").insert(row).select().single();
   let created = data;
   if (error) {
-    const res = await fromCore("tenants").insert(row).select().single();
-    if (res.error) throw res.error;
+    const core = fromCore("tenants");
+    if (!core) throw error;
+    const res = await core.insert(row).select().single();
+    if (res.error) {
+      if (isSchemaNotExposedError(res.error)) throw error;
+      throw res.error;
+    }
     created = res.data;
   }
   await upsertSubscriptionForTenant(created, payload).catch(() => {});
@@ -143,8 +171,13 @@ export async function updateTenant(id, updates) {
   const row = tenantRowFromPayload(updates);
   const { error } = await supabase.from("tenants").update(row).eq("id", id);
   if (error) {
-    const res = await fromCore("tenants").update(row).eq("id", id);
-    if (res.error) throw res.error;
+    const core = fromCore("tenants");
+    if (!core) throw error;
+    const res = await core.update(row).eq("id", id);
+    if (res.error) {
+      if (isSchemaNotExposedError(res.error)) throw error;
+      throw res.error;
+    }
   }
   await upsertSubscriptionForTenant({ id, ...row }, updates).catch(() => {});
 }
@@ -164,8 +197,13 @@ export async function getSubscriptions() {
   if (!pub.error) {
     list = pub.data;
   } else {
-    const coreQ = await fromCore("subscriptions").select(cols).order("created_at", order);
-    if (coreQ.error) return [];
+    const subCore = fromCore("subscriptions");
+    if (!subCore) return [];
+    const coreQ = await subCore.select(cols).order("created_at", order);
+    if (coreQ.error) {
+      if (isSchemaNotExposedError(coreQ.error)) return [];
+      return [];
+    }
     list = coreQ.data;
   }
 
@@ -185,8 +223,11 @@ export async function getSubscriptions() {
     if (!again.error && again.data?.length) {
       rows = again.data;
     } else {
-      const coreAgain = await fromCore("subscriptions").select(cols).order("created_at", order);
-      if (!coreAgain.error && coreAgain.data?.length) rows = coreAgain.data;
+      const subCore = fromCore("subscriptions");
+      if (subCore) {
+        const coreAgain = await subCore.select(cols).order("created_at", order);
+        if (!coreAgain.error && coreAgain.data?.length) rows = coreAgain.data;
+      }
     }
   }
 

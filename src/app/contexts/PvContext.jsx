@@ -66,7 +66,7 @@ export function PvProvider({ children }) {
         setRpcContextAvailable(false)
       }
     }
-    setDbContext()
+    void setDbContext().catch(() => {})
   }, [tenantId, activePv, rpcContextAvailable])
 
   // ======================================
@@ -75,7 +75,9 @@ export function PvProvider({ children }) {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      loadPv()
+      void loadPv().catch((err) => {
+        console.error("[PvContext] loadPv:", err)
+      })
     }
 
     if (!isAuthenticated) {

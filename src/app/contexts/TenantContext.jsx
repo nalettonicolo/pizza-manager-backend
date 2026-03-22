@@ -47,7 +47,9 @@ export function TenantProvider({ children }) {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      loadTenantData()
+      void loadTenantData().catch((err) => {
+        console.error("[TenantContext] loadTenantData:", err)
+      })
     }
 
     if (!isAuthenticated) {

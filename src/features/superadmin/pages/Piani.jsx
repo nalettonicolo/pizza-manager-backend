@@ -29,14 +29,18 @@ function inclusioniFromIds(services, ids) {
   return Object.fromEntries((services || []).map((s) => [s.id, set.has(s.id)]));
 }
 
-/** Legacy: true se il prezzo non va ricalcolato automaticamente (piani salvati prima dell’introduzione del calcolo). */
+/** true solo se l’utente ha spuntato “Prezzo personalizzato” nel modale. */
 function isManualPrezzo(p) {
-  return p.usePrezzoManuale === undefined ? true : p.usePrezzoManuale === true;
+  return p.usePrezzoManuale === true;
+}
+
+/** Canone da catalogo: somma dei prezzi base dei servizi inclusi (unica fonte per il totale in card). */
+function totaleCanoneDaServizi(p, services) {
+  return sumMonthlyFromInclusioni(p.inclusioni, services);
 }
 
 function displayPrezzoForPlan(p, services) {
-  if (isManualPrezzo(p)) return p.prezzo || "—";
-  return formatEuroMonth(sumMonthlyFromInclusioni(p.inclusioni, services));
+  return formatEuroMonth(totaleCanoneDaServizi(p, services));
 }
 
 function buildDefaultPlans(services) {
@@ -163,7 +167,7 @@ function migrateLegacyPlan(p, services) {
     attivo: p.attivo === false ? false : true,
     validitaGiorni: p.validitaGiorni != null && p.validitaGiorni !== "" ? Number(p.validitaGiorni) : null,
     inclusioni: out,
-    usePrezzoManuale: p.usePrezzoManuale === undefined ? true : p.usePrezzoManuale === true,
+    usePrezzoManuale: p.usePrezzoManuale === true,
   };
 }
 
@@ -677,9 +681,14 @@ export default function Piani() {
                   Piano abilitato
                 </label>
               </div>
-              <p style={{ fontSize: 17, fontWeight: 700, margin: "0 0 8px", color: "#2c2c2c" }}>{prezzoCard}</p>
-              {!isManualPrezzo(p) && (
-                <p style={{ fontSize: 11, color: "#15803d", margin: "-4px 0 8px" }}>Prezzo da somma servizi</p>
+              <p style={{ fontSize: 17, fontWeight: 700, margin: "0 0 4px", color: "#2c2c2c" }}>{prezzoCard}</p>
+              <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 8px" }}>
+                Totale = somma dei servizi inclusi (prezzi del catalogo).
+              </p>
+              {isManualPrezzo(p) && (p.prezzo || "").trim() !== "" && (
+                <p style={{ fontSize: 13, color: "#92400e", margin: "0 0 8px", padding: "8px 10px", background: "#fffbeb", borderRadius: 6, border: "1px solid #fcd34d" }}>
+                  <strong>Etichetta personalizzata (listino):</strong> {p.prezzo}
+                </p>
               )}
               {p.validitaGiorni != null && (
                 <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 8px" }}>
