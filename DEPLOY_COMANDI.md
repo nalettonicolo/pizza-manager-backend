@@ -4,8 +4,6 @@
 
 ## Deploy completo (copia e incolla)
 
-Apri il terminale (in VS Code/Cursor: `` Ctrl+` ``). **Copia SOLO le 5 righe dentro il riquadro sotto** (da `cd` a `npm run deploy`) e incollale nel terminale. Non copiare titoli, elenchi o testo fuori dal riquadro, altrimenti PowerShell darà errore.
-
 ```powershell
 cd D:\APP_PIZZERIA\PizzaManagerApp
 git add .
@@ -44,4 +42,5 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 ## Riferimenti
 
 - **Guida dettagliata deploy:** `DEPLOY.md`
+- **Guida utente Super Admin (console piattaforma):** `docs/GUIDA_SUPERADMIN.md`
 - **Punto della situazione:** `PUNTO_SITUAZIONE_ENTERPRISE.md`
