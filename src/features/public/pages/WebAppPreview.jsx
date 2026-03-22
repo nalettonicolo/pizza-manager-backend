@@ -1,14 +1,8 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient";
 import { useTenant } from "@/app/contexts/TenantContext";
+import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import "@/styles/webappPreview.css"
-
-const DEFAULT_MENU_THEME = {
-  primary: "#c0392b",
-  accent: "#e67e22",
-  background: "#fdf2e9",
-  cardBackground: "#ffffff",
-};
 
 export default function WebAppPreview() {
   const { tenantData } = useTenant();
@@ -16,9 +10,7 @@ export default function WebAppPreview() {
   const [products, setProducts] = useState([])
   const [debug, setDebug] = useState(null)
 
-  const menuTheme = tenantData?.parametri_operativi?.menuTheme && typeof tenantData.parametri_operativi.menuTheme === "object"
-    ? { ...DEFAULT_MENU_THEME, ...tenantData.parametri_operativi.menuTheme }
-    : null;
+  const menuTheme = resolveMenuTheme(tenantData?.parametri_operativi);
   const themeStyle = menuTheme ? {
     "--menu-primary": menuTheme.primary,
     "--menu-accent": menuTheme.accent,

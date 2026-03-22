@@ -31,6 +31,7 @@ import {
   searchAnagraficaClienti,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
+import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
 import {
   buildPlanningSlots,
   buildSlotsInOpeningHours,
@@ -785,7 +786,7 @@ export default function CassaPage() {
   }, [filteredProducts, productIngredientIdsMap, ingredientiEsauritiIds, tenantData?.parametri_operativi?.prodotti_esauriti])
 
   const parametri = tenantData?.parametri_operativi || {}
-  const menuTheme = parametri.menuTheme && typeof parametri.menuTheme === "object" ? parametri.menuTheme : null
+  const menuTheme = resolveMenuTheme(parametri)
   const menuRowBackground = menuTheme?.cardBackground || "#f3f9f4"
   const activeCatNome = (categories.find((c) => c.id === activeCategory)?.nome || "").toLowerCase()
   const showModificaCategoria = !["fritti", "dolci", "bibite"].includes(activeCatNome)

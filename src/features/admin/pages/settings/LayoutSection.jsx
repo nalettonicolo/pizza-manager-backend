@@ -3,13 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { supabase } from "@/lib/supabaseClient";
 import { updateTenantSettings } from "@/features/admin/services/adminService";
-
-const DEFAULT_MENU_THEME = {
-  primary: "#c0392b",
-  accent: "#e67e22",
-  background: "#fdf2e9",
-  cardBackground: "#ffffff",
-};
+import { DEFAULT_MENU_THEME, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 
 const PALETTE_PRESETS = [
   { name: "Classico", primary: "#c0392b", accent: "#e67e22", background: "#fdf2e9", cardBackground: "#ffffff" },
@@ -32,15 +26,11 @@ export default function LayoutSection() {
     else if (!logoFile && !settings?.logo_url) setLogoPreview(null);
   }, [settings?.logo_url, logoFile]);
 
-  const menuTheme = settings?.parametri_operativi?.menuTheme && typeof settings.parametri_operativi.menuTheme === "object"
-    ? { ...DEFAULT_MENU_THEME, ...settings.parametri_operativi.menuTheme }
-    : { ...DEFAULT_MENU_THEME };
+  const menuTheme = resolveMenuTheme(settings?.parametri_operativi) ?? { ...DEFAULT_MENU_THEME };
   const [themeColors, setThemeColors] = useState(menuTheme);
 
   useEffect(() => {
-    const next = settings?.parametri_operativi?.menuTheme && typeof settings.parametri_operativi.menuTheme === "object"
-      ? { ...DEFAULT_MENU_THEME, ...settings.parametri_operativi.menuTheme }
-      : { ...DEFAULT_MENU_THEME };
+    const next = resolveMenuTheme(settings?.parametri_operativi) ?? { ...DEFAULT_MENU_THEME };
     setThemeColors(next);
   }, [settings?.parametri_operativi?.menuTheme]);
 

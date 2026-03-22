@@ -20,7 +20,7 @@ export async function getPublicMenu() {
 export async function getPublicTenantInfo() {
   const { data, error } = await supabase
     .from("tenants")
-    .select("id, nome, logo_url, indirizzo, orari_settimana")
+    .select("id, nome, logo_url, indirizzo, orari_settimana, parametri_operativi")
     .limit(1)
     .maybeSingle();
 

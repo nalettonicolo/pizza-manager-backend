@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { CassaHeaderContext } from "@/app/contexts/CassaHeaderContext";
+import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 
 const ROLE_ROUTES = {
   operatore: "/operative/dashboard",
@@ -37,17 +38,11 @@ export default function OperativeLayout() {
   const { tenantData } = useTenant();
   const location = useLocation();
 
-  const menuTheme = tenantData?.parametri_operativi?.menuTheme && typeof tenantData.parametri_operativi.menuTheme === "object"
-    ? tenantData.parametri_operativi.menuTheme
-    : null;
-  const themeStyle = menuTheme
-    ? {
-        "--admin-bar-bg": menuTheme.primary,
-        "--admin-bar-accent": menuTheme.accent,
-        "--admin-sidebar-bg": menuTheme.primary,
-        "--admin-content-bg": menuTheme.background,
-      }
-    : {};
+  const resolvedTenantTheme = resolveMenuTheme(tenantData?.parametri_operativi);
+  const themeStyle = adminLayoutCssVarsFromTheme(resolvedTenantTheme);
+  const tenantThemeClass = resolvedTenantTheme ? " tenant-theme-on" : "";
+  const logoUrl = tenantData?.logo_url ?? null;
+  const brandName = tenantData?.nome || "Pizzeria";
 
   const defaultPath = ROLE_ROUTES[ruolo] || "/operative/dashboard";
   const navItems = permessiAree
@@ -76,8 +71,13 @@ export default function OperativeLayout() {
     return <Navigate to={firstAllowedPath} replace />;
   }
   return (
-    <div className="dashboard-wrap theme-admin" style={themeStyle}>
+    <div className={`dashboard-wrap theme-admin${tenantThemeClass}`} style={themeStyle}>
       <aside className="dashboard-sidebar">
+        {logoUrl && (
+          <div style={{ marginBottom: 16, textAlign: "center" }}>
+            <img src={logoUrl} alt={brandName} style={{ maxWidth: "100%", maxHeight: 48, objectFit: "contain" }} />
+          </div>
+        )}
         <h2 className="dashboard-sidebar-title">Area operativa</h2>
         <nav>
           {navItems.map((item) => (

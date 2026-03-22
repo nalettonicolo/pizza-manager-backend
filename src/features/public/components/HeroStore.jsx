@@ -1,13 +1,16 @@
 import { useNavigate } from "react-router-dom";
 
-export default function HeroStore({ branding }) {
+export default function HeroStore({ branding, menuTheme }) {
   const navigate = useNavigate();
   const safe = branding ?? {};
+  const heroBackground = menuTheme
+    ? `linear-gradient(90deg, ${menuTheme.primary} 0%, ${menuTheme.accent} 50%, ${menuTheme.accent} 100%)`
+    : "var(--color-primary)";
 
   return (
     <section
       style={{
-        background: "var(--color-primary)",
+        background: heroBackground,
         color: "white",
         padding: "80px 20px",
         textAlign: "center",
@@ -32,6 +35,7 @@ export default function HeroStore({ branding }) {
         {safe.ordinazione_attiva !== false && (
           <button
             className="button-primary"
+            style={menuTheme ? { background: menuTheme.accent, borderColor: menuTheme.accent } : undefined}
             onClick={() => navigate("/ordina")}
           >
             Ordina Online

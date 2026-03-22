@@ -7,6 +7,7 @@ import ErrorState from "@/components/feedback/ErrorState";
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid";
 
 import { getPublicMenu, getPublicTenantInfo } from "@/features/services/publicService";
+import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
 
 function isTodayClosed(orariSettimana) {
   if (!Array.isArray(orariSettimana) || !orariSettimana.length) return false;
@@ -28,6 +29,7 @@ export default function PublicStore() {
   const [closedToday, setClosedToday] = useState(false);
   const [tenantName, setTenantName] = useState(null);
   const [branding, setBranding] = useState(null);
+  const [menuTheme, setMenuTheme] = useState(null);
 
   useEffect(() => {
     async function loadData() {
@@ -49,8 +51,10 @@ export default function PublicStore() {
             indirizzo: tenant.indirizzo ?? null,
             ordinazione_attiva: true,
           });
+          setMenuTheme(resolveMenuTheme(tenant.parametri_operativi));
         } else {
           setBranding(null);
+          setMenuTheme(null);
         }
       } catch (err) {
         console.error(err);
@@ -67,8 +71,13 @@ export default function PublicStore() {
   if (error) return <ErrorState message={error} />;
 
   return (
-    <div style={styles.wrapper}>
-      <HeroStore branding={branding} />
+    <div
+      style={{
+        ...styles.wrapper,
+        ...(menuTheme?.background ? { background: menuTheme.background } : {}),
+      }}
+    >
+      <HeroStore branding={branding} menuTheme={menuTheme} />
 
       {closedToday && (
         <div style={styles.closedBanner}>
@@ -84,7 +93,7 @@ export default function PublicStore() {
         <ProductGrid
           products={menu}
           ingredientiMap={menu.reduce((acc, p) => ({ ...acc, [p.id]: p.descrizione ? [p.descrizione] : [] }), {})}
-          rowBackground="#f8f9fa"
+          rowBackground={menuTheme?.cardBackground ?? "#f8f9fa"}
           canAdd={!!user}
           onAdd={() => {}}
         />

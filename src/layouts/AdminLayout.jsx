@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
+import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 
 const HEADER_HEIGHT = 56;
 
@@ -48,19 +49,13 @@ export default function AdminLayout() {
 
   const logoUrl = tenantData?.logo_url ?? null;
   const brandName = tenantData?.nome || "PizzaManager";
-  const menuTheme = tenantData?.parametri_operativi?.menuTheme && typeof tenantData.parametri_operativi.menuTheme === "object"
-    ? tenantData.parametri_operativi.menuTheme
-    : null;
-  const adminThemeStyle = menuTheme ? {
-    "--admin-bar-bg": menuTheme.primary,
-    "--admin-bar-accent": menuTheme.accent,
-    "--admin-sidebar-bg": menuTheme.primary,
-    "--admin-content-bg": menuTheme.background,
-  } : {};
+  const resolvedTenantTheme = resolveMenuTheme(tenantData?.parametri_operativi);
+  const adminThemeStyle = adminLayoutCssVarsFromTheme(resolvedTenantTheme);
+  const tenantThemeClass = resolvedTenantTheme ? " tenant-theme-on" : "";
 
   return (
     <Fragment>
-      <header className="admin-fixed-bar" role="banner" style={adminThemeStyle}>
+      <header className={`admin-fixed-bar${tenantThemeClass}`} role="banner" style={adminThemeStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <Link to="/admin/dashboard" className="admin-bar-logo">
             {logoUrl ? (
@@ -90,7 +85,7 @@ export default function AdminLayout() {
         </div>
       </header>
 
-      <div className="dashboard-wrap theme-admin" style={{ paddingTop: HEADER_HEIGHT, ...adminThemeStyle }}>
+      <div className={`dashboard-wrap theme-admin${tenantThemeClass}`} style={{ paddingTop: HEADER_HEIGHT, ...adminThemeStyle }}>
         {!isDashboard && (
         <aside className="dashboard-sidebar" style={{ flexShrink: 0 }}>
           <h2 className="dashboard-sidebar-title">{isSettingsArea ? "Impostazioni" : "Gestione"}</h2>
