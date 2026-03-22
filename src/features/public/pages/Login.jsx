@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
+import { OPERATIVE_ROLE_HOME } from "@/constants/operativeRoutes"
 import { devLog } from "@/lib/devLog"
 import "@/styles/login.css"
 
@@ -40,13 +41,7 @@ export default function Login() {
       const roleRoutes = {
         superadmin: "/superadmin/dashboard",
         admin: "/admin/dashboard",
-        operatore: "/operative/dashboard",
-        cassa: "/operative/cassa",
-        bancone: "/operative/bancone",
-        cucina: "/operative/cucina",
-        pizzaiolo: "/operative/dashboard",
-        delivery: "/operative/delivery",
-        pony: "/operative/pony",
+        ...OPERATIVE_ROLE_HOME,
       }
       const ruoloNorm = (ruolo && typeof ruolo === "string") ? ruolo.toLowerCase().trim() : ""
       const targetRoute = roleRoutes[ruoloNorm] || "/operative/dashboard"

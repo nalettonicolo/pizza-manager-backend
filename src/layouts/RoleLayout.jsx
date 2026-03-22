@@ -4,7 +4,12 @@ import { useUser } from "@/app/contexts/UserContext"
 export default function RoleLayout({ allowedRoles, children }) {
   const { ruolo } = useUser()
 
-  if (!ruolo || !allowedRoles.includes(ruolo)) {
+  const ruoloNorm = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
+  const allowed = allowedRoles.some(
+    (r) => (r && typeof r === "string" ? r.toLowerCase().trim() : "") === ruoloNorm
+  )
+
+  if (!ruoloNorm || !allowed) {
     return <Navigate to="/login" replace />
   }
 

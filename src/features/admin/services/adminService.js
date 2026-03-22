@@ -431,6 +431,23 @@ export async function aggiungiRuoloPizzeria(tenantId, email, ruolo) {
   return data
 }
 
+function mapSupabaseRuoliError(error) {
+  if (!error) return error
+  const code = error.code
+  const msg = error.message || ""
+  if (code === "42703" || /column .* does not exist/i.test(msg)) {
+    const hint =
+      "Mancano le colonne permessi su public.utenti_ruoli. Esegui in Supabase lo script sql/add_accesso_aree_utenti_ruoli.sql (SQL Editor)."
+    return new Error(hint + (msg ? ` Dettaglio: ${msg}` : ""))
+  }
+  if (code === "42501" || /permission denied/i.test(msg)) {
+    return new Error(
+      "Permesso negato sull’aggiornamento ruoli. Verifica di essere admin del tenant e che esista GRANT UPDATE su public.utenti_ruoli per authenticated."
+    )
+  }
+  return error
+}
+
 // Aggiorna permessi aggiuntivi per un ruolo utente (es. puo_modificare_parametri per cassa).
 export async function updateRuoloPizzeriaPermessi(tenantId, userId, updates) {
   const { error } = await supabase
@@ -438,7 +455,7 @@ export async function updateRuoloPizzeriaPermessi(tenantId, userId, updates) {
     .update(updates)
     .eq("tenant_id", tenantId)
     .eq("user_id", userId)
-  if (error) throw error
+  if (error) throw mapSupabaseRuoliError(error)
 }
 
 ///////////////////////////////////////////////////////////
@@ -940,6 +957,88 @@ export async function getProductIngredientiMap(tenantId, productIds) {
   } catch (e) {
     console.warn("getProductIngredientiMap error:", e)
     return {}
+  }
+}
+
+/**
+ * Stesso output di {@link getProductIngredienti} ma in 2–3 round-trip (schermate operative con molte pizze).
+ * @returns {Promise<Record<string, Array<{ nome: string, vaInCottura: boolean }>>>}
+ */
+export async function getProductIngredientiBatch(tenantId, productIds) {
+  if (!tenantId || !productIds?.length) return {}
+  const uniqueIds = [...new Set(productIds.filter(Boolean))]
+  const emptyMap = () => Object.fromEntries(uniqueIds.map((id) => [id, []]))
+  try {
+    let rows
+    const { data: dataWithOrdine, error: errOrdine } = await supabase
+      .from("prodotto_ingrediente")
+      .select("prodotto_id, ingrediente_id, ordine")
+      .eq("tenant_id", tenantId)
+      .in("prodotto_id", uniqueIds)
+      .order("prodotto_id", { ascending: true })
+      .order("ordine", { ascending: true })
+    if (errOrdine && (errOrdine.code === "PGRST204" || errOrdine.message?.includes("ordine"))) {
+      const { data: dataNoOrdine, error } = await supabase
+        .from("prodotto_ingrediente")
+        .select("prodotto_id, ingrediente_id")
+        .eq("tenant_id", tenantId)
+        .in("prodotto_id", uniqueIds)
+      if (error || !dataNoOrdine?.length) return emptyMap()
+      rows = dataNoOrdine
+    } else if (errOrdine || !dataWithOrdine?.length) {
+      return emptyMap()
+    } else {
+      rows = dataWithOrdine
+    }
+
+    const byProd = {}
+    for (const r of rows) {
+      const pid = r.prodotto_id
+      if (!byProd[pid]) byProd[pid] = []
+      byProd[pid].push(r)
+    }
+    const allIngIds = [...new Set(rows.map((r) => r.ingrediente_id).filter(Boolean))]
+    if (!allIngIds.length) return emptyMap()
+
+    const fullCols = "id, nome, vaInCottura, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
+    let { data: ingredients, error: err2 } = await supabase
+      .from("Ingrediente")
+      .select(fullCols)
+      .eq("tenant_id", tenantId)
+      .in("id", allIngIds)
+    if (err2 && (err2.code === "PGRST204" || err2.message?.includes("column"))) {
+      const fallback = await supabase
+        .from("Ingrediente")
+        .select("id, nome, va_in_cottura, costo_unitario")
+        .eq("tenant_id", tenantId)
+        .in("id", allIngIds)
+      ingredients = fallback.data
+      err2 = fallback.error
+    }
+    if (err2 || !ingredients?.length) return emptyMap()
+    const byId = new Map(ingredients.map((ing) => [ing.id, ing]))
+
+    const out = {}
+    for (const pid of uniqueIds) {
+      const prRows = byProd[pid]
+      if (!prRows?.length) {
+        out[pid] = []
+        continue
+      }
+      const ids = prRows.map((r) => r.ingrediente_id).filter(Boolean)
+      let ordered = ids.map((id) => byId.get(id)).filter(Boolean)
+      if (prRows[0] && prRows[0].ordine === undefined) {
+        ordered = ordered.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""))
+      }
+      out[pid] = ordered.map((ing) => ({
+        nome: ing.nome ?? "",
+        vaInCottura: ing.vaInCottura === true || ing.va_in_cottura === true,
+      }))
+    }
+    return out
+  } catch (e) {
+    console.warn("getProductIngredientiBatch error:", e)
+    return emptyMap()
   }
 }
 

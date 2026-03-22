@@ -4,6 +4,7 @@ import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
 import Modal from "@/components/dashboard/Modal";
 import { getRuoliPizzeria, updateRuoloPizzeriaPermessi } from "@/features/admin/services/adminService";
+import { isDefaultAreaForRole } from "@/utils/operativeAreaAccess";
 
 const AREE_NAV = [
   { key: "accesso_riepilogo", label: "Riepilogo" },
@@ -14,6 +15,16 @@ const AREE_NAV = [
   { key: "accesso_delivery", label: "Delivery" },
   { key: "accesso_pony", label: "Pony (stesso reparto Delivery)" },
 ];
+
+const ACCESS_TO_AREA_KEY = {
+  accesso_riepilogo: "riepilogo",
+  accesso_cassa: "cassa",
+  accesso_cucina: "cucina",
+  accesso_bancone: "bancone",
+  accesso_pizzaiolo: "pizzaiolo",
+  accesso_delivery: "delivery",
+  accesso_pony: "pony",
+};
 
 function getCosaPuoFare(ruolo, puoModificareParametri) {
   const list = [];
@@ -33,7 +44,7 @@ function getCosaPuoFare(ruolo, puoModificareParametri) {
       }
       break;
     case "operatore":
-      list.push("Accesso alle aree operative (Riepilogo, Cassa, Cucina, Bancone, Pizzaioli, Delivery)");
+      list.push("Di default solo l’area Riepilogo; le altre aree si abilitano sotto «Aree consentite».");
       break;
     case "bancone":
       list.push("Area Bancone");
@@ -97,7 +108,9 @@ export default function RuoliPage() {
 
   async function handleToggleArea(ruoloRecord, areaKey) {
     if (!tenantId || !ruoloRecord?.user_id) return;
-    const current = ruoloRecord[areaKey] !== false;
+    const ak = ACCESS_TO_AREA_KEY[areaKey];
+    if (ak && isDefaultAreaForRole(ruoloRecord.ruolo, ak)) return;
+    const current = ruoloRecord[areaKey] === true;
     try {
       await updateRuoloPizzeriaPermessi(tenantId, ruoloRecord.user_id, { [areaKey]: !current });
       await loadRuoli();
@@ -136,7 +149,7 @@ export default function RuoliPage() {
       <section className="dashboard-box dashboard-settings-section">
         <h2 className="dashboard-settings-section-title">Elenco ruoli</h2>
         <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
-          Qui vedi gli utenti associati alla pizzeria e il loro ruolo. Clicca sull’email per aprire il dettaglio di cosa può fare; usa l’interruttore per abilitare o disabilitare l’accesso.
+          Qui vedi gli utenti associati alla pizzeria e il loro ruolo. Clicca sull’email per aprire il dettaglio; nel modale puoi abilitare aree aggiuntive oltre a quella del ruolo (sempre disponibile per quel ruolo).
         </p>
         {ruoli.length === 0 ? (
           <p style={{ color: "#64748b", fontSize: 14 }}>Nessun ruolo presente per questa pizzeria.</p>
@@ -214,19 +227,40 @@ export default function RuoliPage() {
               ))}
             </ul>
             <p style={{ marginBottom: 8, fontSize: 14, fontWeight: 600, color: "#334155" }}>Aree consentite</p>
-            <p style={{ marginBottom: 12, fontSize: 12, color: "#64748b" }}>Abilita o disabilita le aree che questo utente può vedere e usare.</p>
+            <p style={{ marginBottom: 12, fontSize: 12, color: "#64748b" }}>
+              L’area del ruolo è sempre attiva. Spunta le altre aree per consentirle in più al menù operativo.
+            </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {AREE_NAV.map((area) => (
-                <label key={area.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={detailUser[area.key] !== false}
-                    onChange={() => handleToggleArea(detailUser, area.key)}
-                    style={{ width: 18, height: 18, cursor: "pointer" }}
-                  />
-                  {area.label}
-                </label>
-              ))}
+              {AREE_NAV.map((area) => {
+                const ak = ACCESS_TO_AREA_KEY[area.key];
+                const fixedByRole = ak ? isDefaultAreaForRole(detailUser.ruolo, ak) : false;
+                const checked = fixedByRole || detailUser[area.key] === true;
+                return (
+                  <label
+                    key={area.key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 14,
+                      cursor: fixedByRole ? "default" : "pointer",
+                      opacity: fixedByRole ? 0.85 : 1,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={fixedByRole}
+                      onChange={() => handleToggleArea(detailUser, area.key)}
+                      style={{ width: 18, height: 18, cursor: fixedByRole ? "not-allowed" : "pointer" }}
+                    />
+                    {area.label}
+                    {fixedByRole && (
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>(sempre per questo ruolo)</span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
             {detailUser.ruolo === "cassa" && (
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginTop: 12, cursor: "pointer" }}>

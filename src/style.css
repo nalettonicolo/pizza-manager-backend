@@ -583,6 +583,110 @@ body {
   overflow: auto;
 }
 
+/* ===== PIZZAIOLO SCHERMO INTERO (area operativa /operative/pizzaioli) ===== */
+
+.dashboard-wrap.pizzaiolo-fullscreen {
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.dashboard-main.pizzaiolo-fullscreen-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-content.pizzaiolo-content-full {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.dashboard-wrap.theme-admin .dashboard-content.pizzaiolo-content-full {
+  background: #f1f5f9;
+}
+
+.dashboard-wrap.theme-admin.tenant-theme-on .dashboard-content.pizzaiolo-content-full,
+.dashboard-wrap.theme-admin[style*="--admin-content-bg"] .dashboard-content.pizzaiolo-content-full {
+  background: var(--admin-content-bg) !important;
+}
+
+.pizzaiolo-floating-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top, 0)) 12px 8px 12px;
+}
+
+.pizzaiolo-floating-bar .btn-logout-red {
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.pizzaiolo-fs-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(55, 65, 81, 0.95);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.pizzaiolo-fs-btn:active {
+  opacity: 0.92;
+}
+
+.pizzaiolo-dashboard-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 52px 12px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.pizzaiolo-dashboard-columns {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  overflow: hidden;
+  align-content: start;
+}
+
+.pizzaiolo-dashboard-columns > div {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 700px) {
+  .pizzaiolo-dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== TEMA ARANCIONE SUPERADMIN ===== */
 
 .dashboard-wrap.theme-superadmin {

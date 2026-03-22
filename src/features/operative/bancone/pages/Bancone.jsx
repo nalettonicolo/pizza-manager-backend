@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
@@ -6,7 +6,7 @@ import {
   getProdottiByIds,
   getRigheAggregateByOrdineIds,
   getRigheByOrdineIds,
-  getProductIngredienti,
+  getProductIngredientiBatch,
   updateOrderStato,
 } from "@/features/admin/services/adminService"
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
@@ -20,6 +20,7 @@ import {
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
+const POLL_MS = 10000
 
 export default function Bancone() {
   const { tenantId, tenantData } = useTenant()
@@ -33,6 +34,7 @@ export default function Bancone() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const loadSeqRef = useRef(0)
 
   const parametri = tenantData?.parametri_operativi || {}
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
@@ -40,10 +42,14 @@ export default function Bancone() {
   const tempoViaggioMinuti = Number(parametri.pizzaiolo_tempo_viaggio_minuti) || partenzaConsegneMinuti
   const slotMinutes = Number(parametri.ritiro_ogni_min) || Number(parametri.consegne_ogni_min) || 15
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true
     if (!tenantId) return
-    setLoading(true)
-    setError(null)
+    const seq = ++loadSeqRef.current
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const data = await getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 100 })
       const ids = (data || []).map((o) => o.id).filter(Boolean)
@@ -51,6 +57,7 @@ export default function Bancone() {
         ids.length ? getRigheAggregateByOrdineIds(ids) : {},
         ids.length ? getRigheByOrdineIds(ids) : [],
       ])
+      if (seq !== loadSeqRef.current) return
       setOrders(data || [])
       setPizzePerOrdine(pizze)
 
@@ -66,32 +73,34 @@ export default function Bancone() {
       setRighePerOrdine(righePerOrd)
 
       const pIds = [...prodIds]
-      const [prodotti, ingredientiPerProdotto] = await Promise.all([
+      const [prodotti, ingBatch] = await Promise.all([
         pIds.length ? getProdottiByIds(tenantId, pIds) : [],
-        pIds.length
-          ? Promise.all(pIds.map((pid) => getProductIngredienti(tenantId, pid)))
-          : [],
+        pIds.length ? getProductIngredientiBatch(tenantId, pIds) : {},
       ])
+      if (seq !== loadSeqRef.current) return
       setProductNames((prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {}))
       const ingMap = {}
-      pIds.forEach((pid, index) => {
-        ingMap[pid] = (ingredientiPerProdotto[index] || []).map((ing) => ({
+      for (const pid of pIds) {
+        ingMap[pid] = (ingBatch[pid] || []).map((ing) => ({
           nome: ing.nome,
           vaInCottura: ing.vaInCottura === true,
         }))
-      })
+      }
       setIngredientsByProduct(ingMap)
+      setError(null)
     } catch (err) {
       console.error(err)
-      setError("Errore nel caricamento ordini.")
+      if (seq === loadSeqRef.current && !silent) {
+        setError("Errore nel caricamento ordini.")
+      }
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
   }, [tenantId])
 
   useEffect(() => {
     loadOrders()
-    const t = setInterval(loadOrders, 15000)
+    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
     return () => clearInterval(t)
   }, [loadOrders])
 

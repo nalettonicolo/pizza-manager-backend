@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
@@ -10,6 +10,7 @@ import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
+const POLL_MS = 10000
 
 export default function Cucina() {
   const { tenantId } = useTenant()
@@ -19,25 +20,34 @@ export default function Cucina() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const loadSeqRef = useRef(0)
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true
     if (!tenantId) return
-    setLoading(true)
-    setError(null)
+    const seq = ++loadSeqRef.current
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 50 })
+      if (seq !== loadSeqRef.current) return
       setOrders(data || [])
+      setError(null)
     } catch (err) {
       console.error(err)
-      setError("Errore nel caricamento ordini.")
+      if (seq === loadSeqRef.current && !silent) {
+        setError("Errore nel caricamento ordini.")
+      }
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
   }, [tenantId])
 
   useEffect(() => {
     loadOrders()
-    const t = setInterval(loadOrders, 15000)
+    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
     return () => clearInterval(t)
   }, [loadOrders])
 

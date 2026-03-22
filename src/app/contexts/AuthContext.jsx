@@ -3,10 +3,15 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { devLog, devWarn } from "@/lib/devLog"
+import { computePermessiAree, normalizeLegacyAllAccessTrue } from "@/utils/operativeAreaAccess"
 
 const AuthContext = createContext()
 
 const SESSION_CHECK_TIMEOUT_MS = 6000
+/** getSession() può restare in attesa su rete lenta / tablet */
+const GET_SESSION_TIMEOUT_MS = 10000
+/** Oltre questo tempo il gate auth si chiude comunque (evita "Accesso in corso..." infinito) */
+const AUTH_LOADING_FAILSAFE_MS = 20000
 const LOAD_USER_DATA_TIMEOUT_MS = 12000
 const LOAD_USER_DATA_RETRY_DELAY_MS = 500
 const SESSION_PROPAGATION_DELAY_MS = 200
@@ -25,9 +30,8 @@ export function AuthProvider({ children }) {
   const [tipoUtente, setTipoUtente] = useState(null) // "staff" | "cliente"
   const [ruolo, setRuolo] = useState(null)
   const [tenantId, setTenantId] = useState(null)
-  const [permessiAree, setPermessiAree] = useState(null) // { riepilogo, cassa, cucina, bancone, delivery, pony } - null = non staff o non caricato
+  const [permessiAree, setPermessiAree] = useState(null) // aree operative calcolate: ruolo + accesso_* true (null = non staff / non caricato)
   const [loading, setLoading] = useState(true)
-  const loadingDoneRef = useRef(false)
   const retryPendingRef = useRef(false)
   const loadUserDataInProgressRef = useRef(false)
   const lastLoadedUserIdRef = useRef(null)
@@ -36,9 +40,13 @@ export function AuthProvider({ children }) {
 
   const setLoadingSafe = (value) => {
     if (value === false && retryPendingRef.current) return
-    if (loadingDoneRef.current) return
-    loadingDoneRef.current = value === false
     setLoading(value)
+  }
+
+  /** Sblocca sempre il loading (init, logout, failsafe) senza essere bloccato da retryPending */
+  const forceLoadingFalse = () => {
+    retryPendingRef.current = false
+    setLoading(false)
   }
 
   // ===============================
@@ -73,13 +81,13 @@ export function AuthProvider({ children }) {
           staffData = {
             ...fallback.data,
             attivo: fallback.data.attivo !== false,
-            accesso_riepilogo: true,
-            accesso_cassa: true,
-            accesso_cucina: true,
-            accesso_bancone: true,
-            accesso_delivery: true,
-            accesso_pony: true,
-            accesso_pizzaiolo: true,
+            accesso_riepilogo: null,
+            accesso_cassa: null,
+            accesso_cucina: null,
+            accesso_bancone: null,
+            accesso_delivery: null,
+            accesso_pony: null,
+            accesso_pizzaiolo: null,
           }
           staffErrResolved = null
         }
@@ -99,17 +107,18 @@ export function AuthProvider({ children }) {
         lastLoadedUserIdRef.current = userId
         devLog("Auth", "utente STAFF", { ruolo: staffData.ruolo, tenant_id: staffData.tenant_id })
         setTipoUtente("staff")
-        setRuolo(staffData.ruolo)
+        setRuolo(
+          staffData.ruolo != null && String(staffData.ruolo).trim() !== ""
+            ? String(staffData.ruolo).toLowerCase().trim()
+            : null
+        )
         setTenantId(staffData.tenant_id)
-        setPermessiAree({
-          riepilogo: staffData.accesso_riepilogo !== false,
-          cassa: staffData.accesso_cassa !== false,
-          cucina: staffData.accesso_cucina !== false,
-          bancone: staffData.accesso_bancone !== false,
-          delivery: staffData.accesso_delivery !== false,
-          pony: staffData.accesso_pony !== false,
-          pizzaiolo: staffData.accesso_pizzaiolo !== false,
-        })
+        const normalized = normalizeLegacyAllAccessTrue(staffData)
+        const ruoloForPermessi =
+          staffData.ruolo != null && String(staffData.ruolo).trim() !== ""
+            ? String(staffData.ruolo).toLowerCase().trim()
+            : null
+        setPermessiAree(computePermessiAree(normalized, ruoloForPermessi))
         retryPendingRef.current = false
         setLoadingSafe(false)
         return
@@ -192,33 +201,41 @@ export function AuthProvider({ children }) {
 
     if (!isSupabaseConfigured) {
       devWarn("Auth", "Supabase non configurato (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY), loading=false")
-      setLoadingSafe(false)
+      forceLoadingFalse()
       return
     }
 
     let cancelled = false
     const timeoutId = setTimeout(() => {
       if (cancelled) return
-      if (loadUserDataInProgressRef.current) {
-        devLog("Auth", "timeout sessione ma loadUserData ancora in corso, non forzo loading=false")
-        return
-      }
       devLog("Auth", "timeout verifica sessione, forzo loading=false")
-      setLoadingSafe(false)
+      forceLoadingFalse()
     }, SESSION_CHECK_TIMEOUT_MS)
+
+    const failsafeId = setTimeout(() => {
+      if (cancelled) return
+      devWarn("Auth", "failsafe: loading=false dopo attesa massima (evita schermata bloccata)")
+      forceLoadingFalse()
+    }, AUTH_LOADING_FAILSAFE_MS)
 
     const init = async () => {
       try {
         devLog("Auth", "getSession() in corso...")
-        const { data, error } = await supabase.auth.getSession()
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(),
+          GET_SESSION_TIMEOUT_MS,
+          "getSession"
+        ).catch((err) => {
+          devWarn("Auth", "getSession timeout o errore", err?.message ?? err)
+          return { data: { session: null }, error: err }
+        })
         if (cancelled) return
         if (error) {
-          devWarn("Auth", "getSession error", error.message, error)
-          return
+          devWarn("Auth", "getSession segnalazione", error?.message ?? error)
         }
-        const currentUser = data.session?.user ?? null
+        const currentUser = data?.session?.user ?? null
         devLog("Auth", "getSession risultato", {
-          haSessione: !!data.session,
+          haSessione: !!data?.session,
           userId: currentUser?.id,
           email: currentUser?.email,
         })
@@ -228,14 +245,15 @@ export function AuthProvider({ children }) {
           await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
           await loadUserData(currentUser.id)
         } else {
-          setLoadingSafe(false)
+          forceLoadingFalse()
         }
       } catch (err) {
         if (!cancelled) devWarn("Auth", "init eccezione", err?.message || err, err)
       } finally {
         if (!cancelled) {
           clearTimeout(timeoutId)
-          setLoadingSafe(false)
+          clearTimeout(failsafeId)
+          forceLoadingFalse()
           devLog("Auth", "init completato, loading=false")
         }
       }
@@ -256,7 +274,7 @@ export function AuthProvider({ children }) {
         }
         if (currentUser) {
           if (event === "INITIAL_SESSION" && lastLoadedUserIdRef.current === currentUser.id) {
-            setLoadingSafe(false)
+            forceLoadingFalse()
             return
           }
           loadUserDataInProgressRef.current = false
@@ -267,7 +285,8 @@ export function AuthProvider({ children }) {
           setTipoUtente(null)
           setRuolo(null)
           setTenantId(null)
-          setLoadingSafe(false)
+          setPermessiAree(null)
+          forceLoadingFalse()
         }
       }
     )
@@ -275,6 +294,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true
       clearTimeout(timeoutId)
+      clearTimeout(failsafeId)
       if (retryTimeoutIdRef.current) {
         clearTimeout(retryTimeoutIdRef.current)
         retryTimeoutIdRef.current = null
@@ -306,6 +326,7 @@ export function AuthProvider({ children }) {
     setRuolo(null)
     setTenantId(null)
     setPermessiAree(null)
+    forceLoadingFalse()
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
@@ -6,7 +6,7 @@ import {
   getProdottiByIds,
   getRigheAggregateByOrdineIds,
   getRigheByOrdineIds,
-  getProductIngredienti,
+  getProductIngredientiBatch,
   updateOrderStato,
 } from "@/features/admin/services/adminService"
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
@@ -20,6 +20,8 @@ import {
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
+/** Polling ordini: batch ingredienti + refresh silenzioso → meno latenza percepita */
+const POLL_MS = 10000
 
 function googleMapsUrl(indirizzo) {
   if (!indirizzo || !indirizzo.trim()) return null
@@ -38,6 +40,7 @@ export default function PizzaioloDashboard() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const loadSeqRef = useRef(0)
 
   const parametri = tenantData?.parametri_operativi || {}
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
@@ -45,10 +48,14 @@ export default function PizzaioloDashboard() {
   const tempoViaggioMinuti = Number(parametri.pizzaiolo_tempo_viaggio_minuti) || partenzaConsegneMinuti
   const slotMinutes = Number(parametri.ritiro_ogni_min) || Number(parametri.consegne_ogni_min) || 15
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true
     if (!tenantId) return
-    setLoading(true)
-    setError(null)
+    const seq = ++loadSeqRef.current
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 })
       const ids = (data || []).map((o) => o.id).filter(Boolean)
@@ -56,6 +63,7 @@ export default function PizzaioloDashboard() {
         ids.length ? getRigheAggregateByOrdineIds(ids) : {},
         ids.length ? getRigheByOrdineIds(ids) : [],
       ])
+      if (seq !== loadSeqRef.current) return
       setOrders(data || [])
       setPizzePerOrdine(pizze)
 
@@ -71,32 +79,34 @@ export default function PizzaioloDashboard() {
       setRighePerOrdine(righePerOrd)
 
       const pIds = [...prodIds]
-      const [prodotti, ingredientiPerProdotto] = await Promise.all([
+      const [prodotti, ingBatch] = await Promise.all([
         pIds.length ? getProdottiByIds(tenantId, pIds) : [],
-        pIds.length
-          ? Promise.all(pIds.map((pid) => getProductIngredienti(tenantId, pid)))
-          : [],
+        pIds.length ? getProductIngredientiBatch(tenantId, pIds) : {},
       ])
+      if (seq !== loadSeqRef.current) return
       setProductNames((prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {}))
       const ingMap = {}
-      pIds.forEach((pid, index) => {
-        ingMap[pid] = (ingredientiPerProdotto[index] || []).map((ing) => ({
+      for (const pid of pIds) {
+        ingMap[pid] = (ingBatch[pid] || []).map((ing) => ({
           nome: ing.nome,
           vaInCottura: ing.vaInCottura === true,
         }))
-      })
+      }
       setIngredientsByProduct(ingMap)
+      setError(null)
     } catch (err) {
       console.error(err)
-      setError("Errore nel caricamento ordini.")
+      if (seq === loadSeqRef.current && !silent) {
+        setError("Errore nel caricamento ordini.")
+      }
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
   }, [tenantId])
 
   useEffect(() => {
     loadOrders()
-    const t = setInterval(loadOrders, 15000)
+    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
     return () => clearInterval(t)
   }, [loadOrders])
 
@@ -277,7 +287,7 @@ export default function PizzaioloDashboard() {
   }
 
   return (
-    <div style={styles.wrapper}>
+    <div className="pizzaiolo-dashboard-root">
       <h1 style={styles.title}>Pizzaiolo</h1>
 
       {error && <div style={styles.error}>{error}</div>}
@@ -295,7 +305,7 @@ export default function PizzaioloDashboard() {
       )}
 
       {/* Due colonne */}
-      <div style={styles.columns}>
+      <div className="pizzaiolo-dashboard-columns">
         <div style={styles.column}>
           <h2 style={styles.columnTitle}>In negozio</h2>
           {loading && ordiniNegozio.length === 0 ? (
@@ -334,8 +344,7 @@ export default function PizzaioloDashboard() {
 }
 
 const styles = {
-  wrapper: { padding: 16 },
-  title: { fontSize: 22, marginBottom: 16 },
+  title: { fontSize: 22, margin: "0 0 12px", flexShrink: 0 },
   error: { padding: 12, background: "#ffebee", color: "#c62828", borderRadius: 8, marginBottom: 16 },
   slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
   slotBox: {
@@ -348,7 +357,6 @@ const styles = {
   },
   slotTime: { display: "block", fontWeight: 600, fontSize: 11 },
   slotCount: { display: "block", fontSize: 13, fontWeight: 700, color: "#2e7d32" },
-  columns: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 },
   column: { minWidth: 0 },
   columnTitle: { margin: "0 0 12px", fontSize: 16 },
   muted: { color: "#888", marginTop: 8 },

@@ -1,33 +1,38 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { getOrders, updateOrderStato } from "@/features/admin/services/adminService"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
+const POLL_MS = 10000
 
 export default function DeliveryDashboard() {
   const { operatoreLabel } = useOutletContext() || {}
   const { tenantId } = useTenant()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
+  const loadSeqRef = useRef(0)
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true
     if (!tenantId) return
-    setLoading(true)
+    const seq = ++loadSeqRef.current
+    if (!silent) setLoading(true)
     try {
       const data = await getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 30 })
+      if (seq !== loadSeqRef.current) return
       setOrders(data || [])
     } catch (err) {
       console.error(err)
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
   }, [tenantId])
 
   useEffect(() => {
     loadOrders()
-    const t = setInterval(loadOrders, 12000)
+    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
     return () => clearInterval(t)
   }, [loadOrders])
 
