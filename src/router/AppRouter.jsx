@@ -104,6 +104,7 @@ export default function AppRouter() {
 
       <Route element={<PublicLayout />}>
         <Route path="/" element={<RootResolver />} />
+        <Route path="/login" element={<Login />} />
 
         {/* Queste route esistono SOLO nel SaaS */}
         {isSaaS && (
@@ -111,7 +112,6 @@ export default function AppRouter() {
             <Route path="/home" element={<Home />} />
             <Route path="/negozio" element={<PublicStore />} />
             <Route path="/contatti" element={<Contatti />} />
-            <Route path="/login" element={<Login />} />
             <Route path="/select-pv" element={<SelectPuntoVendita />} />
             <Route path="/preview" element={<WebAppPreview />} />
           </>

@@ -1,14 +1,22 @@
 // 📍 src/features/public/pages/Login.jsx
 
 import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { devLog } from "@/lib/devLog"
 import "@/styles/login.css"
 
+function safeInternalPath(p) {
+  if (!p || typeof p !== "string") return null
+  if (!p.startsWith("/") || p.startsWith("//")) return null
+  if (p.includes("..")) return null
+  return p
+}
+
 export default function Login() {
   const { login, ruolo, tipoUtente, user, loading } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -50,7 +58,7 @@ export default function Login() {
 
     devLog("Login", "fallback redirect → /")
     navigate("/", { replace: true })
-  }, [user, ruolo, tipoUtente, loading, navigate])
+  }, [user, ruolo, tipoUtente, loading, navigate, location.state])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

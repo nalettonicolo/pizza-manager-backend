@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { UtensilsCrossed } from "lucide-react";
 
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -42,6 +43,8 @@ function buildCategoriesFromMenu(menu) {
 
 export default function PublicStore() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -148,7 +151,7 @@ export default function PublicStore() {
         </div>
       )}
 
-      <div style={styles.menuSection}>
+      <div id="public-menu" style={styles.menuSection}>
         {categories.length > 0 ? (
           <CategoryTabs
             categories={categories}
@@ -163,14 +166,14 @@ export default function PublicStore() {
           </div>
         )}
         {!user && (
-          <p style={styles.loginHint}>Accedi per ordinare</p>
+          <p style={styles.loginHint}>Accedi per aggiungere al carrello (si apre il login).</p>
         )}
         <ProductGrid
           products={filteredProducts}
           ingredientiMap={ingredientiMap}
           rowBackground={cardBg}
-          canAdd={!!user}
-          onAdd={() => {}}
+          canAdd
+          onAdd={handleAddProduct}
           showModifica={false}
           storefront
         />
