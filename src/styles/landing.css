@@ -926,6 +926,25 @@
   color: white;
 }
 
+.footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.1rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-legal a {
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.footer-legal a:hover {
+  color: #fdba74;
+}
+
 @media (max-width: 640px) {
   .footer-inner {
     flex-direction: column;

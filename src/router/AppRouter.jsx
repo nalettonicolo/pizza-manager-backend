@@ -16,6 +16,9 @@ import Landing from "@/features/public/pages/Landing";
 import PublicStore from "@/features/public/pages/PublicStore";
 import Home from "@/features/public/pages/Home";
 import Contatti from "@/features/public/pages/Contatti";
+import PrivacyPolicy from "@/features/public/pages/PrivacyPolicy";
+import CookiePolicy from "@/features/public/pages/CookiePolicy";
+import TerminiCondizioni from "@/features/public/pages/TerminiCondizioni";
 import Login from "@/features/public/pages/Login";
 import SelectPuntoVendita from "@/features/public/pages/SelectPuntoVendita";
 import WebAppPreview from "@/features/public/pages/WebAppPreview";
@@ -114,6 +117,9 @@ export default function AppRouter() {
             <Route path="/home" element={<Home />} />
             <Route path="/negozio" element={<PublicStore />} />
             <Route path="/contatti" element={<Contatti />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/cookie" element={<CookiePolicy />} />
+            <Route path="/termini" element={<TerminiCondizioni />} />
             <Route path="/select-pv" element={<SelectPuntoVendita />} />
             <Route path="/preview" element={<WebAppPreview />} />
           </>

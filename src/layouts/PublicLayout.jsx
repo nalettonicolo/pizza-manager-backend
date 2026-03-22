@@ -1,4 +1,5 @@
 import { Outlet, Link } from "react-router-dom"
+import CookieBanner from "@/features/public/components/CookieBanner"
 import "@/styles/public-layout.css"
 
 export default function PublicLayout() {
@@ -18,8 +19,19 @@ export default function PublicLayout() {
       </main>
 
       <footer className="public-layout-footer">
-        © {new Date().getFullYear()} PizzaManager
+        <div className="public-layout-footer-inner">
+          <nav className="public-layout-footer-legal" aria-label="Informative legali">
+            <Link to="/privacy">Privacy policy</Link>
+            <Link to="/cookie">Cookie policy</Link>
+            <Link to="/termini">Termini e condizioni</Link>
+          </nav>
+          <span className="public-layout-footer-copy">
+            © {new Date().getFullYear()} PizzaManager
+          </span>
+        </div>
       </footer>
+
+      <CookieBanner />
     </div>
   )
 }

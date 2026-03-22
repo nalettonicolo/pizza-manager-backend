@@ -1,0 +1,97 @@
+/* Pagine Privacy / Cookie / Termini */
+
+.legal-doc-outer {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+.legal-doc-back {
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  text-decoration: none;
+  margin-bottom: 20px;
+}
+
+.legal-doc-back:hover {
+  color: #c0392b;
+}
+
+.legal-doc {
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  padding: 28px 24px 32px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.legal-doc h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.legal-doc-updated {
+  margin: 0 0 24px;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.legal-doc-body h2 {
+  margin: 28px 0 10px;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.legal-doc-body h2:first-child {
+  margin-top: 0;
+}
+
+.legal-doc-body p,
+.legal-doc-body li {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.legal-doc-body p {
+  margin: 0 0 12px;
+}
+
+.legal-doc-body ul {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+}
+
+.legal-doc-body li {
+  margin-bottom: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .legal-doc {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(148, 163, 184, 0.15);
+  }
+
+  .legal-doc h1 {
+    color: #f1f5f9;
+  }
+
+  .legal-doc-updated {
+    color: #94a3b8;
+  }
+
+  .legal-doc-body h2 {
+    color: #e2e8f0;
+  }
+
+  .legal-doc-body p,
+  .legal-doc-body li {
+    color: #cbd5e1;
+  }
+}
