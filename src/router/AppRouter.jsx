@@ -26,6 +26,7 @@ const Licenses = lazy(() => import("@/features/superadmin/pages/Licenses"));
 const Tenants = lazy(() => import("@/features/superadmin/pages/Tenants"));
 const Settings = lazy(() => import("@/features/superadmin/pages/Settings"));
 const Piani = lazy(() => import("@/features/superadmin/pages/Piani"));
+const ServiziCatalogo = lazy(() => import("@/features/superadmin/pages/ServiziCatalogo"));
 
 /* ================= ADMIN (lazy) ================= */
 const Dashboard = lazy(() => import("@/features/admin/pages/Dashboard"));
@@ -136,6 +137,7 @@ export default function AppRouter() {
           <Route path="/superadmin" element={<Navigate to="/superadmin/dashboard" replace />} />
           <Route path="/superadmin/dashboard" element={<Suspense fallback={<PageFallback />}><SuperAdminDashboard /></Suspense>} />
           <Route path="/superadmin/tenants" element={<Suspense fallback={<PageFallback />}><Tenants /></Suspense>} />
+          <Route path="/superadmin/servizi" element={<Suspense fallback={<PageFallback />}><ServiziCatalogo /></Suspense>} />
           <Route path="/superadmin/piani" element={<Suspense fallback={<PageFallback />}><Piani /></Suspense>} />
           <Route path="/superadmin/licenses" element={<Suspense fallback={<PageFallback />}><Licenses /></Suspense>} />
           <Route path="/superadmin/settings" element={<Suspense fallback={<PageFallback />}><Settings /></Suspense>} />

@@ -1,7 +1,30 @@
-3. Deploy da zero su Koyeb
-Create App → GitHub → scegli repo e branch main.
-Builder: Dockerfile | Build directory: server/pizzeria-backend | Dockerfile path: Dockerfile.koyeb | Port: 8000.
-Environment variables: PORT=8000, DATABASE_URL, JWT_SECRET, CORS_ORIGIN=https://pizzamanager.it.
-Deploy e attendi Running.
-Copia l’URL del servizio per usarlo in VITE_API_URL nel frontend.
-Ordine consigliato: prima Koyeb (elimina servizio), poi GitHub (pulizia o nuovo repo), infine Create App su Koyeb e di nuovo il deploy. I dettagli sono nella sezione che ho aggiunto in DEPLOY.md.
+Riepilogo di cosa hai chiesto oggi
+Super Admin – Clienti e Abbonamenti
+Nel Nuovo cliente volevi campi di contatto e fatturazione (P.IVA, email, PEC, codice SDI) e sezione abbonamento / rinnovo automatico.
+Un cliente con piano FREE doveva comparire anche in Abbonamenti, non solo in lista tenant.
+In Abbonamenti volevi vedere rinnovo automatico (e coerenza con i dati tenant).
+Deploy
+Hai chiesto esplicitamente di fare deploy: è stato eseguito commit + push su GitHub e npm run deploy su Firebase Hosting (progetto pizzeria-da-nicolo, URL tipo pizzamanager.it / web.app).
+Piani e catalogo servizi
+Hai descritto la gerarchia dei piani: Base (cassa, comanda, consegne) → Pro (+ ordini online) → Enterprise (+ tablet per ruoli operativi) → Full (tutto) → Su misura (servizi scelti).
+Hai chiesto una pagina con l’elenco completo di servizi e funzioni, prezzi mensili per servizio, e che in Piani il prezzo si calcoli in base ai servizi selezionati.
+Cosa è stato fatto in codice (in sintesi)
+Area	Cosa c’è nel repo
+Clienti	Modale a sezioni (generale, dati fiscali, abbonamento con addebito automatico, date, sconto).
+Abbonamenti	Tabella con rinnovo automatico, prossimo rinnovo, attivazione; logica subscription + fallback se manca la riga in DB.
+Backend dati	Migrazione SQL colonne tenant; servizio JS con upsert su subscriptions.
+Piani / Catalogo	Nuova route /superadmin/servizi, catalogo con prezzi e funzioni, Piani riscritti con piani seed e totale calcolato dalla somma dei servizi.
+Deploy (quella volta)	Build + Firebase completati con successo in quella sessione.
+Perché “non vedi tutto online”
+Possibili cause molto concrete:
+Deploy non aggiornato dopo le ultime modifiche
+Il lavoro su Catalogo servizi + Piani riscritti è stato fatto dopo il deploy che avevi chiesto. Se da allora non hai rilanciato npm run deploy (o la tua pipeline), in produzione puoi avere ancora la vecchia bundle senza /superadmin/servizi e senza il nuovo flusso Piani.
+Cache del browser / CDN
+Prova hard refresh (Ctrl+F5) o finestra anonima su https://pizzamanager.it (o il dominio che usi).
+Cosa è solo in locale (localStorage)
+Catalogo servizi e Piani salvati dalla UI sono nel browser (localStorage), non sul server. Online vedi le pagine e la logica, ma non “i tuoi dati” da un altro PC/browser finché non avrete persistenza su DB.
+Database Supabase
+Se le colonne tenant o le policy su subscriptions non sono allineate, in produzione possono mancare righe o campi anche se il frontend è aggiornato.
+Koyeb (backend)
+Il git push può aver aggiornato il repo; se il servizio non ha fatto redeploy o c’è un errore di build, va controllata la dashboard Koyeb (solo se qualcosa dipende dal backend per Super Admin).
+In una frase: oggi hai chiesto sistemare Super Admin (clienti/abbonamenti), deploy, poi catalogo servizi e piani con prezzi calcolati; in codice è stato implementato, ma vedere “tutto” sul sito richiede almeno un nuovo deploy del frontend dopo l’ultimo commit e, per i dati catalogo/piani, capire che sono per-browser finché non li mettete in database. Se vuoi, nel passo successivo posso proporti i comandi esatti per un deploy “pulito” da lanciare adesso.
