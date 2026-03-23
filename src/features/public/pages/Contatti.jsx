@@ -37,15 +37,6 @@ export default function Contatti() {
 
   return (
     <div className="landing-wrapper">
-      <nav className="landing-nav">
-        <Link to="/" className="logo">PizzaManager</Link>
-        <div className="nav-links">
-          <Link to="/negozio" className="btn-outline">Menu online</Link>
-          <Link to="/login" className="btn-outline">Accedi</Link>
-          <Link to="/contatti#prova-gratuita" className="btn-primary">Prova gratuita</Link>
-        </div>
-      </nav>
-
       <section className="hero" style={{ paddingTop: 40, paddingBottom: 60 }}>
         <div className="hero-text" style={{ maxWidth: 560, margin: "0 auto" }}>
           <h1 style={{ fontSize: "1.75rem", marginBottom: 8 }}>Contattaci</h1>
@@ -65,16 +56,16 @@ export default function Contatti() {
             }}
           >
             <h2 style={{ fontSize: "1.125rem", margin: "0 0 10px", color: "#0f172a" }}>
-              Prova 7 giorni (licenza di prova)
+              Prova 14 giorni (licenza di prova)
             </h2>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
-              Non esiste un piano free permanente: l’ingresso è una <strong>prova di 7 giorni</strong> per valutare il servizio, poi si attiva un <strong>piano a pagamento</strong> (definito in piattaforma).
+              Non esiste un piano free permanente: l’ingresso è una <strong>prova di 14 giorni</strong> sul <strong>piano scelto</strong>, poi si attiva un <strong>piano a pagamento</strong>.
             </p>
             <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
               Per entrare in prova <strong>non basta registrarsi da soli</strong>: l’<strong>amministratore della piattaforma</strong> abilita il tenant e ti invia <strong>email e password</strong> (o invito).
             </p>
             <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
-              Scrivici qui sotto con <strong>“Richiesta prova 7 giorni”</strong> nel messaggio: ti rispondiamo con i passaggi e, se previsto, le credenziali.
+              Scrivici qui sotto con <strong>“Richiesta prova 14 giorni”</strong> nel messaggio e indica il piano desiderato: ti rispondiamo con i passaggi e, se previsto, le credenziali.
             </p>
           </div>
 

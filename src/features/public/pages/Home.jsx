@@ -27,7 +27,7 @@ export default function Home() {
       : plan === "ENTERPRISE"
         ? "Enterprise"
         : plan === "TRIAL"
-          ? "Prova (7 giorni)"
+          ? "Prova (14 giorni)"
           : plan === "FREE"
             ? "Free (legacy)"
             : plan

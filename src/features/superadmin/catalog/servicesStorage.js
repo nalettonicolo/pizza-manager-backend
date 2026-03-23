@@ -25,7 +25,15 @@ function normalizeService(s) {
       : [];
   const categoria =
     typeof s.categoria === "string" && s.categoria.trim() ? s.categoria.trim() : "Altro";
-  return { id, nome, categoria, funzioni, prezzoMensile: Number.isFinite(prezzoMensile) ? Math.max(0, prezzoMensile) : 0 };
+  const attivo = s.attivo !== false;
+  return {
+    id,
+    nome,
+    categoria,
+    funzioni,
+    attivo,
+    prezzoMensile: Number.isFinite(prezzoMensile) ? Math.max(0, prezzoMensile) : 0,
+  };
 }
 
 /**
@@ -49,6 +57,7 @@ export function mergeCatalogWithDefaults(storedList) {
       nome: o.nome,
       categoria: o.categoria || d.categoria,
       funzioni: o.funzioni?.length ? o.funzioni : d.funzioni,
+      attivo: o.attivo !== false,
       prezzoMensile: hasExplicitPrice ? Math.max(0, Number(o.prezzoMensile) || 0) : d.prezzoMensile,
     };
   });
@@ -115,6 +124,7 @@ export function createEmptyService() {
     nome: "",
     categoria: "Altro",
     funzioni: [],
+    attivo: true,
     prezzoMensile: 0,
   };
 }

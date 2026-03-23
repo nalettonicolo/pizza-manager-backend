@@ -10,6 +10,7 @@ const HEADER_HEIGHT = 56;
 const topNavItems = [
   { to: "/admin/dashboard", label: "Riepilogo" },
   { to: "/admin/guida", label: "Guida" },
+  { to: "/admin/pubblicazione", label: "Pubblicazione" },
   { to: "/admin/report", label: "Report" },
   { to: "/admin/menu", label: "Menu" },
   { to: "/admin/menu/ingredienti", label: "Magazzino" },

@@ -14,6 +14,9 @@ const defaultParametri = () => ({
   pizzaiolo_ordini_visibili_minuti: "45",
   pizzaiolo_partenza_consegne_minuti: "30",
   pizzaiolo_tempo_viaggio_minuti: "15",
+  comanda_copie: "1",
+  comanda_font_size: "13",
+  comanda_stampanti: "",
 })
 
 export default function CassaImpostazioniPage({ onBack }) {
@@ -31,6 +34,7 @@ export default function CassaImpostazioniPage({ onBack }) {
     pony_lun_gio: raw.pony_lun_gio !== undefined && raw.pony_lun_gio !== "" ? raw.pony_lun_gio : (raw.pony_consegna ?? ""),
     pony_ven_dom: raw.pony_ven_dom !== undefined && raw.pony_ven_dom !== "" ? raw.pony_ven_dom : "",
     pizze_ogni_15_min: raw.pizze_ogni_15_min !== undefined && raw.pizze_ogni_15_min !== "" ? raw.pizze_ogni_15_min : (raw.pizze_ogni_min ?? ""),
+    comanda_stampanti: Array.isArray(raw.comanda_stampanti) ? raw.comanda_stampanti.join(", ") : (raw.comanda_stampanti ?? ""),
   }
 
   useEffect(() => {
@@ -76,6 +80,12 @@ export default function CassaImpostazioniPage({ onBack }) {
         pizzaiolo_ordini_visibili_minuti: p.pizzaiolo_ordini_visibili_minuti === "" ? 45 : Number(p.pizzaiolo_ordini_visibili_minuti) || 45,
         pizzaiolo_partenza_consegne_minuti: p.pizzaiolo_partenza_consegne_minuti === "" ? 30 : Number(p.pizzaiolo_partenza_consegne_minuti) || 30,
         pizzaiolo_tempo_viaggio_minuti: p.pizzaiolo_tempo_viaggio_minuti === "" ? 15 : Number(p.pizzaiolo_tempo_viaggio_minuti) || 15,
+        comanda_copie: p.comanda_copie === "" ? 1 : Math.max(1, Number(p.comanda_copie) || 1),
+        comanda_font_size: p.comanda_font_size === "" ? 13 : Math.max(9, Number(p.comanda_font_size) || 13),
+        comanda_stampanti: String(p.comanda_stampanti || "")
+          .split(/\r?\n|,/)
+          .map((v) => v.trim())
+          .filter(Boolean),
       }
       await updateTenantSettings(tenantId, { parametri_operativi: payload })
       setSettings({ ...settings, parametri_operativi: payload })
@@ -155,6 +165,23 @@ export default function CassaImpostazioniPage({ onBack }) {
           <label>
             Tempo viaggio consegna (minuti)
             <input type="number" min={5} placeholder="15" value={p.pizzaiolo_tempo_viaggio_minuti === "" ? "" : p.pizzaiolo_tempo_viaggio_minuti} onChange={(e) => setParam("pizzaiolo_tempo_viaggio_minuti", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
+          </label>
+        </div>
+      </section>
+      <section style={styles.section}>
+        <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Comanda</h3>
+        <div style={styles.fields}>
+          <label>
+            Numero copie comanda
+            <input type="number" min={1} placeholder="es. 1" value={p.comanda_copie === "" ? "" : p.comanda_copie} onChange={(e) => setParam("comanda_copie", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
+          </label>
+          <label>
+            Dimensione carattere comanda
+            <input type="number" min={9} max={24} placeholder="es. 13" value={p.comanda_font_size === "" ? "" : p.comanda_font_size} onChange={(e) => setParam("comanda_font_size", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
+          </label>
+          <label>
+            Stampanti comanda (una per riga o separate da virgola)
+            <textarea rows={3} placeholder="es. Cucina, Bancone" value={p.comanda_stampanti || ""} onChange={(e) => setParam("comanda_stampanti", e.target.value)} style={{ ...inputStyle, resize: "vertical", minHeight: 84 }} />
           </label>
         </div>
       </section>

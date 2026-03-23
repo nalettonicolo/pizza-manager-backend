@@ -7,20 +7,6 @@ export default function Landing() {
 
       <div className="landing-bg" aria-hidden="true" />
 
-      <nav className="landing-nav">
-        <Link to="/" className="logo">PizzaManager</Link>
-        <div className="nav-center">
-          <a href="#perche" className="nav-anchor">Perché noi</a>
-          <a href="#funzionalita" className="nav-anchor">Funzionalità</a>
-          <a href="#piani" className="nav-anchor">Piani</a>
-          <Link to="/negozio" className="nav-anchor">Menu online</Link>
-        </div>
-        <div className="nav-links">
-          <Link to="/login" className="btn-outline">Accedi</Link>
-          <Link to="/contatti#prova-gratuita" className="btn-primary">Prova gratuita</Link>
-        </div>
-      </nav>
-
       <section className="hero">
         <div className="hero-text">
           <p className="hero-badge">SaaS verticale per pizzerie e delivery</p>
@@ -33,17 +19,14 @@ export default function Landing() {
 
           <div className="hero-buttons">
             <Link to="/contatti#prova-gratuita" className="btn-primary big">
-              Richiedi prova gratuita
+              Registrati ora
             </Link>
             <Link to="/login" className="btn-outline big">
               Accedi al pannello
             </Link>
-            <Link to="/negozio" className="btn-ghost big landing-hero-menu-btn">
-              Home menu pizzeria
-            </Link>
           </div>
           <p className="hero-hint">
-            La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per entrare in app. Apri il menu pubblico della pizzeria con il pulsante sopra.
+            La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per entrare in app.
           </p>
 
           <ul className="hero-trust" aria-label="Punti di forza">
@@ -175,20 +158,20 @@ export default function Landing() {
           Scala quando sei pronto
         </h2>
         <p className="pricing-subtitle">
-          Nessun piano “free” permanente: inizi con <strong>7 giorni di prova</strong>, poi scegli l’abbonamento tra i piani che offriamo (definiti lato piattaforma). Contattaci per i dettagli.
+          Nessun piano “free” permanente: inizi con <strong>14 giorni di prova</strong> sul <strong>piano che scegli</strong>, poi prosegui con l’abbonamento relativo. Contattaci per i dettagli.
         </p>
         <div className="pricing-grid">
           <div className="pricing-card featured">
             <div className="pricing-card-header">
               <span className="pricing-tag">Per iniziare</span>
-              <span className="pricing-name">Prova 7 giorni</span>
+              <span className="pricing-name">Prova 14 giorni</span>
               <div className="pricing-price">
-                <span className="pricing-amount">7 giorni</span>
+                <span className="pricing-amount">14 giorni</span>
               </div>
-              <p className="pricing-desc">Per conoscere la piattaforma</p>
+              <p className="pricing-desc">Scegli il piano e provalo per 14 giorni</p>
             </div>
             <ul className="pricing-features">
-              <li>Accesso completo per valutare il servizio</li>
+              <li>Accesso al piano selezionato (Base / Pro / Enterprise)</li>
               <li>Non è un piano a tempo indeterminato: serve per decidere</li>
               <li>Al termine attivi un piano a pagamento con l’admin</li>
             </ul>
@@ -238,7 +221,7 @@ export default function Landing() {
           <p>Scopri come PizzaManager può adattarsi al tuo locale: dalla singola sede al modello multi-punto.</p>
           <div className="cta-buttons">
             <Link to="/contatti#prova-gratuita" className="btn-primary big">Richiedi prova o demo</Link>
-            <Link to="/negozio" className="btn-ghost big">Vedi home menu pizzeria</Link>
+            <Link to="/login" className="btn-ghost big">Accedi al pannello</Link>
           </div>
         </div>
       </section>
@@ -251,6 +234,7 @@ export default function Landing() {
             <Link to="/privacy">Privacy</Link>
             <Link to="/cookie">Cookie</Link>
             <Link to="/termini">Termini</Link>
+            <Link to="/support">Supporto</Link>
           </nav>
           <Link to="/login" className="footer-link">Accedi</Link>
         </div>

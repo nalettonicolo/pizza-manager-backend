@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { updateTenantSettings } from "@/features/admin/services/adminService";
+import { KEY_TITOLARE_ESERCENTE } from "@/config/legalEntity";
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
@@ -34,6 +35,14 @@ export default function DatiPizzeriaSection() {
   const indirizzo = settings?.indirizzo ?? "";
   const lat = settings?.lat;
   const lng = settings?.lng;
+  const parametriOperativi =
+    settings?.parametri_operativi && typeof settings.parametri_operativi === "object"
+      ? settings.parametri_operativi
+      : {};
+  const titolareEsercente =
+    typeof parametriOperativi[KEY_TITOLARE_ESERCENTE] === "string"
+      ? parametriOperativi[KEY_TITOLARE_ESERCENTE]
+      : "";
 
   // Mappa: query per iframe (subito visibile, aggiornata in base a indirizzo o lat/lng)
   const mapQuery =
@@ -121,11 +130,20 @@ export default function DatiPizzeriaSection() {
     if (!tenantId || !settings) return;
     try {
       setSaving(true);
+      const prevPo =
+        settings.parametri_operativi && typeof settings.parametri_operativi === "object"
+          ? { ...settings.parametri_operativi }
+          : {};
+      const titolareEsercente =
+        typeof prevPo[KEY_TITOLARE_ESERCENTE] === "string" ? prevPo[KEY_TITOLARE_ESERCENTE].trim() : "";
+      prevPo[KEY_TITOLARE_ESERCENTE] = titolareEsercente;
+
       const payload = {
         nome: settings.nome ?? "",
         telefono: settings.telefono ?? "",
         indirizzo: settings.indirizzo ?? "",
         email: settings.email ?? "",
+        parametri_operativi: prevPo,
       };
       if (settings.lat != null) payload.lat = settings.lat;
       if (settings.lng != null) payload.lng = settings.lng;
@@ -160,6 +178,26 @@ export default function DatiPizzeriaSection() {
               onChange={(e) => setSettings({ ...settings, nome: e.target.value })}
               placeholder="Es. Pizzeria Da Mario"
             />
+          </label>
+          <label>
+            Titolare / referente legale (per privacy e cookie sul sito pubblico)
+            <input
+              type="text"
+              value={titolareEsercente}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  parametri_operativi: {
+                    ...parametriOperativi,
+                    [KEY_TITOLARE_ESERCENTE]: e.target.value,
+                  },
+                })
+              }
+              placeholder="Es. Mario Rossi (nome e cognome del titolare)"
+            />
+            <span className="dati-pizzeria-hint" style={{ display: "block", marginTop: 6 }}>
+              Comparirà nelle informative legali insieme al nome pizzeria sul dominio del locale.
+            </span>
           </label>
           <label>
             Telefono

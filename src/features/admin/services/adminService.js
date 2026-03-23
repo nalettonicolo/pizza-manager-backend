@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient"
+import { logSupabaseError } from "@/utils/logSupabaseError"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 
 ///////////////////////////////////////////////////////////
@@ -1453,7 +1454,10 @@ export async function getTenantSettings(tenantId) {
     .eq("id", tenantId)
     .single()
 
-  if (error) throw error
+  if (error) {
+    logSupabaseError("admin.getTenantSettings", error, { tenantId })
+    throw error
+  }
   return data
 }
 
@@ -1465,9 +1469,13 @@ export async function updateTenantSettings(tenantId, updates) {
     if (error.code === "PGRST204") {
       for (const key of optional) delete payload[key]
       const retry = await supabase.from("tenants").update(payload).eq("id", tenantId)
-      if (retry.error) throw retry.error
+      if (retry.error) {
+        logSupabaseError("admin.updateTenantSettings.retry", retry.error, { tenantId })
+        throw retry.error
+      }
       return
     }
+    logSupabaseError("admin.updateTenantSettings", error, { tenantId })
     throw error
   }
 }

@@ -36,6 +36,8 @@ Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase c
 | Abbonamenti | `/superadmin/licenses` | Tabella subscription con stato e rinnovi |
 | Impostazioni | `/superadmin/settings` | Parametri globali (placeholder / bozza UI) |
 
+**Admin di pizzeria (tenant):** non è Super Admin; per menu, impostazioni, **pubblicazione sito** (`/admin/pubblicazione`) e linee guida aggiornamento codice vedi **`docs/GUIDA_ADMIN.md`**.
+
 ---
 
 ## 4. Pagine in dettaglio
@@ -136,8 +138,23 @@ Quando una di queste viene implementata, aggiungere una sottosezione in §4 e un
 |-----------|-----------|
 | `DEPLOY_COMANDI.md` | Deploy frontend (Firebase) e push backend (Koyeb) |
 | `DEPLOY.md` | Procedura deploy dettagliata |
-| `ARCHITETTURA_E_STATO.md` | Roadmap vs implementazione (admin tenant, operativo, gap) |
-| Migrazioni SQL in `supabase/migrations/` | Schema, RLS, `utenti_ruoli` |
+| `docs/GUIDA_ADMIN.md` | **Linee guida Admin tenant**: cosa aggiornare quando si sviluppa (rotte, tenant, pubblicazione sito) |
+| `docs/ARCHITETTURA_E_STATO.md` | Roadmap vs implementazione (admin tenant, operativo, gap) |
+| Migrazioni SQL in `supabase/migrations/` | Schema, RLS, `utenti_ruoli`, vista `public.tenants` |
+
+---
+
+## 7 bis. Nota sviluppo (cosa è stato introdotto di recente)
+
+Da tenere allineato con il codice e con le migrazioni Supabase:
+
+- **Clienti / tenant:** modale con dati fiscali, abbonamento, addebito automatico; servizio `superadminService` con fallback colonne e schema `core` opzionale (`VITE_SUPABASE_USE_CORE_SCHEMA`).
+- **Vista `public.tenants`:** ricreata da `admin.tenants` con colonne fatturazione e, con migrazione `20260322180000`, colonne operative (`logo_url`, `email`, `parametri_operativi`, `orari_settimana`, ecc.) per Admin e menu pubblico.
+- **Legali:** privacy/cookie/termini con titolare da `.env` (`VITE_LEGAL_*`) sul SaaS e da Dati pizzeria sul dominio cliente; campo **titolare/referente** in `parametri_operativi`.
+- **Supporto:** pagina `/support` e host `support.pizzamanager.it` (vedi `AppRouter`).
+- **Admin → Pubblicazione sito** (`/admin/pubblicazione`): hub per checklist deploy/dominio e roadmap unica piattaforma (funzioni automatiche da completare).
+
+Aggiorna questa sezione e il **registro** sotto a ogni release rilevante.
 
 ---
 
@@ -151,6 +168,7 @@ Compila una riga per ogni modifica significativa all’area Super Admin.
 | 2026-03-22 | — | Collegamento a `ARCHITETTURA_E_STATO.md` per allineamento roadmap / codice. |
 | 2026-03-22 | — | Piani: gestione contenuti in Super Admin (localStorage); TRIAL 7 giorni; niente Free permanente. |
 | 2026-03-22 | — | Piani: modale unico per creazione/modifica (nome, prezzo, validità gg, abilitazione, servizi a flag); schede con toggle rapido abilitato. |
+| 2026-03-22 | — | Aggiunta **GUIDA_ADMIN.md**; pagina Admin **Pubblicazione sito**; nota sviluppo §7 bis (tenant, migrazioni, legali, support). |
 
 ---
 

@@ -29,18 +29,9 @@ function inclusioniFromIds(services, ids) {
   return Object.fromEntries((services || []).map((s) => [s.id, set.has(s.id)]));
 }
 
-/** true solo se l’utente ha spuntato “Prezzo personalizzato” nel modale. */
-function isManualPrezzo(p) {
-  return p.usePrezzoManuale === true;
-}
-
-/** Canone da catalogo: somma dei prezzi base dei servizi inclusi (unica fonte per il totale in card). */
-function totaleCanoneDaServizi(p, services) {
-  return sumMonthlyFromInclusioni(p.inclusioni, services);
-}
-
+/** Canone: somma dei prezzi base dei servizi inclusi (unica fonte). */
 function displayPrezzoForPlan(p, services) {
-  return formatEuroMonth(totaleCanoneDaServizi(p, services));
+  return formatEuroMonth(sumMonthlyFromInclusioni(p.inclusioni, services));
 }
 
 function buildDefaultPlans(services) {
@@ -52,11 +43,10 @@ function buildDefaultPlans(services) {
       id: "seed_base",
       nome: "Base",
       prezzo: formatEuroMonth(sumForIds(IDS_BASE)),
-      descrizione: "Ordini a cassa, stampa comanda in cucina e gestione consegne.",
+      descrizione: "Ordini a cassa, stampa comanda riepilogo ordine e gestione consegne.",
       attivo: true,
       validitaGiorni: 30,
       inclusioni: { ...z, ...inclusioniFromIds(services, IDS_BASE) },
-      usePrezzoManuale: false,
     },
     {
       id: "seed_pro",
@@ -66,17 +56,15 @@ function buildDefaultPlans(services) {
       attivo: true,
       validitaGiorni: 30,
       inclusioni: { ...z, ...inclusioniFromIds(services, IDS_PRO) },
-      usePrezzoManuale: false,
     },
     {
       id: "seed_enterprise",
       nome: "Enterprise",
       prezzo: formatEuroMonth(sumForIds(IDS_ENTERPRISE)),
-      descrizione: "Include tutto il Pro più schermate tablet per i ruoli operativi (cassa, bancone, cucina, delivery, pizzaiolo).",
+      descrizione: "Include tutto il Pro più interfacce tablet dedicate per ruoli operativi (cassa, bancone, cucina, delivery, pizzaiolo).",
       attivo: true,
       validitaGiorni: 30,
       inclusioni: { ...z, ...inclusioniFromIds(services, IDS_ENTERPRISE) },
-      usePrezzoManuale: false,
     },
     {
       id: "seed_full",
@@ -86,7 +74,6 @@ function buildDefaultPlans(services) {
       attivo: true,
       validitaGiorni: 365,
       inclusioni: { ...z, ...inclusioniFromIds(services, IDS_FULL) },
-      usePrezzoManuale: false,
     },
     {
       id: "seed_su_misura",
@@ -96,7 +83,6 @@ function buildDefaultPlans(services) {
       attivo: true,
       validitaGiorni: 30,
       inclusioni: { ...z },
-      usePrezzoManuale: false,
     },
   ];
 }
@@ -124,6 +110,7 @@ const SUPERADMIN_NAV = [
   { to: "/superadmin/dashboard", label: "Riepilogo", description: "Torna alla home" },
   { to: "/superadmin/tenants", label: "Clienti", description: "Pizzerie registrate" },
   { to: "/superadmin/servizi", label: "Catalogo servizi", description: "Servizi e prezzi" },
+  { to: "/superadmin/deploy-clienti", label: "Deploy siti clienti", description: "Pubblicazione e go-live" },
   { to: "/superadmin/licenses", label: "Abbonamenti", description: "Stato licenze" },
   { to: "/superadmin/settings", label: "Impostazioni", description: "Configurazione" },
 ];
@@ -159,15 +146,15 @@ function migrateLegacyPlan(p, services) {
   for (const s of services) {
     out[s.id] = merged[s.id] === true;
   }
+  const prezzoDaSomma = formatEuroMonth(sumMonthlyFromInclusioni(out, services));
   return {
     id: p.id,
     nome: p.nome ?? "",
-    prezzo: p.prezzo ?? "",
+    prezzo: prezzoDaSomma,
     descrizione: p.descrizione ?? "",
     attivo: p.attivo === false ? false : true,
     validitaGiorni: p.validitaGiorni != null && p.validitaGiorni !== "" ? Number(p.validitaGiorni) : null,
     inclusioni: out,
-    usePrezzoManuale: p.usePrezzoManuale === true,
   };
 }
 
@@ -246,15 +233,11 @@ export default function Piani() {
       if (!d) return d;
       const inc = { ...defaultInclusioni(services), ...(d.inclusioni || {}) };
       inc[serviceId] = !inc[serviceId];
-      const next = { ...d, inclusioni: inc };
-      const manual = isManualPrezzo(next);
-      if (!manual) {
-        return {
-          ...next,
-          prezzo: formatEuroMonth(sumMonthlyFromInclusioni(inc, services)),
-        };
-      }
-      return next;
+      return {
+        ...d,
+        inclusioni: inc,
+        prezzo: formatEuroMonth(sumMonthlyFromInclusioni(inc, services)),
+      };
     });
   };
 
@@ -272,7 +255,6 @@ export default function Piani() {
           attivo: true,
           validitaGiorni: 30,
           inclusioni: inc,
-          usePrezzoManuale: false,
         },
         services,
       ),
@@ -305,10 +287,7 @@ export default function Piani() {
         ? null
         : Math.max(1, Math.floor(Number(draft.validitaGiorni)) || 1);
     const inc = { ...defaultInclusioni(services), ...(draft.inclusioni || {}) };
-    const manual = isManualPrezzo(draft);
-    const prezzoFinale = manual
-      ? String(draft.prezzo ?? "").trim()
-      : formatEuroMonth(sumMonthlyFromInclusioni(inc, services));
+    const prezzoFinale = formatEuroMonth(sumMonthlyFromInclusioni(inc, services));
 
     const saved = normalizePlan(
       {
@@ -316,7 +295,6 @@ export default function Piani() {
         validitaGiorni,
         prezzo: prezzoFinale,
         inclusioni: inc,
-        usePrezzoManuale: manual,
       },
       services,
     );
@@ -330,25 +308,6 @@ export default function Piani() {
 
   const updateDraftField = (field, value) => {
     setDraft((d) => (d ? { ...d, [field]: value } : d));
-  };
-
-  const setPrezzoManuale = (checked) => {
-    setDraft((d) => {
-      if (!d) return d;
-      if (checked) {
-        return {
-          ...d,
-          usePrezzoManuale: true,
-          prezzo: d.prezzo || formatEuroMonth(sumMonthlyFromInclusioni(d.inclusioni, services)),
-        };
-      }
-      const inc = { ...defaultInclusioni(services), ...(d.inclusioni || {}) };
-      return {
-        ...d,
-        usePrezzoManuale: false,
-        prezzo: formatEuroMonth(sumMonthlyFromInclusioni(inc, services)),
-      };
-    });
   };
 
   const togglePlanAttivo = (id) => {
@@ -368,7 +327,6 @@ export default function Piani() {
   }, [draftInclusioni, services]);
 
   const modalTitle = planModalMode === "add" ? "Nuovo piano" : "Modifica piano";
-  const draftManual = draft ? isManualPrezzo(draft) : true;
   const noServices = services.length === 0;
 
   return (
@@ -402,8 +360,8 @@ export default function Piani() {
         <p style={{ margin: "0 0 8px", fontSize: 14, color: "#555", lineHeight: 1.55 }}>
           Il <Link to="/superadmin/servizi">catalogo servizi</Link> definisce ogni modulo, le funzioni incluse e il{" "}
           <strong>prezzo base mensile</strong>. Qui componi i <strong>piani</strong> (Base, Pro, Enterprise, Full, Su misura
-          o personalizzati): per ogni piano selezioni quali servizi sono inclusi e il canone può essere{" "}
-          <strong>calcolato automaticamente</strong> come somma dei prezzi dei servizi scelti, oppure impostato manualmente.
+          o personalizzati): per ogni piano selezioni i servizi inclusi; il <strong>canone mensile</strong> è la{" "}
+          <strong>somma</strong> dei prezzi del catalogo per quei servizi.
         </p>
         <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.55 }}>
           I dati sono salvati in questo browser (localStorage). Per uso multi-dispositivo servirà persistenza su database.
@@ -474,35 +432,6 @@ export default function Piani() {
               Somma dei prezzi base del catalogo per le voci spuntate sotto ({inclusioniCount} servizi).
             </p>
           </div>
-
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
-            <input
-              type="checkbox"
-              id="prezzo-manuale"
-              checked={draftManual}
-              onChange={(e) => setPrezzoManuale(e.target.checked)}
-              style={{ marginTop: 3, width: 18, height: 18, flexShrink: 0 }}
-            />
-            <label htmlFor="prezzo-manuale" style={{ fontSize: 14, cursor: "pointer", color: "#334155", lineHeight: 1.45 }}>
-              <strong>Prezzo personalizzato</strong> (testo libero, non aggiornato dalla somma — utile per sconti, listini
-              speciali o &quot;Su richiesta&quot;)
-            </label>
-          </div>
-
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Prezzo mostrato (etichetta)</label>
-          <input
-            type="text"
-            value={draft?.prezzo ?? ""}
-            onChange={(e) => updateDraftField("prezzo", e.target.value)}
-            placeholder={formatEuroMonth(computedMonthly)}
-            style={{ ...inputBase, opacity: draftManual ? 1 : 0.85 }}
-            disabled={!draftManual}
-          />
-          {!draftManual && (
-            <p style={{ fontSize: 12, color: "#64748b", margin: "-8px 0 12px" }}>
-              Alla salvataggio verrà usato il totale calcolato: {formatEuroMonth(computedMonthly)}
-            </p>
-          )}
 
           <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Validità (giorni)</label>
           <input
@@ -685,11 +614,6 @@ export default function Piani() {
               <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 8px" }}>
                 Totale = somma dei servizi inclusi (prezzi del catalogo).
               </p>
-              {isManualPrezzo(p) && (p.prezzo || "").trim() !== "" && (
-                <p style={{ fontSize: 13, color: "#92400e", margin: "0 0 8px", padding: "8px 10px", background: "#fffbeb", borderRadius: 6, border: "1px solid #fcd34d" }}>
-                  <strong>Etichetta personalizzata (listino):</strong> {p.prezzo}
-                </p>
-              )}
               {p.validitaGiorni != null && (
                 <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 8px" }}>
                   Validità: <strong>{p.validitaGiorni} giorni</strong>

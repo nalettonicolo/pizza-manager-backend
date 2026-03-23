@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { logSupabaseError } from "@/utils/logSupabaseError";
 
 const SCHEMA_CORE = "core";
 
@@ -13,6 +14,42 @@ function isSchemaNotExposedError(err) {
   return /schema must be one of/i.test(m);
 }
 
+/** Colonna assente / cache PostgREST non aggiornata dopo migrazione SQL. */
+function isMissingColumnOrSchemaCacheError(err) {
+  const m = String(err?.message ?? err ?? "");
+  const code = err?.code;
+  return (
+    code === "PGRST204" ||
+    /could not find.*column/i.test(m) ||
+    /schema cache/i.test(m)
+  );
+}
+
+/** Vista public.tenants con CASE su piano: UPDATE su piano fallisce (0A000). */
+function isPianoNotUpdatableOnView(err) {
+  return err?.code === "0A000" && /piano/i.test(String(err?.message ?? ""));
+}
+
+/** Aggiorna solo `piano` su admin.tenants (richiede schema admin esposto in PostgREST). */
+async function updatePianoOnAdminTable(id, piano) {
+  const admin = supabase.schema("admin");
+  const { error } = await admin.from("tenants").update({ piano }).eq("id", id);
+  if (!error) return true;
+  if (isSchemaNotExposedError(error)) return false;
+  console.warn("[superadmin] update piano su admin.tenants:", error.message ?? error);
+  return false;
+}
+
+/** Solo campi presenti su tenant “minimi” (senza colonne fatturazione). */
+function tenantRowMinimal(payload) {
+  return {
+    nome: payload.nome,
+    slug: payload.slug,
+    piano: payload.piano ?? "TRIAL",
+    attivo: payload.attivo ?? true,
+  };
+}
+
 /**
  * Query builder per `core.<table>` oppure `null` se il fallback core è disattivo.
  */
@@ -24,7 +61,7 @@ function fromCore(table) {
 const TENANT_SELECT_FULL =
   "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
   "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
-  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale";
+  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, prova_valida_fino";
 
 const TENANT_SELECT_LEGACY = "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at";
 
@@ -32,10 +69,12 @@ async function fetchTenantsList(selectCols) {
   const q = supabase.from("tenants").select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
   const { data, error } = await q;
   if (!error) return data ?? [];
+  logSupabaseError("superadmin.fetchTenantsList", error, { selectCols });
   const core = fromCore("tenants");
   if (!core) throw error;
   const res = await core.select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
   if (!res.error) return res.data ?? [];
+  logSupabaseError("superadmin.fetchTenantsList.core", res.error, { selectCols });
   if (isSchemaNotExposedError(res.error)) throw error;
   throw res.error;
 }
@@ -63,10 +102,12 @@ export async function getTenant(id) {
     .single();
 
   if (!error) return data;
+  logSupabaseError("superadmin.getTenant", error, { id });
   const core = fromCore("tenants");
   if (!core) throw error;
   const res = await core.select("*").eq("id", id).is("deleted_at", null).single();
   if (res.error) {
+    logSupabaseError("superadmin.getTenant.core", res.error, { id });
     if (isSchemaNotExposedError(res.error)) throw error;
     throw res.error;
   }
@@ -92,6 +133,10 @@ function tenantRowFromPayload(payload) {
       payload.sconto_percentuale === "" || payload.sconto_percentuale == null
         ? 0
         : Math.min(100, Math.max(0, Number(payload.sconto_percentuale) || 0)),
+    prova_valida_fino:
+      payload.prova_valida_fino === "" || payload.prova_valida_fino == null
+        ? null
+        : payload.prova_valida_fino,
   };
   return base;
 }
@@ -148,12 +193,25 @@ async function upsertSubscriptionForTenant(tenantRow, payload) {
 
 export async function createTenant(payload) {
   const row = tenantRowFromPayload(payload);
-  const { data, error } = await supabase.from("tenants").insert(row).select().single();
+  let { data, error } = await supabase.from("tenants").insert(row).select().single();
   let created = data;
+  if (error && isMissingColumnOrSchemaCacheError(error)) {
+    const retry = await supabase.from("tenants").insert(tenantRowMinimal(payload)).select().single();
+    if (!retry.error) {
+      created = retry.data;
+      error = null;
+    } else {
+      error = retry.error;
+    }
+  }
   if (error) {
+    logSupabaseError("superadmin.createTenant", error, { nome: payload?.nome, slug: payload?.slug });
     const core = fromCore("tenants");
     if (!core) throw error;
-    const res = await core.insert(row).select().single();
+    let res = await core.insert(row).select().single();
+    if (res.error && isMissingColumnOrSchemaCacheError(res.error)) {
+      res = await core.insert(tenantRowMinimal(payload)).select().single();
+    }
     if (res.error) {
       if (isSchemaNotExposedError(res.error)) throw error;
       throw res.error;
@@ -169,11 +227,42 @@ export async function createTenant(payload) {
  */
 export async function updateTenant(id, updates) {
   const row = tenantRowFromPayload(updates);
-  const { error } = await supabase.from("tenants").update(row).eq("id", id);
+  let { error } = await supabase.from("tenants").update(row).eq("id", id);
+
+  if (error && isPianoNotUpdatableOnView(error)) {
+    const { piano, ...rest } = row;
+    const r1 = await supabase.from("tenants").update(rest).eq("id", id);
+    if (!r1.error) {
+      error = null;
+      if (piano !== undefined) {
+        const ok = await updatePianoOnAdminTable(id, piano);
+        if (!ok) {
+          console.warn(
+            "[superadmin] Piano non aggiornabile sulla vista: applica migrazione SQL public.tenants (SELECT * FROM admin.tenants) oppure espone lo schema admin in Supabase → API."
+          );
+        }
+      }
+    } else {
+      error = r1.error;
+    }
+  }
+
+  if (error && isMissingColumnOrSchemaCacheError(error)) {
+    const retry = await supabase.from("tenants").update(tenantRowMinimal(updates)).eq("id", id);
+    if (!retry.error) {
+      error = null;
+    } else {
+      error = retry.error;
+    }
+  }
   if (error) {
+    logSupabaseError("superadmin.updateTenant", error, { id });
     const core = fromCore("tenants");
     if (!core) throw error;
-    const res = await core.update(row).eq("id", id);
+    let res = await core.update(row).eq("id", id);
+    if (res.error && isMissingColumnOrSchemaCacheError(res.error)) {
+      res = await core.update(tenantRowMinimal(updates)).eq("id", id);
+    }
     if (res.error) {
       if (isSchemaNotExposedError(res.error)) throw error;
       throw res.error;

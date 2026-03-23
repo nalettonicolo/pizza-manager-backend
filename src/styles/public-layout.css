@@ -11,13 +11,98 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 16px clamp(16px, 3vw, 40px);
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 100;
+}
+
+.public-layout-header--saas {
+  justify-content: flex-start;
+}
+
+.public-layout-nav-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 20px;
+  min-width: 0;
+}
+
+.public-layout-header-trailing {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.public-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.public-layout-btn--outline {
+  color: #475569;
+  background: #fff;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.public-layout-btn--outline:hover {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.35);
+}
+
+.public-layout-btn--primary {
+  color: #fff;
+  background: #c0392b;
+  border-color: #c0392b;
+}
+
+.public-layout-btn--primary:hover {
+  background: #962d22;
+  border-color: #962d22;
+}
+
+@media (max-width: 820px) {
+  .public-layout-nav-center {
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .public-layout-header-trailing {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .public-layout-header {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .public-layout-header::-webkit-scrollbar {
+    display: none;
+  }
+
+  .public-layout-nav-center {
+    display: none;
+  }
 }
 
 .public-layout-logo {
@@ -53,9 +138,9 @@
   padding: 16px 24px;
   text-align: center;
   font-size: 0.8125rem;
-  color: #94a3b8;
-  background: #fff;
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  color: #334155;
+  background: #f8fafc;
+  border-top: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 .public-layout-footer-inner {
@@ -76,10 +161,10 @@
 }
 
 .public-layout-footer-legal a {
-  color: #64748b;
+  color: #334155;
   font-weight: 600;
   text-decoration: none;
-  font-size: 0.8125rem;
+  font-size: 0.85rem;
 }
 
 .public-layout-footer-legal a:hover {
@@ -89,6 +174,8 @@
 .public-layout-footer-copy {
   width: 100%;
   flex-basis: 100%;
+  color: #475569;
+  font-size: 0.85rem;
 }
 
 .cookie-banner {

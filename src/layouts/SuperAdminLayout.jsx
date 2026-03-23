@@ -6,8 +6,10 @@ const HEADER_HEIGHT = 56;
 
 const navItems = [
   { to: "/superadmin/dashboard", label: "Riepilogo" },
+  { to: "/superadmin/home-pizzeria", label: "Home Pizzeria" },
   { to: "/superadmin/tenants", label: "Clienti" },
   { to: "/superadmin/servizi", label: "Catalogo servizi" },
+  { to: "/superadmin/deploy-clienti", label: "Deploy Siti Clienti" },
   { to: "/superadmin/piani", label: "Piani" },
   { to: "/superadmin/licenses", label: "Abbonamenti" },
   { to: "/superadmin/settings", label: "Impostazioni" },

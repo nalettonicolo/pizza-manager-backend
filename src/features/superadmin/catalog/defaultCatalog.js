@@ -20,12 +20,12 @@ export const DEFAULT_SERVICES_CATALOG = [
   },
   {
     id: "stampa_comanda",
-    nome: "Stampa comanda in cucina",
+    nome: "Comanda (stampa riepilogo ordine)",
     categoria: "Operazioni sala",
     funzioni: [
-      "Invio ordini in cucina",
-      "Stampa o visualizzazione comanda per preparazione",
-      "Allineamento con flusso bancone–cucina",
+      "Stampa comanda generica al momento della creazione ordine",
+      "Riepilogo ordine stampabile anche senza tablet cucina",
+      "Integrazione con flusso cassa / bancone",
     ],
     prezzoMensile: 9,
   },

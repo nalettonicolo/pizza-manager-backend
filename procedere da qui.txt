@@ -28,3 +28,16 @@ Se le colonne tenant o le policy su subscriptions non sono allineate, in produzi
 Koyeb (backend)
 Il git push può aver aggiornato il repo; se il servizio non ha fatto redeploy o c’è un errore di build, va controllata la dashboard Koyeb (solo se qualcosa dipende dal backend per Super Admin).
 In una frase: oggi hai chiesto sistemare Super Admin (clienti/abbonamenti), deploy, poi catalogo servizi e piani con prezzi calcolati; in codice è stato implementato, ma vedere “tutto” sul sito richiede almeno un nuovo deploy del frontend dopo l’ultimo commit e, per i dati catalogo/piani, capire che sono per-browser finché non li mettete in database. Se vuoi, nel passo successivo posso proporti i comandi esatti per un deploy “pulito” da lanciare adesso.
+
+────────────────────────────────────────
+DA QUI IN POI — FERMARSI (marzo 2026)
+────────────────────────────────────────
+• Il sito del cliente sarà collegato a questo sistema (stesso backend / tenant / menu pubblico).
+• Il deploy del sito del cliente non si gestisce qui: andrà prevista una pagina/flusso dedicato (da creare)
+  per pubblicare il sito del locale collegato a PizzaManager.
+• Qui non implementare oltre il necessario per “sito pubblico su dominio pizzeria + informative legali dinamiche”;
+  il prossimo passo progettuale è la pagina di deploy dedicata, non espandere in questo thread il collegamento
+  deploy-cliente finché non si definisce quel flusso.
+
+2026-03-22 — Aggiunta in Admin la voce "Pubblicazione" (/admin/pubblicazione) come hub checklist + roadmap;
+  create docs/GUIDA_ADMIN.md e aggiornata docs/GUIDA_SUPERADMIN.md (§7 bis). Deploy Firebase eseguito.

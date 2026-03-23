@@ -19,6 +19,7 @@ import Contatti from "@/features/public/pages/Contatti";
 import PrivacyPolicy from "@/features/public/pages/PrivacyPolicy";
 import CookiePolicy from "@/features/public/pages/CookiePolicy";
 import TerminiCondizioni from "@/features/public/pages/TerminiCondizioni";
+import Support from "@/features/public/pages/Support";
 import Login from "@/features/public/pages/Login";
 import SelectPuntoVendita from "@/features/public/pages/SelectPuntoVendita";
 import WebAppPreview from "@/features/public/pages/WebAppPreview";
@@ -30,6 +31,7 @@ const Tenants = lazy(() => import("@/features/superadmin/pages/Tenants"));
 const Settings = lazy(() => import("@/features/superadmin/pages/Settings"));
 const Piani = lazy(() => import("@/features/superadmin/pages/Piani"));
 const ServiziCatalogo = lazy(() => import("@/features/superadmin/pages/ServiziCatalogo"));
+const DeployClientiPage = lazy(() => import("@/features/superadmin/pages/DeployClientiPage"));
 
 /* ================= ADMIN (lazy) ================= */
 const Dashboard = lazy(() => import("@/features/admin/pages/Dashboard"));
@@ -52,6 +54,7 @@ const FrittiPage = lazy(() => import("@/features/admin/pages/menu/FrittiPage"));
 const AllergeniPage = lazy(() => import("@/features/admin/pages/menu/AllergeniPage"));
 const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
 const GuidaUtentePage = lazy(() => import("@/features/admin/pages/GuidaUtentePage"));
+const PubblicazioneSitoPage = lazy(() => import("@/features/admin/pages/PubblicazioneSitoPage"));
 
 /* ================= OPERATIVE (lazy) ================= */
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
@@ -81,13 +84,22 @@ const isLocal =
   host.includes("localhost") ||
   host.includes("127.0.0.1");
 
-const isSaaS = host === "pizzamanager.it" || host.startsWith("app.") || isLocal;
+const isSupportHost = host === "support.pizzamanager.it";
+
+const isSaaS =
+  host === "pizzamanager.it" ||
+  host.startsWith("app.") ||
+  isSupportHost ||
+  isLocal;
 
 /* =========================================================
    HOST RESOLVER
 ========================================================= */
 
 function RootResolver() {
+  if (isSupportHost) {
+    return <Support />;
+  }
   if (isSaaS) {
     return <Landing />;
   }
@@ -110,16 +122,16 @@ export default function AppRouter() {
       <Route element={<PublicLayout />}>
         <Route path="/" element={<RootResolver />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/cookie" element={<CookiePolicy />} />
+        <Route path="/termini" element={<TerminiCondizioni />} />
 
         {/* Queste route esistono SOLO nel SaaS */}
         {isSaaS && (
           <>
-            <Route path="/home" element={<Home />} />
             <Route path="/negozio" element={<PublicStore />} />
             <Route path="/contatti" element={<Contatti />} />
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/cookie" element={<CookiePolicy />} />
-            <Route path="/termini" element={<TerminiCondizioni />} />
+            <Route path="/support" element={<Support />} />
             <Route path="/select-pv" element={<SelectPuntoVendita />} />
             <Route path="/preview" element={<WebAppPreview />} />
           </>
@@ -144,9 +156,11 @@ export default function AppRouter() {
           <Route path="/superadmin/dashboard" element={<Suspense fallback={<PageFallback />}><SuperAdminDashboard /></Suspense>} />
           <Route path="/superadmin/tenants" element={<Suspense fallback={<PageFallback />}><Tenants /></Suspense>} />
           <Route path="/superadmin/servizi" element={<Suspense fallback={<PageFallback />}><ServiziCatalogo /></Suspense>} />
+          <Route path="/superadmin/deploy-clienti" element={<Suspense fallback={<PageFallback />}><DeployClientiPage /></Suspense>} />
           <Route path="/superadmin/piani" element={<Suspense fallback={<PageFallback />}><Piani /></Suspense>} />
           <Route path="/superadmin/licenses" element={<Suspense fallback={<PageFallback />}><Licenses /></Suspense>} />
           <Route path="/superadmin/settings" element={<Suspense fallback={<PageFallback />}><Settings /></Suspense>} />
+          <Route path="/superadmin/home-pizzeria" element={<Suspense fallback={<PageFallback />}><Home /></Suspense>} />
         </Route>
       )}
 
@@ -167,6 +181,7 @@ export default function AppRouter() {
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/dashboard" element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
           <Route path="/admin/guida" element={<Suspense fallback={<PageFallback />}><GuidaUtentePage /></Suspense>} />
+          <Route path="/admin/pubblicazione" element={<Suspense fallback={<PageFallback />}><PubblicazioneSitoPage /></Suspense>} />
           <Route path="/admin/menu" element={<Navigate to="/admin/menu/categorie" replace />} />
           <Route path="/admin/menu/categorie" element={<Suspense fallback={<PageFallback />}><CategoriePage /></Suspense>} />
           <Route path="/admin/menu/formati" element={<Suspense fallback={<PageFallback />}><FormatiPage /></Suspense>} />

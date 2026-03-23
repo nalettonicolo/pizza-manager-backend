@@ -6,7 +6,7 @@ $rootDir = $PSScriptRoot
 
 if (-not (Test-Path "$rootDir\.env.production")) {
     Write-Host "Crea .env.production nella root con almeno VITE_API_URL (URL backend Koyeb)." -ForegroundColor Yellow
-    Write-Host "Puoi copiare .env.production.example e compilare VITE_API_URL." -ForegroundColor Yellow
+    Write-Host "Puoi copiare .env.production.example in .env.production, oppure usare .env nella root se già configurato (VITE_*)." -ForegroundColor Yellow
     $r = Read-Host "Vuoi continuare senza .env.production? (s/n)"
     if ($r -ne "s") { exit 1 }
 } else {

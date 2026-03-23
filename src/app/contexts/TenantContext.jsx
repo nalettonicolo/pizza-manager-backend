@@ -1,8 +1,24 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { logSupabaseError } from "@/utils/logSupabaseError"
 import { useAuth } from "./AuthContext"
 
 const TenantContext = createContext()
+
+/** PostgREST .single() con 0 righe → PGRST116 (con maybeSingle() non dovrebbe comparire). */
+function isPgrst116ZeroRows(err) {
+  return (
+    err?.code === "PGRST116" &&
+    /0 rows/i.test(String(err.details ?? err.message ?? ""))
+  )
+}
+
+function warnTenantRowMissing(tenantId) {
+  console.warn(
+    "[TenantContext] Nessuna riga in public.tenants per questo tenantId. Inserisci la stessa UUID in admin.tenants (allineata a utenti_ruoli.tenant_id).",
+    tenantId
+  )
+}
 
 export function TenantProvider({ children }) {
   const { tenantId, user, loading: authLoading } = useAuth()
@@ -25,14 +41,23 @@ export function TenantProvider({ children }) {
 
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from("tenants")
-      .select("id, nome, slug, piano, attivo, logo_url, parametri_operativi, orari_settimana")
-      .eq("id", tenantId)
-      .single()
+    // select("*") evita PGRST204 se la vista public.tenants non espone ancora tutte le colonne.
+    // maybeSingle: 0 righe → data null senza PGRST116 (.single() fallirebbe se l'id non è in admin.tenants).
+    const { data, error } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle()
 
     if (error) {
-      console.error("Errore caricamento tenant:", error)
+      if (isPgrst116ZeroRows(error)) {
+        warnTenantRowMissing(tenantId)
+        setTenantData(null)
+      } else {
+        logSupabaseError("TenantContext.loadTenantData", error, {
+          tenantId,
+          operation: "from(tenants).select(*).eq(id).maybeSingle",
+        })
+        setTenantData(null)
+      }
+    } else if (!data) {
+      warnTenantRowMissing(tenantId)
       setTenantData(null)
     } else {
       setTenantData(data)

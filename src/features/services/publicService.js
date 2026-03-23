@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { logSupabaseError } from "@/utils/logSupabaseError";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 
 export async function getPublicMenu() {
@@ -20,12 +21,14 @@ export async function getPublicMenu() {
 export async function getPublicTenantInfo() {
   const { data, error } = await supabase
     .from("tenants")
-    .select("id, nome, logo_url, indirizzo, orari_settimana, parametri_operativi")
+    .select("id, nome, logo_url, indirizzo, email, telefono, orari_settimana, parametri_operativi")
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error("Errore caricamento tenant pubblico:", error);
+    logSupabaseError("publicService.getPublicTenantInfo", error, {
+      operation: "from(tenants).select(...).limit(1).maybeSingle",
+    });
     return null;
   }
 

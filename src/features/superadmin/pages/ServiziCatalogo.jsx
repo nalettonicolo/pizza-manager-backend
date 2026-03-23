@@ -67,6 +67,7 @@ export default function ServiziCatalogo() {
       id: s.id,
       nome: s.nome,
       categoria: s.categoria || "Altro",
+      attivo: s.attivo !== false,
       prezzoMensile: s.prezzoMensile ?? 0,
       funzioniText: funzioniToText(s.funzioni),
     });
@@ -81,14 +82,21 @@ export default function ServiziCatalogo() {
     const prezzoMensile = Math.max(0, Number(modal.prezzoMensile) || 0);
     const funzioni = textToFunzioni(modal.funzioniText);
     const categoria = modal.categoria?.trim() || "Altro";
+    const attivo = modal.attivo !== false;
     if (modal.mode === "add") {
-      setServices((prev) => [...prev, { id: modal.id, nome, categoria, funzioni, prezzoMensile }]);
+      setServices((prev) => [...prev, { id: modal.id, nome, categoria, funzioni, prezzoMensile, attivo }]);
     } else {
       setServices((prev) =>
-        prev.map((x) => (x.id === modal.id ? { ...x, nome, categoria, funzioni, prezzoMensile } : x)),
+        prev.map((x) => (x.id === modal.id ? { ...x, nome, categoria, funzioni, prezzoMensile, attivo } : x)),
       );
     }
     closeModal();
+  };
+
+  const toggleServiceAttivo = (serviceId) => {
+    setServices((prev) =>
+      prev.map((x) => (x.id === serviceId ? { ...x, attivo: x.attivo === false } : x)),
+    );
   };
 
   const remove = (s) => {
@@ -150,13 +158,13 @@ export default function ServiziCatalogo() {
         <h2 style={{ marginTop: 0, fontSize: 16 }}>Gerarchia suggerita dei piani</h2>
         <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: "#334155", lineHeight: 1.65 }}>
           <li>
-            <strong>Base</strong> — ordini a cassa, stampa comanda in cucina, gestione consegne.
+            <strong>Base</strong> — ordini a cassa, stampa comanda riepilogo ordine, gestione consegne.
           </li>
           <li>
             <strong>Pro</strong> — tutto il Base più <strong>ordini online</strong> (cliente finale).
           </li>
           <li>
-            <strong>Enterprise</strong> — tutto il Pro più <strong>schermate tablet per ruoli operativi</strong> (cassa,
+            <strong>Enterprise</strong> — tutto il Pro più <strong>schermate tablet dedicate per ruoli operativi</strong> (cassa,
             bancone, cucina, delivery, pizzaiolo, ecc.).
           </li>
           <li>
@@ -196,7 +204,7 @@ export default function ServiziCatalogo() {
               </thead>
               <tbody>
                 {items.map((s) => (
-                  <tr key={s.id}>
+                  <tr key={s.id} style={{ opacity: s.attivo === false ? 0.65 : 1 }}>
                     <td style={{ fontWeight: 600, verticalAlign: "top" }}>{s.nome}</td>
                     <td style={{ fontSize: 13, color: "#475569", verticalAlign: "top" }}>
                       {s.funzioni?.length ? (
@@ -213,18 +221,31 @@ export default function ServiziCatalogo() {
                       {formatEuroMonth(s.prezzoMensile)}
                     </td>
                     <td style={{ textAlign: "right", verticalAlign: "top" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
+                        <label style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }} title={s.attivo === false ? "Servizio disattivato" : "Servizio attivo"}>
+                          <input
+                            type="checkbox"
+                            checked={s.attivo !== false}
+                            onChange={() => toggleServiceAttivo(s.id)}
+                            style={{ width: 16, height: 16 }}
+                          />
+                        </label>
                       <button
                         type="button"
                         onClick={() => openEdit(s)}
-                        style={{ ...btnSecondary, fontSize: 12, padding: "6px 12px", marginRight: 8 }}
+                          style={{ ...btnSecondary, fontSize: 12, padding: "6px 12px" }}
                       >
                         Modifica
                       </button>
-                      {!DEFAULT_SERVICES_CATALOG.some((d) => d.id === s.id) && (
-                        <button type="button" onClick={() => remove(s)} style={{ ...btnSecondary, fontSize: 12, padding: "6px 12px" }}>
-                          Elimina
+                        <button
+                          type="button"
+                          onClick={() => remove(s)}
+                          style={{ ...btnSecondary, fontSize: 12, padding: "6px 10px", color: "#b91c1c", borderColor: "#fecaca" }}
+                          title="Elimina servizio"
+                        >
+                          ✕
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -259,6 +280,18 @@ export default function ServiziCatalogo() {
               style={inputBase}
               placeholder="es. Canale vendita"
             />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <input
+                id="svc-attivo"
+                type="checkbox"
+                checked={modal.attivo !== false}
+                onChange={(e) => setModal((m) => (m ? { ...m, attivo: e.target.checked } : m))}
+                style={{ width: 16, height: 16 }}
+              />
+              <label htmlFor="svc-attivo" style={{ fontSize: 13, color: "#334155", cursor: "pointer" }}>
+                Servizio attivo
+              </label>
+            </div>
             <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
               Prezzo base mensile (€)
             </label>

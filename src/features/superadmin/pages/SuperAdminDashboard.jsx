@@ -9,6 +9,7 @@ const SUPERADMIN_NAV = [
   { to: "/superadmin/dashboard", label: "Riepilogo", description: "Home e statistiche" },
   { to: "/superadmin/tenants", label: "Clienti", description: "Pizzerie registrate" },
   { to: "/superadmin/servizi", label: "Catalogo servizi", description: "Servizi, funzioni e prezzi" },
+  { to: "/superadmin/deploy-clienti", label: "Deploy siti clienti", description: "Pubblicazione e go-live" },
   { to: "/superadmin/piani", label: "Piani", description: "Piani di abbonamento" },
   { to: "/superadmin/licenses", label: "Abbonamenti", description: "Stato licenze" },
   { to: "/superadmin/settings", label: "Impostazioni", description: "Configurazione" },

@@ -8,7 +8,7 @@ import {
 import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
 
 const PIANO_OPTIONS = [
-  { value: "TRIAL", label: "Prova (7 giorni)" },
+  { value: "TRIAL", label: "Prova (14 giorni)" },
   { value: "FREE", label: "Gratuito (legacy)" },
   { value: "PRO", label: "Pro" },
   { value: "ENTERPRISE", label: "Enterprise" },
@@ -43,6 +43,7 @@ function emptyModal(mode) {
     addebito_automatico_mensile: false,
     data_attivazione_abbonamento: "",
     sconto_percentuale: "0",
+    prova_valida_fino: "",
   };
 }
 
@@ -64,6 +65,7 @@ function tenantToModal(t, mode) {
       t.sconto_percentuale != null && t.sconto_percentuale !== ""
         ? String(t.sconto_percentuale)
         : "0",
+    prova_valida_fino: toDateInputValue(t.prova_valida_fino),
   };
 }
 
@@ -136,6 +138,7 @@ export default function Tenants() {
         addebito_automatico_mensile: modal.addebito_automatico_mensile,
         data_attivazione_abbonamento: modal.data_attivazione_abbonamento || null,
         sconto_percentuale: modal.sconto_percentuale,
+        prova_valida_fino: modal.prova_valida_fino || null,
       };
       if (modal.mode === "create") {
         await createTenant(payload);
@@ -225,6 +228,7 @@ export default function Tenants() {
               <th>Addebito auto.</th>
               <th>Sconto %</th>
               <th>Piano</th>
+              <th>Prova fino al</th>
               <th>Stato</th>
               <th>Creato</th>
               <th style={{ textAlign: "right" }}>Azioni</th>
@@ -233,7 +237,7 @@ export default function Tenants() {
           <tbody>
             {list.length === 0 ? (
               <tr>
-                <td colSpan={12} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
+                <td colSpan={13} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
                   Nessun cliente. Clicca &quot;Nuovo cliente&quot; per aggiungerne uno.
                 </td>
               </tr>
@@ -259,6 +263,11 @@ export default function Tenants() {
                       : "—"}
                   </td>
                   <td style={{ fontSize: 13 }}>{pianoDisplayLabel(t.piano)}</td>
+                  <td style={{ color: "#666", fontSize: 13 }}>
+                    {t.prova_valida_fino
+                      ? new Date(t.prova_valida_fino + "T12:00:00").toLocaleDateString("it-IT")
+                      : "—"}
+                  </td>
                   <td>
                     <span className={t.attivo ? "badge badge-success" : "badge badge-neutral"}>
                       {t.attivo ? "Attivo" : "Disattivo"}
@@ -360,6 +369,18 @@ export default function Tenants() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Prova valida fino al (incluso)</label>
+                    <input
+                      type="date"
+                      value={modal.prova_valida_fino}
+                      onChange={(e) => setModalField("prova_valida_fino", e.target.value)}
+                      style={inputStyle}
+                    />
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                      Solo per periodo di prova: ultimo giorno incluso. Lasciare vuoto se non applicabile.
+                    </p>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>

@@ -7,6 +7,7 @@ import { formatPrice } from "@/utils/format"
 const ADMIN_NAV = [
   { to: "/admin/dashboard", label: "Riepilogo", description: "KPI giornalieri (ordini, fatturato, utenti)" },
   { to: "/admin/guida", label: "Guida utente", description: "Manuale operativo aggiornato con l’app" },
+  { to: "/admin/pubblicazione", label: "Pubblicazione sito", description: "Deploy e dominio del menu online (in evoluzione)" },
   { to: "/admin/report", label: "Report vendite", description: "Totali ordini, fatturato, prodotto top" },
   { to: "/admin/menu", label: "Menu", description: "Categorie, listini, allergeni" },
   { to: "/admin/menu/ingredienti", label: "Magazzino", description: "Ingredienti, quantità, costi unitari" },

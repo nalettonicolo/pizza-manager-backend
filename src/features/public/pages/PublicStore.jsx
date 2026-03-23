@@ -121,6 +121,20 @@ export default function PublicStore() {
     return menu.filter((p) => p.categoria_id === activeCategoryId);
   }, [menu, categories.length, activeCategoryId]);
 
+  const handleAddProduct = useCallback(
+    (product) => {
+      if (!user) {
+        navigate("/login", {
+          state: {
+            from: location,
+            pendingProductId: product?.id ?? null,
+          },
+        });
+      }
+    },
+    [user, navigate, location]
+  );
+
   const ingredientiMap = useMemo(
     () =>
       menu.reduce(

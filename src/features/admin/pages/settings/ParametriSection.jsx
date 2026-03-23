@@ -12,6 +12,9 @@ const defaultParametri = () => ({
   tempo_preparazione_pizza: "",
   velocita_pony_kmh: "",
   soglia_giallo_pizze: "10",
+  comanda_copie: "1",
+  comanda_font_size: "13",
+  comanda_stampanti: "",
 });
 
 export default function ParametriSection() {
@@ -29,6 +32,7 @@ export default function ParametriSection() {
     pony_lun_gio: raw.pony_lun_gio !== undefined && raw.pony_lun_gio !== "" ? raw.pony_lun_gio : (raw.pony_consegna ?? ""),
     pony_ven_dom: raw.pony_ven_dom !== undefined && raw.pony_ven_dom !== "" ? raw.pony_ven_dom : "",
     pizze_ogni_15_min: raw.pizze_ogni_15_min !== undefined && raw.pizze_ogni_15_min !== "" ? raw.pizze_ogni_15_min : (raw.pizze_ogni_min ?? ""),
+    comanda_stampanti: Array.isArray(raw.comanda_stampanti) ? raw.comanda_stampanti.join(", ") : (raw.comanda_stampanti ?? ""),
   };
 
   const setParam = (key, value) => {
@@ -43,6 +47,7 @@ export default function ParametriSection() {
     try {
       setSaving(true);
       const payload = {
+        ...(settings?.parametri_operativi || {}),
         pony_lun_gio: p.pony_lun_gio === "" ? 0 : Number(p.pony_lun_gio) || 0,
         pony_ven_dom: p.pony_ven_dom === "" ? 0 : Number(p.pony_ven_dom) || 0,
         pizze_ogni_15_min: p.pizze_ogni_15_min === "" ? 0 : Number(p.pizze_ogni_15_min) || 0,
@@ -51,6 +56,12 @@ export default function ParametriSection() {
         tempo_preparazione_pizza: p.tempo_preparazione_pizza === "" ? 0 : Number(p.tempo_preparazione_pizza) || 0,
         velocita_pony_kmh: p.velocita_pony_kmh === "" ? 0 : Number(p.velocita_pony_kmh) || 0,
         soglia_giallo_pizze: p.soglia_giallo_pizze === "" ? 10 : Number(p.soglia_giallo_pizze) || 10,
+        comanda_copie: p.comanda_copie === "" ? 1 : Math.max(1, Number(p.comanda_copie) || 1),
+        comanda_font_size: p.comanda_font_size === "" ? 13 : Math.max(9, Number(p.comanda_font_size) || 13),
+        comanda_stampanti: String(p.comanda_stampanti || "")
+          .split(/\r?\n|,/)
+          .map((v) => v.trim())
+          .filter(Boolean),
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
@@ -160,6 +171,40 @@ export default function ParametriSection() {
           <p style={{ fontSize: 13, color: "#888", marginTop: 8 }}>
             Distanza/area di consegna (delimitazione su mappa) verrà sviluppata in seguito.
           </p>
+          <h3 style={{ margin: "8px 0 0", fontSize: 16 }}>Comanda</h3>
+          <label>
+            Numero copie comanda
+            <input
+              type="number"
+              min={1}
+              placeholder="es. 1"
+              value={p.comanda_copie === "" ? "" : p.comanda_copie}
+              onChange={(e) => setParam("comanda_copie", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Dimensione carattere comanda
+            <input
+              type="number"
+              min={9}
+              max={24}
+              placeholder="es. 13"
+              value={p.comanda_font_size === "" ? "" : p.comanda_font_size}
+              onChange={(e) => setParam("comanda_font_size", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Stampanti comanda (una per riga o separate da virgola)
+            <textarea
+              rows={3}
+              placeholder="es. Cucina, Bancone"
+              value={p.comanda_stampanti || ""}
+              onChange={(e) => setParam("comanda_stampanti", e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box", resize: "vertical" }}
+            />
+          </label>
         </div>
       </section>
       <div className="dashboard-settings-actions" style={{ marginTop: 16 }}>
