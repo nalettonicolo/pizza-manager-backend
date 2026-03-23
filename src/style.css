@@ -911,6 +911,10 @@ body {
   max-width: 640px;
 }
 
+.dashboard-settings-page.superadmin-deploy-page {
+  max-width: 1280px;
+}
+
 .dashboard-settings-section {
   margin-bottom: 24px;
   padding: 20px;

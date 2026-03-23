@@ -129,14 +129,42 @@ export default function DeployClientiPage() {
   };
 
   return (
-    <div className="dashboard-settings-page">
+    <div className="dashboard-settings-page superadmin-deploy-page">
       <h1 className="dashboard-page-title">Deploy siti clienti</h1>
 
-      <p style={{ maxWidth: 1020, fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 24 }}>
+      <p style={{ maxWidth: 1100, fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 24 }}>
         Da questa area gestisci la pubblicazione del sistema/menu sul dominio del cliente. La pipeline completamente
         automatica tenant-by-tenant e in evoluzione; oggi la procedura operativa resta guidata (checklist + deploy
         piattaforma).
       </p>
+
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
+        <h2 className="dashboard-settings-section-title">Come fare deploy sul sito cliente</h2>
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.65 }}>
+          Flusso consigliato per andare online in sicurezza su un tenant:
+        </p>
+        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.8, color: "#334155" }}>
+          <li>Seleziona il cliente dalla tabella e verifica lo slug/URL pubblico atteso.</li>
+          <li>Completa la checklist di verifica (anagrafica, DNS, menu, legali, smoke test).</li>
+          <li>Esegui deploy frontend dalla root del progetto con <code>npm run deploy</code>.</li>
+          <li>Per backend usa <code>git commit</code> + <code>git push</code> (trigger deploy automatico piattaforma).</li>
+          <li>Apri l&apos;URL cliente e verifica home, menu, login, privacy/cookie/termini.</li>
+          <li>Registra esito con timestamp interno e lascia la checklist completa al 100%.</li>
+        </ol>
+        <div
+          style={{
+            marginTop: 14,
+            padding: "12px 14px",
+            borderRadius: 10,
+            border: "1px solid #dbeafe",
+            background: "#eff6ff",
+            color: "#1e3a8a",
+            fontSize: 13,
+          }}
+        >
+          Nota: gli <strong>aggiornamenti automatici del sistema</strong> sono sempre inclusi nel deploy cliente.
+        </div>
+      </section>
 
       <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Clienti collegati al deploy</h2>
