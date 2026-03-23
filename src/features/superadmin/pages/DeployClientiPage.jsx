@@ -51,6 +51,13 @@ const secondaryBtnStyle = {
   fontWeight: 600,
 };
 
+const sectionCardStyle = {
+  marginBottom: 24,
+  padding: 24,
+  borderRadius: 12,
+  boxShadow: "0 6px 20px rgba(15, 23, 42, 0.06)",
+};
+
 export default function DeployClientiPage() {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,13 +132,13 @@ export default function DeployClientiPage() {
     <div className="dashboard-settings-page">
       <h1 className="dashboard-page-title">Deploy siti clienti</h1>
 
-      <p style={{ maxWidth: 860, fontSize: 15, lineHeight: 1.6, color: "#334155", marginBottom: 24 }}>
+      <p style={{ maxWidth: 1020, fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 24 }}>
         Da questa area gestisci la pubblicazione del sistema/menu sul dominio del cliente. La pipeline completamente
         automatica tenant-by-tenant e in evoluzione; oggi la procedura operativa resta guidata (checklist + deploy
         piattaforma).
       </p>
 
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Clienti collegati al deploy</h2>
         <p style={{ margin: "0 0 10px", fontSize: 14, color: "#475569" }}>
           Questa pagina ora usa i dati reali dei clienti registrati (tenant) per preparare e tracciare il go-live.
@@ -153,8 +160,8 @@ export default function DeployClientiPage() {
         ) : filteredTenants.length === 0 ? (
           <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>Nessun cliente trovato.</p>
         ) : (
-          <div className="dashboard-table-wrap" style={{ overflowX: "auto" }}>
-            <table style={{ minWidth: 820 }}>
+          <div className="dashboard-table-wrap" style={{ overflowX: "auto", borderRadius: 10 }}>
+            <table style={{ minWidth: 980 }}>
               <thead>
                 <tr>
                   <th>Cliente</th>
@@ -195,18 +202,18 @@ export default function DeployClientiPage() {
         )}
       </section>
 
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Stato area deploy</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <div style={{ border: "1px solid #d1fae5", background: "#f0fdf4", borderRadius: 8, padding: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+          <div style={{ border: "1px solid #d1fae5", background: "#f0fdf4", borderRadius: 10, padding: 16 }}>
             <p style={{ margin: 0, fontSize: 12, color: "#166534", fontWeight: 700 }}>FRONTEND</p>
             <p style={{ margin: "4px 0 0", fontSize: 14, color: "#14532d" }}>Deploy guidato disponibile</p>
           </div>
-          <div style={{ border: "1px solid #ffedd5", background: "#fff7ed", borderRadius: 8, padding: 12 }}>
+          <div style={{ border: "1px solid #ffedd5", background: "#fff7ed", borderRadius: 10, padding: 16 }}>
             <p style={{ margin: 0, fontSize: 12, color: "#9a3412", fontWeight: 700 }}>BACKEND</p>
             <p style={{ margin: "4px 0 0", fontSize: 14, color: "#7c2d12" }}>Deploy automatico via push repo</p>
           </div>
-          <div style={{ border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 8, padding: 12 }}>
+          <div style={{ border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 10, padding: 16 }}>
             <p style={{ margin: 0, fontSize: 12, color: "#334155", fontWeight: 700 }}>TENANT</p>
             <p style={{ margin: "4px 0 0", fontSize: 14, color: "#0f172a" }}>
               {selectedTenant ? `${selectedTenant.nome} (${selectedTenant.slug || "slug mancante"})` : "Seleziona un cliente"}
@@ -232,7 +239,7 @@ export default function DeployClientiPage() {
         )}
       </section>
 
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Procedura operativa attuale</h2>
         <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.75, color: "#334155" }}>
           <li>Verifica anagrafica tenant, host pubblico e configurazione menu.</li>
@@ -243,7 +250,7 @@ export default function DeployClientiPage() {
         </ul>
       </section>
 
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Verifica completamento deploy</h2>
         {!selectedTenant ? (
           <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>
@@ -298,7 +305,7 @@ export default function DeployClientiPage() {
         )}
       </section>
 
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Comandi rapidi</h2>
         <p style={{ margin: "0 0 10px", fontSize: 14, color: "#475569" }}>
           Documentazione interna della pipeline:
@@ -327,7 +334,7 @@ export default function DeployClientiPage() {
         </div>
       </section>
 
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+      <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Vai ai tenant</h2>
         <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569" }}>
           Per operare su un cliente specifico, apri prima l&apos;anagrafica del tenant.

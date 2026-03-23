@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Outlet, NavLink, Link } from "react-router-dom";
+import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 
 const HEADER_HEIGHT = 56;
@@ -17,6 +17,19 @@ const navItems = [
 
 export default function SuperAdminLayout() {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
+
+  // Sidebar contestuale: appare solo quando la pagina corrente ha sottopagine dedicate.
+  const contextualSidebarMap = {
+    "/superadmin/settings/": [],
+    "/superadmin/servizi/": [],
+    "/superadmin/piani/": [],
+    "/superadmin/tenants/": [],
+    "/superadmin/deploy-clienti/": [],
+  };
+  const sidebarItems =
+    Object.entries(contextualSidebarMap).find(([prefix]) => pathname.startsWith(prefix))?.[1] || [];
+  const showSidebar = sidebarItems.length > 0;
 
   return (
     <Fragment>
@@ -42,21 +55,23 @@ export default function SuperAdminLayout() {
         </div>
       </header>
 
-      {/* Contenuto: spazio per la barra fissa + sidebar + area principale */}
+      {/* Contenuto: spazio per la barra fissa + sidebar contestuale (se presente) + area principale */}
       <div className="dashboard-wrap theme-superadmin" style={{ paddingTop: HEADER_HEIGHT }}>
-        <aside className="dashboard-sidebar" style={{ flexShrink: 0 }}>
-          <h2 className="dashboard-sidebar-title">Piattaforma</h2>
-          <nav>
-            {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? "active" : "")}>
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="dashboard-sidebar-footer">
-            <p className="user-email" title={user?.email}>{user?.email}</p>
-          </div>
-        </aside>
+        {showSidebar && (
+          <aside className="dashboard-sidebar" style={{ flexShrink: 0 }}>
+            <h2 className="dashboard-sidebar-title">Sezione</h2>
+            <nav>
+              {sidebarItems.map((item) => (
+                <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? "active" : "")}>
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="dashboard-sidebar-footer">
+              <p className="user-email" title={user?.email}>{user?.email}</p>
+            </div>
+          </aside>
+        )}
         <main className="dashboard-main" style={{ flex: 1, minWidth: 0 }}>
           <div className="dashboard-content">
             <Outlet />
