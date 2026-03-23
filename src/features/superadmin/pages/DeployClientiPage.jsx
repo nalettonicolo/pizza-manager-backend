@@ -3,6 +3,44 @@ import { Link } from "react-router-dom";
 import { getTenants } from "@/features/superadmin/services/superadminService";
 import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
 
+const DEPLOY_CHECKLIST_STORAGE_KEY = "pizzamanager_deploy_checklist_v1";
+
+const CHECKLIST_ITEMS = [
+  { id: "anagrafica", label: "Anagrafica tenant verificata" },
+  { id: "dns", label: "DNS dominio cliente configurato" },
+  { id: "menu", label: "Menu pubblico verificato" },
+  { id: "legali", label: "Privacy / Cookie / Termini verificati" },
+  { id: "smoke_test", label: "Smoke test finale completato" },
+];
+
+function loadChecklistByTenant() {
+  try {
+    const raw = localStorage.getItem(DEPLOY_CHECKLIST_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveChecklistByTenant(data) {
+  try {
+    localStorage.setItem(DEPLOY_CHECKLIST_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function getChecklistForTenant(checklistByTenant, tenantId) {
+  const src = checklistByTenant?.[tenantId] || {};
+  const out = {};
+  for (const item of CHECKLIST_ITEMS) {
+    out[item.id] = src[item.id] === true;
+  }
+  return out;
+}
+
 const secondaryBtnStyle = {
   display: "inline-block",
   padding: "10px 14px",
@@ -19,6 +57,7 @@ export default function DeployClientiPage() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState(null);
+  const [checklistByTenant, setChecklistByTenant] = useState(() => loadChecklistByTenant());
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +100,26 @@ export default function DeployClientiPage() {
   const tenantPublicUrl = selectedTenant?.slug
     ? `https://${selectedTenant.slug}.pizzamanager.it`
     : "n/d";
+  const checklist = selectedTenant ? getChecklistForTenant(checklistByTenant, selectedTenant.id) : null;
+  const checkedCount = checklist
+    ? CHECKLIST_ITEMS.reduce((acc, item) => acc + (checklist[item.id] ? 1 : 0), 0)
+    : 0;
+  const totalChecks = CHECKLIST_ITEMS.length + 1; // +1 = aggiornamenti automatici sempre inclusi
+  const completionPercent = selectedTenant
+    ? Math.round(((checkedCount + 1) / totalChecks) * 100)
+    : 0;
+  const isDeployReady = selectedTenant ? checkedCount === CHECKLIST_ITEMS.length : false;
+
+  const toggleChecklistItem = (itemId) => {
+    if (!selectedTenant?.id) return;
+    setChecklistByTenant((prev) => {
+      const current = getChecklistForTenant(prev, selectedTenant.id);
+      const nextTenantChecklist = { ...current, [itemId]: !current[itemId] };
+      const next = { ...prev, [selectedTenant.id]: nextTenantChecklist };
+      saveChecklistByTenant(next);
+      return next;
+    });
+  };
 
   return (
     <div className="dashboard-settings-page">
@@ -157,6 +216,20 @@ export default function DeployClientiPage() {
         <p style={{ margin: "10px 0 0", fontSize: 13, color: "#64748b" }}>
           URL pubblico atteso: <code>{tenantPublicUrl}</code>
         </p>
+        {selectedTenant && (
+          <p style={{ margin: "8px 0 0", fontSize: 13, color: "#0f172a" }}>
+            Completamento deploy: <strong>{completionPercent}%</strong>
+            {" · "}
+            <span
+              style={{
+                color: isDeployReady ? "#166534" : "#9a3412",
+                fontWeight: 700,
+              }}
+            >
+              {isDeployReady ? "Pronto per pubblicazione cliente" : "Checklist non completa"}
+            </span>
+          </p>
+        )}
       </section>
 
       <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
@@ -168,6 +241,61 @@ export default function DeployClientiPage() {
           <li>Controlla il tenant online: home, menu pubblico, privacy/cookie/termini.</li>
           <li>Registra esito e timestamp nel processo interno.</li>
         </ul>
+      </section>
+
+      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
+        <h2 className="dashboard-settings-section-title">Verifica completamento deploy</h2>
+        {!selectedTenant ? (
+          <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>
+            Seleziona prima un cliente per compilare la checklist.
+          </p>
+        ) : (
+          <>
+            <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569" }}>
+              Cliente selezionato: <strong>{selectedTenant.nome}</strong> ({selectedTenant.slug || "slug mancante"})
+            </p>
+            <div
+              style={{
+                marginBottom: 10,
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #d1fae5",
+                background: "#f0fdf4",
+              }}
+            >
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#14532d" }}>
+                <input type="checkbox" checked readOnly style={{ width: 16, height: 16 }} />
+                Aggiornamenti automatici del sistema inclusi (sempre attivi)
+              </label>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {CHECKLIST_ITEMS.map((item) => (
+                <label
+                  key={item.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 14,
+                    color: "#334155",
+                    background: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!checklist?.[item.id]}
+                    onChange={() => toggleChecklistItem(item.id)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 20 }}>
