@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useLayoutEffect } from "react"
+import { useEffect, useState, useMemo, useCallback, useLayoutEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { useAuth } from "@/app/contexts/AuthContext"
@@ -36,6 +36,8 @@ import {
   enrollFidelityCliente,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
+import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
+import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
 import { getLocalYYYYMMDD, orderCreatedLocalDateKey } from "@/utils/localDate"
 import {
@@ -52,8 +54,10 @@ import {
 import {
   cartItemsToComandaRighe,
   printComandaKitchen,
+  printComandaKitchenPerReparto,
   comandaPayloadFromOrdineDetail,
 } from "@/features/operative/cassa/utils/printComanda"
+import { normalizeComandaRepartiStampanti } from "@/utils/comandaRepartiStampanti"
 import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 import {
   cassaTipoOrdineBtn,
@@ -241,6 +245,8 @@ export default function CassaPage() {
   const [lastOrderDetailLoading, setLastOrderDetailLoading] = useState(false)
   const [ordiniOnlineDisabilitati, setOrdiniOnlineDisabilitati] = useState(false)
   const [showPaginaOrdini, setShowPaginaOrdini] = useState(false)
+  const [fuoriAreaModal, setFuoriAreaModal] = useState(null)
+  const bypassFuoriAreaCheckRef = useRef(false)
   const [ordiniSearch, setOrdiniSearch] = useState("")
   const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotMinutes }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
@@ -688,23 +694,41 @@ export default function CassaPage() {
       return () => setCassaSidebar(null)
     }
     setCassaSidebar(
-      <button
-        type="button"
-        style={{
-          ...styles.impostazioniBtn,
-          width: "100%",
-          boxSizing: "border-box",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-        onClick={() => setShowImpostazioniCassa(true)}
-      >
-        Impostazioni cassa
-      </button>,
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+        <button
+          type="button"
+          style={{
+            ...styles.impostazioniBtn,
+            width: "100%",
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={() => setShowImpostazioniCassa(true)}
+        >
+          Impostazioni cassa
+        </button>
+        <button
+          type="button"
+          style={{
+            ...styles.impostazioniBtn,
+            width: "100%",
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#37474f",
+            color: "#fff",
+          }}
+          onClick={() => navigate("/operative/cassa/stampanti-reparti")}
+        >
+          Stampanti reparto
+        </button>
+      </div>,
     )
     return () => setCassaSidebar(null)
-  }, [setCassaSidebar, canEditParametriCassa])
+  }, [setCassaSidebar, canEditParametriCassa, navigate])
 
   useLayoutEffect(() => {
     if (!setCassaHeader) return
@@ -1019,6 +1043,28 @@ export default function CassaPage() {
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
       const orarioRitiro = checkoutSelectedSlot?.label ?? ""
+
+      let consegnaLng
+      let consegnaLat
+      if (tipoOrdine === TIPO_ORDINE.DELIVERY) {
+        const ring = getDeliveryPolygonOuterRing(tenantData?.parametri_operativi)
+        const addr = (indirizzoConsegna || "").trim()
+        if (ring && addr) {
+          const coords = await geocodeAddressForDelivery(addr)
+          if (coords) {
+            consegnaLng = coords.lng
+            consegnaLat = coords.lat
+            const inside = pointInPolygonRing(coords.lng, coords.lat, ring)
+            if (inside === false && !bypassFuoriAreaCheckRef.current) {
+              setFuoriAreaModal({ lat: coords.lat, lng: coords.lng })
+              setLoading(false)
+              return
+            }
+          }
+        }
+      }
+      bypassFuoriAreaCheckRef.current = false
+
       const orderId = await createOrder(tenantId, {
         totale: total,
         stato: ORDER_STATUS,
@@ -1035,6 +1081,8 @@ export default function CassaPage() {
         nomeCliente: nomeCliente || undefined,
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna || undefined,
+        consegnaLng,
+        consegnaLat,
       })
       setCart([])
       setCheckoutNote("")
@@ -1109,6 +1157,10 @@ export default function CassaPage() {
   }, [filteredProducts, productIngredientIdsMap, ingredientiEsauritiIds, tenantData?.parametri_operativi?.prodotti_esauriti])
 
   const parametri = tenantData?.parametri_operativi || {}
+  const haStampantiReparto = useMemo(
+    () => normalizeComandaRepartiStampanti(parametri?.comanda_reparti_stampanti).length > 0,
+    [parametri?.comanda_reparti_stampanti],
+  )
   const menuTheme = resolveMenuTheme(parametri)
   const menuRowBackground = menuTheme?.cardBackground || "#f3f9f4"
   const activeCatNome = (categories.find((c) => c.id === activeCategory)?.nome || "").toLowerCase()
@@ -1321,6 +1373,40 @@ export default function CassaPage() {
 
   return (
     <div style={styles.pageColumn}>
+      {fuoriAreaModal && (
+        <div style={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="fuori-area-title">
+          <div
+            style={{ ...styles.detailModal, maxWidth: 420, width: "92%" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="fuori-area-title" style={{ margin: "0 0 12px" }}>Indirizzo fuori area</h3>
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: "#444", lineHeight: 1.5 }}>
+              L&apos;indirizzo di consegna risulta <strong>fuori dal poligono</strong> impostato in Parametri operativi.
+              In cassa puoi confermare comunque l&apos;ordine; i clienti che ordinano da casa verranno bloccati dal sistema.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                style={styles.comandaBannerDismiss}
+                onClick={() => setFuoriAreaModal(null)}
+              >
+                Modifica indirizzo
+              </button>
+              <button
+                type="button"
+                style={styles.comandaBannerBtn}
+                onClick={() => {
+                  setFuoriAreaModal(null)
+                  bypassFuoriAreaCheckRef.current = true
+                  void handleCheckout()
+                }}
+              >
+                Conferma ordine
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {pendingComandaPrint && (
         <div style={styles.comandaBanner} role="status">
           <span>
@@ -1330,7 +1416,7 @@ export default function CassaPage() {
               : ""}
             . Stampa la comanda per la cucina.
           </span>
-          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
             <button
               type="button"
               style={styles.comandaBannerBtn}
@@ -1340,6 +1426,17 @@ export default function CassaPage() {
             >
               Stampa comanda
             </button>
+            {haStampantiReparto && (
+              <button
+                type="button"
+                style={{ ...styles.comandaBannerBtn, background: "#37474f" }}
+                onClick={() => {
+                  printComandaKitchenPerReparto(pendingComandaPrint)
+                }}
+              >
+                Stampa per reparto
+              </button>
+            )}
             <button type="button" style={styles.comandaBannerDismiss} onClick={() => setPendingComandaPrint(null)}>
               Chiudi
             </button>
@@ -1790,6 +1887,18 @@ export default function CassaPage() {
               >
                 Stampa comanda
               </button>
+              {haStampantiReparto && (
+                <button
+                  type="button"
+                  style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#37474f", color: "#fff" }}
+                  onClick={() => {
+                    const payload = comandaPayloadFromOrdineDetail(ordineDetail, tenantData)
+                    if (payload) printComandaKitchenPerReparto(payload)
+                  }}
+                >
+                  Stampa per reparto
+                </button>
+              )}
               {(ordineDetail.tipo_pagamento || "").toLowerCase().includes("da pagare") && (
                 <button
                   type="button"
@@ -2045,16 +2154,30 @@ export default function CassaPage() {
                 </ul>
                 <p style={{ fontWeight: 600, marginBottom: 12 }}>Totale: € {typeof lastOrderModalDetail.totale === "number" ? lastOrderModalDetail.totale.toFixed(2) : lastOrderModalDetail.totale ?? "—"}</p>
                 <p style={{ margin: 0, fontSize: 13 }}>Pagamento: {lastOrderModalDetail.tipo_pagamento || "—"}</p>
-                <button
-                  type="button"
-                  style={{ ...styles.impostazioniBtn, marginTop: 16, background: "#1565c0" }}
-                  onClick={() => {
-                    const payload = comandaPayloadFromOrdineDetail(lastOrderModalDetail, tenantData)
-                    if (payload) printComandaKitchen(payload)
-                  }}
-                >
-                  Stampa comanda
-                </button>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+                  <button
+                    type="button"
+                    style={{ ...styles.impostazioniBtn, background: "#1565c0" }}
+                    onClick={() => {
+                      const payload = comandaPayloadFromOrdineDetail(lastOrderModalDetail, tenantData)
+                      if (payload) printComandaKitchen(payload)
+                    }}
+                  >
+                    Stampa comanda
+                  </button>
+                  {haStampantiReparto && (
+                    <button
+                      type="button"
+                      style={{ ...styles.impostazioniBtn, background: "#37474f", color: "#fff" }}
+                      onClick={() => {
+                        const payload = comandaPayloadFromOrdineDetail(lastOrderModalDetail, tenantData)
+                        if (payload) printComandaKitchenPerReparto(payload)
+                      }}
+                    >
+                      Stampa per reparto
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </div>

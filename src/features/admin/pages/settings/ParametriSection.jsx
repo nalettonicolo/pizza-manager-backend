@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { updateTenantSettings } from "@/features/admin/services/adminService";
+import DeliveryAreaMapEditor from "@/features/admin/components/DeliveryAreaMapEditor";
 
 const defaultParametri = () => ({
   pony_lun_gio: "",
@@ -21,6 +22,24 @@ export default function ParametriSection() {
   const { settings, setSettings } = useOutletContext();
   const { tenantId } = useTenant();
   const [saving, setSaving] = useState(false);
+  const [mapNonce, setMapNonce] = useState(0);
+
+  const savedPolygonKey = useMemo(
+    () => JSON.stringify(settings?.parametri_operativi?.consegna_area_poligono ?? null),
+    [settings?.parametri_operativi?.consegna_area_poligono],
+  );
+
+  const [consegnaAreaPoligono, setConsegnaAreaPoligono] = useState(null);
+
+  useEffect(() => {
+    const po = settings?.parametri_operativi;
+    const raw = po?.consegna_area_poligono;
+    if (raw && typeof raw === "object" && raw.type === "Polygon") {
+      setConsegnaAreaPoligono(raw);
+    } else {
+      setConsegnaAreaPoligono(null);
+    }
+  }, [savedPolygonKey]);
 
   const raw = settings?.parametri_operativi && typeof settings.parametri_operativi === "object"
     ? settings.parametri_operativi
@@ -40,6 +59,11 @@ export default function ParametriSection() {
       ...settings,
       parametri_operativi: { ...(settings?.parametri_operativi || {}), [key]: value },
     });
+  };
+
+  const mapCenter = {
+    lat: settings?.lat ?? null,
+    lng: settings?.lng ?? null,
   };
 
   async function handleSave() {
@@ -62,6 +86,10 @@ export default function ParametriSection() {
           .split(/\r?\n|,/)
           .map((v) => v.trim())
           .filter(Boolean),
+        consegna_area_poligono:
+          consegnaAreaPoligono && consegnaAreaPoligono.type === "Polygon"
+            ? consegnaAreaPoligono
+            : null,
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
@@ -168,9 +196,40 @@ export default function ParametriSection() {
               style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
             />
           </label>
-          <p style={{ fontSize: 13, color: "#888", marginTop: 8 }}>
-            Distanza/area di consegna (delimitazione su mappa) verrà sviluppata in seguito.
-          </p>
+          <div style={{ marginTop: 16, maxWidth: 720 }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Area di consegna (mappa)</h3>
+            <p style={{ fontSize: 13, color: "#666", marginBottom: 8, lineHeight: 1.5 }}>
+              Disegna il poligono sulla mappa: gli ordini <strong>delivery</strong> dei clienti da casa vengono accettati solo se
+              l&apos;indirizzo (geocodificato) cade <strong>dentro</strong> l&apos;area. In <strong>cassa</strong> puoi sempre confermare,
+              anche fuori area, dopo l&apos;avviso.
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setConsegnaAreaPoligono(null);
+                  setMapNonce((n) => n + 1);
+                }}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #ccc",
+                  background: "#f5f5f5",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                Rimuovi area
+              </button>
+            </div>
+            <DeliveryAreaMapEditor
+              key={`${savedPolygonKey}-${mapNonce}`}
+              center={mapCenter}
+              value={consegnaAreaPoligono}
+              onChange={setConsegnaAreaPoligono}
+              height={420}
+            />
+          </div>
           <h3 style={{ margin: "8px 0 0", fontSize: 16 }}>Comanda</h3>
           <label>
             Numero copie comanda

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { Link } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { getTenantSettings, updateTenantSettings } from "@/features/admin/services/adminService"
 import {
@@ -345,6 +346,13 @@ export default function CassaImpostazioniPage({ onBack }) {
         <p style={{ margin: "0 0 16px", fontSize: 13, color: "#555", lineHeight: 1.45 }}>
           Impostazioni usate quando stampi la comanda cucina dal browser (stampante termica o PDF). Il risultato dipende anche dal driver della stampante: prova una stampa di test dopo ogni modifica.
           Trascina le righe per cambiare l&apos;ordine in stampa; l&apos;anteprima a destra usa dati di esempio e riflette salvataggio dopo «Salva».
+        </p>
+        <p style={{ margin: "0 0 16px", fontSize: 13 }}>
+          <Link to="/operative/cassa/stampanti-reparti" style={{ color: "#1565c0", fontWeight: 600 }}>
+            Stampanti per reparto (IP statico)
+          </Link>
+          {" — "}
+          associa cucina, forno, fritti, ecc. agli indirizzi delle stampanti di rete; in cassa puoi usare «Stampa per reparto».
         </p>
         <div style={styles.comandaGrid}>
         <div style={{ ...styles.comandaCol, display: "flex", flexDirection: "column", gap: 20 }}>

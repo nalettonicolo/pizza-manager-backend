@@ -2,6 +2,11 @@
  * Stampa comanda cucina tramite finestra di dialogo del browser (stampa → PDF o stampante termica configurata in OS).
  */
 
+import {
+  normalizeComandaRepartiStampanti,
+  stampantiLabelDaReparti,
+} from "@/utils/comandaRepartiStampanti"
+
 function escapeHtml(s) {
   if (s == null || s === "") return "";
   return String(s)
@@ -49,6 +54,8 @@ export function orderDetailToComandaRighe(detail) {
 }
 
 function stampantiLabel(parametri) {
+  const daReparti = stampantiLabelDaReparti(parametri);
+  if (daReparti) return daReparti;
   const s = parametri?.comanda_stampanti;
   if (Array.isArray(s) && s.length) return s.join(", ");
   if (typeof s === "string" && s.trim()) return s.trim();
@@ -189,7 +196,10 @@ export function buildComandaHeaderHtmlOrdered(data, parametri) {
     tipoPagamento,
   } = data;
 
-  const destStampa = stampantiLabel(parametri);
+  const destStampa =
+    data.destStampaOverride != null && String(data.destStampaOverride).trim() !== ""
+      ? String(data.destStampaOverride).trim()
+      : stampantiLabel(parametri);
   const labels = mergeComandaEtichette(parametri);
   const titoloBanner =
     String(parametri?.comanda_titolo_banner || "").trim() || labels.banner || COMANDA_ETICHETTE_DEFAULT.banner;
@@ -311,6 +321,7 @@ const COMANDA_FONT_STACK = {
  * @param {string} [payload.indirizzoConsegna]
  * @param {string} [payload.note]
  * @param {string} [payload.tipoPagamento]
+ * @param {string} [payload.destStampaOverride] — sostituisce la riga «Dest. stampa» (es. una copia per reparto)
  * @param {Array<{ qty: number, titolo: string, dettagli?: (string|ComandaDettaglioRiga)[] }>} payload.righe
  * @param {object} [payload.parametri] — comanda_copie, comanda_font_size, comanda_titolo_scale, comanda_qty_scale,
  *   comanda_dettaglio_scale, comanda_line_height, comanda_margin_mm, comanda_width_mm, comanda_font_family,
@@ -333,6 +344,7 @@ export function buildComandaKitchenHtmlDocument(payload) {
     indirizzoConsegna,
     note,
     tipoPagamento,
+    destStampaOverride,
     righe = [],
     parametri = {},
   } = payload;
@@ -376,6 +388,7 @@ export function buildComandaKitchenHtmlDocument(payload) {
       indirizzoConsegna,
       note,
       tipoPagamento,
+      destStampaOverride,
     },
     parametri,
   );
@@ -506,6 +519,31 @@ export function printComandaKitchen(payload) {
     return false;
   }
   return true;
+}
+
+/**
+ * Apre una finestra di stampa per ogni reparto configurato (IP statico sulla stampante di rete).
+ * Sul PC deve essere associata una stampante di sistema all’indirizzo indicato; qui si stampa la stessa comanda
+ * con intestazione «Dest. stampa» dedicata al reparto così si sceglie la stampante corretta.
+ * @param {Parameters<typeof printComandaKitchen>[0]} payload
+ */
+export function printComandaKitchenPerReparto(payload) {
+  const reparti = normalizeComandaRepartiStampanti(payload?.parametri?.comanda_reparti_stampanti)
+  if (!reparti.length) {
+    printComandaKitchen(payload)
+    return
+  }
+  const delayMs = 480
+  reparti.forEach((r, idx) => {
+    const dest =
+      r.indirizzo_ip.trim() !== ""
+        ? `Reparto: ${r.nome} — stampante ${r.indirizzo_ip}:${r.porta}`
+        : `Reparto: ${r.nome}`
+    const parametri = { ...(payload.parametri || {}), comanda_copie: 1 }
+    window.setTimeout(() => {
+      printComandaKitchen({ ...payload, destStampaOverride: dest, parametri })
+    }, idx * delayMs)
+  })
 }
 
 /** Costruisce il payload per stampa da dettaglio ordine (con productNames). */

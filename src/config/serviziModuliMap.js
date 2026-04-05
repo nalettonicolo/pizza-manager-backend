@@ -28,8 +28,13 @@ export const SCHEDE_SERVIZI_IMPLEMENTAZIONE = {
     sintesi: "Riepilogo ordine per reparto integrato nel flusso cassa / preparazione.",
     moduli: [
       { label: "Flusso cassa e reparti", paths: ["/operative/cassa", "/operative/bancone", "/operative/cucina"] },
+      { label: "Stampanti reparto (IP)", paths: ["/operative/cassa/stampanti-reparti"] },
     ],
-    riferimentiCodice: ["Flusso stampa legato a CassaPage e reparti operativi"],
+    riferimentiCodice: [
+      "printComanda.js",
+      "comandaRepartiStampanti.js",
+      "CassaStampantiRepartiPage.jsx",
+    ],
   },
   gestione_consegne: {
     sintesi: "Dashboard delivery / rider e coordinamento consegne.",

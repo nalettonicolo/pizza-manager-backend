@@ -184,9 +184,11 @@ export async function createOrder(tenantId, payload) {
     nomeCliente = "",
     orarioRitiro = "",
     indirizzoConsegna = "",
+    consegnaLng = null,
+    consegnaLat = null,
   } = payload
 
-  const { data, error } = await supabase.rpc("create_order_with_items", {
+  const rpcArgs = {
     p_tenant_id: tenantId,
     p_totale: Number(totale),
     p_stato: stato,
@@ -203,7 +205,15 @@ export async function createOrder(tenantId, payload) {
     p_nome_cliente: nomeCliente ?? "",
     p_orario_ritiro: orarioRitiro ?? "",
     p_indirizzo_consegna: indirizzoConsegna ?? "",
-  })
+  }
+  if (consegnaLng != null && Number.isFinite(Number(consegnaLng))) {
+    rpcArgs.p_consegna_lng = Number(consegnaLng)
+  }
+  if (consegnaLat != null && Number.isFinite(Number(consegnaLat))) {
+    rpcArgs.p_consegna_lat = Number(consegnaLat)
+  }
+
+  const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
 
   if (error) throw error
   return data

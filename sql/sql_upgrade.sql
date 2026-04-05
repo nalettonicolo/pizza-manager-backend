@@ -100,3 +100,9 @@ SET parametri_operativi =
       ELSE true
     END
   );
+
+-- =============================================================================
+-- Area di consegna (poligono GeoJSON + RPC create_order_with_items con coordinate)
+-- Esegui su Supabase lo script: supabase/migrations/20260406110000_delivery_area_polygon.sql
+-- (copia/incolla nel SQL Editor). Prerequisito: schema allineato a 20260406100000_post_remote_schema_unified.
+-- =============================================================================
