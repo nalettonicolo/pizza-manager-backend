@@ -10,8 +10,10 @@ import {
   applyFidelityMovimento,
   getFidelityMovimenti,
   searchAnagraficaClienti,
+  searchFidelityCassa,
   updateFidelitySaldoNomeNegozio,
 } from "@/features/admin/services/adminService"
+import NuovoClienteModal from "@/features/operative/cassa/components/NuovoClienteModal"
 import FidelityVirtualCard from "@/components/fidelity/FidelityVirtualCard"
 import {
   buildFidelityCardTheme,
@@ -42,6 +44,11 @@ function clienteNomeBreve(row) {
   return "Cliente"
 }
 
+function anagraficaDaSaldo(row) {
+  const ac = row?.anagrafica_clienti
+  return Array.isArray(ac) ? ac[0] : ac
+}
+
 export default function FidelityCardPage() {
   const { tenantId, tenantData } = useTenant()
   const [loading, setLoading] = useState(true)
@@ -61,8 +68,11 @@ export default function FidelityCardPage() {
 
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [searchQ, setSearchQ] = useState("")
-  const [searchHits, setSearchHits] = useState([])
+  const [enrollHitsFree, setEnrollHitsFree] = useState([])
+  const [enrollHitsEnrolled, setEnrollHitsEnrolled] = useState([])
   const [searching, setSearching] = useState(false)
+  const [enrollSearchDone, setEnrollSearchDone] = useState(false)
+  const [nuovoClienteEnrollModalOpen, setNuovoClienteEnrollModalOpen] = useState(false)
 
   const [detailId, setDetailId] = useState(null)
   const [movimenti, setMovimenti] = useState([])
@@ -189,22 +199,52 @@ export default function FidelityCardPage() {
     }
   }
 
+  const closeEnrollModal = useCallback(() => {
+    setEnrollOpen(false)
+    setSearchQ("")
+    setEnrollHitsFree([])
+    setEnrollHitsEnrolled([])
+    setEnrollSearchDone(false)
+  }, [])
+
   useEffect(() => {
     if (!enrollOpen || !tenantId) return
     let cancelled = false
     const t = setTimeout(() => {
       ;(async () => {
+        const q = searchQ.trim()
+        if (q.length < 2) {
+          if (!cancelled) {
+            setEnrollHitsFree([])
+            setEnrollHitsEnrolled([])
+            setSearching(false)
+            setEnrollSearchDone(false)
+          }
+          return
+        }
         try {
           setSearching(true)
-          const list = await searchAnagraficaClienti(tenantId, searchQ)
-          const enrolled = new Set(saldi.map((s) => s.anagrafica_cliente_id))
-          const free = list.filter((c) => !enrolled.has(c.id))
-          if (!cancelled) setSearchHits(free)
+          setEnrollSearchDone(false)
+          const enrolledIds = new Set(saldi.map((s) => s.anagrafica_cliente_id))
+          const [list, fidList] = await Promise.all([
+            searchAnagraficaClienti(tenantId, searchQ),
+            searchFidelityCassa(tenantId, searchQ),
+          ])
+          if (cancelled) return
+          const free = list.filter((c) => !enrolledIds.has(c.id))
+          setEnrollHitsFree(free)
+          setEnrollHitsEnrolled(Array.isArray(fidList) ? fidList : [])
         } catch (e) {
           console.error(e)
-          if (!cancelled) setSearchHits([])
+          if (!cancelled) {
+            setEnrollHitsFree([])
+            setEnrollHitsEnrolled([])
+          }
         } finally {
-          if (!cancelled) setSearching(false)
+          if (!cancelled) {
+            setSearching(false)
+            setEnrollSearchDone(true)
+          }
         }
       })()
     }, 280)
@@ -218,8 +258,19 @@ export default function FidelityCardPage() {
     if (!tenantId) return
     try {
       await enrollFidelityCliente(tenantId, clienteId)
-      setEnrollOpen(false)
-      setSearchQ("")
+      closeEnrollModal()
+      await loadSaldi()
+    } catch (e) {
+      alert(e?.message || "Iscrizione non riuscita.")
+    }
+  }
+
+  async function onNuovoClienteEnrollSuccess(cliente) {
+    setNuovoClienteEnrollModalOpen(false)
+    if (!tenantId || !cliente?.id) return
+    try {
+      await enrollFidelityCliente(tenantId, cliente.id)
+      closeEnrollModal()
       await loadSaldi()
     } catch (e) {
       alert(e?.message || "Iscrizione non riuscita.")
@@ -917,30 +968,63 @@ export default function FidelityCardPage() {
       )}
 
       {enrollOpen && (
-        <div style={styles.modalOverlay} role="dialog" aria-modal="true">
+        <div style={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="enroll-modal-title">
           <div style={styles.modal}>
-            <h3 style={styles.h3}>Iscrivi cliente</h3>
-            <p style={styles.small}>Cerca tra le anagrafiche cassa (già iscritti nascosti).</p>
-            <input
-              type="search"
-              placeholder="Nome, telefono, indirizzo…"
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              style={styles.input}
-              autoFocus
-            />
+            <h3 id="enroll-modal-title" style={styles.h3}>
+              Iscrivi cliente
+            </h3>
+            <p style={styles.small}>
+              Cerca con telefono, codice tessera, testo da QR, nome o email. I già iscritti compaiono in elenco come tali.
+            </p>
+            <div style={styles.enrollSearchRow}>
+              <input
+                type="search"
+                placeholder="Telefono, codice tessera, QR, nome o email…"
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                style={styles.enrollSearchInput}
+                autoFocus
+              />
+              {enrollSearchDone &&
+                !searching &&
+                searchQ.trim().length >= 2 &&
+                enrollHitsFree.length === 0 &&
+                enrollHitsEnrolled.length === 0 && (
+                  <button
+                    type="button"
+                    style={styles.enrollNuovaBtn}
+                    onClick={() => setNuovoClienteEnrollModalOpen(true)}
+                  >
+                    Nuova
+                  </button>
+                )}
+            </div>
             {searching ? (
               <p style={styles.muted}>Ricerca…</p>
             ) : (
               <ul style={styles.hitList}>
-                {searchHits.map((c) => (
+                {enrollHitsEnrolled.map((row) => {
+                  const a = anagraficaDaSaldo(row)
+                  return (
+                    <li key={`enr-${row.id}`} style={styles.hitItem}>
+                      <div>
+                        <strong>{a?.nome || "—"}</strong>
+                        {a?.telefono && <span style={styles.muted}> · {a.telefono}</span>}
+                        <div style={styles.smallDim}>
+                          Carta <code>{row.codice_carta}</code> · {row.punti ?? 0} punti ·{" "}
+                          <span style={styles.enrollBadge}>Già iscritto</span>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+                {enrollHitsFree.map((c) => (
                   <li key={c.id} style={styles.hitItem}>
                     <div>
                       <strong>{c.nome || "—"}</strong>
                       {c.telefono && <span style={styles.muted}> · {c.telefono}</span>}
-                      {c.indirizzo && (
-                        <div style={styles.smallDim}>{c.indirizzo}</div>
-                      )}
+                      {c.email && <span style={styles.muted}> · {c.email}</span>}
+                      {c.indirizzo && <div style={styles.smallDim}>{c.indirizzo}</div>}
                     </div>
                     <button type="button" style={styles.btnPrimary} onClick={() => void onEnroll(c.id)}>
                       Iscrivi
@@ -949,12 +1033,19 @@ export default function FidelityCardPage() {
                 ))}
               </ul>
             )}
-            <button type="button" style={styles.btnGhost} onClick={() => setEnrollOpen(false)}>
+            <button type="button" style={styles.btnGhost} onClick={closeEnrollModal}>
               Annulla
             </button>
           </div>
         </div>
       )}
+
+      <NuovoClienteModal
+        open={nuovoClienteEnrollModalOpen}
+        onClose={() => setNuovoClienteEnrollModalOpen(false)}
+        tenantId={tenantId}
+        onSuccess={(c) => void onNuovoClienteEnrollSuccess(c)}
+      />
     </div>
   )
 }
@@ -1099,6 +1190,38 @@ const styles = {
     gap: 12,
     padding: "12px 0",
     borderBottom: "1px solid #eee",
+  },
+  enrollSearchRow: {
+    display: "flex",
+    alignItems: "stretch",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 4,
+  },
+  enrollSearchInput: {
+    flex: "1 1 200px",
+    minWidth: 0,
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    fontSize: 14,
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  enrollNuovaBtn: {
+    flexShrink: 0,
+    padding: "10px 16px",
+    borderRadius: 8,
+    border: "1px solid #1565c0",
+    background: "#e3f2fd",
+    color: "#0d47a1",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  enrollBadge: {
+    fontWeight: 600,
+    color: "#64748b",
   },
   themeHint: { fontSize: 13, color: "#64748b", lineHeight: 1.5, margin: "0 0 16px" },
   themeSplit: {
