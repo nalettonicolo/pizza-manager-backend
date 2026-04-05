@@ -306,7 +306,7 @@ export default function CassaImpostazioniPage({ onBack }) {
           </label>
           <label>
             Ritiro in negozio ogni (min)
-            <input type="number" min={1} placeholder="es. 5" value={p.ritiro_ogni_min === "" ? "" : p.ritiro_ogni_min} onChange={(e) => setParam("ritiro_ogni_min", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
+            <input type="number" min={1} placeholder="es. 15 (quarti d’ora)" value={p.ritiro_ogni_min === "" ? "" : p.ritiro_ogni_min} onChange={(e) => setParam("ritiro_ogni_min", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
             Tempo preparazione pizza (min)

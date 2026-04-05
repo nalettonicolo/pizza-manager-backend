@@ -1116,7 +1116,7 @@ export default function CassaPage() {
 
   const orariOggi = useMemo(() => getTodayOrari(tenantData?.orari_settimana), [tenantData?.orari_settimana])
   const slotDeliveryMin = Number(parametri.consegne_ogni_min) || 15
-  const slotNegozioMin = Number(parametri.ritiro_ogni_min) || 5
+  const slotNegozioMin = Number(parametri.ritiro_ogni_min) || 15
   const pizzeOgni15 = Number(parametri.pizze_ogni_15_min) || 8
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
   const maxPizzeDelivery = Math.max(1, Math.round((pizzeOgni15 * slotDeliveryMin) / 15))

@@ -1,8 +1,6 @@
 import { lazy as reactLazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { createLazyWithChunkReload } from "@/utils/lazyWithReload";
-
-const lazy = createLazyWithChunkReload(reactLazy);
 import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 
@@ -28,6 +26,10 @@ import TerminiCondizioni from "@/features/public/pages/TerminiCondizioni";
 import Support from "@/features/public/pages/Support";
 import SelectPuntoVendita from "@/features/public/pages/SelectPuntoVendita";
 import WebAppPreview from "@/features/public/pages/WebAppPreview";
+import OrdinePage from "@/pages/OrdinePage";
+import OrdineConfermato from "@/pages/OrdineConfermato";
+
+const lazy = createLazyWithChunkReload(reactLazy);
 
 /* ================= SUPERADMIN (lazy) ================= */
 const Login = lazy(() => import("@/features/public/pages/Login"));
@@ -94,10 +96,6 @@ const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"))
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"));
 const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"));
 const OperativeTurniPage = lazy(() => import("@/features/operative/pages/OperativeTurniPage"));
-
-/* ================= LEGACY ================= */
-import OrdinePage from "@/pages/OrdinePage";
-import OrdineConfermato from "@/pages/OrdineConfermato";
 
 const PageFallback = () => <div className="p-6 flex items-center justify-center min-h-[120px]"><span className="text-gray-400 text-sm">Caricamento...</span></div>;
 

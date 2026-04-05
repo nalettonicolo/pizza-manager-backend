@@ -68,13 +68,22 @@ function endMinutesForDay(chiusuraStr) {
   return m === 0 ? 24 * 60 : m
 }
 
-/** Restituisce l'inizio della fascia (timestamp) che contiene la data data. */
+/**
+ * Inizio fascia (timestamp locale) contenente `date`.
+ * Allineato ai minuti della giornata (come buildSlotsInOpeningHours / buildSlotsFullDay).
+ * La versione precedente usava l’epoch UTC: griglia sfasata → etichette tipo :36, :51 invece di :00, :15, :30, :45.
+ */
 export function slotKeyForDate(date, slotMinutes) {
   if (!slotMinutes || slotMinutes < 1) slotMinutes = 15
   const d = new Date(date)
-  const t = d.getTime()
-  const slotMs = slotMinutes * 60 * 1000
-  return Math.floor(t / slotMs) * slotMs
+  const y = d.getFullYear()
+  const mo = d.getMonth()
+  const day = d.getDate()
+  const minsIntoDay = d.getHours() * 60 + d.getMinutes()
+  const slotStartMin = Math.floor(minsIntoDay / slotMinutes) * slotMinutes
+  const out = new Date(y, mo, day, 0, 0, 0, 0)
+  out.setMinutes(slotStartMin)
+  return out.getTime()
 }
 
 /**

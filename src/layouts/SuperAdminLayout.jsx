@@ -46,6 +46,16 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/SuperAdminDashboard"),
       () => import("@/features/superadmin/pages/Tenants"),
       () => import("@/features/superadmin/pages/Piani"),
+      () => import("@/features/superadmin/pages/ServiziCatalogo"),
+      () => import("@/features/superadmin/pages/Licenses"),
+      () => import("@/features/superadmin/pages/DeployClientiPage"),
+      () => import("@/features/superadmin/pages/SuperadminPubblicazioneSitoPage"),
+      () => import("@/features/superadmin/pages/SuperadminGuideHub"),
+      () => import("@/features/superadmin/pages/SuperadminGuideDocPage"),
+      () => import("@/features/superadmin/pages/SviluppoPage"),
+      () => import("@/features/superadmin/pages/Settings"),
+      () => import("@/features/superadmin/pages/SuperadminIngressoPage"),
+      () => import("@/features/superadmin/pages/ServizioSchedaPage"),
     ]);
   }, []);
 

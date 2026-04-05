@@ -6,12 +6,15 @@
 const RELOAD_KEY = "pm_chunk_reload_attempted"
 
 function isChunkLoadError(err) {
-  const msg = String(err?.message ?? err ?? "")
+  const msg = String(err?.message ?? err ?? "").toLowerCase()
   return (
-    msg.includes("Failed to fetch dynamically imported module") ||
+    err?.name === "ChunkLoadError" ||
+    msg.includes("failed to fetch dynamically imported module") ||
     msg.includes("error loading dynamically imported module") ||
-    msg.includes("Importing a module script failed") ||
-    err?.name === "ChunkLoadError"
+    msg.includes("importing a module script failed") ||
+    msg.includes("failed to load module script") ||
+    msg.includes("loading chunk") ||
+    msg.includes("dynamically imported module")
   )
 }
 

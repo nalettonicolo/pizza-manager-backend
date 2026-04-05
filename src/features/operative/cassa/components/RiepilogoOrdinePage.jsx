@@ -49,7 +49,7 @@ export default function RiepilogoOrdinePage({
 }) {
   const slotMinutes = tipoOrdine === "delivery"
     ? (Number(parametri.consegne_ogni_min) || 15)
-    : (Number(parametri.ritiro_ogni_min) || 5)
+    : (Number(parametri.ritiro_ogni_min) || 15)
   const pizzeOgni15 = Number(parametri.pizze_ogni_15_min) || 8
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
   const maxPizzePerSlot = Math.max(1, Math.round((pizzeOgni15 * slotMinutes) / 15))

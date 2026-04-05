@@ -84,16 +84,24 @@ const TENANT_SELECT_NO_SITO_WEB =
 
 const TENANT_SELECT_LEGACY = "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at";
 
-async function fetchTenantsList(selectCols) {
+/** Log per ogni tentativo fallito (solo dev o con VITE_DEBUG_SUPABASE=true). In produzione i fallback select sono attesi. */
+const VERBOSE_TENANTS_LIST =
+  import.meta.env.DEV || import.meta.env.VITE_DEBUG_SUPABASE === "true";
+
+async function fetchTenantsList(selectCols, { quiet = false } = {}) {
   const q = supabase.from("tenants").select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
   const { data, error } = await q;
   if (!error) return data ?? [];
-  logSupabaseError("superadmin.fetchTenantsList", error, { selectCols });
+  if (!quiet) {
+    logSupabaseError("superadmin.fetchTenantsList", error, { selectCols });
+  }
   const core = fromCore("tenants");
   if (!core) throw error;
   const res = await core.select(selectCols).is("deleted_at", null).order("created_at", { ascending: false });
   if (!res.error) return res.data ?? [];
-  logSupabaseError("superadmin.fetchTenantsList.core", res.error, { selectCols });
+  if (!quiet) {
+    logSupabaseError("superadmin.fetchTenantsList.core", res.error, { selectCols });
+  }
   if (isSchemaNotExposedError(res.error)) throw error;
   throw res.error;
 }
@@ -103,12 +111,17 @@ async function fetchTenantsList(selectCols) {
  */
 export async function getTenants() {
   const attempts = [TENANT_SELECT_FULL, TENANT_SELECT_NO_SITO_WEB, TENANT_SELECT_LEGACY];
+  const quiet = !VERBOSE_TENANTS_LIST;
+  let lastErr = null;
   for (const cols of attempts) {
     try {
-      return await fetchTenantsList(cols);
-    } catch {
-      /* prova select più ristretto */
+      return await fetchTenantsList(cols, { quiet });
+    } catch (e) {
+      lastErr = e;
     }
+  }
+  if (lastErr) {
+    logSupabaseError("superadmin.getTenants", lastErr, { attempts: attempts.length });
   }
   return [];
 }

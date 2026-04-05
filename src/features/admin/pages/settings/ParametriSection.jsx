@@ -128,7 +128,7 @@ export default function ParametriSection() {
             <input
               type="number"
               min={1}
-              placeholder="es. 5"
+              placeholder="es. 15 (quarti d’ora)"
               value={p.ritiro_ogni_min === "" ? "" : p.ritiro_ogni_min}
               onChange={(e) => setParam("ritiro_ogni_min", e.target.value === "" ? "" : e.target.value)}
               style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
