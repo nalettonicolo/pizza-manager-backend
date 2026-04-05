@@ -2,35 +2,20 @@
  * Regole programma fidelity da `parametri_operativi` (timbri, premi, ecc.).
  */
 
-/** @typedef {'euro' | 'pizza' | 'entrambi'} FidelityModalitaAccredito */
-
-export const FIDELITY_MODALITA_OPTIONS = [
-  {
-    id: "euro",
-    label: "Solo in base agli euro spesi",
-    hint: "L’accumulo (e l’accredito automatico futuro) userà i punti per euro. I premi restano espressi in timbri sulla scheda.",
-  },
-  {
-    id: "pizza",
-    label: "Solo in base alle pizze acquistate",
-    hint: "L’accumulo userà i timbri per pizza. Imposta «Timbri per ogni pizza» > 0. I premi restano a X timbri sulla scheda.",
-  },
-  {
-    id: "entrambi",
-    label: "Euro e pizze insieme",
-    hint: "In futuro la cassa potrà sommare accredito da euro e da pizze nello stesso saldo. I premi restano a X timbri sulla scheda.",
-  },
-]
+/** @typedef {'euro' | 'pizza' | 'entrambi' | 'nessuno'} FidelityModalitaAccredito */
 
 /**
  * Come si guadagnano punti/timbri verso i premi (accredito automatico futuro).
+ * `entrambi` è legacy: in UI ora si usa solo euro o pizza (esclusivi) o nessuno.
  * @param {Record<string, unknown>} po
  * @returns {FidelityModalitaAccredito}
  */
 export function readFidelityModalitaAccredito(po) {
   const raw = po && typeof po === "object" ? po : {}
   const v = String(raw.fidelity_modalita_accredito || "euro").toLowerCase()
-  if (v === "pizza" || v === "entrambi") return v
+  if (v === "pizza") return "pizza"
+  if (v === "nessuno") return "nessuno"
+  if (v === "entrambi") return "entrambi"
   return "euro"
 }
 
@@ -108,7 +93,7 @@ export function readFidelityProgramSlice(po) {
   const modalitaAccredito = readFidelityModalitaAccredito(raw)
   const rawP = raw.fidelity_timbri_per_pizza
   const hasP = rawP !== undefined && rawP !== null && String(rawP).trim() !== ""
-  const timbriPerPizza = hasP ? Math.max(0, Math.min(50, Number(rawP) || 0)) : 0
+  const timbriPerPizza = hasP ? Math.max(0, Math.min(100, Number(rawP) || 0)) : 0
   const rawT = raw.fidelity_timbri_scheda_totale
   const hasT = rawT !== undefined && rawT !== null && String(rawT).trim() !== ""
   const timbriSchedaTotale = hasT ? Math.max(0, Math.min(48, Number(rawT) || 0)) : 0

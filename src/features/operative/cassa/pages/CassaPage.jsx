@@ -32,6 +32,8 @@ import {
   enrichProductsWithPrezzoCalcolato,
   searchAnagraficaClienti,
   enrichOrdineDetailIngredientiSummaries,
+  searchFidelityCassa,
+  enrollFidelityCliente,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
@@ -213,6 +215,12 @@ export default function CassaPage() {
   /** Dopo conferma ordine, se non stampa automatica: payload per ristampare comanda. */
   const [pendingComandaPrint, setPendingComandaPrint] = useState(null)
   const [showRiepilogo, setShowRiepilogo] = useState(false)
+  const [fidelityQuery, setFidelityQuery] = useState("")
+  const [fidelityHits, setFidelityHits] = useState([])
+  const [fidelityLoading, setFidelityLoading] = useState(false)
+  const [fidelitySearchDone, setFidelitySearchDone] = useState(false)
+  const [selectedFidelitySaldo, setSelectedFidelitySaldo] = useState(null)
+  const [nuovoFidelityClienteModalOpen, setNuovoFidelityClienteModalOpen] = useState(false)
   const [showImpostazioniCassa, setShowImpostazioniCassa] = useState(false)
   const [ordiniOggi, setOrdiniOggi] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
@@ -570,6 +578,40 @@ export default function CassaPage() {
     return () => clearTimeout(t)
   }, [tenantId, tipoOrdine, deliverySearch, selectedCliente])
 
+  useEffect(() => {
+    if (!showRiepilogo || !tenantId || !fidelityServizioOk || tipoOrdine !== TIPO_ORDINE.NEGOZIO) {
+      return
+    }
+    const q = fidelityQuery.trim()
+    if (q.length < 2) {
+      setFidelityHits([])
+      setFidelitySearchDone(false)
+      setFidelityLoading(false)
+      return
+    }
+    let cancelled = false
+    setFidelityLoading(true)
+    setFidelitySearchDone(false)
+    const t = setTimeout(async () => {
+      try {
+        const hits = await searchFidelityCassa(tenantId, q)
+        if (!cancelled) setFidelityHits(hits)
+      } catch (err) {
+        console.error(err)
+        if (!cancelled) setFidelityHits([])
+      } finally {
+        if (!cancelled) {
+          setFidelityLoading(false)
+          setFidelitySearchDone(true)
+        }
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [fidelityQuery, showRiepilogo, tenantId, tipoOrdine, fidelityServizioOk])
+
   const displayCliente = (c) => (c ? [c.nome, c.indirizzo].filter(Boolean).join(" – ") : "")
   const handleSelectCliente = (c) => {
     setSelectedCliente(c)
@@ -586,6 +628,54 @@ export default function CassaPage() {
     setDeliverySearch(displayCliente(cliente))
     setProfiloClienteModalOpen(false)
   }
+
+  const handleSelectFidelitySaldo = useCallback((row) => {
+    if (!row) {
+      setSelectedFidelitySaldo(null)
+      return
+    }
+    setSelectedFidelitySaldo(row)
+    const ac = row.anagrafica_clienti
+    const a = Array.isArray(ac) ? ac[0] : ac
+    if (a?.nome?.trim()) setCheckoutNomeCliente(a.nome.trim())
+  }, [])
+
+  const handleNuovoFidelityClienteSuccess = useCallback(async (cliente) => {
+    setNuovoFidelityClienteModalOpen(false)
+    if (!tenantId || !cliente?.id) return
+    try {
+      const row = await enrollFidelityCliente(tenantId, cliente.id)
+      const merged = {
+        id: row.id,
+        anagrafica_cliente_id: row.anagrafica_cliente_id,
+        punti: row.punti,
+        codice_carta: row.codice_carta,
+        nome_negozio: null,
+        anagrafica_clienti: {
+          nome: cliente.nome,
+          telefono: cliente.telefono,
+          email: cliente.email,
+          indirizzo: cliente.indirizzo,
+        },
+      }
+      setSelectedFidelitySaldo(merged)
+      setFidelityHits([])
+      setFidelityQuery("")
+      setFidelitySearchDone(false)
+      if (cliente.nome?.trim()) setCheckoutNomeCliente(cliente.nome.trim())
+    } catch (err) {
+      console.error(err)
+      setCheckoutError(err?.message ?? "Iscrizione al programma fedeltà non riuscita.")
+    }
+  }, [tenantId])
+
+  const openRiepilogo = useCallback(() => {
+    setFidelityQuery("")
+    setFidelityHits([])
+    setSelectedFidelitySaldo(null)
+    setFidelitySearchDone(false)
+    setShowRiepilogo(true)
+  }, [])
 
   const cassaHeaderApi = useCassaHeader()
   const setCassaHeader = cassaHeaderApi?.setContent
@@ -953,6 +1043,10 @@ export default function CassaPage() {
       setCheckoutSelectedSlot(null)
       setDeliverySearch("")
       setSelectedCliente(null)
+      setFidelityQuery("")
+      setFidelityHits([])
+      setSelectedFidelitySaldo(null)
+      setFidelitySearchDone(false)
       setShowRiepilogo(false)
       loadOrdini()
 
@@ -1179,13 +1273,31 @@ export default function CassaPage() {
           parametri={parametri}
           orariSettimana={tenantData?.orari_settimana}
           onConfirm={handleCheckout}
-          onBack={() => setShowRiepilogo(false)}
+          onBack={() => {
+            setShowRiepilogo(false)
+            setFidelityQuery("")
+            setFidelityHits([])
+            setSelectedFidelitySaldo(null)
+            setFidelitySearchDone(false)
+          }}
           loading={loading}
           checkoutError={checkoutError}
           onIncrease={increaseQty}
           onDecrease={decreaseQty}
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
           pizzePerSlotFromOrders={pizzePerSlotRiepilogo}
+          fidelityAbilitato={fidelityServizioOk}
+          fidelityQuery={fidelityQuery}
+          onFidelityQueryChange={(v) => {
+            setFidelityQuery(v)
+            setSelectedFidelitySaldo(null)
+          }}
+          fidelityLoading={fidelityLoading}
+          fidelityHits={fidelityHits}
+          fidelitySearchDone={fidelitySearchDone}
+          selectedFidelity={selectedFidelitySaldo}
+          onSelectFidelity={handleSelectFidelitySaldo}
+          onNuovaFidelityCliente={() => setNuovoFidelityClienteModalOpen(true)}
         />
         <ModificaPizzaModal
           open={productModalOpen}
@@ -1197,6 +1309,12 @@ export default function CassaPage() {
           onConfirm={confirmModificaPizza}
         />
         <NuovoClienteModal open={nuovoClienteModalOpen} onClose={() => setNuovoClienteModalOpen(false)} tenantId={tenantId} onSuccess={handleNuovoClienteSuccess} />
+        <NuovoClienteModal
+          open={nuovoFidelityClienteModalOpen}
+          onClose={() => setNuovoFidelityClienteModalOpen(false)}
+          tenantId={tenantId}
+          onSuccess={handleNuovoFidelityClienteSuccess}
+        />
       </>
     )
   }
@@ -1550,7 +1668,7 @@ export default function CassaPage() {
           onIncrease={increaseQty}
           onDecrease={decreaseQty}
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
-          onCheckout={() => setShowRiepilogo(true)}
+          onCheckout={openRiepilogo}
           onClear={clearCart}
           checkoutError={checkoutError}
           loading={false}

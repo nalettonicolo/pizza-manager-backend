@@ -26,7 +26,6 @@ import {
   readFidelityAbilitaClientiDomicilio,
   readFidelityProgramSlice,
   readFidelityModalitaAccredito,
-  FIDELITY_MODALITA_OPTIONS,
 } from "@/utils/fidelityProgramConfig"
 
 function anagraficaLabel(row) {
@@ -50,8 +49,9 @@ export default function FidelityCardPage() {
   const [saldi, setSaldi] = useState([])
   const [nomeProgramma, setNomeProgramma] = useState("Fidelity Card")
   const [puntiPerEuro, setPuntiPerEuro] = useState("1")
-  const [modalitaAccredito, setModalitaAccredito] = useState("euro")
-  const [timbriPerPizza, setTimbriPerPizza] = useState("0")
+  const [accreditoEuroOn, setAccreditoEuroOn] = useState(true)
+  const [accreditoPizzaOn, setAccreditoPizzaOn] = useState(false)
+  const [puntiPerPizza, setPuntiPerPizza] = useState("1")
   const [timbriSchedaTotale, setTimbriSchedaTotale] = useState("0")
   const [premiRows, setPremiRows] = useState(() => [])
   const [attivo, setAttivo] = useState(true)
@@ -101,8 +101,18 @@ export default function FidelityCardPage() {
           setNomeProgramma(String(po.fidelity_nome_programma || "Fidelity Card"))
           setPuntiPerEuro(String(po.fidelity_punti_per_euro ?? "1"))
           const fp = readFidelityProgramSlice(po)
-          setModalitaAccredito(readFidelityModalitaAccredito(po))
-          setTimbriPerPizza(String(fp.timbriPerPizza))
+          setPuntiPerPizza(String(fp.timbriPerPizza ?? "1"))
+          const mod = readFidelityModalitaAccredito(po)
+          if (mod === "pizza") {
+            setAccreditoEuroOn(false)
+            setAccreditoPizzaOn(true)
+          } else if (mod === "nessuno") {
+            setAccreditoEuroOn(false)
+            setAccreditoPizzaOn(false)
+          } else {
+            setAccreditoEuroOn(true)
+            setAccreditoPizzaOn(false)
+          }
           setTimbriSchedaTotale(String(fp.timbriSchedaTotale))
           setPremiRows(
             fp.premi.length > 0
@@ -145,7 +155,7 @@ export default function FidelityCardPage() {
         ? settings.parametri_operativi
         : {}
       const pe = Math.max(0, Math.min(100, Number(puntiPerEuro) || 0))
-      const tpp = Math.max(0, Math.min(50, Number(timbriPerPizza) || 0))
+      const tpp = Math.max(0, Math.min(100, Number(puntiPerPizza) || 0))
       const tst = Math.max(0, Math.min(48, Number(timbriSchedaTotale) || 0))
       const premiParsed = parseFidelityPremi(
         premiRows.map((r) => ({ soglia: r.soglia, descrizione: r.descrizione })),
@@ -155,10 +165,11 @@ export default function FidelityCardPage() {
           ...prev,
           fidelity_nome_programma: nomeProgramma.trim() || "Fidelity Card",
           fidelity_punti_per_euro: pe,
-          fidelity_modalita_accredito:
-            modalitaAccredito === "pizza" || modalitaAccredito === "entrambi"
-              ? modalitaAccredito
-              : "euro",
+          fidelity_modalita_accredito: accreditoPizzaOn
+            ? "pizza"
+            : accreditoEuroOn
+              ? "euro"
+              : "nessuno",
           fidelity_timbri_per_pizza: tpp,
           fidelity_timbri_scheda_totale: tst,
           fidelity_premi: premiParsed,
@@ -302,8 +313,8 @@ export default function FidelityCardPage() {
       </h1>
       <p style={styles.hint}>
         Programma punti collegato ai <strong>clienti anagrafica</strong> (creati dalla cassa). Abilita il servizio nel
-        piano dal Super Admin (<code>fidelity_card</code>), poi iscrivi i clienti e gestisci i punti da qui.         Puoi scegliere se accumulare verso i premi in base agli euro, alle pizze o a entrambi; impostare timbri, premi a
-        soglia e il nome al bancone. L’accredito automatico in cassa userà queste regole.
+        piano dal Super Admin (<code>fidelity_card</code>), poi iscrivi i clienti e gestisci i punti da qui.         Attiva <strong>o</strong> l’accredito da euro <strong>o</strong> quello da pizze (mai entrambi insieme). Poi
+        imposta timbri in scheda, premi a soglia e nome al bancone. L’accredito automatico in cassa userà queste regole.
       </p>
 
       <section style={styles.card}>
@@ -317,36 +328,81 @@ export default function FidelityCardPage() {
             style={styles.input}
           />
         </label>
-        <label style={styles.label}>
-          Punti per ogni euro speso (base per future regole automatiche)
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.5}
-            value={puntiPerEuro}
-            onChange={(e) => setPuntiPerEuro(e.target.value)}
-            style={styles.input}
-          />
-        </label>
-
-        <label style={styles.label}>
-          Come si accumula verso i premi (accredito automatico futuro in cassa)
-          <select
-            value={modalitaAccredito}
-            onChange={(e) => setModalitaAccredito(e.target.value)}
-            style={styles.select}
-          >
-            {FIDELITY_MODALITA_OPTIONS.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={styles.accreditoRow}>
+          <div style={{ ...styles.accreditoCol, opacity: accreditoEuroOn ? 1 : 0.72 }}>
+            <label style={styles.switchRow}>
+              <input
+                type="checkbox"
+                checked={accreditoEuroOn}
+                onChange={(e) => {
+                  const on = e.target.checked
+                  if (on) {
+                    setAccreditoEuroOn(true)
+                    setAccreditoPizzaOn(false)
+                  } else {
+                    setAccreditoEuroOn(false)
+                  }
+                }}
+              />
+              On — accredito da euro
+            </label>
+            <span style={styles.accreditoColTitle}>Punti per ogni euro speso</span>
+            <span style={styles.accreditoColHint}>(base per regole automatiche in cassa)</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={puntiPerEuro}
+              onChange={(e) => setPuntiPerEuro(e.target.value)}
+              disabled={!accreditoEuroOn}
+              style={{
+                ...styles.input,
+                marginTop: 8,
+                maxWidth: "100%",
+                background: accreditoEuroOn ? "#fff" : "#f1f5f9",
+              }}
+            />
+          </div>
+          <div style={{ ...styles.accreditoCol, opacity: accreditoPizzaOn ? 1 : 0.72 }}>
+            <label style={styles.switchRow}>
+              <input
+                type="checkbox"
+                checked={accreditoPizzaOn}
+                onChange={(e) => {
+                  const on = e.target.checked
+                  if (on) {
+                    setAccreditoPizzaOn(true)
+                    setAccreditoEuroOn(false)
+                  } else {
+                    setAccreditoPizzaOn(false)
+                  }
+                }}
+              />
+              On — accredito da pizze
+            </label>
+            <span style={styles.accreditoColTitle}>Punti per ogni pizza ordinata</span>
+            <span style={styles.accreditoColHint}>(stesso saldo punti/timbri in scheda)</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={puntiPerPizza}
+              onChange={(e) => setPuntiPerPizza(e.target.value)}
+              disabled={!accreditoPizzaOn}
+              style={{
+                ...styles.input,
+                marginTop: 8,
+                maxWidth: "100%",
+                background: accreditoPizzaOn ? "#fff" : "#f1f5f9",
+              }}
+            />
+          </div>
+        </div>
         <p style={styles.small}>
-          {FIDELITY_MODALITA_OPTIONS.find((o) => o.id === modalitaAccredito)?.hint ||
-            "I premi sotto sono sempre espressi in timbri sulla scheda; questa scelta definisce se guadagni timbri/punti dagli euro, dalle pizze o da entrambi."}
+          Solo una colonna può restare «On»: attivando l’una si spegne l’altra. Puoi spegnere entrambe (nessun accredito
+          automatico da euro/pizze; solo movimenti manuali). I premi sotto restano in timbri sulla scheda.
         </p>
 
         <h3 style={styles.h3}>Timbri e premi</h3>
@@ -356,18 +412,6 @@ export default function FidelityCardPage() {
           intendono sempre in <strong>timbri sulla scheda</strong> (es. 6 e 10), indipendentemente se accumuli da euro o
           da pizze.
         </p>
-        <label style={styles.label}>
-          Timbri per ogni pizza acquistata (0 = non usare questa regola; utile per accredito automatico futuro)
-          <input
-            type="number"
-            min={0}
-            max={50}
-            step={1}
-            value={timbriPerPizza}
-            onChange={(e) => setTimbriPerPizza(e.target.value)}
-            style={styles.input}
-          />
-        </label>
         <label style={styles.label}>
           Timbri totali nella scheda sulla tessera (0 = nascondi griglia; consigliato 8–12)
           <input
@@ -919,6 +963,35 @@ const styles = {
   wrapper: { maxWidth: 1100 },
   pageTitle: { marginBottom: 8 },
   hint: { fontSize: 14, color: "#555", lineHeight: 1.5, marginBottom: 20 },
+  accreditoRow: {
+    display: "flex",
+    gap: 16,
+    flexWrap: "wrap",
+    alignItems: "stretch",
+    marginBottom: 12,
+  },
+  accreditoCol: {
+    flex: "1 1 280px",
+    minWidth: 260,
+    maxWidth: 420,
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    padding: 16,
+    background: "#fafafa",
+    boxSizing: "border-box",
+  },
+  switchRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#0f172a",
+    cursor: "pointer",
+  },
+  accreditoColTitle: { display: "block", fontSize: 14, fontWeight: 700, color: "#334155" },
+  accreditoColHint: { display: "block", fontSize: 12, color: "#64748b", marginTop: 4, lineHeight: 1.4 },
   card: {
     border: "1px solid #e2e8f0",
     borderRadius: 10,

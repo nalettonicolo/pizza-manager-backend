@@ -36,6 +36,16 @@ export default function RiepilogoOrdinePage({
   onDecrease,
   onRemove,
   pizzePerSlotFromOrders = {},
+  /** Fedeltà (solo ritiro in negozio, se servizio attivo) */
+  fidelityAbilitato = false,
+  fidelityQuery = "",
+  onFidelityQueryChange,
+  fidelityLoading = false,
+  fidelityHits = [],
+  fidelitySearchDone = false,
+  selectedFidelity = null,
+  onSelectFidelity,
+  onNuovaFidelityCliente,
 }) {
   const slotMinutes = tipoOrdine === "delivery"
     ? (Number(parametri.consegne_ogni_min) || 15)
@@ -134,6 +144,87 @@ export default function RiepilogoOrdinePage({
           style={styles.textarea}
         />
       </div>
+
+      {fidelityAbilitato && tipoOrdine === "negozio" && (
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Riepilogo fedeltà</h3>
+          <p style={styles.fidelityHint}>
+            Cerca con telefono, codice carta, testo letto da QR, nome o email.
+          </p>
+          <div style={styles.fidelityRow}>
+            <input
+              type="text"
+              value={fidelityQuery}
+              onChange={(e) => onFidelityQueryChange?.(e.target.value)}
+              placeholder="Telefono, codice tessera, QR, nome o email…"
+              style={styles.fidelityInput}
+              autoComplete="off"
+            />
+            {fidelitySearchDone &&
+              !fidelityLoading &&
+              (fidelityQuery || "").trim().length >= 2 &&
+              (fidelityHits || []).length === 0 &&
+              !selectedFidelity && (
+                <button
+                  type="button"
+                  style={styles.fidelityNuovaBtn}
+                  onClick={() => onNuovaFidelityCliente?.()}
+                >
+                  Nuova
+                </button>
+              )}
+          </div>
+          {fidelityLoading && (
+            <p style={styles.fidelityMeta}>Ricerca in corso…</p>
+          )}
+          {!fidelityLoading && (fidelityHits || []).length > 0 && !selectedFidelity && (
+            <ul style={styles.fidelityHits}>
+              {(fidelityHits || []).map((row) => {
+                const ac = row.anagrafica_clienti
+                const a = Array.isArray(ac) ? ac[0] : ac
+                const label = [a?.nome, a?.telefono].filter(Boolean).join(" · ") || row.codice_carta || "Cliente"
+                return (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      style={styles.fidelityHitBtn}
+                      onClick={() => onSelectFidelity?.(row)}
+                    >
+                      <span style={styles.fidelityHitMain}>{label}</span>
+                      <span style={styles.fidelityHitSub}>
+                        Carta {row.codice_carta ?? "—"} · {row.punti ?? 0} punti
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {selectedFidelity && (() => {
+            const ac = selectedFidelity.anagrafica_clienti
+            const a = Array.isArray(ac) ? ac[0] : ac
+            return (
+              <div style={styles.fidelitySelected}>
+                <div style={{ fontWeight: 600 }}>
+                  {a?.nome ?? "Cliente"} · carta {selectedFidelity.codice_carta ?? "—"}
+                </div>
+                <div style={styles.fidelityMeta}>
+                  {a?.telefono ? `${a.telefono} · ` : ""}
+                  {selectedFidelity.punti ?? 0} punti
+                  {a?.email ? ` · ${a.email}` : ""}
+                </div>
+                <button
+                  type="button"
+                  style={styles.fidelityClearBtn}
+                  onClick={() => onSelectFidelity?.(null)}
+                >
+                  Rimuovi collegamento
+                </button>
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>
@@ -332,6 +423,89 @@ const styles = {
     borderRadius: 8,
     fontSize: 16,
     fontWeight: 600,
+    cursor: "pointer",
+  },
+  fidelityHint: {
+    fontSize: 12,
+    color: "#666",
+    margin: "0 0 10px 0",
+  },
+  fidelityRow: {
+    display: "flex",
+    alignItems: "stretch",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  fidelityInput: {
+    flex: "1 1 200px",
+    minWidth: 0,
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid #ddd",
+    boxSizing: "border-box",
+    fontSize: 14,
+  },
+  fidelityNuovaBtn: {
+    flexShrink: 0,
+    padding: "10px 16px",
+    borderRadius: 8,
+    border: "1px solid #1565c0",
+    background: "#e3f2fd",
+    color: "#0d47a1",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  fidelityMeta: {
+    fontSize: 13,
+    color: "#555",
+    marginTop: 8,
+  },
+  fidelityHits: {
+    listStyle: "none",
+    padding: 0,
+    margin: "10px 0 0 0",
+    maxHeight: 220,
+    overflowY: "auto",
+    border: "1px solid #e0e0e0",
+    borderRadius: 8,
+    background: "#fafafa",
+  },
+  fidelityHitBtn: {
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    padding: "10px 12px",
+    border: "none",
+    borderBottom: "1px solid #eee",
+    background: "transparent",
+    cursor: "pointer",
+    fontSize: 14,
+  },
+  fidelityHitMain: {
+    display: "block",
+    fontWeight: 600,
+  },
+  fidelityHitSub: {
+    display: "block",
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  fidelitySelected: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    background: "#e8f5e9",
+    border: "1px solid #a5d6a7",
+  },
+  fidelityClearBtn: {
+    marginTop: 8,
+    padding: "6px 12px",
+    fontSize: 13,
+    borderRadius: 6,
+    border: "1px solid #81c784",
+    background: "#fff",
     cursor: "pointer",
   },
 }

@@ -416,6 +416,59 @@ function randomCodiceCartaFidelity() {
   return s
 }
 
+/**
+ * Ricerca iscritti fidelity in cassa: codice carta, QR (pizzamanager:fidelity:…), nome, telefono, email (via anagrafica).
+ * @param {string} tenantId
+ * @param {string} rawQuery
+ */
+export async function searchFidelityCassa(tenantId, rawQuery) {
+  const raw = String(rawQuery || "").trim()
+  if (!tenantId || raw.length < 2) return []
+
+  let q = raw
+  const qr = raw.match(/^pizzamanager\s*:\s*fidelity\s*:\s*(.+)$/i)
+  if (qr) q = String(qr[1] || "").trim()
+  if (q.length < 1) return []
+
+  const merged = new Map()
+  const sel =
+    "id, anagrafica_cliente_id, punti, codice_carta, nome_negozio, anagrafica_clienti ( nome, telefono, indirizzo, email )"
+
+  const compact = q.replace(/\s/g, "")
+  const looksLikeCode = /^[A-Za-z0-9]{2,12}$/.test(compact)
+
+  if (looksLikeCode) {
+    const { data: byCode, error: e1 } = await supabase
+      .from("fidelity_saldi")
+      .select(sel)
+      .eq("tenant_id", tenantId)
+      .ilike("codice_carta", `%${compact}%`)
+      .limit(40)
+    if (!e1 && byCode) {
+      for (const r of byCode) merged.set(r.id, r)
+    }
+  }
+
+  try {
+    const anagHits = await searchAnagraficaClienti(tenantId, q)
+    const ids = anagHits.map((a) => a.id).filter(Boolean)
+    if (ids.length > 0) {
+      const { data: byAnag, error: e2 } = await supabase
+        .from("fidelity_saldi")
+        .select(sel)
+        .eq("tenant_id", tenantId)
+        .in("anagrafica_cliente_id", ids.slice(0, 80))
+      if (!e2 && byAnag) {
+        for (const r of byAnag) merged.set(r.id, r)
+      }
+    }
+  } catch (_) {
+    /* anagrafica / fidelity opzionali */
+  }
+
+  return Array.from(merged.values()).slice(0, 25)
+}
+
 /** Elenco iscritti fidelity con dati anagrafica (embed FK). */
 export async function getFidelitySaldi(tenantId) {
   if (!tenantId) return []
