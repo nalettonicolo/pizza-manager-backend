@@ -34,8 +34,10 @@ import {
   enrichOrdineDetailIngredientiSummaries,
   searchFidelityCassa,
   enrollFidelityCliente,
+  updateOrderStato,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
+import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
@@ -57,6 +59,11 @@ import {
   printComandaKitchenPerReparto,
   comandaPayloadFromOrdineDetail,
 } from "@/features/operative/cassa/utils/printComanda"
+import {
+  printRicevuta,
+  ricevutaRigheFromCartSnapshot,
+  ricevutaPayloadFromOrdineDetail,
+} from "@/features/operative/cassa/utils/printRicevuta"
 import { normalizeComandaRepartiStampanti } from "@/utils/comandaRepartiStampanti"
 import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 import {
@@ -218,6 +225,7 @@ export default function CassaPage() {
   const [checkoutError, setCheckoutError] = useState(null)
   /** Dopo conferma ordine, se non stampa automatica: payload per ristampare comanda. */
   const [pendingComandaPrint, setPendingComandaPrint] = useState(null)
+  const [pendingRicevutaPrint, setPendingRicevutaPrint] = useState(null)
   const [showRiepilogo, setShowRiepilogo] = useState(false)
   const [fidelityQuery, setFidelityQuery] = useState("")
   const [fidelityHits, setFidelityHits] = useState([])
@@ -504,12 +512,20 @@ export default function CassaPage() {
     return (ordiniOggi || []).filter((o) => orderCreatedLocalDateKey(o) === todayStr)
   }, [ordiniOggi, todayStr])
 
+  /** Esclusi annullati: planning, slot, chiusura giornata, totali incasso. */
+  const ordiniOggiAttivi = useMemo(
+    () => (ordiniOggiFiltered || []).filter((o) => !ordineIsAnnullato(o)),
+    [ordiniOggiFiltered],
+  )
+
+  const incassiOggi = useMemo(() => aggregateIncassiDaOrdini(ordiniOggiAttivi), [ordiniOggiAttivi])
+
   const buildPayloadContabilita = useCallback(() => {
-    const totaleGiornata = (ordiniOggiFiltered || []).reduce((s, o) => s + Number(o.totale || 0), 0)
+    const totaleGiornata = (ordiniOggiAttivi || []).reduce((s, o) => s + Number(o.totale || 0), 0)
     return {
       data: todayStr,
       tenantId,
-      ordini: (ordiniOggiFiltered || []).map((o) => ({
+      ordini: (ordiniOggiAttivi || []).map((o) => ({
         id: o.id,
         numero: o.numero,
         totale: o.totale,
@@ -522,9 +538,9 @@ export default function CassaPage() {
         createdAt: o.createdAt ?? o.created_at,
       })),
       totale_giornata: totaleGiornata,
-      numero_ordini: (ordiniOggiFiltered || []).length,
+      numero_ordini: (ordiniOggiAttivi || []).length,
     }
-  }, [todayStr, tenantId, ordiniOggiFiltered, pizzePerOrdine])
+  }, [todayStr, tenantId, ordiniOggiAttivi, pizzePerOrdine])
 
   const handleSalvaContabilita = useCallback(() => {
     const payload = buildPayloadContabilita()
@@ -553,6 +569,30 @@ export default function CassaPage() {
       setChiudiGiornataLoading(false)
     }
   }, [tenantId, todayStr, buildPayloadContabilita, loadOrdini])
+
+  const handleAnnullaOrdine = useCallback(
+    async (ordineId) => {
+      if (!ordineId) return
+      if (
+        !window.confirm(
+          "Annullare questo ordine? Non comparirà più nel planning né nei totali giornata; resterà in elenco come annullato.",
+        )
+      ) {
+        return
+      }
+      try {
+        await updateOrderStato(ordineId, "ANNULLATO")
+        setSegnaPagatoModal(null)
+        setModificaOrdineModal(null)
+        setOrdineDetail((prev) => (prev?.id === ordineId ? { ...prev, stato: "ANNULLATO" } : prev))
+        loadOrdini()
+      } catch (e) {
+        console.error(e)
+        alert("Errore annullamento ordine. " + (e?.message || ""))
+      }
+    },
+    [loadOrdini],
+  )
 
   // Ricerca clienti delivery (solo se c'è testo cercato e nessun cliente già selezionato con stesso testo)
   useEffect(() => {
@@ -1037,7 +1077,9 @@ export default function CassaPage() {
     if (!cart.length || !tenantId || loading) return
     setCheckoutError(null)
     setPendingComandaPrint(null)
+    setPendingRicevutaPrint(null)
     const snapshotCart = cart.map((row) => ({ ...row }))
+    const noteSnap = checkoutNote.trim()
     try {
       setLoading(true)
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
@@ -1075,7 +1117,7 @@ export default function CassaPage() {
           formatoNome: p.formatoNome ?? undefined,
           ingredientiCotturaSummary: p.ingredientiCotturaSummary ?? undefined,
         })),
-        note: checkoutNote.trim() || undefined,
+        note: noteSnap || undefined,
         tipoPagamento: checkoutTipoPagamento || undefined,
         tipoOrdine: tipoOrdine || undefined,
         nomeCliente: nomeCliente || undefined,
@@ -1115,7 +1157,7 @@ export default function CassaPage() {
         nomeCliente: nomeCliente || undefined,
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna.trim() || undefined,
-        note: checkoutNote.trim() || undefined,
+        note: noteSnap || undefined,
         tipoPagamento: checkoutTipoPagamento || undefined,
         righe: righeComanda,
         parametri: po,
@@ -1125,6 +1167,29 @@ export default function CassaPage() {
         printComandaKitchen(printPayload)
       } else {
         setPendingComandaPrint(printPayload)
+      }
+
+      const ricevutaPayload = {
+        tenantNome: tenantData?.nome || "Locale",
+        orderId,
+        numero: detail?.numero ?? detail?.numero_ordine,
+        createdAt: detail?.createdAt ?? detail?.created_at ?? new Date().toISOString(),
+        tipoOrdine,
+        nomeCliente: nomeCliente || undefined,
+        orarioRitiro: orarioRitiro || undefined,
+        indirizzoConsegna: indirizzoConsegna.trim() || undefined,
+        note: noteSnap || undefined,
+        tipoPagamento: checkoutTipoPagamento || undefined,
+        righe: ricevutaRigheFromCartSnapshot(snapshotCart),
+        totale,
+        parametri: po,
+        annullato: false,
+      }
+      const autoRicevuta = po.cassa_stampa_ricevuta_auto === true || po.cassa_stampa_ricevuta_auto === "true"
+      if (autoRicevuta) {
+        printRicevuta(ricevutaPayload)
+      } else {
+        setPendingRicevutaPrint(ricevutaPayload)
       }
     } catch (err) {
       console.error("Errore checkout:", err)
@@ -1183,48 +1248,48 @@ export default function CassaPage() {
     [slotNegozioMin, orariOggi]
   )
   const ordiniPerSlotDelivery = useMemo(() => {
-    const delivery = (ordiniOggiFiltered || []).filter((o) => ordineIsDelivery(o))
+    const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
     return groupOrdersBySlotOrarioRitiro(delivery, slotDeliveryMin)
-  }, [ordiniOggiFiltered, slotDeliveryMin])
+  }, [ordiniOggiAttivi, slotDeliveryMin])
   const ordiniPerSlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiFiltered || []).filter((o) => {
+    const negozio = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
     return groupOrdersBySlotOrarioRitiro(negozio, slotNegozioMin)
-  }, [ordiniOggiFiltered, slotNegozioMin])
+  }, [ordiniOggiAttivi, slotNegozioMin])
   const ordiniBySlotDelivery = useMemo(() => {
-    const delivery = (ordiniOggiFiltered || []).filter((o) => ordineIsDelivery(o))
+    const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
     return groupOrdiniBySlotOrarioRitiro(delivery, slotDeliveryMin)
-  }, [ordiniOggiFiltered, slotDeliveryMin])
+  }, [ordiniOggiAttivi, slotDeliveryMin])
   const ordiniBySlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiFiltered || []).filter((o) => {
+    const negozio = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
     return groupOrdiniBySlotOrarioRitiro(negozio, slotNegozioMin)
-  }, [ordiniOggiFiltered, slotNegozioMin])
+  }, [ordiniOggiAttivi, slotNegozioMin])
   const pizzePerSlotDelivery = useMemo(() => {
-    const delivery = (ordiniOggiFiltered || []).filter((o) => ordineIsDelivery(o))
+    const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
     return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, slotDeliveryMin)
-  }, [ordiniOggiFiltered, pizzePerOrdine, slotDeliveryMin])
+  }, [ordiniOggiAttivi, pizzePerOrdine, slotDeliveryMin])
   const pizzePerSlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiFiltered || []).filter((o) => {
+    const negozio = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
     return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, slotNegozioMin)
-  }, [ordiniOggiFiltered, pizzePerOrdine, slotNegozioMin])
+  }, [ordiniOggiAttivi, pizzePerOrdine, slotNegozioMin])
 
   const pizzePerSlotRiepilogo = useMemo(() => {
     const slotMin = tipoOrdine === "delivery" ? slotDeliveryMin : slotNegozioMin
-    const filtered = (ordiniOggiFiltered || []).filter((o) => {
+    const filtered = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       if (tipoOrdine === "delivery") return t === "delivery"
       return t === "negozio" || t === ""
     })
     return groupPizzeBySlotOrarioRitiro(filtered, pizzePerOrdine, slotMin)
-  }, [tipoOrdine, ordiniOggiFiltered, pizzePerOrdine, slotDeliveryMin, slotNegozioMin])
+  }, [tipoOrdine, ordiniOggiAttivi, pizzePerOrdine, slotDeliveryMin, slotNegozioMin])
 
   const ordiniFiltratiPerPagina = useMemo(() => {
     const q = (ordiniSearch || "").toLowerCase().trim()
@@ -1407,37 +1472,64 @@ export default function CassaPage() {
           </div>
         </div>
       )}
-      {pendingComandaPrint && (
+      {(pendingComandaPrint || pendingRicevutaPrint) && (
         <div style={styles.comandaBanner} role="status">
           <span>
             Ordine registrato
-            {pendingComandaPrint.numero != null && pendingComandaPrint.numero !== ""
-              ? ` (#${pendingComandaPrint.numero})`
+            {(() => {
+              const n = pendingComandaPrint?.numero ?? pendingRicevutaPrint?.numero
+              return n != null && n !== "" ? ` (#${n})` : ""
+            })()}
+            .
+            {pendingComandaPrint ? " Stampa la comanda per la cucina." : ""}
+            {pendingRicevutaPrint
+              ? pendingComandaPrint
+                ? " Stampa la ricevuta per il cliente se serve."
+                : " Stampa la ricevuta per il cliente."
               : ""}
-            . Stampa la comanda per la cucina.
           </span>
           <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              style={styles.comandaBannerBtn}
-              onClick={() => {
-                printComandaKitchen(pendingComandaPrint)
-              }}
-            >
-              Stampa comanda
-            </button>
-            {haStampantiReparto && (
+            {pendingComandaPrint ? (
+              <>
+                <button
+                  type="button"
+                  style={styles.comandaBannerBtn}
+                  onClick={() => {
+                    printComandaKitchen(pendingComandaPrint)
+                  }}
+                >
+                  Stampa comanda
+                </button>
+                {haStampantiReparto && (
+                  <button
+                    type="button"
+                    style={{ ...styles.comandaBannerBtn, background: "#37474f" }}
+                    onClick={() => {
+                      printComandaKitchenPerReparto(pendingComandaPrint)
+                    }}
+                  >
+                    Stampa per reparto
+                  </button>
+                )}
+              </>
+            ) : null}
+            {pendingRicevutaPrint ? (
               <button
                 type="button"
-                style={{ ...styles.comandaBannerBtn, background: "#37474f" }}
-                onClick={() => {
-                  printComandaKitchenPerReparto(pendingComandaPrint)
-                }}
+                style={{ ...styles.comandaBannerBtn, background: "#6a1b9a" }}
+                onClick={() => printRicevuta(pendingRicevutaPrint)}
               >
-                Stampa per reparto
+                Stampa ricevuta
               </button>
-            )}
-            <button type="button" style={styles.comandaBannerDismiss} onClick={() => setPendingComandaPrint(null)}>
+            ) : null}
+            <button
+              type="button"
+              style={styles.comandaBannerDismiss}
+              onClick={() => {
+                setPendingComandaPrint(null)
+                setPendingRicevutaPrint(null)
+              }}
+            >
               Chiudi
             </button>
           </div>
@@ -1475,18 +1567,25 @@ export default function CassaPage() {
                         const isDelivery = ordineIsDelivery(o)
                         const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
                         const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
+                        const ann = ordineIsAnnullato(o)
                         return (
                           <li key={o.id}>
                             <button
                               type="button"
-                              style={styles.ordiniItem}
+                              style={{
+                                ...styles.ordiniItem,
+                                ...(ann ? { opacity: 0.72, borderLeft: "3px solid #b71c1c" } : {}),
+                              }}
                               onClick={() => { openOrdineDetail(o.id); setShowPaginaOrdini(false); }}
                               title="Apri dettaglio"
                             >
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
-                                  <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{idOrdine}</div>
+                                  <div style={{ fontSize: 11, color: "#666", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                    <span>{idOrdine}</span>
+                                    {ann ? <span style={{ color: "#b71c1c", fontWeight: 700 }}>Annullato</span> : null}
+                                  </div>
                                   {indirizzoSecondaRiga ? (
                                     <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
                                   ) : null}
@@ -1527,6 +1626,47 @@ export default function CassaPage() {
             Fidelity Card
           </button>
         </div>
+        <div
+          style={{
+            marginBottom: 10,
+            padding: "10px 12px",
+            background: "#f5f5f5",
+            borderRadius: 8,
+            fontSize: 13,
+            border: "1px solid #e0e0e0",
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", lineHeight: 1.4 }}>
+              <strong>Incassi oggi (attivi)</strong>
+              <span>€ {incassiOggi.totale.toFixed(2)}</span>
+              <span style={{ color: "#666" }}>({incassiOggi.count} ord.)</span>
+              {incassiOggi.annullatiCount > 0 ? (
+                <span style={{ color: "#b71c1c", fontSize: 12 }}>{incassiOggi.annullatiCount} annull.</span>
+              ) : null}
+              {Object.keys(incassiOggi.byTipo)
+                .sort()
+                .map((k) => (
+                  <span key={k} style={{ fontSize: 12, color: "#444" }}>
+                    {k}: € {(incassiOggi.byTipo[k] || 0).toFixed(2)}
+                  </span>
+                ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" style={styles.contabilitaBtn} onClick={handleSalvaContabilita}>
+                Scarica JSON giornata
+              </button>
+              <button
+                type="button"
+                style={styles.chiudiGiornataBtn}
+                onClick={handleChiudiGiornata}
+                disabled={chiudiGiornataLoading}
+              >
+                {chiudiGiornataLoading ? "…" : "Chiudi giornata"}
+              </button>
+            </div>
+          </div>
+        </div>
         <ul style={styles.ordiniList}>
           {ordiniOggiFiltered.map((o) => {
             const tp = (o.tipo_pagamento || "").toLowerCase()
@@ -1535,18 +1675,27 @@ export default function CassaPage() {
             const isDelivery = ordineIsDelivery(o)
             const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
             const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
+            const ann = ordineIsAnnullato(o)
             return (
               <li key={o.id}>
                 <button
                   type="button"
-                  style={styles.ordiniItem}
+                  style={{
+                    ...styles.ordiniItem,
+                    ...(ann ? { opacity: 0.72, borderLeft: "3px solid #b71c1c" } : {}),
+                  }}
                   onClick={() => openOrdineDetail(o.id)}
                   title="Apri dettaglio"
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
-                      <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{idOrdine}</div>
+                      <div style={{ fontSize: 11, color: "#666", marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span>{idOrdine}</span>
+                        {ann ? (
+                          <span style={{ color: "#b71c1c", fontWeight: 700 }}>Annullato</span>
+                        ) : null}
+                      </div>
                       {indirizzoSecondaRiga ? (
                         <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
                       ) : null}
@@ -1837,6 +1986,21 @@ export default function CassaPage() {
               <h3 style={{ margin: 0 }}>Ordine #{ordineDetail.numero ?? ordineDetail.numero_ordine ?? ordineDetail.numeroOrdine ?? "—"}</h3>
               <button type="button" style={styles.planningBarClose} onClick={() => setOrdineDetail(null)}>✕</button>
             </div>
+            {ordineIsAnnullato(ordineDetail) ? (
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  padding: "8px 10px",
+                  background: "#ffebee",
+                  color: "#b71c1c",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                  fontSize: 14,
+                }}
+              >
+                Ordine annullato — escluso da planning e dai totali giornata.
+              </p>
+            ) : null}
             <p style={{ margin: "0 0 8px", color: "#666" }}>
               {ordineIsDelivery(ordineDetail) ? "Consegna" : "Ritiro in negozio"}
             </p>
@@ -1879,6 +2043,16 @@ export default function CassaPage() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button
                 type="button"
+                style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#6a1b9a", color: "#fff" }}
+                onClick={() => {
+                  const payload = ricevutaPayloadFromOrdineDetail(ordineDetail, tenantData)
+                  if (payload) printRicevuta(payload)
+                }}
+              >
+                Stampa ricevuta
+              </button>
+              <button
+                type="button"
                 style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#1565c0" }}
                 onClick={() => {
                   const payload = comandaPayloadFromOrdineDetail(ordineDetail, tenantData)
@@ -1899,7 +2073,8 @@ export default function CassaPage() {
                   Stampa per reparto
                 </button>
               )}
-              {(ordineDetail.tipo_pagamento || "").toLowerCase().includes("da pagare") && (
+              {!ordineIsAnnullato(ordineDetail) &&
+              (ordineDetail.tipo_pagamento || "").toLowerCase().includes("da pagare") ? (
                 <button
                   type="button"
                   style={{ ...styles.impostazioniBtn, marginTop: 8 }}
@@ -1907,23 +2082,34 @@ export default function CassaPage() {
                 >
                   Segna come pagato
                 </button>
-              )}
-              <button
-                type="button"
-                style={{ ...styles.impostazioniBtn, marginTop: 8 }}
-                onClick={() => {
-                  setModificaOrdineModal(ordineDetail)
-                  setModificaForm({
-                    nome_cliente: ordineNomeCliente(ordineDetail),
-                    orario_ritiro: ordineOrarioRitiro(ordineDetail),
-                    note: ordineDetail.note ?? "",
-                    tipo_pagamento: ordineDetail.tipo_pagamento ?? "Da pagare",
-                    indirizzo_consegna: ordineIndirizzoConsegna(ordineDetail),
-                  })
-                }}
-              >
-                Modifica
-              </button>
+              ) : null}
+              {!ordineIsAnnullato(ordineDetail) ? (
+                <button
+                  type="button"
+                  style={{ ...styles.impostazioniBtn, marginTop: 8 }}
+                  onClick={() => {
+                    setModificaOrdineModal(ordineDetail)
+                    setModificaForm({
+                      nome_cliente: ordineNomeCliente(ordineDetail),
+                      orario_ritiro: ordineOrarioRitiro(ordineDetail),
+                      note: ordineDetail.note ?? "",
+                      tipo_pagamento: ordineDetail.tipo_pagamento ?? "Da pagare",
+                      indirizzo_consegna: ordineIndirizzoConsegna(ordineDetail),
+                    })
+                  }}
+                >
+                  Modifica
+                </button>
+              ) : null}
+              {!ordineIsAnnullato(ordineDetail) ? (
+                <button
+                  type="button"
+                  style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#b71c1c", color: "#fff" }}
+                  onClick={() => handleAnnullaOrdine(ordineDetail.id)}
+                >
+                  Annulla ordine
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

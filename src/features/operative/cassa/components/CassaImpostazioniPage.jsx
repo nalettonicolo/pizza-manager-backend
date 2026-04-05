@@ -57,6 +57,8 @@ const defaultParametri = () => ({
   comanda_mostra_riga_ingredienti: true,
   comanda_stampanti: "",
   comanda_stampa_auto: false,
+  /** Stampa ricevuta cliente dopo conferma (indipendente dalla comanda cucina). */
+  cassa_stampa_ricevuta_auto: false,
   comanda_titolo_banner: "",
 })
 
@@ -250,6 +252,7 @@ export default function CassaImpostazioniPage({ onBack }) {
           .map((v) => v.trim())
           .filter(Boolean),
         comanda_stampa_auto: Boolean(p.comanda_stampa_auto),
+        cassa_stampa_ricevuta_auto: Boolean(p.cassa_stampa_ricevuta_auto),
         comanda_ordine_blocchi: normalizeComandaBlocchiOrdine(p.comanda_ordine_blocchi),
         comanda_ordine_dettagli_prodotto: normalizeComandaDettagliOrdine(p.comanda_ordine_dettagli_prodotto),
         comanda_etichette:
@@ -456,6 +459,20 @@ export default function CassaImpostazioniPage({ onBack }) {
               <FieldHint>
                 Se attivo, subito dopo aver confermato l’ordine si apre il dialogo di stampa del browser: scegli la stampante termica o «Salva come PDF».
                 Se disattivo, resta un avviso con il pulsante «Stampa comanda» così puoi stampare quando vuoi.
+              </FieldHint>
+            </span>
+          </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={Boolean(p.cassa_stampa_ricevuta_auto)}
+              onChange={(e) => setParam("cassa_stampa_ricevuta_auto", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              <span style={{ fontWeight: 600 }}>Stampa ricevuta cliente automaticamente dopo conferma</span>
+              <FieldHint>
+                Ricevuta di cortesia (non fiscale) con righe e totali per il cliente. È separata dalla comanda cucina: puoi attivarla o meno senza toccare la stampa in cucina.
               </FieldHint>
             </span>
           </label>

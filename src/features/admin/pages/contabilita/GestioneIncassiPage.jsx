@@ -1,14 +1,44 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { useTenant } from "@/app/contexts/TenantContext";
+import { getOrders } from "@/features/admin/services/adminService";
+import { aggregateIncassiDaOrdini } from "@/utils/incassiFromOrdini";
 
 export default function GestioneIncassiPage() {
+  const { tenantId } = useTenant();
   const { data, setData, ready } = useTenantLocalJson("contabilita_incassi", { movimenti: [] });
   const [dataMov, setDataMov] = useState(() => new Date().toISOString().slice(0, 10));
   const [descrizione, setDescrizione] = useState("");
   const [importo, setImporto] = useState("");
   const [tipo, setTipo] = useState("contanti");
+  const [ordiniOggi, setOrdiniOggi] = useState([]);
+  const [ordiniHintLoading, setOrdiniHintLoading] = useState(false);
+  const [ordiniHintErr, setOrdiniHintErr] = useState(null);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    setOrdiniHintLoading(true);
+    setOrdiniHintErr(null);
+    getOrders(tenantId, { todayOnly: true, limit: 200 })
+      .then((list) => {
+        if (!cancelled) setOrdiniOggi(Array.isArray(list) ? list : []);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setOrdiniHintErr(e?.message || "Errore caricamento ordini");
+          setOrdiniOggi([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOrdiniHintLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
 
   const totali = useMemo(() => {
     let contanti = 0;
@@ -19,6 +49,8 @@ export default function GestioneIncassiPage() {
     }
     return { contanti, elettronico, totale: contanti + elettronico };
   }, [data.movimenti]);
+
+  const suggerimentoOrdini = useMemo(() => aggregateIncassiDaOrdini(ordiniOggi), [ordiniOggi]);
 
   if (!ready) {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
@@ -54,9 +86,57 @@ export default function GestioneIncassiPage() {
           <li>
             Report vendite: <Link to="/admin/report">Admin → Report</Link>.
           </li>
+          <li>
+            Il riquadro «Da ordini oggi» legge solo gli ordini in database (stesso criterio della cassa): non richiede il modulo contabilità né altri servizi a pagamento.
+          </li>
         </ul>
       }
     >
+      <div
+        style={{
+          marginBottom: 20,
+          padding: 14,
+          borderRadius: 8,
+          border: "1px solid #bae6fd",
+          background: "#f0f9ff",
+          fontSize: 14,
+          color: "#0c4a6e",
+        }}
+      >
+        <strong style={{ display: "block", marginBottom: 8 }}>Da ordini di oggi (non annullati)</strong>
+        {ordiniHintLoading ? (
+          <span style={{ color: "#64748b" }}>Caricamento…</span>
+        ) : ordiniHintErr ? (
+          <span style={{ color: "#b91c1c" }}>{ordiniHintErr}</span>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 8 }}>
+              <span>
+                <strong>Totale venduto</strong>: € {suggerimentoOrdini.totale.toFixed(2)}
+              </span>
+              <span style={{ color: "#64748b" }}>
+                {suggerimentoOrdini.count} ordini attivi
+                {suggerimentoOrdini.annullatiCount > 0
+                  ? ` · ${suggerimentoOrdini.annullatiCount} annullati (esclusi)`
+                  : ""}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 13 }}>
+              {Object.keys(suggerimentoOrdini.byTipo)
+                .sort()
+                .map((k) => (
+                  <span key={k}>
+                    {k}: € {(suggerimentoOrdini.byTipo[k] || 0).toFixed(2)}
+                  </span>
+                ))}
+            </div>
+            <p style={{ margin: "10px 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+              Suggerimento per incrociare con i movimenti manuali sotto; i totali reali restano quelli che registri qui o in cassa.
+            </p>
+          </>
+        )}
+      </div>
+
       <div
         style={{
           display: "grid",
