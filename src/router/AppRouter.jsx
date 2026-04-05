@@ -1,5 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy as reactLazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { createLazyWithChunkReload } from "@/utils/lazyWithReload";
+
+const lazy = createLazyWithChunkReload(reactLazy);
 import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 
