@@ -83,6 +83,12 @@ export const SERVIZI_ROADMAP_STEPS = [
     nota: "Dati localStorage; integrazione DB e fatturazione elettronica fuori scope attuale.",
   },
   {
+    id: "fidelity_card",
+    titolo: "Fidelity Card",
+    stato: "todo",
+    nota: "Admin iscrizioni e punti; migration Supabase; step successivo: accredito da ordine cassa e QR.",
+  },
+  {
     id: "supporto_prioritario",
     titolo: "Supporto prioritario",
     stato: "todo",

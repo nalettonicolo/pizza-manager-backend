@@ -80,15 +80,216 @@ function normalizeDettaglioEntry(d) {
   return { tag: "ingredienti", text: s };
 }
 
+/** Ordine blocchi intestazione comanda (prima dell’elenco prodotti). */
+export const COMANDA_BLOCCHI_IDS = [
+  "banner",
+  "data_stampa",
+  "locale",
+  "numero_ordine",
+  "id_ordine",
+  "tipo_servizio",
+  "cliente",
+  "orario",
+  "indirizzo",
+  "pagamento",
+  "note",
+  "dest_stampanti",
+];
+
+/** Ordine righe dettaglio sotto ogni prodotto. */
+export const COMANDA_DETTAGLI_TAG_ORDER_DEFAULT = ["impasto", "cottura", "ingredienti"];
+
+export const COMANDA_ETICHETTE_DEFAULT = {
+  banner: "COMANDA CUCINA",
+  locale: "Locale",
+  ordine: "Ordine",
+  id: "ID",
+  tipo_ritiro: "Ritiro in negozio",
+  tipo_consegna: "Consegna",
+  cliente: "Cliente",
+  orario: "Orario",
+  indirizzo: "Indirizzo",
+  note: "Note",
+  pagamento: "Pagamento",
+  dest: "Dest. stampa",
+};
+
+export function normalizeComandaBlocchiOrdine(raw) {
+  const allowed = new Set(COMANDA_BLOCCHI_IDS);
+  if (!Array.isArray(raw) || raw.length === 0) return [...COMANDA_BLOCCHI_IDS];
+  const seen = new Set();
+  const out = [];
+  for (const id of raw) {
+    if (allowed.has(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  for (const id of COMANDA_BLOCCHI_IDS) {
+    if (!seen.has(id)) out.push(id);
+  }
+  return out;
+}
+
+export function normalizeComandaDettagliOrdine(raw) {
+  const allowed = new Set(COMANDA_DETTAGLI_TAG_ORDER_DEFAULT);
+  if (!Array.isArray(raw) || raw.length === 0) return [...COMANDA_DETTAGLI_TAG_ORDER_DEFAULT];
+  const seen = new Set();
+  const out = [];
+  for (const id of raw) {
+    if (allowed.has(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  for (const id of COMANDA_DETTAGLI_TAG_ORDER_DEFAULT) {
+    if (!seen.has(id)) out.push(id);
+  }
+  return out;
+}
+
+function mergeComandaEtichette(parametri) {
+  const raw = parametri?.comanda_etichette;
+  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return { ...COMANDA_ETICHETTE_DEFAULT, ...o };
+}
+
 function filterDettagliForPrint(dettagli, parametri) {
   const showImp = paramFlagTrue(parametri, "comanda_mostra_riga_impasto", true);
   const showCot = paramFlagTrue(parametri, "comanda_mostra_riga_cottura", true);
   const showIng = paramFlagTrue(parametri, "comanda_mostra_riga_ingredienti", true);
   const allow = { impasto: showImp, cottura: showCot, ingredienti: showIng };
+  const order = normalizeComandaDettagliOrdine(parametri?.comanda_ordine_dettagli_prodotto);
+  const rank = (tag) => {
+    const i = order.indexOf(tag);
+    return i === -1 ? 999 : i;
+  };
   return (dettagli || [])
     .map(normalizeDettaglioEntry)
     .filter((e) => e.text.trim() && allow[e.tag])
+    .sort((a, b) => rank(a.tag) - rank(b.tag) || 0)
     .map((e) => e.text);
+}
+
+/**
+ * HTML intestazione comanda nell’ordine scelto dal tenant (stesso output della stampa).
+ * @param {object} data — tenantNome, orderId, numero, createdAt, tipoOrdine, nomeCliente, orarioRitiro, indirizzoConsegna, note, tipoPagamento
+ */
+export function buildComandaHeaderHtmlOrdered(data, parametri) {
+  const {
+    tenantNome = "Locale",
+    orderId,
+    numero,
+    createdAt,
+    tipoOrdine,
+    nomeCliente,
+    orarioRitiro,
+    indirizzoConsegna,
+    note,
+    tipoPagamento,
+  } = data;
+
+  const destStampa = stampantiLabel(parametri);
+  const labels = mergeComandaEtichette(parametri);
+  const titoloBanner =
+    String(parametri?.comanda_titolo_banner || "").trim() || labels.banner || COMANDA_ETICHETTE_DEFAULT.banner;
+
+  const showId = paramFlagTrue(parametri, "comanda_mostra_id_ordine", true);
+  const showPagamento = paramFlagTrue(parametri, "comanda_mostra_pagamento", true);
+  const showDestStampa = paramFlagTrue(parametri, "comanda_mostra_dest_stampanti", true);
+  const showLocale = paramFlagTrue(parametri, "comanda_mostra_locale", true);
+  const showBanner = paramFlagTrue(parametri, "comanda_mostra_banner_comanda", true);
+  const showWhen = paramFlagTrue(parametri, "comanda_mostra_data_ora_stampa", true);
+  const showNumero = paramFlagTrue(parametri, "comanda_mostra_numero_ordine", true);
+  const showTipoServizio = paramFlagTrue(parametri, "comanda_mostra_tipo_servizio", true);
+  const showCliente = paramFlagTrue(parametri, "comanda_mostra_cliente", true);
+  const showOrario = paramFlagTrue(parametri, "comanda_mostra_orario", true);
+  const showIndirizzo = paramFlagTrue(parametri, "comanda_mostra_indirizzo", true);
+  const showNote = paramFlagTrue(parametri, "comanda_mostra_note_ordine", true);
+
+  const when = createdAt ? new Date(createdAt).toLocaleString("it-IT") : new Date().toLocaleString("it-IT");
+  const isDel = (tipoOrdine || "").toLowerCase() === "delivery";
+  const tipoLabel = isDel ? labels.tipo_consegna : labels.tipo_ritiro;
+
+  const order = normalizeComandaBlocchiOrdine(parametri?.comanda_ordine_blocchi);
+  const parts = [];
+
+  for (const id of order) {
+    switch (id) {
+      case "banner":
+        if (showBanner) parts.push(`<div class="banner">${escapeHtml(titoloBanner)}</div>`);
+        break;
+      case "data_stampa":
+        if (showWhen) parts.push(`<div class="when">${escapeHtml(when)}</div>`);
+        break;
+      case "locale":
+        if (showLocale) {
+          parts.push(
+            `<div><strong>${escapeHtml(labels.locale)}</strong> ${escapeHtml(tenantNome)}</div>`,
+          );
+        }
+        break;
+      case "numero_ordine":
+        if (showNumero && numero != null && numero !== "") {
+          parts.push(
+            `<div><strong>${escapeHtml(labels.ordine)}</strong> #${escapeHtml(String(numero))}</div>`,
+          );
+        }
+        break;
+      case "id_ordine":
+        if (orderId && showId) {
+          parts.push(`<div class="muted">${escapeHtml(labels.id)} ${escapeHtml(String(orderId))}</div>`);
+        }
+        break;
+      case "tipo_servizio":
+        if (showTipoServizio) {
+          parts.push(`<div><strong>${escapeHtml(tipoLabel)}</strong></div>`);
+        }
+        break;
+      case "cliente":
+        if (nomeCliente && showCliente) {
+          parts.push(
+            `<div>${escapeHtml(labels.cliente)}: ${escapeHtml(nomeCliente)}</div>`,
+          );
+        }
+        break;
+      case "orario":
+        if (orarioRitiro && showOrario) {
+          parts.push(`<div>${escapeHtml(labels.orario)}: ${escapeHtml(orarioRitiro)}</div>`);
+        }
+        break;
+      case "indirizzo":
+        if (indirizzoConsegna && showIndirizzo) {
+          parts.push(
+            `<div>${escapeHtml(labels.indirizzo)}: ${escapeHtml(indirizzoConsegna)}</div>`,
+          );
+        }
+        break;
+      case "pagamento":
+        if (tipoPagamento && showPagamento) {
+          parts.push(
+            `<div>${escapeHtml(labels.pagamento)}: ${escapeHtml(tipoPagamento)}</div>`,
+          );
+        }
+        break;
+      case "note":
+        if (note && showNote) {
+          parts.push(`<div class="note">${escapeHtml(labels.note)}: ${escapeHtml(note)}</div>`);
+        }
+        break;
+      case "dest_stampanti":
+        if (destStampa && showDestStampa) {
+          parts.push(
+            `<div class="dest">${escapeHtml(labels.dest)}: ${escapeHtml(destStampa)}</div>`,
+          );
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  return parts.join("");
 }
 
 const COMANDA_FONT_STACK = {
@@ -116,9 +317,11 @@ const COMANDA_FONT_STACK = {
  *   comanda_mostra_id_ordine, comanda_mostra_pagamento, comanda_mostra_dest_stampanti, comanda_stampanti,
  *   comanda_mostra_locale, comanda_mostra_banner_comanda, comanda_mostra_data_ora_stampa, comanda_mostra_numero_ordine,
  *   comanda_mostra_tipo_servizio, comanda_mostra_cliente, comanda_mostra_orario, comanda_mostra_indirizzo,
- *   comanda_mostra_note_ordine, comanda_mostra_riga_impasto, comanda_mostra_riga_cottura, comanda_mostra_riga_ingredienti
+ *   comanda_mostra_note_ordine, comanda_mostra_riga_impasto, comanda_mostra_riga_cottura, comanda_mostra_riga_ingredienti,
+ *   comanda_rotolo_mm (0 | 58 | 76 | 80) — larghezza carta termica per @page; se comanda_width_mm è 0 si usa larghezza utile predefinita
+ *   comanda_ordine_blocchi, comanda_ordine_dettagli_prodotto, comanda_etichette, comanda_titolo_banner
  */
-export function printComandaKitchen(payload) {
+export function buildComandaKitchenHtmlDocument(payload) {
   const {
     tenantNome = "Locale",
     orderId,
@@ -140,23 +343,18 @@ export function printComandaKitchen(payload) {
   const dettaglioScale = clampNum(parametri.comanda_dettaglio_scale, 0.95, 0.75, 1.15);
   const lineHeight = clampNum(parametri.comanda_line_height, 1.35, 1.05, 1.9);
   const marginMm = clampNum(parametri.comanda_margin_mm, 8, 2, 24);
-  const widthMm = clampNum(parametri.comanda_width_mm, 0, 0, 120);
+  const rotoloRaw = Number(parametri.comanda_rotolo_mm);
+  const rotoliValidi = new Set([58, 76, 80]);
+  const rotoloMm = rotoliValidi.has(rotoloRaw) ? rotoloRaw : 0;
+  /** Larghezza utile testo se non imposti manualmente comanda_width_mm */
+  const larghezzaUtilePreset =
+    rotoloMm === 58 ? 52 : rotoloMm === 76 ? 68 : rotoloMm === 80 ? 72 : 0;
+  let widthMm = clampNum(parametri.comanda_width_mm, 0, 0, 120);
+  if (widthMm <= 0 && larghezzaUtilePreset > 0) widthMm = larghezzaUtilePreset;
+  const pageSizeRule = rotoloMm > 0 ? `size: ${rotoloMm}mm auto;` : "size: auto;";
   const fontKey = COMANDA_FONT_STACK[parametri.comanda_font_family] ? parametri.comanda_font_family : "system";
   const fontStack = COMANDA_FONT_STACK[fontKey];
   const copie = Math.max(1, Math.min(5, Number(parametri.comanda_copie) || 1));
-  const destStampa = stampantiLabel(parametri);
-  const showId = paramFlagTrue(parametri, "comanda_mostra_id_ordine", true);
-  const showPagamento = paramFlagTrue(parametri, "comanda_mostra_pagamento", true);
-  const showDestStampa = paramFlagTrue(parametri, "comanda_mostra_dest_stampanti", true);
-  const showLocale = paramFlagTrue(parametri, "comanda_mostra_locale", true);
-  const showBanner = paramFlagTrue(parametri, "comanda_mostra_banner_comanda", true);
-  const showWhen = paramFlagTrue(parametri, "comanda_mostra_data_ora_stampa", true);
-  const showNumero = paramFlagTrue(parametri, "comanda_mostra_numero_ordine", true);
-  const showTipoServizio = paramFlagTrue(parametri, "comanda_mostra_tipo_servizio", true);
-  const showCliente = paramFlagTrue(parametri, "comanda_mostra_cliente", true);
-  const showOrario = paramFlagTrue(parametri, "comanda_mostra_orario", true);
-  const showIndirizzo = paramFlagTrue(parametri, "comanda_mostra_indirizzo", true);
-  const showNote = paramFlagTrue(parametri, "comanda_mostra_note_ordine", true);
 
   const righeHtml = righe
     .map((r) => {
@@ -166,29 +364,26 @@ export function printComandaKitchen(payload) {
     })
     .join("");
 
-  const metaRows = [];
-  if (showLocale) metaRows.push(`<div><strong>Locale</strong> ${escapeHtml(tenantNome)}</div>`);
-  if (showNumero && numero != null && numero !== "")
-    metaRows.push(`<div><strong>Ordine</strong> #${escapeHtml(String(numero))}</div>`);
-  if (orderId && showId) metaRows.push(`<div class="muted">ID ${escapeHtml(String(orderId))}</div>`);
-  const tipoLabel = (tipoOrdine || "").toLowerCase() === "delivery" ? "Consegna" : "Ritiro in negozio";
-  if (showTipoServizio) metaRows.push(`<div><strong>${escapeHtml(tipoLabel)}</strong></div>`);
-  if (nomeCliente && showCliente) metaRows.push(`<div>Cliente: ${escapeHtml(nomeCliente)}</div>`);
-  if (orarioRitiro && showOrario) metaRows.push(`<div>Orario: ${escapeHtml(orarioRitiro)}</div>`);
-  if (indirizzoConsegna && showIndirizzo) metaRows.push(`<div>Indirizzo: ${escapeHtml(indirizzoConsegna)}</div>`);
-  if (tipoPagamento && showPagamento) metaRows.push(`<div>Pagamento: ${escapeHtml(tipoPagamento)}</div>`);
-  if (note && showNote) metaRows.push(`<div class="note">Note: ${escapeHtml(note)}</div>`);
-  if (destStampa && showDestStampa) metaRows.push(`<div class="dest">Dest. stampa: ${escapeHtml(destStampa)}</div>`);
-
-  const header = metaRows.join("");
-  const when = createdAt ? new Date(createdAt).toLocaleString("it-IT") : new Date().toLocaleString("it-IT");
+  const headerOrdered = buildComandaHeaderHtmlOrdered(
+    {
+      tenantNome,
+      orderId,
+      numero,
+      createdAt,
+      tipoOrdine,
+      nomeCliente,
+      orarioRitiro,
+      indirizzoConsegna,
+      note,
+      tipoPagamento,
+    },
+    parametri,
+  );
 
   let pages = "";
   for (let c = 0; c < copie; c += 1) {
     pages += `<section class="comanda-page">
-      ${showBanner ? `<div class="banner">COMANDA CUCINA</div>` : ""}
-      ${showWhen ? `<div class="when">${escapeHtml(when)}</div>` : ""}
-      <div class="meta">${header}</div>
+      <div class="comanda-top">${headerOrdered}</div>
       <div class="righe">${righeHtml || "<p>Nessuna riga.</p>"}</div>
       ${copie > 1 ? `<div class="copy">Copia ${c + 1} / ${copie}</div>` : ""}
     </section>`;
@@ -199,9 +394,9 @@ export function printComandaKitchen(payload) {
       ? `max-width: ${widthMm}mm; margin-left: auto; margin-right: auto; box-sizing: border-box;`
       : "";
 
-  const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Comanda</title>
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Comanda</title>
   <style>
-    @page { margin: ${marginMm}mm; size: auto; }
+    @page { margin: ${marginMm}mm; ${pageSizeRule} }
     body {
       font-family: ${fontStack};
       margin: 0;
@@ -224,8 +419,10 @@ export function printComandaKitchen(payload) {
       line-height: 1.2;
     }
     .when { font-size: 0.9em; color: #444; margin-bottom: 10px; }
-    .meta { margin-bottom: 12px; }
-    .meta div { margin-bottom: 2px; }
+    .comanda-top { margin-bottom: 12px; }
+    .comanda-top > div { margin-bottom: 2px; }
+    .comanda-top > .banner { margin-bottom: 8px; }
+    .comanda-top > .when { margin-bottom: 10px; }
     .muted { font-size: 0.85em; color: #666; }
     .note { margin-top: 6px; font-style: italic; }
     .dest { margin-top: 6px; font-size: 0.92em; color: #333; }
@@ -243,6 +440,10 @@ export function printComandaKitchen(payload) {
     .copy { margin-top: 16px; text-align: center; font-size: 0.85em; color: #666; }
     @media print { body { padding: 4px; } }
   </style></head><body>${pages}</body></html>`;
+}
+
+export function printComandaKitchen(payload) {
+  const html = buildComandaKitchenHtmlDocument(payload);
 
   const runPrintInWindow = (win) => {
     if (!win?.document) return false;
@@ -316,10 +517,10 @@ export function comandaPayloadFromOrdineDetail(detail, tenantData) {
     orderId: detail.id,
     numero: detail.numero ?? detail.numero_ordine,
     createdAt: detail.createdAt ?? detail.created_at,
-    tipoOrdine: detail.tipo_ordine,
-    nomeCliente: detail.nome_cliente,
-    orarioRitiro: detail.orario_ritiro,
-    indirizzoConsegna: detail.indirizzo_consegna,
+    tipoOrdine: detail.tipo_ordine ?? detail.tipoOrdine,
+    nomeCliente: detail.nome_cliente ?? detail.nomeCliente ?? detail.nome,
+    orarioRitiro: detail.orario_ritiro ?? detail.orarioRitiro,
+    indirizzoConsegna: detail.indirizzo_consegna ?? detail.indirizzoConsegna ?? detail.indirizzo,
     note: detail.note,
     tipoPagamento: detail.tipo_pagamento,
     righe,

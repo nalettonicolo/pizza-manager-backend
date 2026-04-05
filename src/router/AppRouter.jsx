@@ -79,6 +79,7 @@ const FoodCostPage = lazy(() => import("@/features/admin/pages/contabilita/FoodC
 const SpeseLocalePage = lazy(() => import("@/features/admin/pages/contabilita/SpeseLocalePage"));
 const SpesePersonalePage = lazy(() => import("@/features/admin/pages/contabilita/SpesePersonalePage"));
 const GestioneIncassiPage = lazy(() => import("@/features/admin/pages/contabilita/GestioneIncassiPage"));
+const FidelityCardPage = lazy(() => import("@/features/admin/pages/FidelityCardPage"));
 
 /* ================= OPERATIVE (lazy) ================= */
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
@@ -323,6 +324,7 @@ export default function AppRouter() {
           <Route path="/admin/menu/fritti" element={<Suspense fallback={<PageFallback />}><FrittiPage /></Suspense>} />
           <Route path="/admin/menu/allergeni" element={<Suspense fallback={<PageFallback />}><AllergeniPage /></Suspense>} />
           <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
+          <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
           <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
           <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>

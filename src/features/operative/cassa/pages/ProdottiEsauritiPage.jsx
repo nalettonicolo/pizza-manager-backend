@@ -10,6 +10,12 @@ import {
   getImpasti,
   updateTenantSettings,
 } from "@/features/admin/services/adminService"
+import {
+  cassaTipoOrdineBtn,
+  cassaTipoOrdineBtnActive,
+  cassaNuovoClienteBtn,
+  cassaToolbarCompactBtn,
+} from "@/features/operative/cassa/cassaToolbarButtonStyles"
 
 const PRODUCT_SECTION_NAMES = ["Fritti", "Bibite", "Dolci"]
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
@@ -176,19 +182,13 @@ export default function ProdottiEsauritiPage() {
   useLayoutEffect(() => {
     if (!setCassaHeader) return
     const toolbar = (
-      <>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <button
             type="button"
             style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: tipoOrdine === TIPO_ORDINE.NEGOZIO ? "#1976d2" : "#fff",
-              color: tipoOrdine === TIPO_ORDINE.NEGOZIO ? "#fff" : "#333",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
+              ...cassaTipoOrdineBtn,
+              ...(tipoOrdine === TIPO_ORDINE.NEGOZIO ? cassaTipoOrdineBtnActive : {}),
             }}
             onClick={() => { setTipoOrdine(TIPO_ORDINE.NEGOZIO); navigate("/operative/cassa"); }}
           >
@@ -197,35 +197,25 @@ export default function ProdottiEsauritiPage() {
           <button
             type="button"
             style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: tipoOrdine === TIPO_ORDINE.DELIVERY ? "#1976d2" : "#fff",
-              color: tipoOrdine === TIPO_ORDINE.DELIVERY ? "#fff" : "#333",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
+              ...cassaTipoOrdineBtn,
+              ...(tipoOrdine === TIPO_ORDINE.DELIVERY ? cassaTipoOrdineBtnActive : {}),
             }}
             onClick={() => { setTipoOrdine(TIPO_ORDINE.DELIVERY); navigate("/operative/cassa"); }}
           >
             Delivery
           </button>
-          <button
-            type="button"
-            onClick={() => navigate("/operative/cassa")}
-            style={{ padding: "8px 14px", background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, fontSize: 13 }}
-          >
+          <button type="button" onClick={() => navigate("/operative/cassa")} style={cassaNuovoClienteBtn}>
             Nuovo cliente
           </button>
           <button
             type="button"
             onClick={() => navigate("/operative/cassa")}
-            style={{ padding: "8px 14px", background: "#5d4037", color: "#fff", border: "none", borderRadius: 8, fontSize: 13 }}
+            style={{ ...cassaToolbarCompactBtn, background: "#5d4037", color: "#fff", fontWeight: 600 }}
           >
             Ordini
           </button>
         </div>
-      </>
+      </div>
     )
     setCassaHeader(toolbar)
     return () => setCassaHeader(null)

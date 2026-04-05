@@ -39,6 +39,19 @@ export const SERVIZI_APP = [
     codiceRiferimento: "operative/cassa, flusso ordini area operativa",
   },
   {
+    id: "fidelity_card",
+    nome: "Fidelity Card",
+    categoria: "Marketing e clienti",
+    funzioni: [
+      "Programma punti legato all’anagrafica clienti creata in cassa",
+      "Codice carta univoco, saldo punti e storico movimenti in amministrazione",
+      "Regole configurabili (punti per euro); base per accrediti automatici da ordini",
+    ],
+    prezzoDefaultEuro: 14,
+    avanzamentoDefaultPercentuale: 55,
+    codiceRiferimento: "admin/fidelity, tabelle fidelity_saldi e fidelity_movimenti",
+  },
+  {
     id: "stampa_comanda",
     nome: "Comanda (stampa riepilogo ordine in più reparti)",
     categoria: "Operazioni sala",

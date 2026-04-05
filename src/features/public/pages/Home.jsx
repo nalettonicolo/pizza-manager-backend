@@ -14,6 +14,7 @@ const HOME_NAV = [
 
 const ADMIN_NAV = [
   { to: "/admin/menu", label: "Menu e listino", description: "Categorie, pizze, ingredienti", servizioId: null },
+  { to: "/admin/fidelity", label: "Fidelity Card", description: "Punti e carte fedeltà clienti", servizioId: "fidelity_card" },
   { to: "/admin/magazzino", label: "Magazzino", description: "Ordini fornitori e DDT", servizioId: "magazzino_gestione" },
   { to: "/admin/contabilita", label: "Contabilità", description: "Fatture, food cost, spese, incassi", servizioId: "contabilita_locale" },
   { to: "/admin/settings", label: "Impostazioni", description: "Dati pizzeria, layout, parametri", servizioId: null },

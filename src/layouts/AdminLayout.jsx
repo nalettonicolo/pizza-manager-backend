@@ -18,6 +18,7 @@ const HEADER_HEIGHT = 56;
 const topNavItems = [
   { to: "/admin/manuale", label: "Manuale", servizioId: null },
   { to: "/admin/report", label: "Report", servizioId: "report_analisi" },
+  { to: "/admin/fidelity", label: "Fidelity", servizioId: "fidelity_card" },
   { to: "/admin/menu", label: "Menu", servizioId: null },
   { to: "/admin/magazzino", label: "Magazzino", servizioId: "magazzino_gestione" },
   { to: "/admin/contabilita", label: "Contabilità", servizioId: "contabilita_locale" },
@@ -103,6 +104,7 @@ export default function AdminLayout() {
     if (!enforcementActive) return null;
     const p = location.pathname;
     if (p.startsWith("/admin/report") && !hasServizio("report_analisi")) return ADMIN_TENANT_HOME;
+    if (p.startsWith("/admin/fidelity") && !hasServizio("fidelity_card")) return ADMIN_TENANT_HOME;
     if (p === "/admin/ruoli" && !hasServizio("ruoli_avanzati")) return ADMIN_TENANT_HOME;
     if (p.startsWith("/admin/magazzino") && !hasServizio("magazzino_gestione")) return ADMIN_TENANT_HOME;
     if (p.startsWith("/admin/contabilita") && !hasServizio("contabilita_locale")) return ADMIN_TENANT_HOME;

@@ -1,6 +1,20 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { getTenantSettings, updateTenantSettings } from "@/features/admin/services/adminService"
+import {
+  COMANDA_ETICHETTE_DEFAULT,
+  normalizeComandaBlocchiOrdine,
+  normalizeComandaDettagliOrdine,
+  buildComandaKitchenHtmlDocument,
+} from "@/features/operative/cassa/utils/printComanda"
+
+function FieldHint({ children, style }) {
+  return (
+    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#555", lineHeight: 1.5, ...style }}>
+      {children}
+    </p>
+  )
+}
 
 const defaultParametri = () => ({
   pony_lun_gio: "",
@@ -22,6 +36,8 @@ const defaultParametri = () => ({
   comanda_line_height: "1.35",
   comanda_margin_mm: "8",
   comanda_width_mm: "0",
+  /** 0 = solo larghezza manuale; 58/76/80 = rotolo termico (imposta anche area foglio in stampa) */
+  comanda_rotolo_mm: 0,
   comanda_font_family: "system",
   comanda_mostra_locale: true,
   comanda_mostra_banner_comanda: true,
@@ -40,7 +56,55 @@ const defaultParametri = () => ({
   comanda_mostra_riga_ingredienti: true,
   comanda_stampanti: "",
   comanda_stampa_auto: false,
+  comanda_titolo_banner: "",
 })
+
+/** Metadati UI per blocchi intestazione (ordine stampa + flag visibilità). */
+const COMANDA_BLOCCHI_UI = [
+  { id: "banner", flag: "comanda_mostra_banner_comanda", label: "Titolo banner (centrato)", hint: "Testo grande in cima; puoi cambiarlo sotto in «Titolo personalizzato»." },
+  { id: "data_stampa", flag: "comanda_mostra_data_ora_stampa", label: "Data e ora di stampa", hint: "Momento in cui avvii la stampa dal browser." },
+  { id: "locale", flag: "comanda_mostra_locale", label: "Nome locale", hint: "Nome della pizzeria (tenant)." },
+  { id: "numero_ordine", flag: "comanda_mostra_numero_ordine", label: "Numero ordine (#…)", hint: "Numero progressivo in cassa." },
+  { id: "id_ordine", flag: "comanda_mostra_id_ordine", label: "ID ordine (UUID)", hint: "Identificativo tecnico; spesso lungo." },
+  { id: "tipo_servizio", flag: "comanda_mostra_tipo_servizio", label: "Tipo servizio", hint: "Ritiro in negozio o Consegna." },
+  { id: "cliente", flag: "comanda_mostra_cliente", label: "Nome cliente", hint: "Come salvato sull’ordine." },
+  { id: "orario", flag: "comanda_mostra_orario", label: "Orario ritiro / consegna", hint: "Fascia oraria scelta in cassa." },
+  { id: "indirizzo", flag: "comanda_mostra_indirizzo", label: "Indirizzo consegna", hint: "Solo ordini delivery." },
+  { id: "pagamento", flag: "comanda_mostra_pagamento", label: "Tipo pagamento", hint: "Contanti, carta, da pagare…" },
+  { id: "note", flag: "comanda_mostra_note_ordine", label: "Note ordine", hint: "Note libere cassa." },
+  { id: "dest_stampanti", flag: "comanda_mostra_dest_stampanti", label: "Riga «Dest. stampa»", hint: "Testo del campo Stampanti / reparti." },
+]
+
+const COMANDA_DETTAGLI_UI = [
+  { id: "impasto", flag: "comanda_mostra_riga_impasto", label: "Riga impasto", hint: "Impasto scelto in modale pizza." },
+  { id: "cottura", flag: "comanda_mostra_riga_cottura", label: "Riga cottura (tipo pizza)", hint: "Normale, ben cotta, ecc." },
+  { id: "ingredienti", flag: "comanda_mostra_riga_ingredienti", label: "Riga ingredienti", hint: "Base, varianti, aggiunte, fasi." },
+]
+
+const COMANDA_PREVIEW_MOCK = {
+  tenantNome: "Pizzeria Demo",
+  orderId: "00000000-0000-0000-0000-000000000001",
+  numero: 42,
+  createdAt: new Date().toISOString(),
+  tipoOrdine: "delivery",
+  nomeCliente: "Mario Rossi",
+  orarioRitiro: "20:30",
+  indirizzoConsegna: "Via Esempio 1, Milano",
+  note: "Citofono rosso",
+  tipoPagamento: "Contanti",
+  righe: [
+    {
+      qty: 2,
+      titolo: "Margherita (Classica)",
+      dettagli: [
+        { tag: "impasto", text: "Impasto: Classico" },
+        { tag: "cottura", text: "Cottura: Normale" },
+        { tag: "ingredienti", text: "Mozzarella, pomodoro, basilico" },
+      ],
+    },
+    { qty: 1, titolo: "Patatine fritte", dettagli: [] },
+  ],
+}
 
 export default function CassaImpostazioniPage({ onBack }) {
   const { tenantId } = useTenant()
@@ -58,6 +122,13 @@ export default function CassaImpostazioniPage({ onBack }) {
     pony_ven_dom: raw.pony_ven_dom !== undefined && raw.pony_ven_dom !== "" ? raw.pony_ven_dom : "",
     pizze_ogni_15_min: raw.pizze_ogni_15_min !== undefined && raw.pizze_ogni_15_min !== "" ? raw.pizze_ogni_15_min : (raw.pizze_ogni_min ?? ""),
     comanda_stampanti: Array.isArray(raw.comanda_stampanti) ? raw.comanda_stampanti.join(", ") : (raw.comanda_stampanti ?? ""),
+    comanda_ordine_blocchi: normalizeComandaBlocchiOrdine(raw.comanda_ordine_blocchi),
+    comanda_ordine_dettagli_prodotto: normalizeComandaDettagliOrdine(raw.comanda_ordine_dettagli_prodotto),
+    comanda_etichette:
+      raw.comanda_etichette && typeof raw.comanda_etichette === "object" && !Array.isArray(raw.comanda_etichette)
+        ? raw.comanda_etichette
+        : {},
+    comanda_titolo_banner: raw.comanda_titolo_banner != null ? String(raw.comanda_titolo_banner) : "",
   }
 
   useEffect(() => {
@@ -85,6 +156,41 @@ export default function CassaImpostazioniPage({ onBack }) {
       parametri_operativi: { ...(settings?.parametri_operativi || {}), [key]: value },
     })
   }
+
+  const previewDoc = useMemo(() => {
+    const raw =
+      settings?.parametri_operativi && typeof settings.parametri_operativi === "object"
+        ? settings.parametri_operativi
+        : {}
+    const parametri = {
+      ...defaultParametri(),
+      ...raw,
+      pony_lun_gio: raw.pony_lun_gio !== undefined && raw.pony_lun_gio !== "" ? raw.pony_lun_gio : (raw.pony_consegna ?? ""),
+      pony_ven_dom: raw.pony_ven_dom !== undefined && raw.pony_ven_dom !== "" ? raw.pony_ven_dom : "",
+      pizze_ogni_15_min: raw.pizze_ogni_15_min !== undefined && raw.pizze_ogni_15_min !== "" ? raw.pizze_ogni_15_min : (raw.pizze_ogni_min ?? ""),
+      comanda_stampanti: Array.isArray(raw.comanda_stampanti) ? raw.comanda_stampanti.join(", ") : (raw.comanda_stampanti ?? ""),
+      comanda_ordine_blocchi: normalizeComandaBlocchiOrdine(raw.comanda_ordine_blocchi),
+      comanda_ordine_dettagli_prodotto: normalizeComandaDettagliOrdine(raw.comanda_ordine_dettagli_prodotto),
+      comanda_etichette:
+        raw.comanda_etichette && typeof raw.comanda_etichette === "object" && !Array.isArray(raw.comanda_etichette)
+          ? raw.comanda_etichette
+          : {},
+      comanda_titolo_banner: raw.comanda_titolo_banner != null ? String(raw.comanda_titolo_banner) : "",
+    }
+    return buildComandaKitchenHtmlDocument({ ...COMANDA_PREVIEW_MOCK, parametri })
+  }, [settings])
+
+  const setEtichetta = (key, val) => {
+    const next = { ...(p.comanda_etichette || {}) }
+    const t = String(val).trim()
+    const def = COMANDA_ETICHETTE_DEFAULT[key]
+    if (!t || (def != null && t === String(def))) delete next[key]
+    else next[key] = val
+    setParam("comanda_etichette", next)
+  }
+
+  const blocchiOrdinati = normalizeComandaBlocchiOrdine(p.comanda_ordine_blocchi)
+  const dettagliOrdinati = normalizeComandaDettagliOrdine(p.comanda_ordine_dettagli_prodotto)
 
   async function handleSave() {
     if (!tenantId || !settings) return
@@ -119,6 +225,7 @@ export default function CassaImpostazioniPage({ onBack }) {
           p.comanda_margin_mm === "" ? 8 : Math.max(2, Math.min(24, Number(p.comanda_margin_mm) || 8)),
         comanda_width_mm:
           p.comanda_width_mm === "" ? 0 : Math.max(0, Math.min(120, Number(p.comanda_width_mm) || 0)),
+        comanda_rotolo_mm: [0, 58, 76, 80].includes(Number(p.comanda_rotolo_mm)) ? Number(p.comanda_rotolo_mm) : 0,
         comanda_font_family: ["system", "sans", "mono", "serif"].includes(p.comanda_font_family)
           ? p.comanda_font_family
           : "system",
@@ -142,6 +249,13 @@ export default function CassaImpostazioniPage({ onBack }) {
           .map((v) => v.trim())
           .filter(Boolean),
         comanda_stampa_auto: Boolean(p.comanda_stampa_auto),
+        comanda_ordine_blocchi: normalizeComandaBlocchiOrdine(p.comanda_ordine_blocchi),
+        comanda_ordine_dettagli_prodotto: normalizeComandaDettagliOrdine(p.comanda_ordine_dettagli_prodotto),
+        comanda_etichette:
+          p.comanda_etichette && typeof p.comanda_etichette === "object" && !Array.isArray(p.comanda_etichette)
+            ? p.comanda_etichette
+            : {},
+        comanda_titolo_banner: String(p.comanda_titolo_banner || "").trim(),
       }
       await updateTenantSettings(tenantId, { parametri_operativi: payload })
       setSettings({ ...settings, parametri_operativi: payload })
@@ -171,6 +285,7 @@ export default function CassaImpostazioniPage({ onBack }) {
         </button>
         <h1 style={styles.title}>Impostazioni cassa</h1>
       </div>
+      <div style={styles.twoColGrid}>
       <section style={styles.section}>
         <div style={styles.fields}>
           <label>
@@ -224,93 +339,103 @@ export default function CassaImpostazioniPage({ onBack }) {
           </label>
         </div>
       </section>
+      </div>
       <section style={styles.section}>
         <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Comanda — stampa</h3>
         <p style={{ margin: "0 0 16px", fontSize: 13, color: "#555", lineHeight: 1.45 }}>
-          Regola testo e pagina per stampante termica o PDF. Le anteprime dipendono dal browser; per 80 mm usa larghezza ~72 mm e margini bassi.
+          Impostazioni usate quando stampi la comanda cucina dal browser (stampante termica o PDF). Il risultato dipende anche dal driver della stampante: prova una stampa di test dopo ogni modifica.
+          Trascina le righe per cambiare l&apos;ordine in stampa; l&apos;anteprima a destra usa dati di esempio e riflette salvataggio dopo «Salva».
         </p>
-        <div style={styles.fields}>
+        <div style={styles.comandaGrid}>
+        <div style={{ ...styles.comandaCol, display: "flex", flexDirection: "column", gap: 20 }}>
+          <fieldset style={{ border: "1px solid #c8e6c9", borderRadius: 8, padding: "14px 16px", margin: 0, background: "#f8fff8" }}>
+            <legend style={{ fontSize: 13, fontWeight: 600, padding: "0 6px" }}>Rotolo carta termica</legend>
+            <label style={{ display: "block", cursor: "pointer" }}>
+              <span style={{ fontWeight: 600 }}>Dimensione rotolo (larghezza carta)</span>
+              <FieldHint>
+                Indica la <strong>larghezza fisica</strong> del rotolo che monti sulla stampante (58 mm, 76 mm o 80 mm). Serve al foglio di stampa per suggerire al browser la <strong>larghezza pagina</strong> corretta.
+                Se scegli «Personalizzato», non viene forzata la larghezza del foglio: contano solo margini e «Larghezza contenuto» sotto.
+              </FieldHint>
+              <select
+                value={String([0, 58, 76, 80].includes(Number(p.comanda_rotolo_mm)) ? Number(p.comanda_rotolo_mm) : 0)}
+                onChange={(e) => setParam("comanda_rotolo_mm", Number(e.target.value))}
+                style={inputStyle}
+              >
+                <option value="0">Personalizzato (non imposto la larghezza del foglio)</option>
+                <option value="58">58 mm — rotolo stretto (spesso scontrino / cassa)</option>
+                <option value="76">76 mm — rotolo intermedio</option>
+                <option value="80">80 mm — rotolo largo (molto usato in cucina)</option>
+              </select>
+            </label>
+            <FieldHint>
+              Con rotolo <strong>58 / 76 / 80 mm</strong>, se lasci <strong>Larghezza contenuto = 0</strong>, il testo usa una larghezza utile predefinita (circa 52 / 68 / 72 mm) per evitare che esca dai bordi. Puoi comunque impostare tu un valore in mm per stringere o allargare.
+            </FieldHint>
+          </fieldset>
+
           <label>
-            Numero copie comanda
+            <span style={{ fontWeight: 600 }}>Numero copie comanda</span>
+            <FieldHint>Quante pagine identiche stampare in un solo comando (es. una per reparto). Massimo 5.</FieldHint>
             <input type="number" min={1} max={5} placeholder="es. 1" value={p.comanda_copie === "" ? "" : p.comanda_copie} onChange={(e) => setParam("comanda_copie", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Dimensione testo corpo (px)
+            <span style={{ fontWeight: 600 }}>Dimensione testo corpo (px)</span>
+            <FieldHint>Altezza base del carattere per righe normali (locale, righe prodotto, note). Più alto = caratteri più grandi su tutta la comanda, tranne dove c’è una scala dedicata sotto.</FieldHint>
             <input type="number" min={8} max={28} placeholder="es. 13" value={p.comanda_font_size === "" ? "" : p.comanda_font_size} onChange={(e) => setParam("comanda_font_size", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Scala titolo «COMANDA» (× testo corpo, es. 1.12)
+            <span style={{ fontWeight: 600 }}>Scala titolo «COMANDA CUCINA»</span>
+            <FieldHint>Moltiplicatore rispetto al testo corpo (es. 1,12 = titolo leggermente più grande). Vale solo per la riga di intestazione principale.</FieldHint>
             <input type="number" min={0.85} max={1.6} step={0.01} placeholder="1.12" value={p.comanda_titolo_scale === "" ? "" : p.comanda_titolo_scale} onChange={(e) => setParam("comanda_titolo_scale", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Scala quantità (× corpo, es. 1)
+            <span style={{ fontWeight: 600 }}>Scala quantità (es. 2×)</span>
+            <FieldHint>Moltiplicatore per il numero a sinistra di ogni riga prodotto (2×, 1×…). Utile per evidenziare le quantità in cucina.</FieldHint>
             <input type="number" min={0.85} max={1.5} step={0.01} placeholder="1" value={p.comanda_qty_scale === "" ? "" : p.comanda_qty_scale} onChange={(e) => setParam("comanda_qty_scale", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Scala dettagli righe (ingredienti, × corpo)
+            <span style={{ fontWeight: 600 }}>Scala dettagli sotto il prodotto</span>
+            <FieldHint>Moltiplicatore per le righe piccole sotto il nome pizza (impasto, cottura, ingredienti). Di solito leggermente più piccolo del corpo per distinguere i dettagli.</FieldHint>
             <input type="number" min={0.75} max={1.15} step={0.01} placeholder="0.95" value={p.comanda_dettaglio_scale === "" ? "" : p.comanda_dettaglio_scale} onChange={(e) => setParam("comanda_dettaglio_scale", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Interlinea (righe)
+            <span style={{ fontWeight: 600 }}>Interlinea</span>
+            <FieldHint>Distanza verticale tra le righe di testo (1 = compatto, valori più alti = più aria). Aiuta la lettura su carta termica piccola.</FieldHint>
             <input type="number" min={1.05} max={1.9} step={0.05} placeholder="1.35" value={p.comanda_line_height === "" ? "" : p.comanda_line_height} onChange={(e) => setParam("comanda_line_height", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Famiglia carattere
+            <span style={{ fontWeight: 600 }}>Famiglia carattere</span>
+            <FieldHint>
+              <strong>Sistema</strong>: font del dispositivo, spesso più leggibile a schermo.
+              <strong>Monospazio</strong>: caratteri a larghezza fissa, spesso simile alle stampanti ESC/POS.
+              Scegli in base a come rende la tua stampante nel dialogo di stampa.
+            </FieldHint>
             <select value={p.comanda_font_family || "system"} onChange={(e) => setParam("comanda_font_family", e.target.value)} style={inputStyle}>
               <option value="system">Sistema (consigliato)</option>
               <option value="sans">Sans (Arial / simile)</option>
-              <option value="mono">Monospazio (termica)</option>
+              <option value="mono">Monospazio (simile a termica)</option>
               <option value="serif">Serif</option>
             </select>
           </label>
           <label>
-            Margini pagina stampa (mm, tutti i lati)
+            <span style={{ fontWeight: 600 }}>Margini pagina (mm, tutti i lati)</span>
+            <FieldHint>Spazio bianco lasciato tra il bordo del foglio (o del rotolo) e il contenuto. Valori bassi (es. 4–6) sfruttano meglio carta stretta; troppo bassi possono tagliare il testo su alcune stampanti.</FieldHint>
             <input type="number" min={2} max={24} placeholder="8" value={p.comanda_margin_mm === "" ? "" : p.comanda_margin_mm} onChange={(e) => setParam("comanda_margin_mm", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Larghezza massima contenuto (mm, 0 = tutta la pagina)
-            <input type="number" min={0} max={120} placeholder="0 o 72 per 80mm" value={p.comanda_width_mm === "" ? "" : p.comanda_width_mm} onChange={(e) => setParam("comanda_width_mm", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
+            <span style={{ fontWeight: 600 }}>Larghezza massima contenuto (mm)</span>
+            <FieldHint>
+              Limita la larghezza del blocco di testo al centro (evita righe lunghissime). <strong>0</strong> = nessun limite manuale; se hai scelto un <strong>rotolo</strong> sopra, viene usata la larghezza utile predefinita per quel rotolo finché resta 0.
+              Se compili un valore (es. 70), quello ha priorità sul predefinito del rotolo.
+            </FieldHint>
+            <input type="number" min={0} max={120} placeholder="0 = auto se rotolo impostato" value={p.comanda_width_mm === "" ? "" : p.comanda_width_mm} onChange={(e) => setParam("comanda_width_mm", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
           </label>
           <label>
-            Stampanti / reparti (testo su comanda, una per riga o virgole)
+            <span style={{ fontWeight: 600 }}>Stampanti / reparti (testo informativo)</span>
+            <FieldHint>
+              Testo libero mostrato in comanda come «Dest. stampa: …» (se abilitato sotto). Serve a indicare a chi è destinato lo scontrino (Cucina, Pizzeria, Bancone…). Una voce per riga oppure separate da virgola.
+            </FieldHint>
             <textarea rows={3} placeholder="es. Cucina, Bancone" value={p.comanda_stampanti || ""} onChange={(e) => setParam("comanda_stampanti", e.target.value)} style={{ ...inputStyle, resize: "vertical", minHeight: 84 }} />
           </label>
-          <fieldset style={{ border: "1px solid #e0e0e0", borderRadius: 8, padding: "12px 14px", margin: 0 }}>
-            <legend style={{ fontSize: 13, fontWeight: 600, padding: "0 6px" }}>Cosa includere in stampa</legend>
-            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#666", lineHeight: 1.4 }}>Intestazione</p>
-            {[
-              ["comanda_mostra_locale", "Nome locale"],
-              ["comanda_mostra_banner_comanda", "Titolo «COMANDA CUCINA»"],
-              ["comanda_mostra_data_ora_stampa", "Data e ora (in alto)"],
-              ["comanda_mostra_numero_ordine", "Numero ordine (#…)"],
-              ["comanda_mostra_tipo_servizio", "Tipo servizio (ritiro / consegna)"],
-              ["comanda_mostra_cliente", "Nome cliente"],
-              ["comanda_mostra_orario", "Orario ritiro / consegna"],
-              ["comanda_mostra_indirizzo", "Indirizzo consegna"],
-              ["comanda_mostra_note_ordine", "Note ordine"],
-              ["comanda_mostra_id_ordine", "ID ordine (UUID)"],
-              ["comanda_mostra_pagamento", "Tipo pagamento"],
-              ["comanda_mostra_dest_stampanti", "Riga «Dest. stampa»"],
-            ].map(([key, label]) => (
-              <label key={key} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 10 }}>
-                <input type="checkbox" checked={Boolean(p[key])} onChange={(e) => setParam(key, e.target.checked)} />
-                <span>{label}</span>
-              </label>
-            ))}
-            <p style={{ margin: "14px 0 10px", fontSize: 12, color: "#666", lineHeight: 1.4 }}>Sotto ogni prodotto</p>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 10 }}>
-              <input type="checkbox" checked={Boolean(p.comanda_mostra_riga_impasto)} onChange={(e) => setParam("comanda_mostra_riga_impasto", e.target.checked)} />
-              <span>Riga impasto</span>
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 10 }}>
-              <input type="checkbox" checked={Boolean(p.comanda_mostra_riga_cottura)} onChange={(e) => setParam("comanda_mostra_riga_cottura", e.target.checked)} />
-              <span>Riga cottura (tipo pizza)</span>
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 0 }}>
-              <input type="checkbox" checked={Boolean(p.comanda_mostra_riga_ingredienti)} onChange={(e) => setParam("comanda_mostra_riga_ingredienti", e.target.checked)} />
-              <span>Riga ingredienti (base + varianti e aggiunte)</span>
-            </label>
-          </fieldset>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
             <input
               type="checkbox"
@@ -319,12 +444,152 @@ export default function CassaImpostazioniPage({ onBack }) {
               style={{ marginTop: 4 }}
             />
             <span>
-              Stampa comanda automaticamente dopo la conferma ordine
-              <span style={{ display: "block", fontSize: 12, color: "#666", fontWeight: 400, marginTop: 4 }}>
-                Si apre la finestra di stampa del browser (scegli stampante termica o PDF). Se disattivato, compare un avviso con pulsante «Stampa comanda».
-              </span>
+              <span style={{ fontWeight: 600 }}>Stampa comanda automaticamente dopo conferma ordine</span>
+              <FieldHint>
+                Se attivo, subito dopo aver confermato l’ordine si apre il dialogo di stampa del browser: scegli la stampante termica o «Salva come PDF».
+                Se disattivo, resta un avviso con il pulsante «Stampa comanda» così puoi stampare quando vuoi.
+              </FieldHint>
             </span>
           </label>
+        </div>
+        <div style={{ ...styles.comandaCol, display: "flex", flexDirection: "column", gap: 16 }}>
+          <fieldset style={{ border: "1px solid #e0e0e0", borderRadius: 8, padding: "12px 14px", margin: 0 }}>
+            <legend style={{ fontSize: 13, fontWeight: 600, padding: "0 6px" }}>Cosa includere e ordine righe</legend>
+            <FieldHint style={{ marginBottom: 10 }}>
+              Spunta per mostrare o nascondere. Trascina le righe (⋮⋮) per l&apos;ordine verticale sulla comanda stampata.
+            </FieldHint>
+            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#666", fontWeight: 600 }}>Intestazione e dati ordine</p>
+            <div style={{ marginBottom: 12 }}>
+              {blocchiOrdinati.map((blockId) => {
+                const meta = COMANDA_BLOCCHI_UI.find((x) => x.id === blockId)
+                if (!meta) return null
+                return (
+                  <div
+                    key={blockId}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("application/x-comanda-block", blockId)
+                      e.dataTransfer.effectAllowed = "move"
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const dragged = e.dataTransfer.getData("application/x-comanda-block")
+                      if (!dragged || dragged === blockId) return
+                      const order = [...blocchiOrdinati]
+                      const fi = order.indexOf(dragged)
+                      const ti = order.indexOf(blockId)
+                      if (fi < 0 || ti < 0) return
+                      order.splice(fi, 1)
+                      order.splice(ti, 0, dragged)
+                      setParam("comanda_ordine_blocchi", order)
+                    }}
+                    style={styles.dragRow}
+                  >
+                    <span style={styles.dragHandle} aria-hidden>⋮⋮</span>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(p[meta.flag])}
+                        onChange={(ev) => setParam(meta.flag, ev.target.checked)}
+                        style={{ marginTop: 3, flexShrink: 0 }}
+                      />
+                      <span>
+                        <span style={{ fontWeight: 500 }}>{meta.label}</span>
+                        <FieldHint>{meta.hint}</FieldHint>
+                      </span>
+                    </label>
+                  </div>
+                )
+              })}
+            </div>
+            <p style={{ margin: "12px 0 8px", fontSize: 12, color: "#666", fontWeight: 600 }}>Sotto ogni prodotto (ordine righe dettaglio)</p>
+            {dettagliOrdinati.map((tag) => {
+              const meta = COMANDA_DETTAGLI_UI.find((x) => x.id === tag)
+              if (!meta) return null
+              return (
+                <div
+                  key={tag}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/x-comanda-dettaglio", tag)
+                    e.dataTransfer.effectAllowed = "move"
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const dragged = e.dataTransfer.getData("application/x-comanda-dettaglio")
+                    if (!dragged || dragged === tag) return
+                    const order = [...dettagliOrdinati]
+                    const fi = order.indexOf(dragged)
+                    const ti = order.indexOf(tag)
+                    if (fi < 0 || ti < 0) return
+                    order.splice(fi, 1)
+                    order.splice(ti, 0, dragged)
+                    setParam("comanda_ordine_dettagli_prodotto", order)
+                  }}
+                  style={{ ...styles.dragRow, marginBottom: 10 }}
+                >
+                  <span style={styles.dragHandle} aria-hidden>⋮⋮</span>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(p[meta.flag])}
+                      onChange={(ev) => setParam(meta.flag, ev.target.checked)}
+                      style={{ marginTop: 3, flexShrink: 0 }}
+                    />
+                    <span>
+                      <span style={{ fontWeight: 500 }}>{meta.label}</span>
+                      <FieldHint>{meta.hint}</FieldHint>
+                    </span>
+                  </label>
+                </div>
+              )
+            })}
+          </fieldset>
+          <label>
+            <span style={{ fontWeight: 600 }}>Titolo banner (opzionale)</span>
+            <FieldHint>
+              Sostituisce il testo grande in cima se compilato. Se vuoto, si usa l&apos;etichetta predefinita o il campo «banner» in etichette sotto.
+            </FieldHint>
+            <input
+              type="text"
+              placeholder={COMANDA_ETICHETTE_DEFAULT.banner}
+              value={p.comanda_titolo_banner || ""}
+              onChange={(e) => setParam("comanda_titolo_banner", e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <details style={{ border: "1px solid #e0e0e0", borderRadius: 8, padding: "10px 12px", background: "#fafafa" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 14 }}>Etichette testi (personalizzazione)</summary>
+            <FieldHint style={{ marginTop: 8 }}>
+              Lascia vuoto per usare il default. Modifica le parole prima dei due punti (es. «Cliente», «Orario») o il titolo servizio.
+            </FieldHint>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+              {Object.keys(COMANDA_ETICHETTE_DEFAULT).map((key) => (
+                <label key={key} style={{ display: "block" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#444" }}>{key}</span>
+                  <input
+                    type="text"
+                    placeholder={COMANDA_ETICHETTE_DEFAULT[key]}
+                    value={p.comanda_etichette?.[key] ?? ""}
+                    onChange={(e) => setEtichetta(key, e.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
+        <div style={styles.comandaPreviewCol}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Layout anteprima</div>
+          <FieldHint style={{ marginBottom: 8 }}>
+            Anteprima con ordine di esempio (consegna + 2 righe prodotto). Salva per persistere su tutti i dispositivi del locale.
+          </FieldHint>
+          <div style={styles.previewFrame}>
+            <iframe title="Anteprima comanda" srcDoc={previewDoc} style={{ width: "100%", height: "100%", border: "none", display: "block" }} />
+          </div>
+        </div>
         </div>
       </section>
       <div style={styles.actions}>
@@ -337,12 +602,29 @@ export default function CassaImpostazioniPage({ onBack }) {
 }
 
 const styles = {
-  wrapper: { padding: 20, maxWidth: 560 },
+  wrapper: { padding: 20, maxWidth: 1120, margin: "0 auto", boxSizing: "border-box" },
   header: { marginBottom: 20 },
   backBtn: { padding: "8px 14px", marginBottom: 12, background: "#f0f0f0", border: "1px solid #ccc", borderRadius: 8, cursor: "pointer", fontSize: 14 },
   title: { margin: 0, fontSize: 20, fontWeight: 600 },
   section: { background: "#fff", border: "1px solid #e0e0e0", borderRadius: 8, padding: 20, marginBottom: 16 },
   fields: { display: "flex", flexDirection: "column", gap: 20 },
+  twoColGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 16 },
+  comandaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, alignItems: "start" },
+  comandaCol: { minWidth: 0 },
+  comandaPreviewCol: { minWidth: 220 },
+  previewFrame: { height: 440, border: "1px solid #ccc", borderRadius: 8, overflow: "hidden", background: "#fff", boxShadow: "inset 0 0 0 1px #eee" },
+  dragRow: {
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-start",
+    padding: "8px 8px",
+    borderRadius: 6,
+    border: "1px solid #e8e8e8",
+    marginBottom: 8,
+    background: "#fafafa",
+    cursor: "grab",
+  },
+  dragHandle: { flexShrink: 0, color: "#999", userSelect: "none", fontSize: 14, lineHeight: 1.4, width: 22 },
   actions: { marginTop: 16 },
   saveBtn: { padding: "10px 20px", background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 600 },
 }

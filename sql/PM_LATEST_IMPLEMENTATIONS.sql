@@ -286,6 +286,12 @@ COMMENT ON FUNCTION public.create_order_with_items(
   'Crea ordine + righe (cassa). p_items: prodotto_id, quantita, prezzo, formato_nome, ingredienti_cottura_summary.';
 
 -- =============================================================================
+-- Fidelity Card (servizio `fidelity_card`): tabelle public.fidelity_saldi e
+-- public.fidelity_movimenti. Copia integrale da:
+--   supabase/migrations/20260403170000_fidelity_card.sql
+-- =============================================================================
+
+-- =============================================================================
 -- Fine. Dopo l'esecuzione: Dashboard Supabase → Settings → API → Reload schema
 --   se PostgREST non espone subito le nuove colonne/viste.
 -- =============================================================================

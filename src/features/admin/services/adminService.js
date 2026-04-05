@@ -409,6 +409,106 @@ export async function searchAnagraficaClienti(tenantId, query) {
   })
 }
 
+function randomCodiceCartaFidelity() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  let s = ""
+  for (let i = 0; i < 8; i += 1) s += chars[Math.floor(Math.random() * chars.length)]
+  return s
+}
+
+/** Elenco iscritti fidelity con dati anagrafica (embed FK). */
+export async function getFidelitySaldi(tenantId) {
+  if (!tenantId) return []
+  const { data, error } = await supabase
+    .from("fidelity_saldi")
+    .select(
+      "id, anagrafica_cliente_id, punti, codice_carta, created_at, updated_at, anagrafica_clienti ( nome, telefono, indirizzo, email )",
+    )
+    .eq("tenant_id", tenantId)
+    .order("updated_at", { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+/** Iscrive un cliente anagrafica al programma (saldo 0 + codice carta). */
+export async function enrollFidelityCliente(tenantId, anagraficaClienteId) {
+  if (!tenantId || !anagraficaClienteId) throw new Error("Dati mancanti.")
+  const { data: dup } = await supabase
+    .from("fidelity_saldi")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("anagrafica_cliente_id", anagraficaClienteId)
+    .maybeSingle()
+  if (dup?.id) throw new Error("Cliente già iscritto al programma.")
+  let codice = randomCodiceCartaFidelity()
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const { data, error } = await supabase
+      .from("fidelity_saldi")
+      .insert({
+        tenant_id: tenantId,
+        anagrafica_cliente_id: anagraficaClienteId,
+        punti: 0,
+        codice_carta: codice,
+      })
+      .select("id, codice_carta, punti, anagrafica_cliente_id")
+      .single()
+    if (!error) return data
+    if (error.code === "23505") {
+      codice = randomCodiceCartaFidelity()
+      continue
+    }
+    throw error
+  }
+  throw new Error("Impossibile generare un codice carta univoco.")
+}
+
+/**
+ * Registra un movimento e aggiorna il saldo (transazione logica lato client).
+ * @param {string} tipo es. manuale, accredito_ordine, rettifica
+ */
+export async function applyFidelityMovimento(tenantId, anagraficaClienteId, puntiDelta, tipo, note = null, ordineId = null) {
+  if (!tenantId || !anagraficaClienteId) throw new Error("Dati mancanti.")
+  const delta = Number(puntiDelta)
+  if (!Number.isFinite(delta) || delta === 0) throw new Error("Indica un numero di punti diverso da zero.")
+  const { data: saldoRow, error: e1 } = await supabase
+    .from("fidelity_saldi")
+    .select("id, punti")
+    .eq("tenant_id", tenantId)
+    .eq("anagrafica_cliente_id", anagraficaClienteId)
+    .single()
+  if (e1 || !saldoRow) throw new Error("Cliente non iscritto al programma fidelity.")
+  const nuovi = saldoRow.punti + delta
+  if (nuovi < 0) throw new Error("Saldo punti insufficiente.")
+  const { error: e2 } = await supabase
+    .from("fidelity_saldi")
+    .update({ punti: nuovi, updated_at: new Date().toISOString() })
+    .eq("id", saldoRow.id)
+  if (e2) throw e2
+  const { error: e3 } = await supabase.from("fidelity_movimenti").insert({
+    tenant_id: tenantId,
+    anagrafica_cliente_id: anagraficaClienteId,
+    punti: delta,
+    tipo: tipo || "manuale",
+    ordine_id: ordineId || null,
+    note: note || null,
+  })
+  if (e3) throw e3
+  return { punti: nuovi }
+}
+
+export async function getFidelityMovimenti(tenantId, anagraficaClienteId, limit = 80) {
+  if (!tenantId || !anagraficaClienteId) return []
+  const { data, error } = await supabase
+    .from("fidelity_movimenti")
+    .select("id, punti, tipo, ordine_id, note, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("anagrafica_cliente_id", anagraficaClienteId)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(200, Math.max(1, limit)))
+  if (error) throw error
+  return data || []
+}
+
 export async function getDashboardStats(tenantId) {
   const [
     ordersCount,

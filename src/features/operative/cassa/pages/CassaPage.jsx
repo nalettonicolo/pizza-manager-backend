@@ -51,10 +51,117 @@ import {
   comandaPayloadFromOrdineDetail,
 } from "@/features/operative/cassa/utils/printComanda"
 import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
+import {
+  cassaTipoOrdineBtn,
+  cassaTipoOrdineBtnActive,
+  cassaNuovoClienteBtn,
+  cassaToolbarCompactBtn,
+} from "@/features/operative/cassa/cassaToolbarButtonStyles"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Da pagare", "Altro"]
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
+
+/** La vista PostgREST `Ordine` può restituire snake_case o camelCase: normalizziamo ovunque in cassa. */
+function ordineTipoOrdine(o) {
+  return String(o?.tipo_ordine ?? o?.tipoOrdine ?? "").trim().toLowerCase()
+}
+
+function ordineIsDelivery(o) {
+  return ordineTipoOrdine(o) === "delivery"
+}
+
+function ordineNomeCliente(o) {
+  return String(o?.nome_cliente ?? o?.nomeCliente ?? o?.nome ?? "").trim()
+}
+
+function ordineIndirizzoConsegna(o) {
+  return String(o?.indirizzo_consegna ?? o?.indirizzoConsegna ?? o?.indirizzo ?? "").trim()
+}
+
+function ordineOrarioRitiro(o) {
+  return String(o?.orario_ritiro ?? o?.orarioRitiro ?? "").trim()
+}
+
+function ordineCreatedAt(o) {
+  return o?.createdAt ?? o?.created_at ?? null
+}
+
+/** Stesso criterio di `ordiniRaggruppatiPerOra`: se manca orario_ritiro in DB si usa HH:mm da createdAt. */
+function formatOrarioFallbackDaCreazione(o) {
+  const raw = ordineCreatedAt(o)
+  if (!raw) return ""
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return ""
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+}
+
+function orarioVisualizzatoLista(o) {
+  const t = ordineOrarioRitiro(o)
+  if (t) return t
+  return formatOrarioFallbackDaCreazione(o)
+}
+
+/**
+ * Molti ordini delivery hanno solo indirizzo = "Nome – Via …" senza nome_cliente.
+ * Separa solo se il primo segmento non sembra già un indirizzo (Via, Viale, …).
+ * Accetta trattini − – — - e spaziature irregolari.
+ */
+function splitNomeDaIndirizzoConsegna(raw) {
+  const t = String(raw || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (!t) return { nomePart: "", addrPart: "", full: "" }
+  const m = t.match(/^(.+?)\s*[\u2013\u2014\u2212\-]\s*(.+)$/)
+  if (!m) return { nomePart: "", addrPart: "", full: t }
+  const left = m[1].trim()
+  const right = m[2].trim()
+  if (!right) return { nomePart: "", addrPart: "", full: t }
+  if (/^(Via|Viale|Piazza|Corso|Largo|Contr\.|Contrada)\b/i.test(left)) {
+    return { nomePart: "", addrPart: "", full: t }
+  }
+  if (left.length > 52) return { nomePart: "", addrPart: "", full: t }
+  return { nomePart: left, addrPart: right, full: t }
+}
+
+/** Seconda riga sotto il titolo: solo tratto indirizzo (senza ripetere il nome se era nel campo unico). */
+function deliveryIndirizzoRiga(o) {
+  const ind = ordineIndirizzoConsegna(o)
+  if (!ind) return ""
+  const sp = splitNomeDaIndirizzoConsegna(ind)
+  if (sp.addrPart) return sp.addrPart
+  return sp.full || ind
+}
+
+/** Riga titolo lista ordini: negozio = nome + orario a destra; delivery = nome grande + orario a destra (fallback da creazione). */
+function OrdineCardTitleRows({ o, isDelivery }) {
+  const nomeDb = ordineNomeCliente(o)
+  const indRaw = ordineIndirizzoConsegna(o)
+  const split = isDelivery ? splitNomeDaIndirizzoConsegna(indRaw) : { nomePart: "" }
+  const nome = isDelivery ? (nomeDb || split.nomePart) : nomeDb
+  const orario = orarioVisualizzatoLista(o)
+  if (isDelivery) {
+    const titoloPrincipale = nome || orario || "—"
+    const orarioADestra = orario && nome
+    return (
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, width: "100%" }}>
+        <span style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.25, minWidth: 0 }}>{titoloPrincipale}</span>
+        {orarioADestra ? (
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#1565c0", flexShrink: 0 }}>{orario}</span>
+        ) : null}
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, width: "100%" }}>
+      <span style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.25, minWidth: 0 }}>{nome || "—"}</span>
+      {orario ? (
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#2e7d32", flexShrink: 0 }}>{orario}</span>
+      ) : null}
+    </div>
+  )
+}
 
 /** Ordini collegati all’anagrafica cliente (delivery: nome+indirizzo; negozio: stesso nome cliente). */
 function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
@@ -62,9 +169,9 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
   const nomeNorm = (cliente.nome || "").trim().toLowerCase()
   const indNorm = (cliente.indirizzo || "").trim().toLowerCase()
   return (ordini || []).filter((o) => {
-    const oNome = (o.nome_cliente ?? "").trim().toLowerCase()
-    const oInd = (o.indirizzo_consegna ?? "").trim().toLowerCase()
-    const tipo = (o.tipo_ordine || "").toLowerCase()
+    const oNome = ordineNomeCliente(o).toLowerCase()
+    const oInd = ordineIndirizzoConsegna(o).toLowerCase()
+    const tipo = ordineTipoOrdine(o)
     if (tipo === "delivery") {
       return oNome === nomeNorm && oInd === indNorm
     }
@@ -387,10 +494,10 @@ export default function CassaPage() {
         numero: o.numero,
         totale: o.totale,
         tipo_pagamento: o.tipo_pagamento,
-        tipo_ordine: o.tipo_ordine,
-        nome_cliente: o.nome_cliente,
-        indirizzo_consegna: o.indirizzo_consegna,
-        orario_ritiro: o.orario_ritiro,
+        tipo_ordine: ordineTipoOrdine(o) || null,
+        nome_cliente: ordineNomeCliente(o) || null,
+        indirizzo_consegna: ordineIndirizzoConsegna(o) || null,
+        orario_ritiro: ordineOrarioRitiro(o) || null,
         pizze: pizzePerOrdine[o.id] ?? 0,
         createdAt: o.createdAt ?? o.created_at,
       })),
@@ -616,7 +723,7 @@ export default function CassaPage() {
           <button
             type="button"
             onClick={() => setShowPaginaOrdini(true)}
-            style={{ padding: "8px 14px", background: "#5d4037", color: "#fff", border: "none", borderRadius: 8, fontSize: 13 }}
+            style={{ ...cassaToolbarCompactBtn, background: "#5d4037", color: "#fff", fontWeight: 600 }}
             title="Vedi e cerca tutti gli ordini"
           >
             Ordini
@@ -624,7 +731,7 @@ export default function CassaPage() {
           <button
             type="button"
             onClick={() => setShowPlanningBar((v) => !v)}
-            style={{ padding: "8px 14px", background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, fontSize: 13 }}
+            style={{ ...cassaToolbarCompactBtn, background: "#2e7d32", color: "#fff", fontWeight: 600 }}
             title="Situazione planning"
           >
             Planning
@@ -905,34 +1012,34 @@ export default function CassaPage() {
     [slotNegozioMin, orariOggi]
   )
   const ordiniPerSlotDelivery = useMemo(() => {
-    const delivery = (ordiniOggiFiltered || []).filter((o) => (o.tipo_ordine || "").toLowerCase() === "delivery")
+    const delivery = (ordiniOggiFiltered || []).filter((o) => ordineIsDelivery(o))
     return groupOrdersBySlotOrarioRitiro(delivery, slotDeliveryMin)
   }, [ordiniOggiFiltered, slotDeliveryMin])
   const ordiniPerSlotNegozio = useMemo(() => {
     const negozio = (ordiniOggiFiltered || []).filter((o) => {
-      const t = (o.tipo_ordine || "").toLowerCase()
+      const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
     return groupOrdersBySlotOrarioRitiro(negozio, slotNegozioMin)
   }, [ordiniOggiFiltered, slotNegozioMin])
   const ordiniBySlotDelivery = useMemo(() => {
-    const delivery = (ordiniOggiFiltered || []).filter((o) => (o.tipo_ordine || "").toLowerCase() === "delivery")
+    const delivery = (ordiniOggiFiltered || []).filter((o) => ordineIsDelivery(o))
     return groupOrdiniBySlotOrarioRitiro(delivery, slotDeliveryMin)
   }, [ordiniOggiFiltered, slotDeliveryMin])
   const ordiniBySlotNegozio = useMemo(() => {
     const negozio = (ordiniOggiFiltered || []).filter((o) => {
-      const t = (o.tipo_ordine || "").toLowerCase()
+      const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
     return groupOrdiniBySlotOrarioRitiro(negozio, slotNegozioMin)
   }, [ordiniOggiFiltered, slotNegozioMin])
   const pizzePerSlotDelivery = useMemo(() => {
-    const delivery = (ordiniOggiFiltered || []).filter((o) => (o.tipo_ordine || "").toLowerCase() === "delivery")
+    const delivery = (ordiniOggiFiltered || []).filter((o) => ordineIsDelivery(o))
     return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, slotDeliveryMin)
   }, [ordiniOggiFiltered, pizzePerOrdine, slotDeliveryMin])
   const pizzePerSlotNegozio = useMemo(() => {
     const negozio = (ordiniOggiFiltered || []).filter((o) => {
-      const t = (o.tipo_ordine || "").toLowerCase()
+      const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
     return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, slotNegozioMin)
@@ -941,7 +1048,7 @@ export default function CassaPage() {
   const pizzePerSlotRiepilogo = useMemo(() => {
     const slotMin = tipoOrdine === "delivery" ? slotDeliveryMin : slotNegozioMin
     const filtered = (ordiniOggiFiltered || []).filter((o) => {
-      const t = (o.tipo_ordine || "").toLowerCase()
+      const t = ordineTipoOrdine(o)
       if (tipoOrdine === "delivery") return t === "delivery"
       return t === "negozio" || t === ""
     })
@@ -953,9 +1060,9 @@ export default function CassaPage() {
     let list = ordiniOggiFiltered || []
     if (q) {
       list = list.filter((o) => {
-        const nome = (o.nome_cliente ?? o.nome ?? "").toLowerCase()
-        const indirizzo = (o.indirizzo_consegna ?? o.indirizzo ?? "").toLowerCase()
-        const num = String(o.numero ?? o.numero_ordine ?? "")
+        const nome = ordineNomeCliente(o).toLowerCase()
+        const indirizzo = ordineIndirizzoConsegna(o).toLowerCase()
+        const num = String(o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "")
         return nome.includes(q) || indirizzo.includes(q) || num.includes(q)
       })
     }
@@ -965,18 +1072,12 @@ export default function CassaPage() {
   const ordiniRaggruppatiPerOra = useMemo(() => {
     const byKey = {}
     for (const o of ordiniFiltratiPerPagina) {
-      const orarioSelezionato = (o.orario_ritiro || "").trim()
-      const key = orarioSelezionato || (() => {
-        const raw = o.createdAt ?? o.created_at
-        if (!raw) return "—"
-        const d = new Date(raw)
-        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-      })()
+      const key = orarioVisualizzatoLista(o) || "—"
       if (!byKey[key]) byKey[key] = []
       byKey[key].push(o)
     }
     for (const arr of Object.values(byKey)) {
-      arr.sort((a, b) => new Date(b.createdAt ?? b.created_at) - new Date(a.createdAt ?? a.created_at))
+      arr.sort((a, b) => new Date(ordineCreatedAt(b) || 0) - new Date(ordineCreatedAt(a) || 0))
     }
     return Object.keys(byKey)
       .sort()
@@ -1131,10 +1232,9 @@ export default function CassaPage() {
                         const tp = (o.tipo_pagamento || "").toLowerCase()
                         const iconPagamento = tp.includes("contanti") ? "💵" : tp.includes("carta") ? "💳" : "⏳"
                         const labelPagamento = tp.includes("da pagare") || tp === "da pagare" ? "Da pag." : (o.tipo_pagamento || "—")
-                        const isDelivery = (o.tipo_ordine || "").toLowerCase() === "delivery"
-                        const nome = o.nome_cliente ?? o.nome ?? ""
-                        const indirizzo = o.indirizzo_consegna ?? o.indirizzo ?? ""
-                        const idOrdine = `#${o.numero ?? o.numero_ordine ?? "—"}`
+                        const isDelivery = ordineIsDelivery(o)
+                        const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
+                        const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
                         return (
                           <li key={o.id}>
                             <button
@@ -1145,11 +1245,11 @@ export default function CassaPage() {
                             >
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontWeight: 700, fontSize: 15 }}>{nome || "—"}</div>
-                                  <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{idOrdine}</div>
-                                  {isDelivery && indirizzo && (
-                                    <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzo}</div>
-                                  )}
+                                  <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
+                                  <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{idOrdine}</div>
+                                  {indirizzoSecondaRiga ? (
+                                    <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
+                                  ) : null}
                                 </div>
                                 <span style={{ fontSize: 14 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
                                 <span style={{ fontSize: 12, marginLeft: 4 }} title={labelPagamento}>{iconPagamento}</span>
@@ -1173,10 +1273,9 @@ export default function CassaPage() {
             const tp = (o.tipo_pagamento || "").toLowerCase()
             const iconPagamento = tp.includes("contanti") ? "💵" : tp.includes("carta") ? "💳" : "⏳"
             const labelPagamento = tp.includes("da pagare") || tp === "da pagare" ? "Da pag." : (o.tipo_pagamento || "—")
-            const isDelivery = (o.tipo_ordine || "").toLowerCase() === "delivery"
-            const nome = o.nome_cliente ?? o.nome ?? ""
-            const indirizzo = o.indirizzo_consegna ?? o.indirizzo ?? ""
-            const idOrdine = `#${o.numero ?? o.numero_ordine ?? "—"}`
+            const isDelivery = ordineIsDelivery(o)
+            const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
+            const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
             return (
               <li key={o.id}>
                 <button
@@ -1187,11 +1286,11 @@ export default function CassaPage() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>{nome || "—"}</div>
-                      <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{idOrdine}</div>
-                      {isDelivery && indirizzo && (
-                        <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzo}</div>
-                      )}
+                      <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
+                      <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{idOrdine}</div>
+                      {indirizzoSecondaRiga ? (
+                        <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
+                      ) : null}
                     </div>
                     <span style={{ fontSize: 14 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
                     <span style={{ fontSize: 12, marginLeft: 4 }} title={labelPagamento}>{iconPagamento}</span>
@@ -1243,7 +1342,7 @@ export default function CassaPage() {
                 </div>
                 {planningMergedRows.map((row, i) => {
                   const deliveryIndirizzi = (row.deliveryOrdiniList || [])
-                    .map((o) => (o.indirizzo_consegna || o.indirizzo || "").trim())
+                    .map((o) => ordineIndirizzoConsegna(o))
                     .filter(Boolean)
                   const indirizziPreview = deliveryIndirizzi.length ? deliveryIndirizzi.slice(0, 3).join(" · ") : ""
                   const hasMoreIndirizzi = deliveryIndirizzi.length > 3
@@ -1327,9 +1426,10 @@ export default function CassaPage() {
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                   {planningSlotModal.ordini.map((o) => {
                     const isDelivery = planningSlotModal.type === "delivery"
-                    const nome = o.nome_cliente ?? o.nome ?? "—"
-                    const indirizzo = (o.indirizzo_consegna ?? o.indirizzo ?? "").trim()
-                    const numero = o.numero ?? o.numero_ordine ?? "—"
+                    const nome = ordineNomeCliente(o) || "—"
+                    const indirizzo = ordineIndirizzoConsegna(o)
+                    const numero = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
+                    const orarioCorrente = ordineOrarioRitiro(o)
                     const loading = planningSpostaLoading === o.id
                     return (
                       <li key={o.id} style={{ borderBottom: "1px solid #eee", padding: "12px 0" }}>
@@ -1342,10 +1442,10 @@ export default function CassaPage() {
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <label style={{ fontSize: 12, fontWeight: 500 }}>Sposta a:</label>
                             <select
-                              value={o.orario_ritiro ?? ""}
+                              value={orarioCorrente}
                               onChange={(e) => {
                                 const val = e.target.value
-                                if (val && val !== (o.orario_ritiro || "")) handleSpostaOrdinePlanning(o.id, val)
+                                if (val && val !== orarioCorrente) handleSpostaOrdinePlanning(o.id, val)
                               }}
                               disabled={loading}
                               style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #ccc", fontSize: 13 }}
@@ -1475,22 +1575,22 @@ export default function CassaPage() {
         <div style={styles.modalOverlay} onClick={() => setOrdineDetail(null)} role="dialog" aria-modal="true">
           <div style={styles.detailModal} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0 }}>Ordine #{ordineDetail.numero ?? "—"}</h3>
+              <h3 style={{ margin: 0 }}>Ordine #{ordineDetail.numero ?? ordineDetail.numero_ordine ?? ordineDetail.numeroOrdine ?? "—"}</h3>
               <button type="button" style={styles.planningBarClose} onClick={() => setOrdineDetail(null)}>✕</button>
             </div>
             <p style={{ margin: "0 0 8px", color: "#666" }}>
-              {ordineDetail.tipo_ordine === "delivery" ? "Consegna" : "Ritiro in negozio"}
+              {ordineIsDelivery(ordineDetail) ? "Consegna" : "Ritiro in negozio"}
             </p>
-            {ordineDetail.tipo_ordine === "delivery" && ordineDetail.indirizzo_consegna && (
-              <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Indirizzo: {ordineDetail.indirizzo_consegna}</p>
+            {ordineIsDelivery(ordineDetail) && ordineIndirizzoConsegna(ordineDetail) && (
+              <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Indirizzo: {ordineIndirizzoConsegna(ordineDetail)}</p>
             )}
-            {ordineDetail.tipo_ordine === "negozio" && (
+            {!ordineIsDelivery(ordineDetail) && (
               <>
-                {ordineDetail.nome_cliente && (
-                  <p style={{ margin: "0 0 4px", fontWeight: 500 }}>Cliente: <strong>{ordineDetail.nome_cliente}</strong></p>
+                {ordineNomeCliente(ordineDetail) && (
+                  <p style={{ margin: "0 0 4px", fontWeight: 500 }}>Cliente: <strong>{ordineNomeCliente(ordineDetail)}</strong></p>
                 )}
-                {ordineDetail.orario_ritiro && (
-                  <p style={{ margin: "0 0 12px", color: "#555" }}>Orario ritiro: {ordineDetail.orario_ritiro}</p>
+                {ordineOrarioRitiro(ordineDetail) && (
+                  <p style={{ margin: "0 0 12px", color: "#555" }}>Orario ritiro: {ordineOrarioRitiro(ordineDetail)}</p>
                 )}
               </>
             )}
@@ -1543,11 +1643,11 @@ export default function CassaPage() {
                 onClick={() => {
                   setModificaOrdineModal(ordineDetail)
                   setModificaForm({
-                    nome_cliente: ordineDetail.nome_cliente ?? "",
-                    orario_ritiro: ordineDetail.orario_ritiro ?? "",
+                    nome_cliente: ordineNomeCliente(ordineDetail),
+                    orario_ritiro: ordineOrarioRitiro(ordineDetail),
                     note: ordineDetail.note ?? "",
                     tipo_pagamento: ordineDetail.tipo_pagamento ?? "Da pagare",
-                    indirizzo_consegna: ordineDetail.indirizzo_consegna ?? "",
+                    indirizzo_consegna: ordineIndirizzoConsegna(ordineDetail),
                   })
                 }}
               >
@@ -1586,16 +1686,16 @@ export default function CassaPage() {
             {/* Dettaglio ordine (sempre visibile) */}
             <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #eee" }}>
               <p style={{ margin: "0 0 8px", color: "#666", fontSize: 14 }}>
-                {modificaOrdineModal.tipo_ordine === "delivery" ? "Consegna" : "Ritiro in negozio"}
+                {ordineIsDelivery(modificaOrdineModal) ? "Consegna" : "Ritiro in negozio"}
               </p>
-              {modificaOrdineModal.tipo_ordine === "delivery" && modificaOrdineModal.indirizzo_consegna && (
-                <p style={{ margin: "0 0 8px", fontWeight: 500, fontSize: 14 }}>Indirizzo: {modificaOrdineModal.indirizzo_consegna}</p>
+              {ordineIsDelivery(modificaOrdineModal) && ordineIndirizzoConsegna(modificaOrdineModal) && (
+                <p style={{ margin: "0 0 8px", fontWeight: 500, fontSize: 14 }}>Indirizzo: {ordineIndirizzoConsegna(modificaOrdineModal)}</p>
               )}
-              {modificaOrdineModal.nome_cliente && (
-                <p style={{ margin: "0 0 4px", fontWeight: 500, fontSize: 14 }}>Cliente: {modificaOrdineModal.nome_cliente}</p>
+              {ordineNomeCliente(modificaOrdineModal) && (
+                <p style={{ margin: "0 0 4px", fontWeight: 500, fontSize: 14 }}>Cliente: {ordineNomeCliente(modificaOrdineModal)}</p>
               )}
-              {modificaOrdineModal.orario_ritiro && (
-                <p style={{ margin: "0 0 12px", color: "#555", fontSize: 14 }}>Orario ritiro: {modificaOrdineModal.orario_ritiro}</p>
+              {ordineOrarioRitiro(modificaOrdineModal) && (
+                <p style={{ margin: "0 0 12px", color: "#555", fontSize: 14 }}>Orario ritiro: {ordineOrarioRitiro(modificaOrdineModal)}</p>
               )}
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 8px", fontSize: 14 }}>
                 {(modificaOrdineModal.righe || []).map((r, i) => {
@@ -1635,7 +1735,7 @@ export default function CassaPage() {
                   style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
                 />
               </label>
-              {modificaOrdineModal.tipo_ordine === "delivery" && (
+              {ordineIsDelivery(modificaOrdineModal) && (
                 <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <span style={{ fontWeight: 500 }}>Indirizzo consegna</span>
                   <input
@@ -1693,7 +1793,9 @@ export default function CassaPage() {
           <div style={{ ...styles.detailModal, maxWidth: lastOrderModalDetail.mode === "list" ? 520 : 560 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ margin: 0 }}>
-                {lastOrderModalDetail.mode === "detail" ? `Ordine #${lastOrderModalDetail.numero ?? "—"}` : "Storico ordini"}
+                {lastOrderModalDetail.mode === "detail"
+                  ? `Ordine #${lastOrderModalDetail.numero ?? lastOrderModalDetail.numero_ordine ?? lastOrderModalDetail.numeroOrdine ?? "—"}`
+                  : "Storico ordini"}
               </h3>
               <button type="button" style={styles.planningBarClose} onClick={() => setLastOrderModalDetail(null)}>✕</button>
             </div>
@@ -1708,7 +1810,7 @@ export default function CassaPage() {
                 </p>
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "min(60vh, 420px)", overflowY: "auto" }}>
                   {(lastOrderModalDetail.ordini || []).map((o) => {
-                    const num = o.numero ?? o.numero_ordine ?? "—"
+                    const num = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
                     const when = o.createdAt ?? o.created_at
                     const whenStr = when ? new Date(when).toLocaleString("it-IT") : "—"
                     return (
@@ -1748,16 +1850,16 @@ export default function CassaPage() {
                   ← Torna all&apos;elenco
                 </button>
                 <p style={{ margin: "0 0 8px", color: "#666" }}>
-                  {lastOrderModalDetail.tipo_ordine === "delivery" ? "Consegna" : "Ritiro in negozio"}
+                  {ordineIsDelivery(lastOrderModalDetail) ? "Consegna" : "Ritiro in negozio"}
                 </p>
-                {lastOrderModalDetail.tipo_ordine === "delivery" && lastOrderModalDetail.indirizzo_consegna && (
-                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Indirizzo: {lastOrderModalDetail.indirizzo_consegna}</p>
+                {ordineIsDelivery(lastOrderModalDetail) && ordineIndirizzoConsegna(lastOrderModalDetail) && (
+                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Indirizzo: {ordineIndirizzoConsegna(lastOrderModalDetail)}</p>
                 )}
-                {lastOrderModalDetail.nome_cliente && (
-                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Cliente: {lastOrderModalDetail.nome_cliente}</p>
+                {ordineNomeCliente(lastOrderModalDetail) && (
+                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Cliente: {ordineNomeCliente(lastOrderModalDetail)}</p>
                 )}
-                {lastOrderModalDetail.orario_ritiro && (
-                  <p style={{ margin: "0 0 12px", color: "#555" }}>Orario: {lastOrderModalDetail.orario_ritiro}</p>
+                {ordineOrarioRitiro(lastOrderModalDetail) && (
+                  <p style={{ margin: "0 0 12px", color: "#555" }}>Orario: {ordineOrarioRitiro(lastOrderModalDetail)}</p>
                 )}
                 <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px", borderTop: "1px solid #eee", paddingTop: 12 }}>
                   {(lastOrderModalDetail.righe || []).map((r, i) => {
@@ -1859,22 +1961,8 @@ const styles = {
     gap: 8,
     marginBottom: 12,
   },
-  tipoOrdineBtn: {
-    padding: "10px 20px",
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "#ddd",
-    borderRadius: 8,
-    background: "#fff",
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  tipoOrdineBtnActive: {
-    background: "#2e7d32",
-    color: "#fff",
-    borderColor: "#2e7d32",
-  },
+  tipoOrdineBtn: cassaTipoOrdineBtn,
+  tipoOrdineBtnActive: cassaTipoOrdineBtnActive,
   deliverySearchRow: {
     display: "flex",
     gap: 8,
@@ -1904,16 +1992,7 @@ const styles = {
     borderBottom: "1px solid #eee",
     fontSize: 14,
   },
-  nuovoClienteBtn: {
-    padding: "10px 16px",
-    background: "#1976d2",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 14,
-    whiteSpace: "nowrap",
-  },
+  nuovoClienteBtn: cassaNuovoClienteBtn,
   ordiniSection: {
     width: 220,
     flexShrink: 0,

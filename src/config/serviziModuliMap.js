@@ -100,6 +100,11 @@ export const SCHEDE_SERVIZI_IMPLEMENTAZIONE = {
     moduli: [{ label: "Contabilità", paths: ["/admin/contabilita"], note: "Hub e sotto-pagine" }],
     riferimentiCodice: ["src/features/admin/pages/contabilita/*", "useTenantLocalJson"],
   },
+  fidelity_card: {
+    sintesi: "Carta fedeltà: punti per clienti anagrafica cassa, codice carta e movimenti.",
+    moduli: [{ label: "Fidelity Card", paths: ["/admin/fidelity"] }],
+    riferimentiCodice: ["src/features/admin/pages/FidelityCardPage.jsx", "adminService (getFidelitySaldi, …)"],
+  },
   supporto_prioritario: {
     sintesi: "Offerta commerciale: nessun modulo dedicato in app.",
     moduli: [],
