@@ -29,6 +29,14 @@ export default function PublicLayout() {
 
   const logoLabel = isLanding ? "PizzaManager" : (tenantName || "PizzaManager")
 
+  const prefetchLogin = () => {
+    void import("@/features/public/pages/Login")
+  }
+
+  const prefetchRegistrazione = () => {
+    void import("@/features/public/pages/ClienteRegistrazionePage")
+  }
+
   return (
     <div className="public-layout-root">
       <header className={`public-layout-header${isSaaS ? " public-layout-header--saas" : ""}`}>
@@ -55,11 +63,21 @@ export default function PublicLayout() {
           </nav>
         ) : null}
         <div className="public-layout-header-trailing">
-          <Link to="/login" className="public-layout-btn public-layout-btn--outline">
+          <Link
+            to="/login"
+            className="public-layout-btn public-layout-btn--outline"
+            onMouseEnter={prefetchLogin}
+            onFocus={prefetchLogin}
+          >
             Accedi
           </Link>
-          <Link to={isSaaS ? "/contatti#prova-gratuita" : "/login"} className="public-layout-btn public-layout-btn--primary">
-            Registrati ora
+          <Link
+            to={isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
+            className="public-layout-btn public-layout-btn--primary"
+            onMouseEnter={isSaaS ? undefined : prefetchRegistrazione}
+            onFocus={isSaaS ? undefined : prefetchRegistrazione}
+          >
+            {isSaaS ? "Registrati ora" : "Crea account"}
           </Link>
         </div>
       </header>

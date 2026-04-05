@@ -37,11 +37,11 @@ export default function TurnoControl({ userId, tenantId, puntoVenditaId }) {
 
   return (
     <div>
-      <button onClick={apriTurno} disabled={loading}>
+      <button type="button" onClick={apriTurno} disabled={loading}>
         Apri Turno
       </button>
 
-      <button onClick={chiudiTurno} disabled={loading}>
+      <button type="button" onClick={chiudiTurno} disabled={loading}>
         Chiudi Turno
       </button>
     </div>

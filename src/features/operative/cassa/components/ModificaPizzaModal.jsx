@@ -11,6 +11,7 @@ import {
 import { getFormatiSpecialiParametri, getFormatiSpecialiList, calcPrezzoFamiglia, FORMATO_SPECIALE_ID } from "@/features/operative/cassa/utils/formatiSpeciali"
 import FamigliaModal from "@/features/operative/cassa/components/FamigliaModal"
 import MezzoMetroMetroModal from "@/features/operative/cassa/components/MezzoMetroMetroModal"
+import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 
 const VARIANTI = [
   { value: "normale", label: "Normale" },
@@ -38,9 +39,14 @@ function formatEuro(n) {
 const s = {
   body: {
     padding: "16px 20px 20px",
-    maxHeight: "82vh",
-    overflowY: "auto",
     background: "#f3f9f4",
+  },
+  chipsRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+    marginBottom: 12,
   },
   topRow: {
     display: "flex",
@@ -440,31 +446,6 @@ export default function ModificaPizzaModal({
     if (cotturaList.length) setSelectedCotturaId(cotturaList[0].id)
   }
 
-  const buildSummary = () => {
-    const parts = []
-    productIngredienti.forEach((ing) => {
-      const m = modifiche[ing.id]
-      if (!m) return
-      if (m.variante !== "normale") parts.push(`${m.variante}: ${ing.nome}`)
-      if (m.variante !== "senza" && m.cottura) {
-        parts.push(`${m.cottura === "in_cottura" ? "In cottura" : "A fine cottura"}: ${ing.nome}`)
-      }
-    })
-    extraIngredienti.forEach((e) => {
-      if (e.variante && e.variante !== "normale") {
-        parts.push(`+ ${e.nome} (${e.variante})`)
-      } else {
-        parts.push(`+ ${e.nome}`)
-      }
-      if (e.variante !== "senza" && e.cottura) {
-        parts.push(
-          `${e.cottura === "in_cottura" ? "In cottura" : "A fine cottura"}: ${e.nome}`
-        )
-      }
-    })
-    return parts.join(" · ") || ""
-  }
-
   const handleConfirm = () => {
     if (selectedFormatoId === FORMATO_SPECIALE_ID.FAMIGLIA) {
       setShowFamigliaModal(true)
@@ -484,7 +465,11 @@ export default function ModificaPizzaModal({
     const payload = {
       ingredientiModifiche: { ...modifiche },
       extraIngredienti: [...extraIngredienti],
-      ingredientiCotturaSummary: buildSummary(),
+      ingredientiCotturaSummary: buildComandaIngredientiSummary(
+        productIngredienti,
+        modifiche,
+        extraIngredienti,
+      ),
       impastoId: selectedImpastoId || undefined,
       impastoNome: selectedImpasto?.nome ?? undefined,
       formatoId: selectedFormatoId || undefined,
@@ -501,7 +486,7 @@ export default function ModificaPizzaModal({
   if (!product) return null
 
   return (
-    <Modal open={open} onClose={onClose} title="" wide>
+    <Modal open={open} onClose={onClose} title="" wide tall>
       <div style={s.body}>
         {loading ? (
           <div style={s.loadingWrap}>Caricamento...</div>
@@ -517,6 +502,8 @@ export default function ModificaPizzaModal({
               <span style={s.productNameBtn}>
                 Pizza: {product.nome}
               </span>
+            </div>
+            <div style={s.chipsRow}>
               {productIngredienti.map((ing) => {
                 const m = modifiche[ing.id] || { variante: "normale", cottura: "in_cottura" }
                 const label = m.variante !== "normale" ? `${ing.nome} (${m.variante})` : ing.nome
@@ -534,7 +521,60 @@ export default function ModificaPizzaModal({
               })}
             </div>
 
-            {/* Sezioni semplici: Impasto, Dimensione, Cottura (sopra la lista ingredienti) */}
+            {productIngredienti.map((ing) => {
+              if (expandedIngId !== ing.id) return null
+              const m = modifiche[ing.id] || { variante: "normale", cottura: "in_cottura" }
+              return (
+                <div key={ing.id} style={s.expandCard}>
+                  <div style={s.expandTitle}>Modifica ingrediente: {ing.nome}</div>
+                  <div style={s.chipRow}>
+                    {VARIANTI.map((v) => {
+                      const isSenza = v.value === "senza"
+                      const isActive = m.variante === v.value
+                      let priceLabel = ""
+                      if (v.value === "senza" && (ing.costo_senza != null || ing.costo_senza === 0)) priceLabel = ` (${formatEuro(ing.costo_senza)})`
+                      else if (v.value === "poco" && (ing.costo_poco != null || ing.costo_poco === 0)) priceLabel = ` (${formatEuro(ing.costo_poco)})`
+                      else if (v.value === "abbondante" && (ing.costo_abbondante != null || ing.costo_abbondante === 0)) priceLabel = ` (${formatEuro(ing.costo_abbondante)})`
+                      return (
+                        <button
+                          key={v.value}
+                          type="button"
+                          style={{
+                            ...s.chip,
+                            ...(isActive && !isSenza ? s.chipActive : {}),
+                            ...(isSenza ? s.chipSenza : {}),
+                            ...(isSenza && isActive ? s.chipSenzaActive : {}),
+                          }}
+                          onClick={() => setModifica(ing.id, "variante", v.value)}
+                        >
+                          {v.label}
+                          {priceLabel}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {m.variante !== "senza" && (
+                    <div style={{ ...s.chipRow, marginTop: 6 }}>
+                      {COTTURE.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          style={{
+                            ...s.chip,
+                            ...(m.cottura === c.value ? s.chipActive : {}),
+                          }}
+                          onClick={() => setModifica(ing.id, "cottura", c.value)}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Sezioni semplici: Impasto, Dimensione, Cottura */}
             {impasti.length > 0 && (
               <div style={s.sectionSimple}>
                 <div style={s.sectionSimpleLabel}>Impasto</div>
@@ -625,60 +665,6 @@ export default function ModificaPizzaModal({
                 </div>
               </div>
             )}
-
-            {/* Card espansa per variante/cottura ingrediente */}
-            {productIngredienti.map((ing) => {
-              if (expandedIngId !== ing.id) return null
-              const m = modifiche[ing.id] || { variante: "normale", cottura: "in_cottura" }
-              return (
-                <div key={ing.id} style={s.expandCard}>
-                  <div style={s.expandTitle}>Modifica ingrediente: {ing.nome}</div>
-                  <div style={s.chipRow}>
-                    {VARIANTI.map((v) => {
-                      const isSenza = v.value === "senza"
-                      const isActive = m.variante === v.value
-                      let priceLabel = ""
-                      if (v.value === "senza" && (ing.costo_senza != null || ing.costo_senza === 0)) priceLabel = ` (${formatEuro(ing.costo_senza)})`
-                      else if (v.value === "poco" && (ing.costo_poco != null || ing.costo_poco === 0)) priceLabel = ` (${formatEuro(ing.costo_poco)})`
-                      else if (v.value === "abbondante" && (ing.costo_abbondante != null || ing.costo_abbondante === 0)) priceLabel = ` (${formatEuro(ing.costo_abbondante)})`
-                      return (
-                        <button
-                          key={v.value}
-                          type="button"
-                          style={{
-                            ...s.chip,
-                            ...(isActive && !isSenza ? s.chipActive : {}),
-                            ...(isSenza ? s.chipSenza : {}),
-                            ...(isSenza && isActive ? s.chipSenzaActive : {}),
-                          }}
-                          onClick={() => setModifica(ing.id, "variante", v.value)}
-                        >
-                          {v.label}
-                          {priceLabel}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {m.variante !== "senza" && (
-                    <div style={{ ...s.chipRow, marginTop: 6 }}>
-                      {COTTURE.map((c) => (
-                        <button
-                          key={c.value}
-                          type="button"
-                          style={{
-                            ...s.chip,
-                            ...(m.cottura === c.value ? s.chipActive : {}),
-                          }}
-                          onClick={() => setModifica(ing.id, "cottura", c.value)}
-                        >
-                          {c.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
 
             {/* Aggiungi un ingrediente + ricerca */}
             <div style={s.addIngRow}>

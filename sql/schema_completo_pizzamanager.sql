@@ -2,7 +2,7 @@
 -- Reset: FASE 1; DB esistente: commenta FASE 1.
 --
 -- Integrazioni incrementali idempotenti (colonne accesso, viste menu, GRANT anon):
---   → sql/PM_UNIFIED_INCREMENTAL.sql  (PM-SQL-REF: UNIFIED-INCR-v1-2026-03-22)
+--   → sql/PM_UNIFIED_ALL.sql (incrementale unificato; ex PM_UNIFIED_INCREMENTAL)
 
 -- #############################################################################
 -- FASE 1: RESET TOTALE (opzionale – solo in sviluppo)

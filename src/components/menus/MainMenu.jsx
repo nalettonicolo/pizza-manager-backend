@@ -9,7 +9,7 @@ export default function MainMenu() {
       {role === "cassa" && <Link to="/operative/cassa">Cassa</Link>}
       {role === "bancone" && <Link to="/operative/bancone">Bancone</Link>}
       {role === "cucina" && <Link to="/operative/cucina">Cucina</Link>}
-      {role === "pizzaiolo" && <Link to="/operative/pizzaiolo">Pizzaiolo</Link>}
+      {role === "pizzaiolo" && <Link to="/operative/pizzaioli">Pizzaiolo</Link>}
       {role === "delivery" && <Link to="/operative/delivery">Delivery</Link>}
     </nav>
   )

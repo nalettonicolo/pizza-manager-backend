@@ -74,7 +74,7 @@ export default function MenuManager() {
           value={newPrice}
           onChange={(e) => setNewPrice(e.target.value)}
         />
-        <button onClick={handleCreate}>Aggiungi</button>
+        <button type="button" onClick={handleCreate}>Aggiungi</button>
       </div>
 
       {products.map((p) => (
@@ -85,6 +85,7 @@ export default function MenuManager() {
           </div>
 
           <button
+            type="button"
             onClick={() => handleToggle(p.id, p.attivo)}
             style={{
               background: p.attivo ? "#4caf50" : "#f44336",

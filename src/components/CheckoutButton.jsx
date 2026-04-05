@@ -85,6 +85,7 @@ export default function CheckoutButton({ ordineId }) {
   return (
     <div style={{ marginTop: "20px" }}>
       <button
+        type="button"
         onClick={handleCheckout}
         disabled={loading}
         style={{

@@ -13,12 +13,28 @@ function loadGoogleMapsScript(apiKey) {
       resolve();
       return;
     }
+    const cbName = `__pmGoogleMapsCb_${Math.random().toString(36).slice(2, 11)}`;
+    window[cbName] = () => {
+      try {
+        delete window[cbName];
+      } catch (_) {
+        window[cbName] = undefined;
+      }
+      resolve();
+    };
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    /* loading=async + callback: pattern raccomandato da Google (evita warning "without loading=async"). */
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async&callback=${encodeURIComponent(cbName)}`;
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Caricamento Google Maps fallito"));
+    script.onerror = () => {
+      try {
+        delete window[cbName];
+      } catch (_) {
+        /* ignore */
+      }
+      reject(new Error("Caricamento Google Maps fallito"));
+    };
     document.head.appendChild(script);
   });
 }

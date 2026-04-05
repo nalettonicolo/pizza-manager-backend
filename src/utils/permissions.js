@@ -1,3 +1,5 @@
+import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome"
+
 // ===============================
 // ROLE → HOME ROUTE
 // ===============================
@@ -8,7 +10,7 @@ export function getHomeByRole(role) {
       return "/superadmin/dashboard"
 
     case "admin":
-      return "/admin/dashboard"
+      return ADMIN_TENANT_HOME
 
     case "operatore":
       return "/operative/dashboard"

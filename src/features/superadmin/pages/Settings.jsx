@@ -16,23 +16,6 @@ export default function Settings() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Link
-          to="/superadmin/dashboard"
-          style={{
-            display: "inline-block",
-            padding: "10px 20px",
-            background: "#d35400",
-            color: "#fff",
-            borderRadius: 6,
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
-          ← Torna al Riepilogo
-        </Link>
-      </div>
       <h1 className="dashboard-page-title">Impostazioni</h1>
       <p style={{ margin: "0 0 24px 0", fontSize: 15, color: "#555", maxWidth: 640 }}>
         Configura i parametri globali della piattaforma PizzaManager. Le modifiche si applicano a tutti i clienti (pizzerie) che usano il servizio.
@@ -73,7 +56,12 @@ export default function Settings() {
       <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
         <h2 style={{ marginBottom: 4 }}>Piani di abbonamento</h2>
         <p style={{ margin: "0 0 12px 0", fontSize: 14, color: "#666" }}>
-          Da <strong>Piani</strong> apri una finestra per ogni piano: nome, prezzo, validità in giorni, abilitazione, descrizione e <strong>servizi inclusi</strong> (lista con flag). Non esiste un piano free permanente: i nuovi clienti partono con la <strong>prova di 14 giorni</strong>, poi passano a un abbonamento. Ogni cliente è associato a un codice piano (es. Prova, Pro, Enterprise).
+          Da <strong>Piani</strong> apri una finestra per ogni piano: nome, canone mensile (somma servizi),{" "}
+          <strong>validità listino in mesi di calendario</strong> (di norma 1 mese),{" "}
+          <strong>sconto opzionale sull&apos;abbonamento annuale</strong>{" "}
+          (anticipo 12 mensilità), abilitazione, descrizione e <strong>servizi inclusi</strong>. Non esiste un piano free
+          permanente: i nuovi clienti partono con la <strong>prova di 14 giorni</strong>. Il ciclo mensile/annuale sul
+          cliente si imposta in <strong>Clienti → Abbonamento</strong>.
         </p>
         <Link to="/superadmin/piani" className="btn-primary-dashboard" style={{ display: "inline-block", textDecoration: "none" }}>
           Vai a Piani di abbonamento →
@@ -81,14 +69,11 @@ export default function Settings() {
       </div>
 
       <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
-        <h2 style={{ marginBottom: 4 }}>Stato piattaforma</h2>
-        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: "#555", lineHeight: 1.8 }}>
-          <li><strong>Riepilogo</strong> — Statistiche globali: numero clienti, abbonamenti attivi, ordini totali.</li>
-          <li><strong>Clienti</strong> — Elenco pizzerie registrate; puoi creare, modificare e disattivare clienti.</li>
-          <li><strong>Piani di abbonamento</strong> — Modale con nome, prezzo, validità, servizi a flag; prova 14 giorni poi abbonamento.</li>
-          <li><strong>Abbonamenti</strong> — Stato delle licenze per ogni cliente (attiva, scaduta, sospesa).</li>
-          <li><strong>Impostazioni</strong> — Configurazione globale (supporto, nome app, parametri piattaforma).</li>
-        </ul>
+        <h2 style={{ marginBottom: 4 }}>Navigazione</h2>
+        <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.65 }}>
+          Le altre aree della console (clienti, piani, abbonamenti, documentazione, ecc.) sono raggiungibili dalla{" "}
+          <strong>barra in alto</strong>, senza ripetere qui l&apos;elenco delle voci.
+        </p>
       </div>
     </>
   );

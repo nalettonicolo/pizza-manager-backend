@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -9,31 +10,52 @@ import { formatPrice } from "@/utils/format";
 
 export default function Report() {
   const { tenantId } = useTenant();
+  const { loading: authLoading } = useAuth();
 
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (authLoading) return;
+
+    if (!tenantId) {
+      setLoading(false);
+      setReport(null);
+      setError("Nessun tenant associato all’account: impossibile caricare il report.");
+      return;
+    }
+
+    let cancelled = false;
 
     async function loadReport() {
       try {
         setLoading(true);
+        setError(null);
         const data = await getReportData(tenantId);
-        setReport(data || {});
+        if (!cancelled) {
+          setReport(data || {});
+        }
       } catch (err) {
         console.error(err);
-        setError("Errore nel caricamento del report.");
+        if (!cancelled) {
+          setError("Errore nel caricamento del report.");
+          setReport(null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
-    loadReport();
-  }, [tenantId]);
+    void loadReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, authLoading]);
 
-  if (loading) return <Loader />;
+  if (authLoading || loading) return <Loader />;
   if (error) return <ErrorState message={error} />;
   if (!report) return null;
 
@@ -118,12 +140,10 @@ const styles = {
   cardTitle: {
     margin: "0 0 12px",
     fontSize: "0.95rem",
-    fontWeight: 600,
-    color: "#334155",
   },
   cardValue: {
     margin: 0,
-    fontSize: "1.5rem",
+    fontSize: "1.75rem",
     fontWeight: 700,
     color: "#0f172a",
   },
@@ -131,46 +151,32 @@ const styles = {
     margin: 0,
     fontSize: 14,
     color: "#64748b",
+    lineHeight: 1.5,
   },
   rankList: {
     margin: 0,
     padding: 0,
     listStyle: "none",
-    display: "flex",
-    flexDirection: "column",
-    gap: 0,
   },
   rankItem: {
     display: "flex",
     alignItems: "center",
     gap: 12,
-    padding: "12px 0",
+    padding: "10px 0",
     borderBottom: "1px solid #f1f5f9",
-    fontSize: 15,
+    fontSize: 14,
   },
   rankPos: {
-    flexShrink: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    background: "#fef2f2",
-    color: "#c0392b",
     fontWeight: 700,
-    fontSize: 14,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    color: "#94a3b8",
+    minWidth: 24,
   },
   rankName: {
     flex: 1,
-    minWidth: 0,
-    fontWeight: 600,
-    color: "#0f172a",
+    color: "#334155",
   },
   rankQty: {
-    flexShrink: 0,
-    fontSize: 14,
     color: "#64748b",
-    fontWeight: 500,
+    fontSize: 13,
   },
 };

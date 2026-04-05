@@ -1,18 +1,21 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
+import { usePlan } from "@/app/hooks/usePlan"
 
 const PvContext = createContext()
 
 export function PvProvider({ children }) {
   const { user, ruolo, loading: authLoading } = useAuth()
-  const { tenantId } = useTenant()
+  const { tenantId, tenantData } = useTenant()
+  const { canUseFeature } = usePlan()
 
   const [activePv, setActivePv] = useState(null)
   const [pvList, setPvList] = useState([])
   const [loading, setLoading] = useState(true)
   const [rpcContextAvailable, setRpcContextAvailable] = useState(true)
+  const pvLoadInFlightRef = useRef(false)
 
   const isAuthenticated = !!user
 
@@ -26,26 +29,62 @@ export function PvProvider({ children }) {
       return
     }
 
-    const { data, error } = await supabase
-      .from("punti_vendita")
-      .select("*")
-      .eq("tenant_id", tenantId)
+    if (pvLoadInFlightRef.current) {
+      return
+    }
+    pvLoadInFlightRef.current = true
 
-    if (!error && data) {
-      setPvList(data)
+    try {
+      const { data, error } = await supabase
+        .from("punti_vendita")
+        .select("*")
+        .eq("tenant_id", tenantId)
 
-      if (ruolo !== "superadmin") {
-        // prende il primo disponibile
-        if (data.length > 0) {
-          setActivePv(data[0].id)
+      if (!error && data) {
+        setPvList(data)
+
+        if (ruolo !== "superadmin") {
+          if (data.length > 0) {
+            const ruoloNorm = (ruolo && String(ruolo).toLowerCase().trim()) || ""
+            const multiPv = canUseFeature("multi_punto_vendita")
+            const saved = localStorage.getItem("active_pv")
+            const valid = saved && data.some((p) => String(p.id) === String(saved))
+
+            if (ruoloNorm === "admin" && multiPv && data.length > 1) {
+              if (valid) {
+                setActivePv(String(saved))
+              } else {
+                setActivePv(null)
+                localStorage.removeItem("active_pv")
+              }
+            } else {
+              const nextId = valid ? saved : data[0].id
+              setActivePv(String(nextId))
+              if (!valid) {
+                localStorage.setItem("active_pv", String(nextId))
+              }
+            }
+          }
+        } else {
+          const saved = localStorage.getItem("active_pv")
+          if (saved && data.some((p) => String(p.id) === String(saved))) {
+            setActivePv(saved)
+          } else if (data.length === 1) {
+            const only = data[0].id
+            setActivePv(only)
+            localStorage.setItem("active_pv", String(only))
+          }
         }
       } else {
-        const saved = localStorage.getItem("active_pv")
-        if (saved) setActivePv(saved)
+        if (error) {
+          console.error("[PvContext] punti_vendita:", error.message || error)
+        }
+        setPvList([])
       }
+    } finally {
+      pvLoadInFlightRef.current = false
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   // ======================================
@@ -83,15 +122,15 @@ export function PvProvider({ children }) {
     if (!isAuthenticated) {
       setActivePv(null)
       setPvList([])
+      pvLoadInFlightRef.current = false
       setLoading(false)
     }
-  }, [tenantId, authLoading, isAuthenticated])
+  }, [tenantId, tenantData, authLoading, isAuthenticated, ruolo])
 
   const selectPv = (pvId) => {
-    if (ruolo !== "superadmin") return
-
-    localStorage.setItem("active_pv", pvId)
-    setActivePv(pvId)
+    if (pvId == null || pvId === "") return
+    localStorage.setItem("active_pv", String(pvId))
+    setActivePv(String(pvId))
   }
 
   return (

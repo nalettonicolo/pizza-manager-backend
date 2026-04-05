@@ -1,0 +1,318 @@
+/* Super Admin — navigazione a cluster + utility pagine (tema arancione allineato a theme-superadmin in style.css) */
+
+.superadmin-fixed-bar.sa-enterprise-bar {
+  background: linear-gradient(90deg, #d35400 0%, #e67e22 50%, #f39c12 100%) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25) !important;
+  height: auto !important;
+  min-height: 56px;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  padding: 10px 20px 12px 16px !important;
+  gap: 0 !important;
+  color: #fff !important;
+}
+
+.sa-enterprise-bar .sa-bar-row-top {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 16px !important;
+}
+
+.sa-enterprise-bar .sa-bar-brand-block {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+}
+
+.sa-enterprise-bar .superadmin-bar-logo {
+  font-size: 20px !important;
+  letter-spacing: -0.02em !important;
+}
+
+.sa-enterprise-badge {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  padding: 3px 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.45) !important;
+  border-radius: 999px !important;
+  background: rgba(0, 0, 0, 0.12) !important;
+}
+
+.sa-enterprise-bar nav.sa-nav-clustered {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: flex-end !important;
+  gap: 8px 22px !important;
+  margin-top: 10px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.28) !important;
+}
+
+.sa-nav-cluster {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.sa-nav-cluster-label {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  line-height: 1.2 !important;
+}
+
+.sa-nav-cluster-links {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 2px !important;
+}
+
+.sa-enterprise-bar nav.sa-nav-clustered a {
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  color: #fff !important;
+}
+
+.sa-enterprise-bar nav.sa-nav-clustered a:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.sa-enterprise-bar nav.sa-nav-clustered a.active {
+  background: rgba(0, 0, 0, 0.28) !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+}
+
+.sa-enterprise-bar .superadmin-bar-right span {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.sa-enterprise-bar .superadmin-bar-email {
+  max-width: 220px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+  opacity: 0.92 !important;
+}
+
+.sa-enterprise-bar .superadmin-bar-logout {
+  padding: 8px 20px !important;
+  background: rgba(0, 0, 0, 0.45) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+}
+
+.sa-enterprise-bar .superadmin-bar-logout:hover {
+  background: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Corpo: stesso caldo #f8f6f3 del tema Super Admin (nessun override su card/bottoni — vince .theme-superadmin in style.css) */
+.dashboard-wrap.theme-superadmin.sa-enterprise-body {
+  padding-top: 108px !important;
+  background: #f8f6f3 !important;
+}
+
+.dashboard-wrap.theme-superadmin.sa-enterprise-body .dashboard-content {
+  background: #f8f6f3 !important;
+}
+
+/* Intestazioni pagina */
+.sa-page-header {
+  margin-bottom: 20px;
+  max-width: 800px;
+}
+
+.sa-page-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a85a32;
+  margin: 0 0 6px;
+}
+
+.sa-page-title {
+  margin: 0 0 8px !important;
+  font-size: 1.75rem !important;
+  letter-spacing: -0.02em;
+  color: #2c2c2c !important;
+}
+
+.sa-page-lede {
+  margin: 0;
+  font-size: 14px;
+  color: #5c534c;
+  line-height: 1.55;
+}
+
+.sa-page-toolbar {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sa-back-link {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #c0392b;
+  text-decoration: none;
+}
+
+.sa-back-link:hover {
+  color: #922b21;
+  text-decoration: underline;
+}
+
+.sa-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(44, 24, 16, 0.45);
+  padding: 16px;
+  overflow-y: auto;
+  backdrop-filter: blur(4px);
+}
+
+.sa-modal-panel {
+  max-width: 800px !important;
+  width: 100%;
+  margin: auto;
+  max-height: min(92vh, 920px);
+  overflow-y: auto;
+  border-radius: 14px !important;
+  border: 1px solid #e8d5c4 !important;
+  box-shadow: 0 24px 48px rgba(211, 84, 0, 0.12) !important;
+}
+
+.sa-modal-title {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  color: #2c2c2c;
+}
+
+.sa-modal-subtitle {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: #5c534c;
+  line-height: 1.5;
+}
+
+.sa-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sa-form-section {
+  margin: 0;
+}
+
+.sa-form-section-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2c2c2c;
+  letter-spacing: -0.01em;
+}
+
+.sa-form-section-lede {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #5c534c;
+  line-height: 1.52;
+}
+
+.sa-callout-muted {
+  padding: 12px 14px;
+  background: #fffaf6;
+  border-radius: 10px;
+  border: 1px solid #e8d5c4;
+  margin-bottom: 16px;
+}
+
+.sa-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #e8d5c4;
+}
+
+.sa-btn-ghost {
+  padding: 10px 18px;
+  color: #5c534c;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sa-btn-outline {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #c0392b;
+  background: #fff;
+  border: 1px solid #d35400;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sa-btn-outline:hover:not(:disabled) {
+  border-color: #c0392b;
+  color: #922b21;
+  background: #fff8f4;
+}
+
+.sa-btn-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sa-table-action {
+  background: none;
+  border: none;
+  color: #d35400;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sa-table-action:hover {
+  color: #c0392b;
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .sa-enterprise-bar nav.sa-nav-clustered {
+    gap: 10px 14px;
+  }
+}

@@ -6,26 +6,31 @@ Documento di **allineamento** tra la roadmap (visione SaaS) e ciò che è effett
 
 ## 1. Admin di pizzeria (tenant): menu ideale vs route reali
 
-La documentazione di prodotto elencava voci tipo: Dashboard, Ordini, Menu, Magazzino, Costi, Dipendenti, Turni, Report.
-
 **Implementazione attuale (barra superiore `AdminLayout`):**
 
 | Voce menu | Route | Cosa apre davvero |
 |-----------|--------|-------------------|
-| Riepilogo | `/admin/dashboard` | KPI giornalieri (ordini oggi, fatturato, utenti attivi) |
-| Report | `/admin/report` | Vendite aggregate: totale ordini, fatturato, prodotto più venduto — **non** è la lista ordini live (quella è in area operativa / cassa) |
-| Menu | `/admin/menu/...` | Sotto-menu: categorie, formati, pizze, bibite, ecc. |
-| Magazzino | `/admin/menu/ingredienti` | Ingredienti con quantità e costi unitari (CSV, soglie: dipende da dati/API) |
-| Costi | `/admin/menu/pizze` | Listini e composizione pizze (ricavi lato menu; margini analitici avanzati in roadmap) |
-| Dipendenti | `/admin/dipendenti` | `UserManager`: utenti del tenant, ruolo, attivo/disattivo |
-| Ruoli | `/admin/ruoli` | Configurazione permessi sulle aree operative |
+| *(home)* | `/admin` → `/admin/menu/...` | Atterraggio su listino (categorie); **nessuna** pagina Riepilogo KPI dedicata |
+| Manuale | `/admin/manuale` (redirect da `/admin/guida`) | `src/content/manualeUtente.md` + roadmap `manualeRoadmap.js` |
+| Report | `/admin/report` | Vendite aggregate — **non** è la lista ordini live (area operativa / cassa) |
+| Menu | `/admin/menu/...` | Sidebar: categorie, formati, cottura, pizze, ingredienti, impasti, bibite, dolci, fritti, allergeni |
+| Magazzino | `/admin/magazzino/...` | Hub, ordini fornitori, DDT; dati `localStorage` per tenant (`useTenantLocalJson`) |
+| Contabilità | `/admin/contabilita/...` | Fatture, pagamenti, food cost, spese locale/personale, incassi; stesso modello dati locale |
+| Dipendenti | `/admin/dipendenti` | Utenti del tenant |
+| Ruoli | `/admin/ruoli` | Permessi aree operative; ruoli di reparto con area dedicata |
 | Impostazioni | `/admin/settings/...` | Dati pizzeria, layout, orari, parametri |
+
+**Vecchia route tenant** `/admin/pubblicazione` → redirect a **`/admin/manuale`** (nessun form pubblicazione in area cliente).
+
+**Pubblicazione dominio / go-live:** non è nell’area Admin cliente; **Super Admin → Pubblicazione dominio** (`/superadmin/pubblicazione-sito`). Layout Super Admin **senza** colonna sinistra aggiuntiva sotto la nav principale.
+
+**Visibilità moduli (opzionale):** con `VITE_ENFORCE_SERVIZI_PLAN=true`, card e voci operative possono essere filtrate in base al piano tenant e a `parametri_operativi.servizi_abilitati` / `servizi_personalizzati` (impostati dal Super Admin). Vedi `useTenantServizi.js`.
 
 **Gap noti (roadmap):**
 
-- **Lista ordini admin** dedicata: non presente; il riepilogo ordini è nel **Report** e nell’**area operativa**.
-- **KPI avanzati** (ticket medio, pizze vendute, orari di punta come schermata dedicata): **non** nel front; testo esplicativo sul riepilogo admin.
-- **Alert magazzino automatici** (job + notifiche soglia): non come modulo dedicato; possibile sovrapposizione con **Prodotti esauriti** in cassa (`/operative/cassa/prodotti-esauriti`).
+- **Lista ordini admin** dedicata: non presente; riepilogo in Report e operativo.
+- **KPI avanzati** come schermata dedicata: non nel front.
+- **Alert magazzino** automatici: non come modulo unico; sovrapposizione con **Prodotti esauriti** in cassa.
 
 ---
 
@@ -33,11 +38,15 @@ La documentazione di prodotto elencava voci tipo: Dashboard, Ordini, Menu, Magaz
 
 | Capacità roadmap | Stato |
 |------------------|--------|
-| Dashboard tenant, piani, abbonamenti | Presente (`/superadmin/*`) |
+| Dashboard tenant, piani, abbonamenti, catalogo servizi, deploy | Presente (`/superadmin/*`) |
+| Console UI “enterprise” (cluster menu, slate) | Presente (`SuperAdminLayout`, `superadmin-enterprise.css`) |
+| Piani/listino in localStorage + stessa fonte landing | Presente (`plansStorage.js`); landing **senza prezzi** |
+| Tenant: servizi personalizzati in `parametri_operativi` | Presente (modale Clienti) |
 | MRR, billing, fatture PDF | Non come schermate dedicate |
-| Monitor (log errori, performance API, utilizzo DB) | Non presente nel router |
+| Persistenza piani su server | Non ancora; listino ancora browser-local |
+| Monitor (log, performance API, DB) | Non nel router |
 
-Dettaglio funzionale: `docs/GUIDA_SUPERADMIN.md`.
+Dettaglio: **`docs/GUIDA_SUPERADMIN.md`**.
 
 ---
 
@@ -45,31 +54,45 @@ Dettaglio funzionale: `docs/GUIDA_SUPERADMIN.md`.
 
 | Voce | Route | Note |
 |------|--------|------|
-| Riepilogo, Cassa, Cucina, Bancone, Pizzaioli, Delivery, Prodotti esauriti | Esistenti | Filtrate da `permessiAree` |
-| **Turni** | `/operative/turni` | UI con `TurnoControl` (API `/api/turni/...`). Visibile con permesso **cassa** (stesso flusso operativo del turno) |
-
-**Gap precedente:** mancava voce “Turni” nella sidebar — **risolto** con route dedicata.
+| Riepilogo, Cassa, Cucina, Bancone, Pizzaioli, Delivery, Prodotti esauriti | Esistenti | Permessi + eventuale gate servizi |
+| **Turni** | `/operative/turni` | Permesso cassa / flusso turno |
 
 ---
 
-## 4. Sicurezza e backend
+## 4. Sito pubblico
+
+| Elemento | Stato |
+|----------|--------|
+| Landing, Contatti, login | Route pubbliche |
+| Piani su landing | Da listino (localStorage / default), **senza importi** in UI |
+| Contatti | Scelta piano listino o moduli personalizzati nel modulo |
+
+---
+
+## 5. Sicurezza e backend
 
 | Argomento | Stato |
 |-----------|--------|
-| Controllo ruoli lato SPA | `ProtectedRoute`, `RoleLayout`, contesto Supabase |
-| Multi-tenant | `tenant_id`, RLS su Supabase (vedi migrazioni) |
-| Middleware HTTP unico (Express) per ogni tenant | Non è il modello principale: autorità su **RLS + client**; eventuale API Nest/Node separata per turni/integrazioni |
+| Controllo ruoli lato SPA | `ProtectedRoute`, `RoleLayout`, Supabase Auth |
+| Multi-tenant | `tenant_id`, RLS |
+| API Node/Nest (turni, ecc.) | Opzionale accanto al client Supabase |
 
 ---
 
-## 5. Come aggiornare questo file
+## 6. Come aggiornare questo file
 
-1. Aggiungi o modifica righe nelle tabelle quando cambiano route o significato delle pagine.
-2. Per ogni release che chiude un “gap”, sposta la riga dalla sezione *Gap* a *Implementazione* e indica la versione o la data nel registro sotto.
+1. Modifica le tabelle quando cambiano route o comportamento.
+2. Chiudi i “gap” spostando le righe e aggiornando il registro.
 
 ### Registro
 
 | Data | Modifica |
 |------|----------|
-| 2026-03-22 | Prima versione: mappatura admin (Magazzino/Costi/Dipendenti), Super Admin, operativo Turni, sicurezza. |
-| 2026-03-22 | Nav admin e route `/admin/dipendenti`, `/operative/turni`; dashboard admin: nota KPI avanzati. |
+| 2026-03-22 | Prima versione: admin, Super Admin, operativo, sicurezza. |
+| 2026-03-22 | Route dipendenti, turni; note KPI. |
+| 2026-04-03 | Super Admin ampliato (catalogo, deploy, enterprise UI, piani/landing/contatti); gate servizi; tabella sito pubblico; admin Guida e Pubblicazione in tabella menu. |
+| 2026-04-03 | Admin: route e sidebar Magazzino e Contabilità (dati locali tenant); tabella menu aggiornata. |
+
+---
+
+*Ultima revisione: 2026-04-03*

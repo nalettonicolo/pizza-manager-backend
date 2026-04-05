@@ -1,7 +1,18 @@
 /**
  * Permessi aree operative: di default è visibile solo l’area del ruolo;
  * le altre compaiono nel menù solo se accesso_* = true in utenti_ruoli.
+ *
+ * Ruoli di reparto (cassa, cucina, …): una sola area operativa, indipendentemente dai DEFAULT true
+ * su `accesso_*` in DB (altrimenti con un solo flag false restano tutte le altre aree attive).
+ * Per più aree usare il ruolo operatore e le spunte in Admin → Ruoli.
  */
+
+const RUOLO_OPERATIVO_ALIASES = {
+  pizzaioli: "pizzaiolo",
+};
+
+/** Ruoli con un’unica area operativa (non si combinano con le colonne accesso_*). */
+export const DEDICATED_REPARTO_ROLES = new Set(["cassa", "bancone", "cucina", "pizzaiolo", "delivery", "pony"]);
 
 const ACCESSO_KEYS = [
   "accesso_riepilogo",
@@ -17,9 +28,21 @@ const ACCESSO_KEYS = [
  * @param {string | null | undefined} ruolo
  * @param {string} areaKey — riepilogo | cassa | cucina | bancone | pizzaiolo | delivery | pony
  */
+/** Normalizza il testo ruolo da DB (alias, case). */
+export function normalizeRuoloOperativo(ruolo) {
+  if (ruolo == null || String(ruolo).trim() === "") return null
+  const t = String(ruolo).toLowerCase().trim()
+  return RUOLO_OPERATIVO_ALIASES[t] ?? t
+}
+
+export function isDedicatedRepartoRole(ruolo) {
+  const r = normalizeRuoloOperativo(ruolo)
+  return r ? DEDICATED_REPARTO_ROLES.has(r) : false
+}
+
 export function isDefaultAreaForRole(ruolo, areaKey) {
   if (!ruolo || !areaKey) return false
-  const r = String(ruolo).toLowerCase().trim()
+  const r = normalizeRuoloOperativo(ruolo) ?? String(ruolo).toLowerCase().trim()
   const k = areaKey
   if (k === "delivery") return r === "delivery" || r === "pony"
   if (k === "pony") return r === "pony"
@@ -57,11 +80,21 @@ export function normalizeLegacyAllAccessTrue(staffData) {
  */
 export function computePermessiAree(staffData, ruolo) {
   const keys = ["riepilogo", "cassa", "cucina", "bancone", "pizzaiolo", "delivery", "pony"]
+  const r = normalizeRuoloOperativo(ruolo)
+
+  if (r && DEDICATED_REPARTO_ROLES.has(r)) {
+    const out = {}
+    for (const key of keys) {
+      out[key] = isDefaultAreaForRole(r, key)
+    }
+    return out
+  }
+
   const out = {}
   for (const key of keys) {
     const col = key === "riepilogo" ? "accesso_riepilogo" : `accesso_${key}`
     const v = staffData[col]
-    if (isDefaultAreaForRole(ruolo, key)) {
+    if (isDefaultAreaForRole(r ?? ruolo, key)) {
       out[key] = true
       continue
     }

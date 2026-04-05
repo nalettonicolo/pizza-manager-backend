@@ -1,6 +1,15 @@
 import { useEffect } from "react";
 
-export default function Modal({ open, onClose, title, children, closeOnOverlayClick = false, wide = false }) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  closeOnOverlayClick = false,
+  wide = false,
+  /** Modale alta/larga (cassa modifica pizza): meno scroll interno su desktop */
+  tall = false,
+}) {
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape") onClose?.();
@@ -21,13 +30,19 @@ export default function Modal({ open, onClose, title, children, closeOnOverlayCl
 
   return (
     <div
-      className="dashboard-modal-overlay"
+      className={`dashboard-modal-overlay${tall ? " dashboard-modal-overlay--tall" : ""}`}
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={wide ? "dashboard-modal dashboard-modal--wide" : "dashboard-modal"}
+        className={[
+          "dashboard-modal",
+          wide ? "dashboard-modal--wide" : "",
+          tall ? "dashboard-modal--tall" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dashboard-modal-header">

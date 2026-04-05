@@ -259,3 +259,15 @@ Tonno;0,65;0,35;-0,65;-0,25;0;Pesce
 - **Estensione:** `.csv`
 
 Se segui questa guida, il file sarà compilato in modo corretto e il caricamento da **CSV** → **Inserisci CSV** nel portale potrà andare a buon fine senza errori.
+
+---
+
+## 12. Registro revisioni guida
+
+| Data | Nota |
+|------|------|
+| 2026-04-03 | Allineamento con set guide progetto (nessuna modifica alle regole Formato A/B). |
+
+---
+
+*Ultima revisione: 2026-04-03*

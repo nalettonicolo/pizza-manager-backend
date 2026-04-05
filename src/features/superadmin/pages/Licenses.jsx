@@ -51,23 +51,6 @@ export default function Licenses() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Link
-          to="/superadmin/dashboard"
-          style={{
-            display: "inline-block",
-            padding: "10px 20px",
-            background: "#d35400",
-            color: "#fff",
-            borderRadius: 6,
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
-          ← Torna al Riepilogo
-        </Link>
-      </div>
       <div className="dashboard-page-header">
         <div>
           <h1 className="dashboard-page-title">Abbonamenti</h1>
@@ -95,9 +78,12 @@ export default function Licenses() {
       )}
 
       <p style={{ margin: "0 0 16px", fontSize: 14, color: "#555", maxWidth: 720 }}>
-        Ogni cliente ha una riga di abbonamento collegata al tenant. Il <strong>rinnovo automatico</strong> e la data di
-        attivazione si impostano in <Link to="/superadmin/tenants">Clienti</Link> (modifica cliente → sezione Abbonamento).
-        All’apertura di questa pagina vengono create le righe mancanti in base ai clienti già presenti.
+        Ogni cliente ha una riga di abbonamento collegata al tenant. <strong>Ciclo mensile (30 giorni)</strong> o{" "}
+        <strong>annuale (12 mesi di calendario)</strong> e eventuale <strong>sconto sull&apos;unica rata annuale</strong> si
+        impostano in <Link to="/superadmin/tenants">Clienti</Link> (modifica cliente → Abbonamento). Il{" "}
+        <strong>prossimo rinnovo</strong> segue i mesi solari (stesso giorno del mese quando possibile). All&apos;apertura
+        di questa pagina vengono create le
+        righe mancanti in base ai clienti già presenti.
       </p>
 
       <div className="dashboard-table-wrap" style={{ overflowX: "auto" }}>
@@ -107,6 +93,8 @@ export default function Licenses() {
               <th>Cliente</th>
               <th>Slug</th>
               <th>Piano</th>
+              <th>Ciclo</th>
+              <th>Sconto ann.</th>
               <th>Stato</th>
               <th>Rinnovo automatico</th>
               <th>Prossimo rinnovo</th>
@@ -117,7 +105,7 @@ export default function Licenses() {
           <tbody>
             {list.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
+                <td colSpan={10} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
                   Nessun abbonamento al momento. Verifica che esistano clienti e che la tabella subscriptions sia
                   accessibile (vedi anche Clienti dopo un salvataggio).
                 </td>
@@ -128,6 +116,14 @@ export default function Licenses() {
                   <td style={{ fontWeight: 600 }}>{s.tenant_nome}</td>
                   <td style={{ color: "#666" }}>{s.tenant_slug}</td>
                   <td>{pianoDisplayLabel(s.piano)}</td>
+                  <td style={{ fontSize: 13, color: "#475569" }}>
+                    {Number(s.ciclo_fatturazione_giorni) === 365 ? "12 mesi (annuale)" : "1 mese (mensile)"}
+                  </td>
+                  <td style={{ fontSize: 13, color: "#475569" }}>
+                    {Number(s.ciclo_fatturazione_giorni) === 365 && s.sconto_annuale_percent != null
+                      ? `−${Number(s.sconto_annuale_percent)}%`
+                      : "—"}
+                  </td>
                   <td>
                     <span className={STATO_BADGE[s.stato] ?? "badge badge-neutral"}>
                       {STATO_LABEL[s.stato] ?? s.stato}

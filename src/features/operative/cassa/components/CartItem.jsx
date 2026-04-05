@@ -36,9 +36,9 @@ export default function CartItem({
       </div>
 
       <div style={styles.actions}>
-        <button onClick={() => onDecrease(item)}>-</button>
-        <button onClick={() => onIncrease(item)}>+</button>
-        <button onClick={() => onRemove(item)}>🗑</button>
+        <button type="button" onClick={() => onDecrease(item)}>-</button>
+        <button type="button" onClick={() => onIncrease(item)}>+</button>
+        <button type="button" onClick={() => onRemove(item)}>🗑</button>
       </div>
     </div>
   )

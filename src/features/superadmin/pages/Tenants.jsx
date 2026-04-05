@@ -1,15 +1,26 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { serviziIdsIncludedForPiano } from "@/app/hooks/useTenantServizi";
+import TenantServiziPlanFields from "@/features/superadmin/components/TenantServiziPlanFields";
+import { defaultInclusioni, loadPlansResolved } from "@/features/superadmin/catalog/plansStorage";
+import { loadServicesCatalog } from "@/features/superadmin/catalog/servicesStorage";
 import {
-  getTenants,
+  getRuoliPizzeria,
+  listStaffPasswordNotes,
+  upsertStaffPasswordNote,
+} from "@/features/admin/services/adminService";
+import {
   createTenant,
+  getSubscriptionRow,
+  getTenants,
   updateTenant,
 } from "@/features/superadmin/services/superadminService";
-import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
+import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
+import { pianoDisplayLabel, tenantListinoLabel } from "@/features/superadmin/utils/pianoLabels";
 
 const PIANO_OPTIONS = [
-  { value: "TRIAL", label: "Prova (14 giorni)" },
-  { value: "FREE", label: "Gratuito (legacy)" },
+  { value: "TRIAL", label: "Prova (14 gg) — bundle come Pro" },
+  { value: "FREE", label: "Gratuito — solo bundle Base" },
   { value: "PRO", label: "Pro" },
   { value: "ENTERPRISE", label: "Enterprise" },
 ];
@@ -29,7 +40,7 @@ function toDateInputValue(v) {
   return d.toISOString().slice(0, 10);
 }
 
-function emptyModal(mode) {
+function emptyModal(mode, services, reloadInclusioniFromPiano) {
   return {
     mode,
     nome: "",
@@ -43,11 +54,31 @@ function emptyModal(mode) {
     addebito_automatico_mensile: false,
     data_attivazione_abbonamento: "",
     sconto_percentuale: "0",
+    sconto_importo_euro: "0",
     prova_valida_fino: "",
+    serviziPersonalizzati: false,
+    pianoTemplateId: "",
+    pianoCommercialeNome: "",
+    inclusioni: reloadInclusioniFromPiano("TRIAL", services),
+    parametriOperativiBase: {},
+    abbonamentoCicloGiorni: 30,
+    abbonamentoScontoAnnualePercent: "",
   };
 }
 
-function tenantToModal(t, mode) {
+function tenantToModal(t, mode, services, reloadInclusioniFromPiano) {
+  const po = t.parametri_operativi && typeof t.parametri_operativi === "object" ? { ...t.parametri_operativi } : {};
+  const serviziPersonalizzati = po.servizi_personalizzati === true;
+  const ids = Array.isArray(po.servizi_abilitati) ? po.servizi_abilitati : [];
+  let inclusioni;
+  if (serviziPersonalizzati && ids.length) {
+    inclusioni = defaultInclusioni(services);
+    for (const id of ids) {
+      if (Object.prototype.hasOwnProperty.call(inclusioni, id)) inclusioni[id] = true;
+    }
+  } else {
+    inclusioni = reloadInclusioniFromPiano(t.piano, services);
+  }
   return {
     mode,
     id: t.id,
@@ -65,7 +96,18 @@ function tenantToModal(t, mode) {
       t.sconto_percentuale != null && t.sconto_percentuale !== ""
         ? String(t.sconto_percentuale)
         : "0",
+    sconto_importo_euro:
+      po.sconto_importo_euro != null && po.sconto_importo_euro !== ""
+        ? String(po.sconto_importo_euro)
+        : "0",
     prova_valida_fino: toDateInputValue(t.prova_valida_fino),
+    serviziPersonalizzati,
+    pianoTemplateId: "",
+    pianoCommercialeNome: typeof po.piano_listino_nome === "string" ? po.piano_listino_nome.trim() : "",
+    inclusioni,
+    parametriOperativiBase: po,
+    abbonamentoCicloGiorni: 30,
+    abbonamentoScontoAnnualePercent: "",
   };
 }
 
@@ -93,8 +135,31 @@ export default function Tenants() {
   const [error, setError] = useState(null);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  /** Modale Modifica cliente: staff + note archivio password (stessa tabella che vede Admin → Ruoli). */
+  const [archivio, setArchivio] = useState({
+    loading: false,
+    error: null,
+    ruoli: [],
+    drafts: {},
+    savingUserId: null,
+  });
 
-  const load = async () => {
+  const catalogServices = useMemo(() => loadServicesCatalog(), []);
+  const commercialPlans = useMemo(() => {
+    const { plans } = loadPlansResolved();
+    return plans.filter((p) => p.attivo !== false);
+  }, []);
+
+  const reloadInclusioniFromPiano = useCallback((piano, services) => {
+    const set = serviziIdsIncludedForPiano(piano);
+    const z = defaultInclusioni(services);
+    for (const id of set) {
+      if (Object.prototype.hasOwnProperty.call(z, id)) z[id] = true;
+    }
+    return z;
+  }, []);
+
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -105,18 +170,87 @@ export default function Tenants() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, []);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!modal || modal.mode !== "edit" || !modal.id) {
+      setArchivio({ loading: false, error: null, ruoli: [], drafts: {}, savingUserId: null });
+      return undefined;
+    }
+    const tenantId = modal.id;
+    let cancelled = false;
+    (async () => {
+      setArchivio({ loading: true, error: null, ruoli: [], drafts: {}, savingUserId: null });
+      try {
+        const [ruoli, notes] = await Promise.all([
+          getRuoliPizzeria(tenantId),
+          listStaffPasswordNotes(tenantId),
+        ]);
+        if (cancelled) return;
+        const byUser = {};
+        for (const n of notes || []) {
+          byUser[n.user_id] = n.password_nota ?? "";
+        }
+        const drafts = {};
+        for (const r of ruoli || []) {
+          drafts[r.user_id] = byUser[r.user_id] ?? "";
+        }
+        setArchivio({ loading: false, error: null, ruoli: ruoli || [], drafts, savingUserId: null });
+      } catch (err) {
+        if (cancelled) return;
+        setArchivio({
+          loading: false,
+          error: err?.message ?? "Impossibile caricare ruoli o note password.",
+          ruoli: [],
+          drafts: {},
+          savingUserId: null,
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modal?.mode, modal?.id]);
+
+  const saveArchivioNote = async (userId, text) => {
+    const tid = modal?.id;
+    if (!tid || !userId) return;
+    setArchivio((a) => ({ ...a, savingUserId: userId }));
+    try {
+      await upsertStaffPasswordNote(tid, userId, text);
+    } catch (err) {
+      setError(err?.message ?? "Salvataggio nota password non riuscito.");
+      setArchivio((a) => ({ ...a, savingUserId: null }));
+      return;
+    }
+    setArchivio((a) => ({ ...a, savingUserId: null }));
+  };
+
   const openCreate = () => {
-    setModal(emptyModal("create"));
+    setModal(emptyModal("create", catalogServices, reloadInclusioniFromPiano));
   };
 
   const openEdit = (t) => {
-    setModal(tenantToModal(t, "edit"));
+    const base = tenantToModal(t, "edit", catalogServices, reloadInclusioniFromPiano);
+    setModal(base);
+    void getSubscriptionRow(t.id).then((sub) => {
+      if (!sub) return;
+      setModal((m) => {
+        if (!m || m.id !== t.id || m.mode !== "edit") return m;
+        return {
+          ...m,
+          abbonamentoCicloGiorni: sub.ciclo_fatturazione_giorni ?? 30,
+          abbonamentoScontoAnnualePercent:
+            sub.sconto_annuale_percent != null && String(sub.sconto_annuale_percent).trim() !== ""
+              ? String(sub.sconto_annuale_percent)
+              : "",
+        };
+      });
+    });
   };
 
   const closeModal = () => setModal(null);
@@ -126,6 +260,28 @@ export default function Tenants() {
     if (!modal) return;
     setSaving(true);
     try {
+      const enabledIds = Object.entries(modal.inclusioni || {})
+        .filter(([, v]) => v)
+        .map(([id]) => id);
+      const basePo = { ...(modal.parametriOperativiBase || {}) };
+      const nextPo = {
+        ...basePo,
+        servizi_personalizzati: modal.serviziPersonalizzati,
+        servizi_abilitati: modal.serviziPersonalizzati ? enabledIds : [],
+      };
+      if (modal.pianoCommercialeNome && String(modal.pianoCommercialeNome).trim()) {
+        nextPo.piano_listino_nome = String(modal.pianoCommercialeNome).trim();
+      } else {
+        delete nextPo.piano_listino_nome;
+      }
+
+      const euroFisso = Math.max(
+        0,
+        Math.round((Number(String(modal.sconto_importo_euro ?? "").replace(",", ".")) || 0) * 100) / 100,
+      );
+      nextPo.sconto_importo_euro = euroFisso;
+
+      const ciclo = Number(modal.abbonamentoCicloGiorni) === 365 ? 365 : 30;
       const payload = {
         nome: modal.nome,
         slug: modal.slug || slugify(modal.nome),
@@ -139,6 +295,12 @@ export default function Tenants() {
         data_attivazione_abbonamento: modal.data_attivazione_abbonamento || null,
         sconto_percentuale: modal.sconto_percentuale,
         prova_valida_fino: modal.prova_valida_fino || null,
+        parametri_operativi: nextPo,
+        abbonamento_ciclo_giorni: ciclo,
+        abbonamento_sconto_annuale_percent:
+          ciclo === 365 && String(modal.abbonamentoScontoAnnualePercent ?? "").trim() !== ""
+            ? modal.abbonamentoScontoAnnualePercent
+            : null,
       };
       if (modal.mode === "create") {
         await createTenant(payload);
@@ -156,9 +318,13 @@ export default function Tenants() {
 
   const setModalField = (field, value) => {
     setModal((m) => {
+      if (!m) return m;
       const next = { ...m, [field]: value };
       if (field === "nome" && m.mode === "create") {
         next.slug = slugify(value);
+      }
+      if (field === "piano" && !m.serviziPersonalizzati && !m.pianoTemplateId) {
+        next.inclusioni = reloadInclusioniFromPiano(value, catalogServices);
       }
       return next;
     });
@@ -167,13 +333,14 @@ export default function Tenants() {
   const inputStyle = {
     width: "100%",
     padding: "8px 12px",
-    border: "1px solid #ddd",
-    borderRadius: 6,
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
     boxSizing: "border-box",
     fontSize: 14,
+    background: "#fff",
   };
 
-  const labelStyle = { display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#334155" };
+  const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6, color: "#475569" };
 
   if (loading) {
     return (
@@ -187,27 +354,15 @@ export default function Tenants() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Link
-          to="/superadmin/dashboard"
-          style={{
-            display: "inline-block",
-            padding: "10px 20px",
-            background: "#d35400",
-            color: "#fff",
-            borderRadius: 6,
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
-          ← Torna al Riepilogo
-        </Link>
-      </div>
-      <div className="dashboard-page-header">
-        <div>
-          <h1 className="dashboard-page-title">Clienti</h1>
-        </div>
+      <header className="sa-page-header">
+        <p className="sa-page-kicker">Super Admin · commerciale</p>
+        <h1 className="dashboard-page-title sa-page-title">Clienti (tenant)</h1>
+        <p className="sa-page-lede">
+          Anagrafica pizzerie, livello contratto e — se serve — servizi personalizzati rispetto al listino.
+        </p>
+      </header>
+
+      <div className="sa-page-toolbar">
         <button type="button" className="btn-primary-dashboard" onClick={openCreate}>
           Nuovo cliente
         </button>
@@ -227,7 +382,8 @@ export default function Tenants() {
               <th>Cod. univoco</th>
               <th>Addebito auto.</th>
               <th>Sconto %</th>
-              <th>Piano</th>
+              <th>Contratto</th>
+              <th>Listino</th>
               <th>Prova fino al</th>
               <th>Stato</th>
               <th>Creato</th>
@@ -237,7 +393,7 @@ export default function Tenants() {
           <tbody>
             {list.length === 0 ? (
               <tr>
-                <td colSpan={13} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
+                <td colSpan={14} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
                   Nessun cliente. Clicca &quot;Nuovo cliente&quot; per aggiungerne uno.
                 </td>
               </tr>
@@ -258,11 +414,21 @@ export default function Tenants() {
                     )}
                   </td>
                   <td style={{ fontSize: 13, color: "#444" }}>
-                    {t.sconto_percentuale != null && Number(t.sconto_percentuale) > 0
-                      ? `${Number(t.sconto_percentuale)}%`
-                      : "—"}
+                    {(() => {
+                      const po =
+                        t.parametri_operativi && typeof t.parametri_operativi === "object"
+                          ? t.parametri_operativi
+                          : {};
+                      const euro = Number(po.sconto_importo_euro) || 0;
+                      const pct = t.sconto_percentuale != null && Number(t.sconto_percentuale) > 0;
+                      const bits = [];
+                      if (pct) bits.push(`${Number(t.sconto_percentuale)}%`);
+                      if (euro > 0) bits.push(`−${euro} €`);
+                      return bits.length ? bits.join(" · ") : "—";
+                    })()}
                   </td>
                   <td style={{ fontSize: 13 }}>{pianoDisplayLabel(t.piano)}</td>
+                  <td style={{ fontSize: 13, color: "#64748b" }}>{tenantListinoLabel(t) ?? "—"}</td>
                   <td style={{ color: "#666", fontSize: 13 }}>
                     {t.prova_valida_fino
                       ? new Date(t.prova_valida_fino + "T12:00:00").toLocaleDateString("it-IT")
@@ -277,11 +443,7 @@ export default function Tenants() {
                     {t.created_at ? new Date(t.created_at).toLocaleDateString("it-IT") : "—"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(t)}
-                      style={{ background: "none", border: "none", color: "#c0392b", cursor: "pointer", fontSize: 13 }}
-                    >
+                    <button type="button" onClick={() => openEdit(t)} className="sa-table-action">
                       Modifica
                     </button>
                   </td>
@@ -293,48 +455,22 @@ export default function Tenants() {
       </div>
 
       {modal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 50,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.5)",
-            padding: 16,
-            overflowY: "auto",
-          }}
-          onClick={closeModal}
-        >
+        <div className="sa-modal-overlay" onClick={closeModal} role="presentation">
           <div
-            className="dashboard-box"
-            style={{ maxWidth: 720, width: "100%", margin: "auto", maxHeight: "min(92vh, 900px)", overflowY: "auto" }}
+            className="dashboard-box sa-modal-panel"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="sa-tenant-modal-title"
           >
-            <h2 style={{ marginTop: 0, marginBottom: 8 }}>
+            <h2 id="sa-tenant-modal-title" className="sa-modal-title">
               {modal.mode === "create" ? "Nuovo cliente" : "Modifica cliente"}
             </h2>
-            <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b" }}>
-              Dati anagrafici della pizzeria, fatturazione e opzioni di abbonamento (addebito mensile e sconto concordato).
+            <p className="sa-modal-subtitle">
+              Dati anagrafici, livello contratto (subscription), listino servizi e fatturazione.
             </p>
-            <p
-              style={{
-                margin: "0 0 16px",
-                padding: "10px 12px",
-                background: "#fff7ed",
-                border: "1px solid #fed7aa",
-                borderRadius: 8,
-                fontSize: 13,
-                color: "#9a3412",
-              }}
-            >
-              <strong>Scorri in basso</strong> per le sezioni <em>Dati fiscali e contatti</em> e{" "}
-              <em>Abbonamento e pagamento</em> (P.IVA, email, PEC, SDI, rinnovo automatico).
-            </p>
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <section>
-                <h3 style={{ margin: "0 0 12px", fontSize: 15, color: "#0f172a" }}>Generale</h3>
+            <form onSubmit={handleSubmit} className="sa-modal-form">
+              <section className="sa-form-section">
+                <h3 className="sa-form-section-title">Anagrafica e contratto</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
                   <div>
                     <label style={labelStyle}>Nome attività</label>
@@ -357,7 +493,7 @@ export default function Tenants() {
                     />
                   </div>
                   <div>
-                    <label style={labelStyle}>Piano</label>
+                    <label style={labelStyle}>Livello contratto (subscription)</label>
                     <select
                       value={modal.piano}
                       onChange={(e) => setModalField("piano", e.target.value)}
@@ -369,6 +505,10 @@ export default function Tenants() {
                         </option>
                       ))}
                     </select>
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                      Valore tecnico su DB e abbonamenti; il bundle operativo predefinito segue questo livello se non
+                      personalizzi i servizi.
+                    </p>
                   </div>
                   <div>
                     <label style={labelStyle}>Prova valida fino al (incluso)</label>
@@ -378,9 +518,6 @@ export default function Tenants() {
                       onChange={(e) => setModalField("prova_valida_fino", e.target.value)}
                       style={inputStyle}
                     />
-                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
-                      Solo per periodo di prova: ultimo giorno incluso. Lasciare vuoto se non applicabile.
-                    </p>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
@@ -396,8 +533,18 @@ export default function Tenants() {
                 </div>
               </section>
 
-              <section>
-                <h3 style={{ margin: "0 0 12px", fontSize: 15, color: "#0f172a" }}>Dati fiscali e contatti</h3>
+              <TenantServiziPlanFields
+                modal={modal}
+                catalogServices={catalogServices}
+                commercialPlans={commercialPlans}
+                labelStyle={labelStyle}
+                inputStyle={inputStyle}
+                setModal={setModal}
+                reloadInclusioniFromPiano={reloadInclusioniFromPiano}
+              />
+
+              <section className="sa-form-section">
+                <h3 className="sa-form-section-title">Dati fiscali e contatti</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
                   <div>
                     <label style={labelStyle}>Partita IVA</label>
@@ -431,7 +578,7 @@ export default function Tenants() {
                     />
                   </div>
                   <div style={{ gridColumn: "1 / -1" }}>
-                    <label style={labelStyle}>Codice univoco / SDI (fatturazione elettronica)</label>
+                    <label style={labelStyle}>Codice univoco / SDI</label>
                     <input
                       type="text"
                       value={modal.codice_univoco_sdi}
@@ -444,17 +591,80 @@ export default function Tenants() {
                 </div>
               </section>
 
-              <section>
-                <h3 style={{ margin: "0 0 12px", fontSize: 15, color: "#0f172a" }}>Abbonamento e pagamento</h3>
-                <div
-                  style={{
-                    padding: 12,
-                    background: "#f8fafc",
-                    borderRadius: 8,
-                    border: "1px solid #e2e8f0",
-                    marginBottom: 16,
-                  }}
-                >
+              {modal.mode === "edit" && modal.id ? (
+                <section className="sa-form-section">
+                  <h3 className="sa-form-section-title">Archivio password staff (Ruoli)</h3>
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
+                    Stesse <strong>note opzionali</strong> che il titolare vede in <strong>Admin → Ruoli</strong> dopo aver
+                    inserito la propria password: non sono le credenziali Supabase, solo promemoria (es. password date al
+                    dipendente). Dopo il salvataggio il locale le trova allo sblocco dell&apos;archivio in Ruoli.
+                  </p>
+                  {archivio.loading ? (
+                    <p style={{ fontSize: 14, color: "#64748b" }}>Caricamento account staff…</p>
+                  ) : null}
+                  {archivio.error ? (
+                    <div className="dashboard-error" style={{ marginBottom: 12, fontSize: 13 }}>
+                      {archivio.error}
+                    </div>
+                  ) : null}
+                  {!archivio.loading && !archivio.error && archivio.ruoli.length === 0 ? (
+                    <p style={{ fontSize: 14, color: "#64748b" }}>Nessun account staff collegato a questo tenant.</p>
+                  ) : null}
+                  {!archivio.loading && archivio.ruoli.length > 0 ? (
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                      {archivio.ruoli.map((r) => (
+                        <li
+                          key={r.user_id}
+                          style={{
+                            padding: "14px 0",
+                            borderBottom: "1px solid #e2e8f0",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{labelFromEmailPrefix(r.email)}</div>
+                          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
+                            {r.email} · ruolo: {r.ruolo}
+                          </div>
+                          <label style={labelStyle}>Nota password (archivio)</label>
+                          <textarea
+                            value={archivio.drafts[r.user_id] ?? ""}
+                            onChange={(e) =>
+                              setArchivio((a) => ({
+                                ...a,
+                                drafts: { ...a.drafts, [r.user_id]: e.target.value },
+                              }))
+                            }
+                            rows={2}
+                            style={{ ...inputStyle, resize: "vertical", minHeight: 52 }}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          <div style={{ marginTop: 8 }}>
+                            <button
+                              type="button"
+                              className="sa-table-action"
+                              disabled={archivio.savingUserId === r.user_id}
+                              onClick={() => saveArchivioNote(r.user_id, archivio.drafts[r.user_id] ?? "")}
+                            >
+                              {archivio.savingUserId === r.user_id ? "Salvataggio…" : "Salva nota"}
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+              ) : null}
+
+              <section className="sa-form-section">
+                <h3 className="sa-form-section-title">Abbonamento e pagamento</h3>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.55, maxWidth: 720 }}>
+                  Il <strong>prossimo rinnovo</strong> (pagina Abbonamenti) si calcola dalla{" "}
+                  <strong>data di attivazione</strong> con <strong>mesi di calendario</strong>: un mese dopo per il
+                  mensile, dodici mesi dopo per l&apos;annuale (non giorni fissi: febbraio, mesi da 30/31, ecc.). In caso
+                  annuale puoi registrare uno <strong>sconto %</strong> sul totale delle 12 mensilità (unica rata); il
+                  listino può suggerire lo stesso sconto in <strong>Piani</strong>.
+                </p>
+                <div className="sa-callout-muted">
                   <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
                     <input
                       type="checkbox"
@@ -463,16 +673,15 @@ export default function Tenants() {
                       style={{ marginTop: 3, width: 18, height: 18 }}
                     />
                     <span style={{ fontSize: 14, color: "#334155", lineHeight: 1.45 }}>
-                      <strong>Pagamento online con addebito automatico mensile</strong>
+                      <strong>Addebito / rinnovo automatico</strong>
                       <br />
-                      Il rinnovo è impostato all&apos;inizio di ogni mese solare, a partire dalla data di attivazione
-                      indicata sotto (integrazione gateway di pagamento da configurare lato piattaforma).
+                      Allineato al ciclo scelto (mensile o annuale in mesi solari); gateway di pagamento da configurare.
                     </span>
                   </label>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
                   <div>
-                    <label style={labelStyle}>Data attivazione abbonamento / primo addebito</label>
+                    <label style={labelStyle}>Data attivazione / primo addebito</label>
                     <input
                       type="date"
                       value={modal.data_attivazione_abbonamento}
@@ -480,6 +689,35 @@ export default function Tenants() {
                       style={inputStyle}
                     />
                   </div>
+                  <div>
+                    <label style={labelStyle}>Ciclo fatturazione</label>
+                    <select
+                      value={String(modal.abbonamentoCicloGiorni ?? 30)}
+                      onChange={(e) => setModalField("abbonamentoCicloGiorni", Number(e.target.value))}
+                      style={inputStyle}
+                    >
+                      <option value="30">Mensile (1 mese di calendario)</option>
+                      <option value="365">Annuale (12 mesi di calendario, una rata)</option>
+                    </select>
+                  </div>
+                  {Number(modal.abbonamentoCicloGiorni) === 365 ? (
+                    <div>
+                      <label style={labelStyle}>Sconto pagamento annuale (%)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={modal.abbonamentoScontoAnnualePercent}
+                        onChange={(e) => setModalField("abbonamentoScontoAnnualePercent", e.target.value)}
+                        style={inputStyle}
+                        placeholder="es. 12"
+                      />
+                      <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                        Applicato al totale 12× canone mensile (prima degli sconti commerciali sotto, se li usi a parte).
+                      </p>
+                    </div>
+                  ) : null}
                   <div>
                     <label style={labelStyle}>Sconto sul canone (%)</label>
                     <input
@@ -492,15 +730,27 @@ export default function Tenants() {
                       style={inputStyle}
                       placeholder="0"
                     />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Sconto fisso sul canone (€ / mese)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={modal.sconto_importo_euro}
+                      onChange={(e) => setModalField("sconto_importo_euro", e.target.value)}
+                      style={inputStyle}
+                      placeholder="0"
+                    />
                     <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
-                      Percentuale concordata con il cliente (0 = nessuno sconto).
+                      Si applica sul totale dopo lo sconto percentuale; salvato con il cliente (parametri operativi).
                     </p>
                   </div>
                 </div>
               </section>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                <button type="button" onClick={closeModal} style={{ padding: "10px 18px", color: "#666", background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>
+              <div className="sa-modal-actions">
+                <button type="button" onClick={closeModal} className="sa-btn-ghost">
                   Annulla
                 </button>
                 <button type="submit" disabled={saving} className="btn-primary-dashboard">

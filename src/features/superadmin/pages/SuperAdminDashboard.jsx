@@ -1,19 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getPlatformStats } from "@/features/superadmin/services/superadminService";
-import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
 const STATO_LABEL = { ATTIVA: "Attiva", SCADUTA: "Scaduta", SOSPESA: "Sospesa", CANCELLATA: "Cancellata" };
-
-const SUPERADMIN_NAV = [
-  { to: "/superadmin/dashboard", label: "Riepilogo", description: "Home e statistiche" },
-  { to: "/superadmin/tenants", label: "Clienti", description: "Pizzerie registrate" },
-  { to: "/superadmin/servizi", label: "Catalogo servizi", description: "Servizi, funzioni e prezzi" },
-  { to: "/superadmin/deploy-clienti", label: "Deploy siti clienti", description: "Pubblicazione e go-live" },
-  { to: "/superadmin/piani", label: "Piani", description: "Piani di abbonamento" },
-  { to: "/superadmin/licenses", label: "Abbonamenti", description: "Stato licenze" },
-  { to: "/superadmin/settings", label: "Impostazioni", description: "Configurazione" },
-];
 
 export default function SuperAdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -59,9 +48,13 @@ export default function SuperAdminDashboard() {
 
   return (
     <>
-      <h1 className="dashboard-page-title">Riepilogo</h1>
-
-      <DashboardNavCards items={SUPERADMIN_NAV} columns={5} />
+      <header className="sa-page-header">
+        <p className="sa-page-kicker">Super Admin</p>
+        <h1 className="dashboard-page-title sa-page-title">Panoramica</h1>
+        <p className="sa-page-lede">
+          Indicatori sintetici sulla piattaforma. Per spostarti tra le sezioni usa la barra di navigazione in alto.
+        </p>
+      </header>
 
       <div className="stat-cards cols-4">
         <div className="stat-card">

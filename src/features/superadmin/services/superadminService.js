@@ -14,8 +14,15 @@ function isSchemaNotExposedError(err) {
   return /schema must be one of/i.test(m);
 }
 
-/** Colonna assente / cache PostgREST non aggiornata dopo migrazione SQL. */
+/** Tabella assente in PostgREST (es. solo core.subscriptions, niente public.subscriptions). */
+function isTableNotInSchemaCacheError(err) {
+  const m = String(err?.message ?? err ?? "");
+  return /could not find the table/i.test(m);
+}
+
+/** Colonna assente / cache PostgREST non aggiornata dopo migrazione SQL (non usare per “table not found”). */
 function isMissingColumnOrSchemaCacheError(err) {
+  if (isTableNotInSchemaCacheError(err)) return false;
   const m = String(err?.message ?? err ?? "");
   const code = err?.code;
   return (
@@ -42,12 +49,16 @@ async function updatePianoOnAdminTable(id, piano) {
 
 /** Solo campi presenti su tenant “minimi” (senza colonne fatturazione). */
 function tenantRowMinimal(payload) {
-  return {
+  const row = {
     nome: payload.nome,
     slug: payload.slug,
     piano: payload.piano ?? "TRIAL",
     attivo: payload.attivo ?? true,
   };
+  if (payload.parametri_operativi != null && typeof payload.parametri_operativi === "object") {
+    row.parametri_operativi = payload.parametri_operativi;
+  }
+  return row;
 }
 
 /**
@@ -61,7 +72,15 @@ function fromCore(table) {
 const TENANT_SELECT_FULL =
   "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
   "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
-  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, prova_valida_fino";
+  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, prova_valida_fino, " +
+  "public_domain, public_domain_status, public_domain_requested_at, sito_web_cliente, parametri_operativi";
+
+/** Come FULL ma senza sito_web_cliente (DB non ancora migrato). */
+const TENANT_SELECT_NO_SITO_WEB =
+  "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
+  "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
+  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, prova_valida_fino, " +
+  "public_domain, public_domain_status, public_domain_requested_at, parametri_operativi";
 
 const TENANT_SELECT_LEGACY = "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at";
 
@@ -83,11 +102,15 @@ async function fetchTenantsList(selectCols) {
  * Elenco di tutti i tenant (solo superadmin).
  */
 export async function getTenants() {
-  try {
-    return await fetchTenantsList(TENANT_SELECT_FULL);
-  } catch {
-    return fetchTenantsList(TENANT_SELECT_LEGACY);
+  const attempts = [TENANT_SELECT_FULL, TENANT_SELECT_NO_SITO_WEB, TENANT_SELECT_LEGACY];
+  for (const cols of attempts) {
+    try {
+      return await fetchTenantsList(cols);
+    } catch {
+      /* prova select più ristretto */
+    }
   }
+  return [];
 }
 
 /**
@@ -137,8 +160,55 @@ function tenantRowFromPayload(payload) {
       payload.prova_valida_fino === "" || payload.prova_valida_fino == null
         ? null
         : payload.prova_valida_fino,
+    public_domain:
+      payload.public_domain === undefined
+        ? undefined
+        : payload.public_domain?.trim()
+          ? payload.public_domain.trim()
+          : null,
+    public_domain_status: payload.public_domain_status,
+    public_domain_requested_at: payload.public_domain_requested_at,
   };
-  return base;
+  const cleaned = { ...base };
+  if (cleaned.public_domain === undefined) delete cleaned.public_domain;
+  if (cleaned.public_domain_status === undefined) delete cleaned.public_domain_status;
+  if (cleaned.public_domain_requested_at === undefined) delete cleaned.public_domain_requested_at;
+  if (Object.prototype.hasOwnProperty.call(payload, "sito_web_cliente")) {
+    cleaned.sito_web_cliente =
+      payload.sito_web_cliente == null || String(payload.sito_web_cliente).trim() === ""
+        ? null
+        : String(payload.sito_web_cliente).trim();
+  }
+  if (cleaned.sito_web_cliente === undefined) delete cleaned.sito_web_cliente;
+  if (Object.prototype.hasOwnProperty.call(payload, "parametri_operativi")) {
+    const po = payload.parametri_operativi;
+    if (po != null && typeof po === "object") {
+      cleaned.parametri_operativi = po;
+    }
+  }
+  return cleaned;
+}
+
+/** Aggiorna solo campi pubblicazione / dominio (senza toccare nome, slug, piano). */
+export async function updateTenantPublicDomain(id, patch) {
+  const row = {};
+  if (patch.public_domain !== undefined) {
+    row.public_domain = patch.public_domain?.trim() ? patch.public_domain.trim() : null;
+  }
+  if (patch.public_domain_status !== undefined) row.public_domain_status = patch.public_domain_status;
+  if (patch.public_domain_requested_at !== undefined) row.public_domain_requested_at = patch.public_domain_requested_at;
+  if (patch.sito_web_cliente !== undefined) {
+    row.sito_web_cliente =
+      patch.sito_web_cliente == null || String(patch.sito_web_cliente).trim() === ""
+        ? null
+        : String(patch.sito_web_cliente).trim();
+  }
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from("tenants").update(row).eq("id", id);
+  if (error) {
+    logSupabaseError("superadmin.updateTenantPublicDomain", error, { id });
+    throw error;
+  }
 }
 
 /** Piano UI → valore enum DB (core.piano_saas: FREE, PRO, ENTERPRISE) */
@@ -150,38 +220,101 @@ function pianoToDbEnum(piano) {
   return "FREE";
 }
 
-/** Prossima data rinnovo (primo giorno del mese successivo alla data di riferimento, mezzogiorno UTC). */
-function computeRinnovoIl(dataAttivazione) {
-  if (!dataAttivazione) return null;
-  const base = new Date(dataAttivazione);
-  if (Number.isNaN(base.getTime())) return null;
-  const y = base.getFullYear();
-  const m = base.getMonth();
-  return new Date(Date.UTC(y, m + 1, 1, 12, 0, 0)).toISOString();
+/** Ciclo fatturazione: 365 = annuale, altrimenti 30 (mensile). */
+function parseAbbonamentoCicloGiorni(payload, tenantRow) {
+  const raw =
+    payload?.abbonamento_ciclo_giorni ??
+    payload?.abbonamentoCicloGiorni ??
+    tenantRow?.abbonamento_ciclo_giorni;
+  const n = Number(raw);
+  if (n === 365) return 365;
+  return 30;
 }
 
-async function upsertSubscriptionForTenant(tenantRow, payload) {
-  const tenantId = tenantRow?.id;
-  if (!tenantId) return;
-  const piano = pianoToDbEnum(payload?.piano ?? tenantRow?.piano);
-  const rinnovo = computeRinnovoIl(payload?.data_attivazione_abbonamento ?? tenantRow?.data_attivazione_abbonamento);
+/** Sconto % sul totale annuale (solo se ciclo 365). */
+function parseScontoAnnualePercent(payload, tenantRow, cicloGiorni) {
+  if (cicloGiorni !== 365) return null;
+  const raw =
+    payload?.abbonamento_sconto_annuale_percent ?? payload?.abbonamentoScontoAnnualePercent ?? tenantRow?.abbonamento_sconto_annuale_percent;
+  const x = Number(String(raw ?? "").replace(",", "."));
+  if (!Number.isFinite(x) || x <= 0) return null;
+  return Math.min(100, Math.max(0, Math.round(x * 100) / 100));
+}
 
-  const subRow = {
-    tenant_id: tenantId,
-    piano,
-    stato: "ATTIVA",
-    rinnovo_il: rinnovo,
-  };
+/**
+ * Aggiunge N mesi di calendario a una data YYYY-MM-DD (mezzogiorno UTC).
+ * Il giorno viene ridotto se il mese di destinazione è più corto (es. 31 gen → 28/29 feb).
+ */
+function addCalendarMonthsFromDateStr(dateStr, monthsToAdd) {
+  if (!dateStr || monthsToAdd < 1) return null;
+  const s = String(dateStr).trim().slice(0, 10);
+  const parts = s.split("-");
+  if (parts.length !== 3) return null;
+  let y = Number(parts[0]);
+  let mo = Number(parts[1]);
+  const d = Number(parts[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  mo -= 1;
+  mo += monthsToAdd;
+  y += Math.floor(mo / 12);
+  mo = ((mo % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+  const day = Math.min(d, lastDay);
+  return new Date(Date.UTC(y, mo, day, 12, 0, 0, 0)).toISOString();
+}
 
-  const opts = { onConflict: "tenant_id" };
+/**
+ * Prossimo rinnovo da data attivazione.
+ * `ciclo_fatturazione_giorni` in DB: 30 = un mese di calendario, 365 = 12 mesi di calendario (non giorni fissi).
+ */
+function computeProssimoRinnovoIl(dataAttivazione, cicloGiorni) {
+  const months = Number(cicloGiorni) === 365 ? 12 : 1;
+  return addCalendarMonthsFromDateStr(dataAttivazione, months);
+}
+
+async function upsertSubscriptionRow(subRow, opts) {
   let r = await supabase.from("subscriptions").upsert(subRow, opts).select().single();
   if (!r.error) return;
+
+  if (isTableNotInSchemaCacheError(r.error)) {
+    const subCoreOnly = fromCore("subscriptions");
+    if (subCoreOnly) {
+      let rc = await subCoreOnly.upsert(subRow, opts).select().single();
+      if (!rc.error) return;
+      if (isMissingColumnOrSchemaCacheError(rc.error) && (subRow.ciclo_fatturazione_giorni !== undefined || subRow.sconto_annuale_percent !== undefined)) {
+        const { ciclo_fatturazione_giorni: _c0, sconto_annuale_percent: _s0, ...leg0 } = subRow;
+        rc = await subCoreOnly.upsert(leg0, opts).select().single();
+        if (!rc.error) return;
+      }
+    }
+    return;
+  }
+
+  if (isMissingColumnOrSchemaCacheError(r.error) && (subRow.ciclo_fatturazione_giorni !== undefined || subRow.sconto_annuale_percent !== undefined)) {
+    const { ciclo_fatturazione_giorni: _c, sconto_annuale_percent: _s, ...legacy } = subRow;
+    r = await supabase.from("subscriptions").upsert(legacy, opts).select().single();
+    if (!r.error) {
+      console.warn("[superadmin] subscriptions: colonne ciclo/sconto assenti, salvataggio senza estensione annuale. Esegui la migrazione SQL.");
+      return;
+    }
+  }
   const subCore = fromCore("subscriptions");
   if (!subCore) {
-    console.warn("subscriptions upsert (solo public):", r.error?.message ?? r.error);
+    if (!isTableNotInSchemaCacheError(r.error)) {
+      console.warn("subscriptions upsert (solo public):", r.error?.message ?? r.error);
+    }
     return;
   }
   r = await subCore.upsert(subRow, opts).select().single();
+  if (!r.error) return;
+  if (isMissingColumnOrSchemaCacheError(r.error) && (subRow.ciclo_fatturazione_giorni !== undefined || subRow.sconto_annuale_percent !== undefined)) {
+    const { ciclo_fatturazione_giorni: _c2, sconto_annuale_percent: _s2, ...legacy2 } = subRow;
+    r = await subCore.upsert(legacy2, opts).select().single();
+    if (!r.error) {
+      console.warn("[superadmin] subscriptions (core): colonne ciclo/sconto assenti, salvataggio senza estensione annuale.");
+      return;
+    }
+  }
   if (r.error) {
     if (isSchemaNotExposedError(r.error)) {
       console.warn("subscriptions upsert: schema core non disponibile, ignorato");
@@ -189,6 +322,57 @@ async function upsertSubscriptionForTenant(tenantRow, payload) {
     }
     console.warn("subscriptions upsert:", r.error.message ?? r.error);
   }
+}
+
+async function upsertSubscriptionForTenant(tenantRow, payload) {
+  const tenantId = tenantRow?.id;
+  if (!tenantId) return;
+  const piano = pianoToDbEnum(payload?.piano ?? tenantRow?.piano);
+  const ciclo = parseAbbonamentoCicloGiorni(payload, tenantRow);
+  const sconto = parseScontoAnnualePercent(payload, tenantRow, ciclo);
+  const dataAtt = payload?.data_attivazione_abbonamento ?? tenantRow?.data_attivazione_abbonamento;
+  const rinnovo = computeProssimoRinnovoIl(dataAtt, ciclo);
+
+  const subRow = {
+    tenant_id: tenantId,
+    piano,
+    stato: "ATTIVA",
+    rinnovo_il: rinnovo,
+    ciclo_fatturazione_giorni: ciclo,
+    sconto_annuale_percent: sconto,
+  };
+
+  const opts = { onConflict: "tenant_id" };
+  await upsertSubscriptionRow(subRow, opts);
+}
+
+/**
+ * Riga subscription per tenant (modale Clienti: ciclo e sconto annuale).
+ */
+export async function getSubscriptionRow(tenantId) {
+  if (!tenantId) return null;
+  const colsFull = "tenant_id, ciclo_fatturazione_giorni, sconto_annuale_percent, rinnovo_il";
+  const colsLegacy = "tenant_id, rinnovo_il";
+
+  const tryTable = async (getBuilder) => {
+    let r = await getBuilder().select(colsFull).eq("tenant_id", tenantId).maybeSingle();
+    if (!r.error && r.data) return r.data;
+    if (isTableNotInSchemaCacheError(r.error)) return null;
+    if (isMissingColumnOrSchemaCacheError(r.error)) {
+      r = await getBuilder().select(colsLegacy).eq("tenant_id", tenantId).maybeSingle();
+      if (!r.error && r.data) {
+        return { ...r.data, ciclo_fatturazione_giorni: 30, sconto_annuale_percent: null };
+      }
+    }
+    return null;
+  };
+
+  const pub = await tryTable(() => supabase.from("subscriptions"));
+  if (pub) return pub;
+  if (fromCore("subscriptions")) {
+    return await tryTable(() => fromCore("subscriptions"));
+  }
+  return null;
 }
 
 export async function createTenant(payload) {
@@ -271,6 +455,37 @@ export async function updateTenant(id, updates) {
   await upsertSubscriptionForTenant({ id, ...row }, updates).catch(() => {});
 }
 
+async function fetchSubscriptionsRows(order) {
+  const colsFull =
+    "id, tenant_id, piano, stato, rinnovo_il, created_at, updated_at, ciclo_fatturazione_giorni, sconto_annuale_percent";
+  const colsBasic = "id, tenant_id, piano, stato, rinnovo_il, created_at, updated_at";
+
+  const withDefaults = (data) =>
+    (data ?? []).map((r) => ({
+      ...r,
+      ciclo_fatturazione_giorni: r.ciclo_fatturazione_giorni ?? 30,
+      sconto_annuale_percent: r.sconto_annuale_percent ?? null,
+    }));
+
+  let pub = await supabase.from("subscriptions").select(colsFull).order("created_at", order);
+  if (!pub.error) return withDefaults(pub.data);
+  if (!isTableNotInSchemaCacheError(pub.error) && isMissingColumnOrSchemaCacheError(pub.error)) {
+    pub = await supabase.from("subscriptions").select(colsBasic).order("created_at", order);
+    if (!pub.error) return withDefaults(pub.data);
+  }
+
+  const subCore = fromCore("subscriptions");
+  if (!subCore) return [];
+  let coreQ = await subCore.select(colsFull).order("created_at", order);
+  if (!coreQ.error) return withDefaults(coreQ.data);
+  if (isMissingColumnOrSchemaCacheError(coreQ.error)) {
+    coreQ = await subCore.select(colsBasic).order("created_at", order);
+    if (!coreQ.error) return withDefaults(coreQ.data);
+  }
+  if (coreQ.error && !isSchemaNotExposedError(coreQ.error)) return [];
+  return [];
+}
+
 /**
  * Elenco subscription con nome tenant (solo superadmin).
  * Prova `public.subscriptions`, poi `core.subscriptions` (schema enterprise nelle migrazioni).
@@ -278,25 +493,8 @@ export async function updateTenant(id, updates) {
  * affinché PostgREST serva le tabelle core.
  */
 export async function getSubscriptions() {
-  const cols = "id, tenant_id, piano, stato, rinnovo_il, created_at, updated_at";
   const order = { ascending: false };
-
-  let list = null;
-  const pub = await supabase.from("subscriptions").select(cols).order("created_at", order);
-  if (!pub.error) {
-    list = pub.data;
-  } else {
-    const subCore = fromCore("subscriptions");
-    if (!subCore) return [];
-    const coreQ = await subCore.select(cols).order("created_at", order);
-    if (coreQ.error) {
-      if (isSchemaNotExposedError(coreQ.error)) return [];
-      return [];
-    }
-    list = coreQ.data;
-  }
-
-  let rows = list ?? [];
+  let rows = await fetchSubscriptionsRows(order);
 
   const tenants = await getTenants();
   const tenantMap = Object.fromEntries(tenants.map((t) => [t.id, t]));
@@ -308,16 +506,7 @@ export async function getSubscriptions() {
     await upsertSubscriptionForTenant(t, t).catch(() => {});
   }
   if (missing.length > 0) {
-    const again = await supabase.from("subscriptions").select(cols).order("created_at", order);
-    if (!again.error && again.data?.length) {
-      rows = again.data;
-    } else {
-      const subCore = fromCore("subscriptions");
-      if (subCore) {
-        const coreAgain = await subCore.select(cols).order("created_at", order);
-        if (!coreAgain.error && coreAgain.data?.length) rows = coreAgain.data;
-      }
-    }
+    rows = await fetchSubscriptionsRows(order);
   }
 
   const enriched = rows.map((s) => {
@@ -338,7 +527,9 @@ export async function getSubscriptions() {
       tenant_id: t.id,
       piano: pianoToDbEnum(t.piano),
       stato: "ATTIVA",
-      rinnovo_il: computeRinnovoIl(t.data_attivazione_abbonamento),
+      rinnovo_il: computeProssimoRinnovoIl(t.data_attivazione_abbonamento, 30),
+      ciclo_fatturazione_giorni: 30,
+      sconto_annuale_percent: null,
       created_at: t.created_at ?? null,
       updated_at: t.updated_at ?? null,
       tenant_nome: t.nome ?? "—",

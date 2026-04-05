@@ -6,13 +6,14 @@ Documento **vivo**: aggiornalo quando aggiungi o modifichi funzionalità nella c
 
 ## 1. Cos’è il Super Admin
 
-Il **Super Admin** gestisce l’intera piattaforma SaaS: tutte le **pizzerie (tenant)** iscritte, i **piani** e la visione d’insieme su **abbonamenti** e volumi.  
-È un profilo distinto dal **Admin di pizzeria** (tenant), che vede solo i dati della propria attività.
+Il **Super Admin** gestisce l’intera piattaforma SaaS: **tenant (pizzerie)**, **listini e piani commerciali** (catalogo servizi + bundle), **deploy e domini** dei siti cliente, **abbonamenti** (subscription) e documentazione interna.
+
+È un profilo distinto dall’**Admin di pizzeria** (tenant), che vede solo i dati del proprio locale.
 
 **URL tipici (ambiente produzione):**
 
 - Sito pubblico / login: `https://pizzamanager.it` (o dominio `app.*` configurato)
-- Area Super Admin: `https://pizzamanager.it/superadmin/dashboard` (dopo login)
+- Area Super Admin: `https://pizzamanager.it/superadmin/dashboard` (dopo login; ingresso spesso da `/superadmin/ingresso`)
 
 ---
 
@@ -20,156 +21,205 @@ Il **Super Admin** gestisce l’intera piattaforma SaaS: tutte le **pizzerie (te
 
 1. Apri la pagina di **login** del progetto SaaS.
 2. Accedi con un utente il cui ruolo in database è **superadmin** (tabella `public.utenti_ruoli`, campo `ruolo` = `superadmin`, collegato al tuo `user_id` Supabase).
-3. Dopo l’accesso, l’app reindirizza alla **dashboard Super Admin** (`/superadmin/dashboard`).
+3. Dopo l’accesso, l’app può mostrare prima **Ingresso** (`/superadmin/ingresso`) e poi la **Panoramica** (`/superadmin/dashboard`).
 
 Se l’accesso funziona ma non vedi l’area Super Admin, verifica in Supabase che il profilo sia presente e attivo in `utenti_ruoli`.
 
 ---
 
-## 3. Struttura menu (sidebar e barra)
+## 3. Struttura menu (console enterprise)
 
-| Voce | Percorso | Ruolo |
-|------|----------|--------|
-| Riepilogo | `/superadmin/dashboard` | Panoramica numeri e link rapidi |
-| Clienti | `/superadmin/tenants` | Elenco e gestione tenant (pizzerie) |
-| Piani | `/superadmin/piani` | Piani commerciali (modale: nome, prezzo, validità, servizi a flag) |
-| Abbonamenti | `/superadmin/licenses` | Tabella subscription con stato e rinnovi |
-| Impostazioni | `/superadmin/settings` | Parametri globali (placeholder / bozza UI) |
+La barra superiore è organizzata in **cluster** (etichette in maiuscoletto) per ridurre ambiguità tra voci simili.
 
-**Admin di pizzeria (tenant):** non è Super Admin; per menu, impostazioni, **pubblicazione sito** (`/admin/pubblicazione`) e linee guida aggiornamento codice vedi **`docs/GUIDA_ADMIN.md`**.
+| Cluster | Voci | Percorso | Ruolo |
+|---------|------|----------|--------|
+| **Accesso** | Ingresso | `/superadmin/ingresso` | Schermata iniziale / passaggio alla console |
+| **Commercio** | Panoramica | `/superadmin/dashboard` | KPI piattaforma e schede rapide |
+| | Clienti | `/superadmin/tenants` | Tenant: anagrafica, contratto, **piano/servizi** |
+| | Piani e listini | `/superadmin/piani` | Bundle commerciali (servizi inclusi, canone = somma listino) |
+| | Catalogo servizi | `/superadmin/servizi` | Moduli vendibili, prezzi e schede (`/superadmin/servizi/:id`) |
+| | Abbonamenti | `/superadmin/licenses` | Subscription, stato, rinnovi |
+| **Go-live** | Deploy siti | `/superadmin/deploy-clienti` | Checklist go-live / domini |
+| | Pubblicazione dominio | `/superadmin/pubblicazione-sito` | Dominio pubblico tenant, stato, guida DNS/Firebase |
+| **Piattaforma** | Documentazione | `/superadmin/guide` | Hub guide (markdown da `docs/` e build) |
+| | Roadmap | `/superadmin/sviluppo` | Avanzamento sviluppo / export CSV allineati al catalogo |
+| | Anteprima sito | `/superadmin/home-pizzeria` | Anteprima home pubblica (stesso componente marketing) |
+| | Sistema | `/superadmin/settings` | Impostazioni globali (UI in evoluzione) |
+
+**Route aggiuntive (non sempre in barra):** `/superadmin/test-reparti` (strumenti interni), documenti sotto `/superadmin/guide/:slug` (es. `superadmin`, `admin`, `deploy`).
+
+**Admin di pizzeria (tenant):** menu, impostazioni, report, dipendenti, ruoli — vedi **`docs/GUIDA_ADMIN.md`**. **Pubblicazione dominio** è in **`/superadmin/pubblicazione-sito`** (questa console).
 
 ---
 
 ## 4. Pagine in dettaglio
 
-### 4.1 Riepilogo (`/superadmin/dashboard`)
+### 4.1 Panoramica (`/superadmin/dashboard`)
 
-**Cosa mostra (dati attuali nell’implementazione):**
-
-- **Schede di navigazione** verso le altre sezioni Super Admin.
-- **KPI principali:** clienti totali, clienti attivi, numero abbonamenti (righe in `subscriptions`), ordini totali (conteggio dalla tabella usata dal servizio; vedi nota tecnica sotto).
-- **Clienti per piano:** distribuzione tenant per piano (`FREE`, `PRO`, `ENTERPRISE`).
-- **Abbonamenti per stato:** conteggio subscription per stato (es. Attiva, Scaduta, Sospesa, Cancellata).
-- **Ultimi clienti:** elenco sintetico degli ultimi tenant (nome, slug, piano) con link verso la gestione clienti.
-
-**Nota tecnica (ordini):** le statistiche piattaforma leggono i tenant e le subscription da Supabase; il totale ordini dipende dalla tabella/vista configurata nel client (es. `Ordine`). Se il conteggio risulta zero, verificare nome tabella e permessi RLS in Supabase.
+- Schede di navigazione verso le altre sezioni (etichette allineate alla console).
+- **KPI:** clienti totali/attivi, abbonamenti, ordini totali (dipende da tabella configurata nel client).
+- **Clienti per piano:** distribuzione per enum `FREE` / `PRO` / `ENTERPRISE` (e varianti UI come TRIAL).
+- **Abbonamenti per stato** e **ultimi clienti** con link a **Clienti**.
 
 ---
 
-### 4.2 Clienti — Tenant (`/superadmin/tenants`)
+### 4.2 Ingresso (`/superadmin/ingresso`)
 
-**Funzioni:**
-
-- Visualizzazione elenco **tutti i tenant** (pizzerie) non eliminati (`deleted_at` nullo).
-- **Creazione / modifica** tramite modale: oltre a nome, **slug**, **piano** (default prova **TRIAL** / 7 giorni, poi Pro o Enterprise) e **attivo**, sono disponibili i **dati fiscali e di contatto** della pizzeria: **partita IVA**, **email** (fatturazione/azienda), **PEC**, **codice univoco / SDI** (fatturazione elettronica).
-- **Abbonamento:** flag **pagamento online con addebito automatico mensile** (rinnovo a inizio mese solare dalla **data di attivazione** indicata; l’integrazione con il gateway va completata lato piattaforma), e **sconto percentuale** sul canone se concordato con il cliente.
-- Tabella principale con colonne riassuntive (P.IVA, email, PEC, addebito automatico, sconto, ecc.).
-
-**Comportamento slug:** in creazione, se lo slug è vuoto può essere derivato dal nome (solo lettere minuscole, numeri e trattini).
-
-**Dati persistiti:** tabella `core.tenants` (colonne aggiunte dalla migrazione `20260322120000_tenants_anagrafica_fatturazione.sql`). Il client prova anche `public.tenants` se presente; dopo la migrazione su Supabase eseguire **SQL Editor** o `supabase db push` come da workflow del progetto.
+Schermata di benvenuto / passaggio verso la Panoramica o le aree operative, secondo il flusso configurato nell’app.
 
 ---
 
-### 4.3 Piani (`/superadmin/piani`)
+### 4.3 Clienti — Tenant (`/superadmin/tenants`)
 
-**Funzioni attuali:**
+**Elenco:** tutti i tenant non eliminati (`deleted_at` nullo). Colonne riassuntive incluso **Contratto** (etichetta piano) e **Listino** (nome piano commerciale o “Servizi su misura” se personalizzato).
 
-- **Aggiungi piano** apre un **modale** unico dove compili: **nome**, **prezzo** (testo libero), **validità in giorni**, flag **piano abilitato** (se disattivato non è proponibile per nuove sottoscrizioni), **descrizione** (facoltativa), e la sezione **Cosa include**: **tutti i servizi** disponibili come **checkbox** (es. report, multi-sede, API, ecc.).
-- **Modifica** riapre lo stesso modale con i dati salvati. Sulle **schede** in elenco puoi ancora attivare/disattivare rapidamente il piano senza aprire il modale.
-- **Elimina** rimuove il piano dall’elenco locale.
-- Persistenza in **localStorage** del browser (allineamento team; pubblicazione su DB/landing globale da estendere in seguito).
-- **Nessun piano Free permanente** in prodotto: i nuovi clienti usano la **prova di 7 giorni** (codice piano tipico `TRIAL` sui tenant), poi un abbonamento (es. `PRO`, `ENTERPRISE`).
-- Link di navigazione verso altre sezioni Super Admin.
+**Modale creazione / modifica:**
 
-**Codici piano sui tenant** (campo `piano` in anagrafica clienti): `TRIAL`, `PRO`, `ENTERPRISE`; eventuali valori `FREE` in database sono considerati **legacy**. I nomi configurati nella pagina Piani sono descrittivi in UI; l’associazione tenant ↔ codice enum resta sul campo `piano` del tenant finché non si collega un DB `piani`.
+- **Anagrafica:** nome, slug, **livello contratto (subscription)** — valori UI tipici: **TRIAL** (prova, bundle operativo come Pro), **FREE** (bundle Base), **PRO**, **ENTERPRISE**. Su database/subscription gli enum sono `FREE`, `PRO`, `ENTERPRISE` (mapping da `superadminService`).
+- **Prova valida fino al** e flag **Cliente attivo**.
+- **Piano commerciale e servizi**
+  - **Modello da listino:** applica le inclusioni di un piano definito in **Piani e listini** (stessi dati in localStorage).
+  - **Personalizza servizi:** abilita le checkbox sul **catalogo servizi**; in salvataggio si scrive su `tenants.parametri_operativi` con `servizi_personalizzati: true` e `servizi_abilitati: [id, …]`. Con **`VITE_ENFORCE_SERVIZI_PLAN=true`** (e senza bypass), l’app tenant usa questo elenco per i gate sui moduli.
+  - **Allinea livello contratto:** suggerisce l’enum subscription in base ai servizi selezionati.
+  - **Canone stimato:** somma dei prezzi listino (riferimento commerciale; non sostituisce fatturazione).
+- **Dati fiscali e contatti:** P.IVA, email, PEC, codice SDI.
+- **Abbonamento:** addebito automatico mensile, data attivazione, sconto % sul canone.
 
----
-
-### 4.4 Abbonamenti (`/superadmin/licenses`)
-
-**Funzioni:**
-
-- Tabella delle **subscription** con: cliente, slug, piano, **stato**, data **rinnovo** (`rinnovo_il`), data creazione.
-- Stato mostrato con etichette in italiano (Attiva, Scaduta, ecc.).
-- Link verso **Clienti** per gestione tenant.
-
-Se non ci sono righe in `subscriptions`, viene mostrato un messaggio esplicativo.
+**Persistenza:** tabella `tenants` (vista `public.tenants` / `core.tenants` a seconda del progetto). Il campo **`parametri_operativi`** (JSONB) deve essere esposto in select/update affinché i servizi personalizzati funzionino.
 
 ---
 
-### 4.5 Impostazioni (`/superadmin/settings`)
+### 4.4 Piani e listini (`/superadmin/piani`)
 
-**Funzioni attuali (UI):**
-
-- Blocco **configurazione generale** con nome applicazione (campo di sola lettura / dimostrativo).
-- Pulsante **Salva** con feedback simulato (messaggio “Salvato (simulato)”) — utile solo a fini dimostrativi finché non si collega un backend di salvataggio.
-- Sezione **Supporto** (URL e email) come campi editabili in pagina, senza persistenza garantita finché non implementata.
-- Link alla pagina **Piani**.
-
-**Nota:** aggiornare questa sezione quando le impostazioni globali saranno salvate su API o Supabase.
+- I **prezzi** dei piani sono la **somma** dei `prezzoMensile` dei servizi inclusi (unica fonte, come in catalogo).
+- Modale piano: nome, descrizione, validità giorni, **abilitato**, inclusioni servizi a checkbox.
+- Persistenza in **localStorage** (`pizzamanager_superadmin_plans_v2`); catalogo servizi in `pizzamanager_superadmin_services_v2`.
+- La **landing** pubblica può leggere gli stessi piani nello stesso browser; **non mostra importi** in pagina marketing (solo moduli e testi). I contatti da sito usano **`/contatti`** con scelta piano / moduli.
 
 ---
 
-## 5. Operazioni che il Super Admin **non** fa (oggi) nell’UI
+### 4.5 Catalogo servizi (`/superadmin/servizi`)
 
-Per evitare aspettative errate, queste capacità **non** sono esposte come sezioni dedicate nella console Super Admin al momento della stesura di questa guida:
+- Elenco moduli con prezzo, categoria, avanzamento (stima sviluppo).
+- Scheda per servizio: `/superadmin/servizi/:servizioId` (note implementative, link utili).
+- CSV / ripristino default da registro codice (`serviziAppRegistro`).
+
+---
+
+### 4.6 Roadmap / Sviluppo (`/superadmin/sviluppo`)
+
+- Vista avanzamento allineata al catalogo (percentuali, export dove previsto).
+
+---
+
+### 4.7 Deploy siti clienti (`/superadmin/deploy-clienti`)
+
+- Checklist e riferimenti per go-live, domini, Firebase Hosting; allineato a `DEPLOY_COMANDI.md`. Il form **dominio / stato pubblicazione** e la **guida deploy** modale sono in **Pubblicazione dominio** (sotto).
+
+---
+
+### 4.7b Pubblicazione dominio (`/superadmin/pubblicazione-sito`)
+
+- Scelta tenant, salvataggio **dominio pubblico**, **stato go-live**, URL sito vetrina cliente; sezioni DNS / Firebase e checklist. Non è disponibile nell’area Admin del cliente.
+
+---
+
+### 4.7c Supabase Authentication — URL configuration (reset password clienti)
+
+Quando un tenant ha il **menu / vetrina sul proprio dominio** (non solo su `pizzamanager.it`), i clienti possono usare **Password dimenticata** e **Reimposta password** sul **sito della pizzeria**. L’app invia a Supabase un `redirectTo` uguale a **`https://<origine-del-sito-cliente>/reimposta-password`** (l’origine è quella del browser al momento della richiesta).
+
+**Operazione da fare in Supabase (Dashboard del progetto):**
+
+1. Apri **Authentication** → **URL Configuration**.
+2. In **Redirect URLs** aggiungi, **per ogni dominio** su cui è pubblicata la vetrina (e per eventuali sottodomini usati in produzione), una riga del tipo:
+   - `https://www.tuapizzeria.it/reimposta-password`
+   - `https://ordini.tuapizzeria.it/reimposta-password`
+3. Se il registrar/hosting lo consente, puoi usare un **wildcard** Supabase (es. `https://*.tuapizzeria.it/reimposta-password`) per coprire più host sotto lo stesso dominio.
+4. La **Site URL** può restare il dominio principale della piattaforma (es. `https://pizzamanager.it`); conta soprattutto che l’URL di redirect del link email sia **in elenco** (altrimenti il recupero password dal sito cliente fallisce o viene deviato in modo errato).
+
+**Nota:** il **reset password da UI è solo per account cliente** sul sito pizzeria; lo **staff** non ha flusso equivalente nell’app (gestione password fuori da questa procedura).
+
+**Riferimento codice:** `src/features/public/services/clienteAuthService.js` (`requestClientePasswordReset`), route `/password-dimenticata` e `/reimposta-password` (solo su dominio non-SaaS).
+
+---
+
+### 4.8 Abbonamenti (`/superadmin/licenses`)
+
+- Tabella subscription: cliente, piano enum, stato, `rinnovo_il`.
+- Se mancano righe, il client può proporre upsert di allineamento (vedi `superadminService`).
+
+---
+
+### 4.9 Anteprima sito (`/superadmin/home-pizzeria`)
+
+- Anteprima della home / marketing pubblica (stesso stack delle pagine pubbliche).
+
+---
+
+### 4.10 Documentazione (`/superadmin/guide`)
+
+- **Hub** con link ai documenti markdown inclusi nel build: Super Admin, Admin tenant, Manuale utente (tenant), Architettura, CSV ingredienti, Comandi deploy (`DEPLOY_COMANDI.md`).
+
+---
+
+### 4.11 Sistema (`/superadmin/settings`)
+
+- Parametri globali (placeholder / bozza finché non collegati a backend).
+
+---
+
+## 5. Sito pubblico, landing e contatti
+
+- **Landing (`/`):** sezione piani senza **prezzi** in evidenza; elenco moduli per piano; link “Richiedi informazioni” con `?piano=<id>` verso Contatti.
+- **Contatti (`/contatti`):** modulo con scelta **piano da listino** o **Personalizzato** (checkbox moduli); il testo riepilogativo viene incluso nel corpo dell’email (`mailto`).
+
+---
+
+## 6. Operazioni che il Super Admin **non** fa (oggi) nell’UI
 
 - Dashboard **MRR / fatturazione SaaS** dettagliata
-- **Monitor infrastruttura** (log errori, performance API, utilizzo database)
+- **Monitor infrastruttura** unificato
 - **Fatture PDF** e storico pagamenti integrato
-- Modifica **prezzi piani** con persistenza **centralizzata su server** (oggi i piani in UI sono salvati in **localStorage** del browser)
-
-Quando una di queste viene implementata, aggiungere una sottosezione in §4 e una riga nel registro aggiornamenti.
+- Persistenza **centralizzata su server** dei piani/listini (oggi listino + piani in **localStorage** del browser che configura la console)
 
 ---
 
-## 6. Sicurezza e dati
+## 7. Sicurezza e dati
 
-- L’accesso all’area `/superadmin/*` è protetto da **ruolo** lato applicazione (`ProtectedRoute` / `RoleLayout`).
-- I dati dei tenant e delle subscription passano da **Supabase** con le policy **RLS** configurate sul progetto: solo gli utenti autorizzati (es. superadmin) devono poter leggere/scrivere le tabelle sensibili.
-- Ogni **tenant** isola i dati operativi delle singole pizzerie (`tenant_id` sulle entità applicative).
+- Accesso `/superadmin/*` protetto da ruolo (`ProtectedRoute` / layout dedicato).
+- Dati su **Supabase** con **RLS**; tenant isolati con `tenant_id`.
 
 ---
 
-## 7. Collegamenti utili interni al repo
+## 8. Collegamenti utili interni al repo
 
 | Documento | Contenuto |
 |-----------|-----------|
-| `DEPLOY_COMANDI.md` | Deploy frontend (Firebase) e push backend (Koyeb) |
-| `DEPLOY.md` | Procedura deploy dettagliata |
-| `docs/GUIDA_ADMIN.md` | **Linee guida Admin tenant**: cosa aggiornare quando si sviluppa (rotte, tenant, pubblicazione sito) |
-| `docs/ARCHITETTURA_E_STATO.md` | Roadmap vs implementazione (admin tenant, operativo, gap) |
-| Migrazioni SQL in `supabase/migrations/` | Schema, RLS, `utenti_ruoli`, vista `public.tenants` |
+| `DEPLOY_COMANDI.md` | Deploy frontend (Firebase) e note backend |
+| `docs/GUIDA_ADMIN.md` | Admin tenant (menu, impostazioni, report; senza pubblicazione dominio) |
+| `docs/ARCHITETTURA_E_STATO.md` | Route vs roadmap |
+| `sql/PM_UNIFIED_ALL.sql` / `supabase/migrations/` | Schema, `parametri_operativi`, viste tenant |
 
 ---
 
-## 7 bis. Nota sviluppo (cosa è stato introdotto di recente)
+## 9. Nota sviluppo (file e variabili rilevanti)
 
-Da tenere allineato con il codice e con le migrazioni Supabase:
-
-- **Clienti / tenant:** modale con dati fiscali, abbonamento, addebito automatico; servizio `superadminService` con fallback colonne e schema `core` opzionale (`VITE_SUPABASE_USE_CORE_SCHEMA`).
-- **Vista `public.tenants`:** ricreata da `admin.tenants` con colonne fatturazione e, con migrazione `20260322180000`, colonne operative (`logo_url`, `email`, `parametri_operativi`, `orari_settimana`, ecc.) per Admin e menu pubblico.
-- **Legali:** privacy/cookie/termini con titolare da `.env` (`VITE_LEGAL_*`) sul SaaS e da Dati pizzeria sul dominio cliente; campo **titolare/referente** in `parametri_operativi`.
-- **Supporto:** pagina `/support` e host `support.pizzamanager.it` (vedi `AppRouter`).
-- **Admin → Pubblicazione sito** (`/admin/pubblicazione`): hub per checklist deploy/dominio e roadmap unica piattaforma (funzioni automatiche da completare).
-
-Aggiorna questa sezione e il **registro** sotto a ogni release rilevante.
+- **`plansStorage.js`:** caricamento/salvataggio piani, default, normalizzazione; usato anche dalla landing.
+- **`useTenantServizi.js` / `tenantServiziPolicy.js`:** risoluzione servizi per tenant; flag `servizi_personalizzati` su `parametri_operativi`.
+- **`VITE_ENFORCE_SERVIZI_PLAN`**, **`VITE_DISABLE_SERVIZI_GATE`:** vedi `.env.example`.
+- **`SuperAdminLayout` + `superadmin-enterprise.css`:** stile console (barra slate, cluster navigazione).
+- **Go-live dominio cliente:** dopo DNS/hosting, verificare in **Supabase → Authentication → Redirect URLs** la presenza di `https://<dominio-tenant>/reimposta-password` (vedi §4.7c).
 
 ---
 
-## 8. Registro aggiornamenti
-
-Compila una riga per ogni modifica significativa all’area Super Admin.
+## 10. Registro aggiornamenti
 
 | Data | Versione / commit | Cosa è cambiato |
 |------|-------------------|-----------------|
-| 2026-03-22 | — | Prima stesura guida: Riepilogo, Clienti, Piani, Abbonamenti, Impostazioni; note su limiti e sicurezza. |
-| 2026-03-22 | — | Collegamento a `ARCHITETTURA_E_STATO.md` per allineamento roadmap / codice. |
-| 2026-03-22 | — | Piani: gestione contenuti in Super Admin (localStorage); TRIAL 7 giorni; niente Free permanente. |
-| 2026-03-22 | — | Piani: modale unico per creazione/modifica (nome, prezzo, validità gg, abilitazione, servizi a flag); schede con toggle rapido abilitato. |
-| 2026-03-22 | — | Aggiunta **GUIDA_ADMIN.md**; pagina Admin **Pubblicazione sito**; nota sviluppo §7 bis (tenant, migrazioni, legali, support). |
+| 2026-03-22 | — | Prima stesura guida classica (Riepilogo, Clienti, Piani, Abbonamenti, Impostazioni). |
+| 2026-04-03 | — | Riscrittura: menu enterprise a cluster; Clienti con servizi personalizzati e `parametri_operativi`; Piani/catalogo/localStorage; Catalogo servizi, Sviluppo, Deploy, Guide hub, Anteprima sito; landing senza prezzi e modulo Contatti con piano; variabili enforcement servizi; registro TRIAL 14 gg allineato alle etichette UI. |
+| 2026-04-03 | — | §4.7c: Supabase URL Configuration e Redirect URLs per reset password clienti su dominio vetrina; nota sviluppo §9. |
 
 ---
 
-*Ultima revisione documento: 2026-03-22*
+*Ultima revisione documento: 2026-04-03*

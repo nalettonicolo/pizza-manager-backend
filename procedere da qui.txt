@@ -1,43 +1,40 @@
-Riepilogo di cosa hai chiesto oggi
-Super Admin – Clienti e Abbonamenti
-Nel Nuovo cliente volevi campi di contatto e fatturazione (P.IVA, email, PEC, codice SDI) e sezione abbonamento / rinnovo automatico.
-Un cliente con piano FREE doveva comparire anche in Abbonamenti, non solo in lista tenant.
-In Abbonamenti volevi vedere rinnovo automatico (e coerenza con i dati tenant).
-Deploy
-Hai chiesto esplicitamente di fare deploy: è stato eseguito commit + push su GitHub e npm run deploy su Firebase Hosting (progetto pizzeria-da-nicolo, URL tipo pizzamanager.it / web.app).
-Piani e catalogo servizi
-Hai descritto la gerarchia dei piani: Base (cassa, comanda, consegne) → Pro (+ ordini online) → Enterprise (+ tablet per ruoli operativi) → Full (tutto) → Su misura (servizi scelti).
-Hai chiesto una pagina con l’elenco completo di servizi e funzioni, prezzi mensili per servizio, e che in Piani il prezzo si calcoli in base ai servizi selezionati.
-Cosa è stato fatto in codice (in sintesi)
-Area	Cosa c’è nel repo
-Clienti	Modale a sezioni (generale, dati fiscali, abbonamento con addebito automatico, date, sconto).
-Abbonamenti	Tabella con rinnovo automatico, prossimo rinnovo, attivazione; logica subscription + fallback se manca la riga in DB.
-Backend dati	Migrazione SQL colonne tenant; servizio JS con upsert su subscriptions.
-Piani / Catalogo	Nuova route /superadmin/servizi, catalogo con prezzi e funzioni, Piani riscritti con piani seed e totale calcolato dalla somma dei servizi.
-Deploy (quella volta)	Build + Firebase completati con successo in quella sessione.
-Perché “non vedi tutto online”
-Possibili cause molto concrete:
-Deploy non aggiornato dopo le ultime modifiche
-Il lavoro su Catalogo servizi + Piani riscritti è stato fatto dopo il deploy che avevi chiesto. Se da allora non hai rilanciato npm run deploy (o la tua pipeline), in produzione puoi avere ancora la vecchia bundle senza /superadmin/servizi e senza il nuovo flusso Piani.
-Cache del browser / CDN
-Prova hard refresh (Ctrl+F5) o finestra anonima su https://pizzamanager.it (o il dominio che usi).
-Cosa è solo in locale (localStorage)
-Catalogo servizi e Piani salvati dalla UI sono nel browser (localStorage), non sul server. Online vedi le pagine e la logica, ma non “i tuoi dati” da un altro PC/browser finché non avrete persistenza su DB.
-Database Supabase
-Se le colonne tenant o le policy su subscriptions non sono allineate, in produzione possono mancare righe o campi anche se il frontend è aggiornato.
-Koyeb (backend)
-Il git push può aver aggiornato il repo; se il servizio non ha fatto redeploy o c’è un errore di build, va controllata la dashboard Koyeb (solo se qualcosa dipende dal backend per Super Admin).
-In una frase: oggi hai chiesto sistemare Super Admin (clienti/abbonamenti), deploy, poi catalogo servizi e piani con prezzi calcolati; in codice è stato implementato, ma vedere “tutto” sul sito richiede almeno un nuovo deploy del frontend dopo l’ultimo commit e, per i dati catalogo/piani, capire che sono per-browser finché non li mettete in database. Se vuoi, nel passo successivo posso proporti i comandi esatti per un deploy “pulito” da lanciare adesso.
+analizza lo stato di sviluppo di questa webapp, poi facciamo recap per procedere con le varie funzioni che poi saranno i servizi da includere nel piano o meno.
 
-────────────────────────────────────────
-DA QUI IN POI — FERMARSI (marzo 2026)
-────────────────────────────────────────
-• Il sito del cliente sarà collegato a questo sistema (stesso backend / tenant / menu pubblico).
-• Il deploy del sito del cliente non si gestisce qui: andrà prevista una pagina/flusso dedicato (da creare)
-  per pubblicare il sito del locale collegato a PizzaManager.
-• Qui non implementare oltre il necessario per “sito pubblico su dominio pizzeria + informative legali dinamiche”;
-  il prossimo passo progettuale è la pagina di deploy dedicata, non espandere in questo thread il collegamento
-  deploy-cliente finché non si definisce quel flusso.
+Analizzando la struttura del progetto, le funzionalità implementate e la documentazione per fornire un recap utile alla pianificazione dei servizi.
 
-2026-03-22 — Aggiunta in Admin la voce "Pubblicazione" (/admin/pubblicazione) come hub checklist + roadmap;
-  create docs/GUIDA_ADMIN.md e aggiornata docs/GUIDA_SUPERADMIN.md (§7 bis). Deploy Firebase eseguito.
+Ecco un’analisi sintetica dello stato di sviluppo e un recap orientato ai piani/servizi (senza ripetere contenuti sensibili: nel file txt.txt ci sono credenziali e URL di DB in chiaro — conviene rimuoverle dal repo o spostarle in un gestore segreti e ruotare le password).
+
+Architettura attuale
+Frontend: React 18 + Vite; entry src/app/main.jsx → AppRouter (src/router/AppRouter.jsx).
+Stato/auth: AuthProvider, TenantProvider, PvProvider, ThemeProvider (cartella src/app/contexts).
+Dati principali: Supabase (client in src/lib/supabaseClient, tabelle tipo tenants, ordini, ecc.).
+Deploy: script npm run build + Firebase Hosting (package.json); documentazione in DEPLOY_COMANDI.md.
+Backend separato: cartella server/pizzeria-backend (Nest/Prisma) per parti aggiuntive; in documentazione si parla di API per turni e integrazioni, non come unico middleware per tutto il tenant.
+Host: logica SaaS vs “negozio pubblico” in AppRouter: su pizzamanager.it / app.* / localhost si espone la piattaforma completa; su altri hostname la root va a PublicStore e rotte come /ordine per il cliente finale.
+
+Cosa è già coperto (per area)
+Area	Stato
+Pubblico SaaS	Landing, negozio, login, privacy/cookie/termini, support, selezione PV, preview webapp
+Super Admin	Dashboard, clienti (tenants), catalogo servizi e piani (UI), abbonamenti/licenze, impostazioni, deploy siti clienti, home pizzeria demo
+Admin tenant	Dashboard KPI, report vendite, menu completo (categorie, formati, pizze, ingredienti, impasti, bibite, dolci, fritti, allergeni, cottura), dipendenti, ruoli, impostazioni (dati, layout, orari, parametri), pubblicazione sito (in evoluzione; doc in docs/GUIDA_ADMIN.md + migrazioni dominio pubblico)
+Operativo	Cassa (anche prodotti esauriti), cucina, bancone, pizzaioli, delivery, turni, dashboard operativa — con permessi per area
+Dominio pizzeria (non-SaaS)	Flusso ordine legacy (OrdinePage + /ordine-confermato); in parallelo lavoro su dominio pubblico + RPC per risolvere il tenant dal dominio (migrazioni supabase/migrations/20260323*.sql)
+La mappa dettagliata admin vs roadmap è in docs/ARCHITETTURA_E_STATO.md (gap: lista ordini solo admin, KPI avanzati, billing, monitor, ecc.).
+
+Piani e “servizi”: come sono collegati oggi
+Catalogo servizi (src/features/superadmin/catalog/defaultCatalog.js): elenco servizi con ID stabili (ordini_cassa, stampa_comanda, ordini_online, tablet_ruoli, report_analisi, multi_sede, api_integrazioni, ecc.) e bundle Base / Pro / Enterprise / Full / Su misura (IDS_BASE, IDS_PRO, …).
+Super Admin → Servizi e Piani: persistenza su localStorage (servicesStorage.js), non su DB centralizzato: utili per prezzi e packaging commerciale, ma non ancora enforcement automatico lato app.
+Feature gate da piano tenant: usePlan (src/app/hooks/usePlan.js) con livelli FREE/TRIAL/PRO/ENTERPRISE è usato in modo molto limitato (es. Home.jsx); la maggior parte dell’accesso è per ruolo (ProtectedRoute), non per servizio acquistato.
+Conclusione: i “servizi da includere nel piano” sono oggi definiti bene in catalogo e UI superadmin, ma non sono ancora il motore unico che abilita/disabilita moduli in produzione.
+Recap per decidere cosa mettere nei piani
+Usa il catalogo come lista canonica degli ID servizio; per ogni voce valuta:
+
+Già implementato e usabile → candidato forte per un piano (es. ordini cassa, stampa comanda, ruoli operativi se coperti dalle route).
+Parziale o solo commerciale (es. API, account manager, SLA) → piano alto o add-on, finché non c’è codice + enforcement.
+In lavoro (pubblicazione dominio, menu per hostname) → allineare al servizio ordini online / vetrina quando la catena dominio → tenant sarà stabile.
+Prossimo passo consigliato per allineare “piani” e prodotto:
+
+decidere quali ID del defaultCatalog sono in scope per la release;
+per ciascuno, indicare se serve solo etichetta commerciale o anche gate (nascondere route / chiamate API);
+se serve il gate, pianificare dove leggerlo (colonna su tenants o tabella tenant_services + controllo in router o layout).
+Se vuoi, nel messaggio successivo possiamo prendere il defaultCatalog riga per riga e classificarlo in Sì piano / Opzionale / Non ancora in base a come vuoi strutturare Base/Pro/Enterprise.

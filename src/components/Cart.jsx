@@ -1,6 +1,6 @@
 import PropTypes from "prop-types"
 
-function Cart({ items, onRemove, onClear }) {
+function Cart({ items, onRemove, onClear, onCheckout }) {
   const total = items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
@@ -28,6 +28,7 @@ function Cart({ items, onRemove, onClear }) {
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => onRemove(item.id)}
                   className="text-red-500 hover:text-red-700"
                 >
@@ -44,13 +45,20 @@ function Cart({ items, onRemove, onClear }) {
 
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={onClear}
               className="flex-1 bg-gray-200 hover:bg-gray-300 py-2 rounded-lg"
             >
               Svuota
             </button>
 
-            <button className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
+            <button
+              type="button"
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={typeof onCheckout !== "function"}
+              title={typeof onCheckout !== "function" ? "Checkout non collegato in questa vista" : undefined}
+              onClick={() => onCheckout?.()}
+            >
               Pagamento
             </button>
           </div>
@@ -64,6 +72,7 @@ Cart.propTypes = {
   items: PropTypes.array.isRequired,
   onRemove: PropTypes.func.isRequired,
   onClear: PropTypes.func.isRequired,
+  onCheckout: PropTypes.func,
 }
 
 export default Cart

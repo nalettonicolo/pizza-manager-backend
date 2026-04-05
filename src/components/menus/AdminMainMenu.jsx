@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 export default function AdminMainMenu() {
   return (
     <nav style={styles.menu}>
-      <Link to="/admin">Dashboard</Link>
+      <Link to="/admin">Area admin</Link>
     </nav>
   )
 }

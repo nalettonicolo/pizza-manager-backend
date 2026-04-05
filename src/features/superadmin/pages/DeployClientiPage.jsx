@@ -13,6 +13,16 @@ const CHECKLIST_ITEMS = [
   { id: "smoke_test", label: "Smoke test finale completato" },
 ];
 
+function publicDomainStatusLabel(v) {
+  const m = {
+    none: "—",
+    requested: "Richiesta piattaforma",
+    dns_pending: "DNS / Firebase",
+    live: "Live",
+  };
+  return m[v] || v || "—";
+}
+
 function loadChecklistByTenant() {
   try {
     const raw = localStorage.getItem(DEPLOY_CHECKLIST_STORAGE_KEY);
@@ -95,7 +105,8 @@ export default function DeployClientiPage() {
     return tenants.filter((t) => {
       const nome = String(t.nome || "").toLowerCase();
       const slug = String(t.slug || "").toLowerCase();
-      return nome.includes(q) || slug.includes(q);
+      const sito = String(t.sito_web_cliente || "").toLowerCase();
+      return nome.includes(q) || slug.includes(q) || sito.includes(q);
     });
   }, [tenants, query]);
 
@@ -176,7 +187,7 @@ export default function DeployClientiPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Cerca cliente per nome o slug..."
+            placeholder="Cerca per nome, slug o URL sito web..."
             style={{ width: "100%", maxWidth: 420, padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1" }}
           />
         </div>
@@ -189,11 +200,14 @@ export default function DeployClientiPage() {
           <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>Nessun cliente trovato.</p>
         ) : (
           <div className="dashboard-table-wrap" style={{ overflowX: "auto", borderRadius: 10 }}>
-            <table style={{ minWidth: 980 }}>
+            <table style={{ minWidth: 1280 }}>
               <thead>
                 <tr>
                   <th>Cliente</th>
                   <th>Slug</th>
+                  <th>Sito web cliente</th>
+                  <th>Dominio pubblico</th>
+                  <th>Stato dominio</th>
                   <th>Piano</th>
                   <th>Stato</th>
                   <th style={{ textAlign: "right" }}>Azioni</th>
@@ -204,6 +218,17 @@ export default function DeployClientiPage() {
                   <tr key={t.id} style={{ background: selectedTenantId === t.id ? "#fff7ed" : undefined }}>
                     <td style={{ fontWeight: 600 }}>{t.nome || "—"}</td>
                     <td style={{ color: "#475569" }}>{t.slug || "—"}</td>
+                    <td style={{ fontSize: 12, maxWidth: 200 }}>
+                      {t.sito_web_cliente ? (
+                        <a href={t.sito_web_cliente} target="_blank" rel="noopener noreferrer" style={{ color: "#c0392b", wordBreak: "break-all" }}>
+                          {t.sito_web_cliente}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td style={{ color: "#475569", fontSize: 13 }}>{t.public_domain || "—"}</td>
+                    <td style={{ fontSize: 13 }}>{publicDomainStatusLabel(t.public_domain_status)}</td>
                     <td>{pianoDisplayLabel(t.piano)}</td>
                     <td>
                       <span className={t.attivo ? "badge badge-success" : "badge badge-neutral"}>
@@ -249,8 +274,50 @@ export default function DeployClientiPage() {
           </div>
         </div>
         <p style={{ margin: "10px 0 0", fontSize: 13, color: "#64748b" }}>
-          URL pubblico atteso: <code>{tenantPublicUrl}</code>
+          URL piattaforma (subdominio): <code>{tenantPublicUrl}</code>
         </p>
+        {selectedTenant?.sito_web_cliente ? (
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#334155" }}>
+            Sito web cliente:{" "}
+            <a href={selectedTenant.sito_web_cliente} target="_blank" rel="noopener noreferrer" style={{ color: "#c0392b", fontWeight: 600 }}>
+              {selectedTenant.sito_web_cliente}
+            </a>
+          </p>
+        ) : null}
+        {selectedTenant?.public_domain ? (
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#0f172a" }}>
+            Dominio cliente registrato in app:{" "}
+            <code>
+              https://{selectedTenant.public_domain}
+            </code>{" "}
+            · stato: <strong>{publicDomainStatusLabel(selectedTenant.public_domain_status)}</strong>
+          </p>
+        ) : (
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
+            Dominio cliente: non ancora impostato — configura da{" "}
+            <Link
+              to={
+                selectedTenant?.id
+                  ? `/superadmin/pubblicazione-sito?tenant=${encodeURIComponent(selectedTenant.id)}`
+                  : "/superadmin/pubblicazione-sito"
+              }
+              style={{ fontWeight: 600 }}
+            >
+              Pubblicazione dominio
+            </Link>
+            .
+          </p>
+        )}
+        {selectedTenant?.id ? (
+          <p style={{ margin: "8px 0 0", fontSize: 13 }}>
+            <Link
+              to={`/superadmin/pubblicazione-sito?tenant=${encodeURIComponent(selectedTenant.id)}`}
+              style={{ fontWeight: 600, color: "#c0392b" }}
+            >
+              Apri guida tecnica e form dominio per questo cliente →
+            </Link>
+          </p>
+        ) : null}
         {selectedTenant && (
           <p style={{ margin: "8px 0 0", fontSize: 13, color: "#0f172a" }}>
             Completamento deploy: <strong>{completionPercent}%</strong>
@@ -370,9 +437,6 @@ export default function DeployClientiPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link to="/superadmin/tenants" className="btn-primary-dashboard" style={{ textDecoration: "none" }}>
             Apri clienti →
-          </Link>
-          <Link to="/superadmin/dashboard" style={{ ...secondaryBtnStyle, textDecoration: "none" }}>
-            Torna al riepilogo
           </Link>
         </div>
       </section>

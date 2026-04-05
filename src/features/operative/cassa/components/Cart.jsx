@@ -51,6 +51,7 @@ export default function Cart({
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         {onClear && (
           <button
+            type="button"
             style={{ ...styles.checkout, background: "#666", flex: 1 }}
             onClick={onClear}
           >
@@ -58,6 +59,7 @@ export default function Cart({
           </button>
         )}
         <button
+          type="button"
           style={{ ...styles.checkout, flex: 1 }}
           disabled={!cart.length || loading}
           onClick={onCheckout}

@@ -4,7 +4,11 @@ import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { OPERATIVE_ROLE_HOME } from "@/constants/operativeRoutes"
+import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome"
 import { devLog } from "@/lib/devLog"
+import { supabase } from "@/lib/supabaseClient"
+import { getIsSaaSClient } from "@/utils/saasHost"
+import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
 import "@/styles/login.css"
 
 function safeInternalPath(p) {
@@ -30,6 +34,19 @@ export default function Login() {
 
     devLog("Login", "redirect check", { tipoUtente, ruolo, email: user?.email })
 
+    const saas = getIsSaaSClient()
+
+    if (saas && tipoUtente === "cliente") {
+      setError("Gli account cliente si usano dal sito della tua pizzeria (menu online), non da PizzaManager.")
+      void supabase.auth.signOut()
+      return
+    }
+
+    if (!saas && tipoUtente === "staff") {
+      window.location.replace(getSaaSLoginUrl())
+      return
+    }
+
     if (tipoUtente === "cliente") {
       devLog("Login", "redirect → /cliente/dashboard")
       navigate("/cliente/dashboard", { replace: true })
@@ -38,8 +55,8 @@ export default function Login() {
 
     if (tipoUtente === "staff") {
       const roleRoutes = {
-        superadmin: "/superadmin/dashboard",
-        admin: "/admin/dashboard",
+        superadmin: "/superadmin/ingresso",
+        admin: ADMIN_TENANT_HOME,
         ...OPERATIVE_ROLE_HOME,
       }
       const ruoloNorm = (ruolo && typeof ruolo === "string") ? ruolo.toLowerCase().trim() : ""
@@ -53,6 +70,8 @@ export default function Login() {
     devLog("Login", "fallback redirect → /")
     navigate("/", { replace: true })
   }, [user, ruolo, tipoUtente, loading, navigate, location.state])
+
+  const isSaaS = getIsSaaSClient()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -90,9 +109,11 @@ export default function Login() {
             <div className="login-brand-mark" aria-hidden="true">
               🍕
             </div>
-            <h1 className="login-brand-title">PizzaManager</h1>
+            <h1 className="login-brand-title">{isSaaS ? "PizzaManager" : "Accedi"}</h1>
             <p className="login-brand-sub">
-              Accedi con le credenziali del tuo account staff o cliente.
+              {isSaaS
+                ? "Accesso per staff e operatori della piattaforma. Account cliente: usa il sito della tua pizzeria."
+                : "Accedi con l’account cliente per questa pizzeria. Il personale accede da PizzaManager."}
             </p>
           </div>
 
@@ -143,6 +164,20 @@ export default function Login() {
           </form>
 
           <div className="login-footer-links">
+            {!isSaaS ? (
+              <>
+                <Link to="/registrazione" className="login-back">
+                  Crea account
+                </Link>
+                <Link to="/password-dimenticata" className="login-back">
+                  Password dimenticata
+                </Link>
+              </>
+            ) : (
+              <p className="login-back" style={{ cursor: "default", textDecoration: "none", color: "#94a3b8", fontSize: 13 }}>
+                Recupero password: solo sul sito della pizzeria (menu online).
+              </p>
+            )}
             <Link to="/" className="login-back">
               ← Torna alla home
             </Link>

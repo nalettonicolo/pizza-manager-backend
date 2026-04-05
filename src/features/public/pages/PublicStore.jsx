@@ -58,11 +58,8 @@ export default function PublicStore() {
     async function loadData() {
       try {
         setLoading(true);
-        const [menuData, tenant] = await Promise.all([
-          getPublicMenu(),
-          getPublicTenantInfo(),
-        ]);
-        setMenu(menuData || []);
+        setError(null);
+        const tenant = await getPublicTenantInfo();
         if (tenant) {
           setTenantName(tenant.nome || null);
           if (tenant.orari_settimana) {
@@ -79,6 +76,8 @@ export default function PublicStore() {
           setBranding(null);
           setMenuTheme(null);
         }
+        const menuData = await getPublicMenu({ tenantId: tenant?.id ?? null });
+        setMenu(menuData || []);
       } catch (err) {
         console.error(err);
         setError("Errore nel caricamento del menu.");
@@ -182,6 +181,20 @@ export default function PublicStore() {
         {!user && (
           <p style={styles.loginHint}>Accedi per aggiungere al carrello (si apre il login).</p>
         )}
+        {!menu.length && (
+          <p style={styles.emptyMenuHint}>
+            {location.pathname.startsWith("/preview") ? (
+              <>
+                Anteprima: nessun prodotto in vetrina per il tenant di riferimento, oppure la lettura del menu non è
+                consentita ad <code style={{ fontSize: 12 }}>anon</code> su Supabase (vista{" "}
+                <code style={{ fontSize: 12 }}>prodotti_menu_pubblico</code>). In Admin verifica prodotti attivi e &quot;visibili
+                online&quot;.
+              </>
+            ) : (
+              <>Al momento non ci sono piatti disponibili online.</>
+            )}
+          </p>
+        )}
         <ProductGrid
           products={filteredProducts}
           ingredientiMap={ingredientiMap}
@@ -234,5 +247,15 @@ const styles = {
     fontSize: 14,
     color: "#666",
     marginBottom: 12,
+  },
+  emptyMenuHint: {
+    fontSize: 14,
+    color: "#64748b",
+    marginBottom: 16,
+    lineHeight: 1.55,
+    padding: "12px 14px",
+    background: "#f8fafc",
+    borderRadius: 8,
+    border: "1px solid #e2e8f0",
   },
 };

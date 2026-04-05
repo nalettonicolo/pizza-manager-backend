@@ -28,15 +28,16 @@ npm run deploy
 ### Frontend (Firebase)
 
 - **Cosa fa:** `npm run deploy` esegue build (cartella `dist`) e pubblica su Firebase Hosting.
+- **Non pubblicare hosting senza build:** evita `firebase deploy --only hosting` da solo; senza `npm run build` rischi di spedire una `dist` incompleta o vecchia. La cartella `dist/` è in `.gitignore` e non va versionata.
 - **Prima del deploy:** verifica che `.env.production` abbia `VITE_API_URL` con l’URL del backend Koyeb (senza slash finale).
 - **Sito:** https://pizzamanager.it (se il dominio è configurato in Firebase).
-- **Guida utente in app (Admin → Guida):** il testo è in `src/content/guidaUtente.md`; aggiornalo lì e ridistribuisci il frontend.
+- **Guide in app:** **Admin → Manuale** legge `src/content/manualeUtente.md` e `manualeRoadmap.js`. **Super Admin → Documentazione** incorpora al build i file in `docs/*.md` (es. `GUIDA_SUPERADMIN.md`, `GUIDA_ADMIN.md`, `ARCHITETTURA_E_STATO.md`) e `DEPLOY_COMANDI.md`: dopo averli modificati, ridistribuisci il frontend.
 
 ---
 
 ## Database (Supabase)
 
-Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. Integrazioni solo (idempotente, codice unico): `sql/PM_UNIFIED_INCREMENTAL.sql`. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. **Script incrementale unificato** (tutte le migrazioni 202502–202603 + ex `PM_UNIFIED_INCREMENTAL.sql`, idempotente): `sql/PM_UNIFIED_ALL.sql` (stesso contenuto di `supabase/migrations/20260402100000_pizzamanager_unified_incremental.sql`). Dopo un dump Supabase eseguire prima il dump remoto, poi questo script. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
 
 ---
 
@@ -44,6 +45,11 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 
 - **Guida dettagliata deploy:** `DEPLOY.md`
 - **Guida utente Super Admin (console piattaforma):** `docs/GUIDA_SUPERADMIN.md`
-- **Linee guida Admin (tenant / pubblicazione sito):** `docs/GUIDA_ADMIN.md`
+- **Linee guida Admin (tenant):** `docs/GUIDA_ADMIN.md`
 - **Architettura e stato (roadmap vs codice):** `docs/ARCHITETTURA_E_STATO.md`
 - **Punto della situazione:** `PUNTO_SITUAZIONE_ENTERPRISE.md`
+- **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
+
+---
+
+*Ultima revisione documento: 2026-04-03*

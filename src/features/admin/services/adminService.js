@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabaseClient"
 import { logSupabaseError } from "@/utils/logSupabaseError"
 import { sortByOrdine } from "@/utils/sortByOrdine"
+import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
+import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 
 ///////////////////////////////////////////////////////////
 // ===================== UTILITY ========================
@@ -55,10 +57,10 @@ export async function getTodayRevenue(tenantId) {
 
 export async function getActiveUsersCount(tenantId) {
   const { count, error } = await supabase
-    .from("profiles")
+    .from("utenti_ruoli")
     .select("*", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
-    .eq("attivo", true)
+    .or("attivo.is.null,attivo.eq.true")
 
   if (error) throw error
   return count || 0
@@ -101,6 +103,69 @@ export async function getOrders(tenantId, opts = {}) {
   const { data, error } = await q
   if (error) throw error
   return data || []
+}
+
+/**
+ * Statistiche vendite su un campione recente di ordini (nessuna migrazione: solo query esistenti).
+ * Utile in admin tenant: pizze più vendute e clienti con più ordini (chiave nome+indirizzo per delivery).
+ */
+export async function getTenantVenditeInsights(tenantId, opts = {}) {
+  if (!tenantId) {
+    return {
+      ordiniAnalizzati: 0,
+      topProducts: [],
+      clientiTop: [],
+    }
+  }
+  const limitOrders = Math.min(500, Math.max(50, Number(opts.limitOrders) || 320))
+  const ordini = await getOrders(tenantId, { limit: limitOrders })
+  const ids = ordini.map((o) => o.id).filter(Boolean)
+  const righe = ids.length ? await getRigheByOrdineIds(ids) : []
+  const qtyByPid = {}
+  for (const r of righe) {
+    const pid = r.prodottoId ?? r.prodotto_id
+    if (!pid) continue
+    qtyByPid[pid] = (qtyByPid[pid] || 0) + (Number(r.quantita) || 0)
+  }
+  const topEntries = Object.entries(qtyByPid)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+  const topIds = topEntries.map(([k]) => k)
+  let topProducts = []
+  if (topIds.length) {
+    const prodotti = await getProdottiByIds(tenantId, topIds)
+    const nameById = Object.fromEntries((prodotti || []).map((p) => [p.id, p.nome || "—"]))
+    topProducts = topEntries.map(([pid, qty]) => ({
+      id: pid,
+      nome: nameById[pid] || "—",
+      qty,
+    }))
+  }
+
+  const clienteCounts = {}
+  for (const o of ordini) {
+    const tipo = (o.tipo_ordine || "").toLowerCase()
+    const nome = (o.nome_cliente || "").trim().toLowerCase()
+    const ind = (o.indirizzo_consegna || "").trim().toLowerCase()
+    if (!nome && !ind) continue
+    const key = tipo === "delivery" ? `${nome}|${ind}` : nome
+    if (!key || key === "|") continue
+    clienteCounts[key] = (clienteCounts[key] || 0) + 1
+  }
+  const clientiTop = Object.entries(clienteCounts)
+    .map(([key, n]) => ({
+      key,
+      ordini: n,
+      label: key.includes("|") ? key.replace("|", " · ") : key,
+    }))
+    .sort((a, b) => b.ordini - a.ordini)
+    .slice(0, 10)
+
+  return {
+    ordiniAnalizzati: ordini.length,
+    topProducts,
+    clientiTop,
+  }
 }
 
 /**
@@ -194,6 +259,51 @@ export async function getOrderDetail(ordineId) {
   return { ...order, righe: righe || [] }
 }
 
+/**
+ * Per righe senza ingredienti_cottura_summary (ordini vecchi o prodotti senza testo salvato),
+ * ricostruisce il riepilogo dalla ricetta listino così stampa e schermate mostrano la base.
+ */
+export async function enrichOrdineDetailIngredientiSummaries(tenantId, detail) {
+  if (!tenantId || !detail?.righe?.length) return detail
+  const righe = detail.righe
+  const needPid = new Set()
+  for (const r of righe) {
+    const ex = r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary
+    if (String(ex || "").trim()) continue
+    const pid = r.prodottoId ?? r.prodotto_id
+    if (pid) needPid.add(pid)
+  }
+  if (needPid.size === 0) return detail
+  const entries = await Promise.all(
+    [...needPid].map(async (pid) => {
+      const ingList = await getProductIngredienti(tenantId, pid)
+      return [pid, ingList]
+    }),
+  )
+  const ingMap = Object.fromEntries(entries)
+  const newRighe = righe.map((r) => {
+    const ex = r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary
+    if (String(ex || "").trim()) return r
+    const pid = r.prodottoId ?? r.prodotto_id
+    const ingList = ingMap[pid]
+    if (!ingList?.length) return r
+    const defaultModifiche = {}
+    for (const ing of ingList) {
+      defaultModifiche[ing.id] = {
+        variante: "normale",
+        cottura: ing.vaInCottura ? "in_cottura" : "fine_cottura",
+      }
+    }
+    const summary = buildComandaIngredientiSummary(ingList, defaultModifiche, [])
+    return {
+      ...r,
+      ingredientiCotturaSummary: summary,
+      ingredienti_cottura_summary: summary,
+    }
+  })
+  return { ...detail, righe: newRighe }
+}
+
 /** Restituisce per ogni ordineId il totale pizze (somma quantita righe). Utile per planning. */
 export async function getRigheAggregateByOrdineIds(ordineIds) {
   if (!ordineIds?.length) return {}
@@ -212,14 +322,18 @@ export async function getRigheAggregateByOrdineIds(ordineIds) {
 }
 
 /** Restituisce tutte le righe ordine per i given ordineIds (per Pizzaioli: nomi pizze e ingredienti). */
-export async function getRigheByOrdineIds(ordineIds) {
+export async function getRigheByOrdineIds(ordineIds, options = {}) {
   if (!ordineIds?.length) return []
-  const { data, error } = await supabase
-    .from("RigaOrdine")
-    .select("*")
-    .in("ordineId", ordineIds)
-  if (error) throw error
-  return data || []
+  const select = options.select ?? "*"
+  const chunkSize = Math.min(180, Math.max(40, options.chunkSize ?? 120))
+  const aggregated = []
+  for (let i = 0; i < ordineIds.length; i += chunkSize) {
+    const chunk = ordineIds.slice(i, i + chunkSize)
+    const { data, error } = await supabase.from("RigaOrdine").select(select).in("ordineId", chunk)
+    if (error) throw error
+    if (data?.length) aggregated.push(...data)
+  }
+  return aggregated
 }
 
 /** Chiude la giornata (salvataggio contabilità e reset storico). payload = export ordini del giorno (JSON). */
@@ -320,15 +434,17 @@ export async function getDashboardStats(tenantId) {
 // ===================== USERS ==========================
 ///////////////////////////////////////////////////////////
 
+/** Dipendenti: stessa fonte della pagina Ruoli (`ruoli_pizzeria` → utenti_ruoli + email da auth.users). */
 export async function getTenantUsers(tenantId) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, nome, email, ruolo, attivo, created_at")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-
-  if (error) throw error
-  return data || []
+  if (!tenantId) return []
+  const ruoli = await getRuoliPizzeria(tenantId)
+  return ruoli.map((r) => ({
+    id: r.user_id,
+    email: r.email || "",
+    nome: labelFromEmailPrefix(r.email) || (r.email && r.email.includes("@") ? r.email.split("@")[0] : "—"),
+    ruolo: r.ruolo,
+    attivo: r.attivo !== false,
+  }))
 }
 
 export async function createUserProfile(userData) {
@@ -342,22 +458,24 @@ export async function createUserProfile(userData) {
   return data
 }
 
-export async function updateUserRole(userId, ruolo) {
+export async function updateUserRole(tenantId, userId, ruolo) {
   const { error } = await supabase
-    .from("profiles")
+    .from("utenti_ruoli")
     .update({ ruolo })
-    .eq("id", userId)
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
 
-  if (error) throw error
+  if (error) throw mapSupabaseRuoliError(error)
 }
 
-export async function toggleUserActive(userId, attivo) {
+export async function toggleUserActive(tenantId, userId, attivo) {
   const { error } = await supabase
-    .from("profiles")
+    .from("utenti_ruoli")
     .update({ attivo })
-    .eq("id", userId)
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
 
-  if (error) throw error
+  if (error) throw mapSupabaseRuoliError(error)
 }
 
 const AREA_COLUMNS = "accesso_riepilogo, accesso_cassa, accesso_cucina, accesso_bancone, accesso_pizzaiolo, accesso_delivery, accesso_pony"
@@ -457,6 +575,58 @@ export async function updateRuoloPizzeriaPermessi(tenantId, userId, updates) {
     .eq("tenant_id", tenantId)
     .eq("user_id", userId)
   if (error) throw mapSupabaseRuoliError(error)
+}
+
+/** Note password dipendenti (archivio titolare; tabella staff_password_note + RLS: tenant admin o superadmin). */
+export async function listStaffPasswordNotes(tenantId) {
+  if (!tenantId) return []
+  const { data, error } = await supabase
+    .from("staff_password_note")
+    .select("user_id, password_nota")
+    .eq("tenant_id", tenantId)
+  if (error) throw mapStaffPasswordNoteError(error)
+  return data || []
+}
+
+export async function upsertStaffPasswordNote(tenantId, userId, passwordNota) {
+  if (!tenantId || !userId) throw new Error("tenant o utente mancante.")
+  const trimmed = typeof passwordNota === "string" ? passwordNota.trim() : ""
+  if (!trimmed) {
+    const { error } = await supabase
+      .from("staff_password_note")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("user_id", userId)
+    if (error) throw mapStaffPasswordNoteError(error)
+    return
+  }
+  const { error } = await supabase.from("staff_password_note").upsert(
+    {
+      user_id: userId,
+      tenant_id: tenantId,
+      password_nota: trimmed,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,tenant_id" },
+  )
+  if (error) throw mapStaffPasswordNoteError(error)
+}
+
+function mapStaffPasswordNoteError(error) {
+  if (!error) return error
+  const code = error.code
+  const msg = error.message || ""
+  if (code === "42P01" || /relation .* does not exist/i.test(msg)) {
+    return new Error(
+      "Tabella staff_password_note assente. Esegui in Supabase la migrazione 20260403130000_staff_password_note_tenant_admin.sql (o lo script incrementale PM_UNIFIED_ALL).",
+    )
+  }
+  if (code === "42501" || /permission denied/i.test(msg)) {
+    return new Error(
+      "Permesso negato: serve essere admin del locale (tenant_admins) oppure Super Admin con migrazione RLS aggiornata.",
+    )
+  }
+  return error
 }
 
 ///////////////////////////////////////////////////////////
@@ -1001,13 +1171,19 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
     const allIngIds = [...new Set(rows.map((r) => r.ingrediente_id).filter(Boolean))]
     if (!allIngIds.length) return emptyMap()
 
-    const fullCols = "id, nome, vaInCottura, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
+    /* Solo nomi colonna reali in DB (snake_case). vaInCottura è solo convenzione JS lato client. */
+    const fullCols = "id, nome, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
     let { data: ingredients, error: err2 } = await supabase
       .from("Ingrediente")
       .select(fullCols)
       .eq("tenant_id", tenantId)
       .in("id", allIngIds)
-    if (err2 && (err2.code === "PGRST204" || err2.message?.includes("column"))) {
+    const colErr =
+      err2 &&
+      (err2.code === "PGRST204" ||
+        /column|does not exist/i.test(String(err2.message || "")) ||
+        String(err2.code || "") === "42703")
+    if (colErr) {
       const fallback = await supabase
         .from("Ingrediente")
         .select("id, nome, va_in_cottura, costo_unitario")
@@ -1031,10 +1207,16 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
       if (prRows[0] && prRows[0].ordine === undefined) {
         ordered = ordered.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""))
       }
-      out[pid] = ordered.map((ing) => ({
-        nome: ing.nome ?? "",
-        vaInCottura: ing.vaInCottura === true || ing.va_in_cottura === true,
-      }))
+      out[pid] = ordered.map((ing) => {
+        const cu = ing.costo_unitario ?? ing.costoUnitario ?? ing.costo
+        return {
+          nome: ing.nome ?? "",
+          vaInCottura: ing.va_in_cottura === true,
+          costo_unitario: ing.costo_unitario,
+          costoUnitario: ing.costo_unitario,
+          costo: cu,
+        }
+      })
     }
     return out
   } catch (e) {
@@ -1070,13 +1252,18 @@ export async function getProductIngredienti(tenantId, productId) {
     }
     const ids = rows.map((r) => r.ingrediente_id).filter(Boolean)
     if (!ids.length) return []
-    const fullCols = "id, nome, vaInCottura, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
+    const fullCols = "id, nome, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
     let { data: ingredients, error: err2 } = await supabase
       .from("Ingrediente")
       .select(fullCols)
       .eq("tenant_id", tenantId)
       .in("id", ids)
-    if (err2 && (err2.code === "PGRST204" || err2.message?.includes("column"))) {
+    const colErr2 =
+      err2 &&
+      (err2.code === "PGRST204" ||
+        /column|does not exist/i.test(String(err2.message || "")) ||
+        String(err2.code || "") === "42703")
+    if (colErr2) {
       const fallback = await supabase
         .from("Ingrediente")
         .select("id, nome, va_in_cottura, costo_unitario")
@@ -1092,7 +1279,7 @@ export async function getProductIngredienti(tenantId, productId) {
     return ordered.map((ing) => ({
       id: ing.id,
       nome: ing.nome ?? "",
-      vaInCottura: ing.vaInCottura === true || ing.va_in_cottura === true,
+      vaInCottura: ing.va_in_cottura === true,
       costo_unitario: ing.costo_unitario,
       costo_abbondante: ing.costo_abbondante,
       costo_senza: ing.costo_senza,
@@ -1140,21 +1327,21 @@ export async function getProductPrezzoCalcolato(tenantId, productId) {
 export async function enrichProductsWithPrezzoCalcolato(tenantId, products) {
   if (!tenantId || !products?.length) return products || []
   try {
-    const [config, allIng] = await Promise.all([
+    const ids = products.map((p) => p.id).filter(Boolean)
+    const [config, ingByProduct] = await Promise.all([
       getConfigurazioneCosti(tenantId),
-      getIngredients(tenantId),
+      getProductIngredientiBatch(tenantId, ids),
     ])
     const costoBase = _toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
-    const ingMap = new Map((allIng || []).map((i) => [i.id, i]))
 
     const out = []
     for (const p of products) {
-      const ings = await getProductIngredienti(tenantId, p.id)
+      const ings = ingByProduct[p.id] || []
       let totalIng = 0
-      for (const ing of ings || []) {
+      for (const ing of ings) {
         totalIng += _toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
       }
-      const hasIngredienti = (ings || []).length > 0
+      const hasIngredienti = ings.length > 0
       const prezzoCalcolato = hasIngredienti ? costoBase + totalIng : 0
       const prezzoUsare = prezzoCalcolato > 0 ? prezzoCalcolato : _toNum(p.prezzo)
       out.push({ ...p, prezzo: prezzoUsare })
@@ -1307,7 +1494,7 @@ export async function getOrdersByDateRange(
 ) {
   let q = supabase
     .from("Ordine")
-    .select("*")
+    .select("id, totale, createdAt")
     .eq("tenantId", tenantId)
   if (startDate != null) q = q.gte("createdAt", startDate)
   if (endDate != null) q = q.lte("createdAt", endDate)
@@ -1343,10 +1530,16 @@ async function computeTopProdottiVenduti(tenantId, ordineIds, topN = 5) {
 
   let righe
   try {
-    righe = await getRigheByOrdineIds(ordineIds)
+    righe = await getRigheByOrdineIds(ordineIds, {
+      select: "prodottoId, prodotto_id, quantita, formatoNome, formato_nome",
+    })
   } catch (e) {
-    console.warn("computeTopProdottiVenduti righe:", e)
-    return []
+    try {
+      righe = await getRigheByOrdineIds(ordineIds)
+    } catch (e2) {
+      console.warn("computeTopProdottiVenduti righe:", e2)
+      return []
+    }
   }
   if (!righe?.length) return []
 
@@ -1463,7 +1656,20 @@ export async function getTenantSettings(tenantId) {
 
 export async function updateTenantSettings(tenantId, updates) {
   const payload = { ...updates }
-  const optional = ["indirizzo", "telefono", "email", "lat", "lng", "logo_url", "orari_settimana", "parametri_operativi"]
+  const optional = [
+    "indirizzo",
+    "telefono",
+    "email",
+    "lat",
+    "lng",
+    "logo_url",
+    "orari_settimana",
+    "parametri_operativi",
+    "public_domain",
+    "public_domain_status",
+    "public_domain_requested_at",
+    "sito_web_cliente",
+  ]
   const { error } = await supabase.from("tenants").update(payload).eq("id", tenantId)
   if (error) {
     if (error.code === "PGRST204") {

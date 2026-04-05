@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { logSupabaseError } from "@/utils/logSupabaseError"
 import { useAuth } from "./AuthContext"
@@ -25,6 +25,8 @@ export function TenantProvider({ children }) {
 
   const [tenantData, setTenantData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const tenantDataIdRef = useRef(null)
+  const loadInFlightRef = useRef(false)
 
   const isAuthenticated = !!user
 
@@ -35,35 +37,49 @@ export function TenantProvider({ children }) {
   const loadTenantData = async () => {
     if (!tenantId) {
       setTenantData(null)
+      tenantDataIdRef.current = null
       setLoading(false)
       return
     }
 
+    if (tenantDataIdRef.current === tenantId) {
+      setLoading(false)
+      return
+    }
+    if (loadInFlightRef.current) {
+      return
+    }
+    loadInFlightRef.current = true
     setLoading(true)
 
-    // select("*") evita PGRST204 se la vista public.tenants non espone ancora tutte le colonne.
-    // maybeSingle: 0 righe → data null senza PGRST116 (.single() fallirebbe se l'id non è in admin.tenants).
-    const { data, error } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle()
+    try {
+      // select("*") evita PGRST204 se la vista public.tenants non espone ancora tutte le colonne.
+      // maybeSingle: 0 righe → data null senza PGRST116 (.single() fallirebbe se l'id non è in admin.tenants).
+      const { data, error } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle()
 
-    if (error) {
-      if (isPgrst116ZeroRows(error)) {
+      if (error) {
+        if (isPgrst116ZeroRows(error)) {
+          warnTenantRowMissing(tenantId)
+          setTenantData(null)
+        } else {
+          logSupabaseError("TenantContext.loadTenantData", error, {
+            tenantId,
+            operation: "from(tenants).select(*).eq(id).maybeSingle",
+          })
+          setTenantData(null)
+        }
+      } else if (!data) {
         warnTenantRowMissing(tenantId)
         setTenantData(null)
       } else {
-        logSupabaseError("TenantContext.loadTenantData", error, {
-          tenantId,
-          operation: "from(tenants).select(*).eq(id).maybeSingle",
-        })
-        setTenantData(null)
+        setTenantData(data)
       }
-    } else if (!data) {
-      warnTenantRowMissing(tenantId)
-      setTenantData(null)
-    } else {
-      setTenantData(data)
-    }
 
-    setLoading(false)
+      tenantDataIdRef.current = tenantId
+    } finally {
+      setLoading(false)
+      loadInFlightRef.current = false
+    }
   }
 
   // ====================================
@@ -79,11 +95,15 @@ export function TenantProvider({ children }) {
 
     if (!isAuthenticated) {
       setTenantData(null)
+      tenantDataIdRef.current = null
+      loadInFlightRef.current = false
       setLoading(false)
     }
   }, [tenantId, authLoading, isAuthenticated])
 
   const refreshTenant = async () => {
+    tenantDataIdRef.current = null
+    loadInFlightRef.current = false
     await loadTenantData()
   }
 

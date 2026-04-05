@@ -6,9 +6,9 @@ Documento **vivo**: aggiornalo quando modifichi funzionalità visibili all’adm
 
 ## 1. Ruolo dell’Admin
 
-L’**Admin** gestisce **un solo tenant** (la propria pizzeria): menu, impostazioni, report, dipendenti, ruoli e (in evoluzione) **pubblicazione del sito** cliente collegato alla stessa app.
+L’**Admin** gestisce **un solo tenant** (la propria pizzeria): menu, impostazioni, report, dipendenti, ruoli e (se abilitato in build) i **gate sui moduli** in base al piano/servizi concordati con la piattaforma. **Dominio pubblico e go-live** del sito ordini sono gestiti dalla **console Super Admin** (non dall’Admin cliente).
 
-**URL tipici:** dopo login, area `/admin/dashboard`, `/admin/menu/...`, `/admin/settings/...`, `/admin/pubblicazione`.
+**URL tipici:** dopo login, area `/admin/menu/...` (home), `/admin/settings/...`, `/admin/manuale`, `/admin/report` (se piano).
 
 ---
 
@@ -16,39 +16,47 @@ L’**Admin** gestisce **un solo tenant** (la propria pizzeria): menu, impostazi
 
 | Ambito | Cosa mantenere allineato |
 |--------|---------------------------|
-| **Nuova pagina o voce menu** | `src/layouts/AdminLayout.jsx` (nav), `src/router/AppRouter.jsx` (route), eventuale card in `Dashboard.jsx` (`ADMIN_NAV`). |
-| **Impostazioni tenant** | `getTenantSettings` / `updateTenantSettings` in `adminService.js`; colonne su `tenants` in Supabase + migrazioni in `supabase/migrations/`. |
+| **Nuova pagina o voce menu** | `src/layouts/AdminLayout.jsx` (nav), `src/router/AppRouter.jsx` (route). `Dashboard.jsx` reindirizza solo (nessuna griglia card). |
+| **Impostazioni tenant** | `getTenantSettings` / `updateTenantSettings` in `adminService.js`; colonne su `tenants` in Supabase + migrazioni. |
 | **Menu pubblico / tema** | `parametri_operativi`, `LayoutSection`, `publicService.js`, test su dominio non-SaaS se applicabile. |
-| **Testi in-app** | `src/content/guidaUtente.md` (pagina Guida utente). |
-| **Privacy / termini lato locale** | Dati in **Impostazioni → Dati pizzeria** (nome, titolare/referente, email, indirizzo); logica in `src/config/legalEntity.js` + `useLegalEntity`. |
+| **Servizi / moduli visibili** | Il Super Admin può impostare `parametri_operativi.servizi_abilitati` e `servizi_personalizzati` sul tenant; con `VITE_ENFORCE_SERVIZI_PLAN=true` l’app filtra card e rotte operative (`useTenantServizi`, `operativeNav`, layout). Documentare in **GUIDA_SUPERADMIN.md**. |
+| **Testi in-app per lo staff** | `src/content/manualeUtente.md` + struttura navigazione `src/content/manualeRoadmap.js` (pagina **Admin → Manuale**, `/admin/manuale`). |
+| **Privacy / termini lato locale** | **Impostazioni → Dati pizzeria** (nome, titolare/referente, email, indirizzo); `src/config/legalEntity.js` + `useLegalEntity`. |
 
 ---
 
-## 3. Pubblicazione sito (`/admin/pubblicazione`)
+## 3. Pubblicazione dominio (solo Super Admin)
 
-- Pagina **centro di coordinamento** per collegare il sito del cliente a PizzaManager e per le future automazioni di deploy.
-- Oggi: checklist e riferimenti; **deploy effettivo** ancora da pipeline / procedura repo (`DEPLOY_COMANDI.md`).
-- Quando aggiungi funzioni (DNS, build, log): aggiorna questa guida, la sezione in **GUIDA_SUPERADMIN.md** (registro) e il testo in `PubblicazioneSitoPage.jsx`.
+Configurazione **dominio pubblico**, stato go-live, guida deploy e checklist DNS/Firebase: **`/superadmin/pubblicazione-sito`**. Vedi **`docs/GUIDA_SUPERADMIN.md`**.
 
 ---
 
-## 4. Collegamenti utili nel repo
+## 4. Manuale operativo in app
+
+Il testo della voce **Manuale** (`/admin/manuale`; redirect da `/admin/guida`) è **`src/content/manualeUtente.md`**, con roadmap macro/micro in **`src/content/manualeRoadmap.js`** e pagina **`src/features/admin/pages/ManualeUtentePage.jsx`**.  
+`docs/GUIDA_UTENTE.md` è un puntatore per chi lavora sul repo.
+
+---
+
+## 5. Collegamenti utili nel repo
 
 | File | Contenuto |
 |------|-----------|
 | `DEPLOY_COMANDI.md` | Build + Firebase, push backend |
-| `docs/GUIDA_SUPERADMIN.md` | Console piattaforma (tenant globali) |
+| `docs/GUIDA_SUPERADMIN.md` | Console piattaforma, piani, servizi tenant |
 | `docs/ARCHITETTURA_E_STATO.md` | Roadmap vs codice |
-| `supabase/migrations/*.sql` | Schema tenant, vista `public.tenants` |
+| `supabase/migrations/*.sql` | Schema tenant, viste |
 
 ---
 
-## 5. Registro aggiornamenti (Admin)
+## 6. Registro aggiornamenti (Admin)
 
 | Data | Cosa è cambiato |
 |------|-----------------|
-| 2026-03-22 | Prima stesura guida: checklist sviluppo, tabella allineamento, nota pagina Pubblicazione. |
+| 2026-03-22 | Prima stesura: checklist sviluppo, Pubblicazione. |
+| 2026-03-23 | Pubblicazione: wizard dominio + note RPC. |
+| 2026-04-03 | Nota gate servizi / `parametri_operativi`; manuale tenant (`manualeUtente.md`, `/admin/manuale`) e allineamento Super Admin. |
 
 ---
 
-*Aggiorna la tabella del §5 e la data in fondo a ogni release rilevante dell’area Admin.*
+*Ultima revisione: 2026-04-03*

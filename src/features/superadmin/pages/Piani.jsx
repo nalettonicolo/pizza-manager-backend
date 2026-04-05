@@ -1,90 +1,29 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import Modal from "@/components/dashboard/Modal";
 import {
-  IDS_BASE,
-  IDS_ENTERPRISE,
-  IDS_FULL,
-  IDS_PRO,
-} from "@/features/superadmin/catalog/defaultCatalog";
+  buildDefaultPlans,
+  defaultInclusioni,
+  displayPrezzoForPlan,
+  inclusioniFromIds,
+  inclusioniIncluded,
+  formatValiditaMesiLabel,
+  loadPlansFromStorage,
+  normalizePlan,
+  savePlansToStorage,
+} from "@/features/superadmin/catalog/plansStorage";
 import {
+  annualTotalFromMonthlyEuro,
+  formatEuro,
   formatEuroMonth,
   loadServicesCatalog,
   sumMonthlyFromInclusioni,
 } from "@/features/superadmin/catalog/servicesStorage";
-
-const STORAGE_KEY_V2 = "pizzamanager_superadmin_plans_v2";
-const STORAGE_KEY_V1 = "pizzamanager_superadmin_plans_v1";
+import { exportPianiCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
+import { mergePianiImport, parsePianiCsv } from "@/features/superadmin/utils/parsePianiCsv";
 
 function uid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function defaultInclusioni(services) {
-  return Object.fromEntries((services || []).map((s) => [s.id, false]));
-}
-
-function inclusioniFromIds(services, ids) {
-  const set = new Set(ids);
-  return Object.fromEntries((services || []).map((s) => [s.id, set.has(s.id)]));
-}
-
-/** Canone: somma dei prezzi base dei servizi inclusi (unica fonte). */
-function displayPrezzoForPlan(p, services) {
-  return formatEuroMonth(sumMonthlyFromInclusioni(p.inclusioni, services));
-}
-
-function buildDefaultPlans(services) {
-  const z = defaultInclusioni(services);
-  const sumForIds = (ids) => sumMonthlyFromInclusioni(inclusioniFromIds(services, ids), services);
-
-  return [
-    {
-      id: "seed_base",
-      nome: "Base",
-      prezzo: formatEuroMonth(sumForIds(IDS_BASE)),
-      descrizione: "Ordini a cassa, stampa comanda riepilogo ordine e gestione consegne.",
-      attivo: true,
-      validitaGiorni: 30,
-      inclusioni: { ...z, ...inclusioniFromIds(services, IDS_BASE) },
-    },
-    {
-      id: "seed_pro",
-      nome: "Pro",
-      prezzo: formatEuroMonth(sumForIds(IDS_PRO)),
-      descrizione: "Include tutto il Base più ordini online (cliente finale).",
-      attivo: true,
-      validitaGiorni: 30,
-      inclusioni: { ...z, ...inclusioniFromIds(services, IDS_PRO) },
-    },
-    {
-      id: "seed_enterprise",
-      nome: "Enterprise",
-      prezzo: formatEuroMonth(sumForIds(IDS_ENTERPRISE)),
-      descrizione: "Include tutto il Pro più interfacce tablet dedicate per ruoli operativi (cassa, bancone, cucina, delivery, pizzaiolo).",
-      attivo: true,
-      validitaGiorni: 30,
-      inclusioni: { ...z, ...inclusioniFromIds(services, IDS_ENTERPRISE) },
-    },
-    {
-      id: "seed_full",
-      nome: "Full",
-      prezzo: formatEuroMonth(sumForIds(IDS_FULL)),
-      descrizione: "Tutti i servizi del catalogo.",
-      attivo: true,
-      validitaGiorni: 365,
-      inclusioni: { ...z, ...inclusioniFromIds(services, IDS_FULL) },
-    },
-    {
-      id: "seed_su_misura",
-      nome: "Su misura",
-      prezzo: formatEuroMonth(0),
-      descrizione: "Il cliente sceglie i servizi dal catalogo; il canone è la somma dei servizi selezionati.",
-      attivo: true,
-      validitaGiorni: 30,
-      inclusioni: { ...z },
-    },
-  ];
 }
 
 const btnSecondary = {
@@ -106,103 +45,6 @@ const inputBase = {
   boxSizing: "border-box",
 };
 
-const SUPERADMIN_NAV = [
-  { to: "/superadmin/dashboard", label: "Riepilogo", description: "Torna alla home" },
-  { to: "/superadmin/tenants", label: "Clienti", description: "Pizzerie registrate" },
-  { to: "/superadmin/servizi", label: "Catalogo servizi", description: "Servizi e prezzi" },
-  { to: "/superadmin/deploy-clienti", label: "Deploy siti clienti", description: "Pubblicazione e go-live" },
-  { to: "/superadmin/licenses", label: "Abbonamenti", description: "Stato licenze" },
-  { to: "/superadmin/settings", label: "Impostazioni", description: "Configurazione" },
-];
-
-const LEGACY_LABEL_HINTS = [
-  { id: "ordini_online", needle: "ordini online" },
-  { id: "tablet_ruoli", needle: "tablet" },
-  { id: "report_analisi", needle: "report" },
-  { id: "multi_sede", needle: "multipli" },
-  { id: "ruoli_avanzati", needle: "ruoli" },
-  { id: "supporto_prioritario", needle: "supporto" },
-  { id: "menu_listini", needle: "menu" },
-  { id: "api_integrazioni", needle: "api" },
-  { id: "account_manager", needle: "account" },
-  { id: "sla_personalizzazioni", needle: "sla" },
-];
-
-function migrateLegacyPlan(p, services) {
-  const inc = defaultInclusioni(services);
-  const lines = (p.funzionalita || []).map((s) => String(s).toLowerCase());
-  for (const { id, needle } of LEGACY_LABEL_HINTS) {
-    if (lines.some((line) => line.includes(needle) || line.includes(id.replace(/_/g, " ")))) {
-      if (services.some((s) => s.id === id)) inc[id] = true;
-    }
-  }
-  if (lines.some((l) => l.includes("pro") && l.includes("tutto"))) {
-    services.forEach((s) => {
-      inc[s.id] = true;
-    });
-  }
-  const merged = { ...inc, ...(p.inclusioni || {}) };
-  const out = defaultInclusioni(services);
-  for (const s of services) {
-    out[s.id] = merged[s.id] === true;
-  }
-  const prezzoDaSomma = formatEuroMonth(sumMonthlyFromInclusioni(out, services));
-  return {
-    id: p.id,
-    nome: p.nome ?? "",
-    prezzo: prezzoDaSomma,
-    descrizione: p.descrizione ?? "",
-    attivo: p.attivo === false ? false : true,
-    validitaGiorni: p.validitaGiorni != null && p.validitaGiorni !== "" ? Number(p.validitaGiorni) : null,
-    inclusioni: out,
-  };
-}
-
-function normalizePlan(p, services) {
-  const base = migrateLegacyPlan(p, services);
-  if (typeof base.attivo !== "boolean") base.attivo = true;
-  return base;
-}
-
-function loadPlansFromStorage(services) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_V2);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) return parsed.map((p) => normalizePlan(p, services));
-    }
-    const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
-    if (rawV1) {
-      const parsed = JSON.parse(rawV1);
-      if (Array.isArray(parsed) && parsed.length) {
-        const migrated = parsed.map((p) => migrateLegacyPlan(p, services));
-        try {
-          localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
-        } catch {
-          /* ignore */
-        }
-        return migrated;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function savePlansToStorage(list) {
-  try {
-    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(list));
-  } catch {
-    /* ignore */
-  }
-}
-
-function inclusioniIncluded(inc, services) {
-  if (!inc || !services?.length) return [];
-  return services.filter((s) => inc[s.id] === true);
-}
-
 export default function Piani() {
   const [services] = useState(() => loadServicesCatalog());
   const [piani, setPiani] = useState(() => {
@@ -213,6 +55,8 @@ export default function Piani() {
   const [planModalMode, setPlanModalMode] = useState("add");
   const [draft, setDraft] = useState(null);
   const [modalError, setModalError] = useState(null);
+  const [importPianiError, setImportPianiError] = useState(null);
+  const filePianiRef = useRef(null);
 
   useEffect(() => {
     savePlansToStorage(piani);
@@ -253,7 +97,8 @@ export default function Piani() {
           prezzo,
           descrizione: "",
           attivo: true,
-          validitaGiorni: 30,
+          validitaMesi: 1,
+          scontoAbbonamentoAnnualePercent: 12,
           inclusioni: inc,
         },
         services,
@@ -282,17 +127,22 @@ export default function Piani() {
       return;
     }
     setModalError(null);
-    const validitaGiorni =
-      draft.validitaGiorni === "" || draft.validitaGiorni == null
-        ? null
-        : Math.max(1, Math.floor(Number(draft.validitaGiorni)) || 1);
+    const validitaMesi =
+      draft.validitaMesi === "" || draft.validitaMesi == null
+        ? 1
+        : Math.max(1, Math.floor(Number(draft.validitaMesi)) || 1);
+    const scontoAbbonamentoAnnualePercent = Math.min(
+      100,
+      Math.max(0, Number(String(draft.scontoAbbonamentoAnnualePercent ?? "").replace(",", ".")) || 0),
+    );
     const inc = { ...defaultInclusioni(services), ...(draft.inclusioni || {}) };
     const prezzoFinale = formatEuroMonth(sumMonthlyFromInclusioni(inc, services));
 
     const saved = normalizePlan(
       {
         ...draft,
-        validitaGiorni,
+        validitaMesi,
+        scontoAbbonamentoAnnualePercent,
         prezzo: prezzoFinale,
         inclusioni: inc,
       },
@@ -322,6 +172,33 @@ export default function Piani() {
     if (draft?.id === id) closePlanModal();
   };
 
+  const onImportPianiCsv = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setImportPianiError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const sv = loadServicesCatalog();
+        const parsed = parsePianiCsv(String(reader.result || ""), sv);
+        if (!parsed.length) {
+          setImportPianiError("Nessuna riga valida nel CSV (serve colonna id e almeno una riga dati).");
+          e.target.value = "";
+          return;
+        }
+        setPiani((prev) => mergePianiImport(prev, parsed).map((p) => normalizePlan(p, sv)));
+      } catch (err) {
+        setImportPianiError(err?.message ?? "Import CSV non riuscito.");
+      }
+      e.target.value = "";
+    };
+    reader.onerror = () => {
+      setImportPianiError("Lettura file non riuscita.");
+      e.target.value = "";
+    };
+    reader.readAsText(f, "UTF-8");
+  };
+
   const inclusioniCount = useMemo(() => {
     return services.filter((s) => draftInclusioni[s.id]).length;
   }, [draftInclusioni, services]);
@@ -331,29 +208,16 @@ export default function Piani() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Link
-          to="/superadmin/dashboard"
-          style={{
-            display: "inline-block",
-            padding: "10px 20px",
-            background: "#d35400",
-            color: "#fff",
-            borderRadius: 6,
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
-          ← Torna al Riepilogo
+      <header className="sa-page-header" style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, maxWidth: "100%" }}>
+        <div>
+          <p className="sa-page-kicker">Super Admin · commerciale</p>
+          <h1 className="dashboard-page-title sa-page-title">Piani e listini</h1>
+          <p className="sa-page-lede">Componi i bundle vendibili a partire dal catalogo servizi (prezzi in localStorage).</p>
+        </div>
+        <Link to="/superadmin/servizi" className="btn-primary-dashboard" style={{ textDecoration: "none", alignSelf: "center" }}>
+          Catalogo servizi →
         </Link>
-      </div>
-      <div className="dashboard-page-header" style={{ flexWrap: "wrap", gap: 12 }}>
-        <h1 className="dashboard-page-title">Piani di abbonamento</h1>
-        <Link to="/superadmin/servizi" className="btn-primary-dashboard" style={{ textDecoration: "none" }}>
-          Catalogo servizi e prezzi →
-        </Link>
-      </div>
+      </header>
 
       <div className="dashboard-box" style={{ marginBottom: 24, maxWidth: 800 }}>
         <h2 style={{ marginTop: 0, fontSize: 16 }}>Come funziona</h2>
@@ -363,27 +227,51 @@ export default function Piani() {
           o personalizzati): per ogni piano selezioni i servizi inclusi; il <strong>canone mensile</strong> è la{" "}
           <strong>somma</strong> dei prezzi del catalogo per quei servizi.
         </p>
+        <p style={{ margin: "0 0 8px", fontSize: 14, color: "#555", lineHeight: 1.55 }}>
+          La <strong>validità listino</strong> si esprime in <strong>mesi di calendario</strong> (non in giorni fissi), in
+          linea con rinnovi e fatturazione reale.
+        </p>
         <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.55 }}>
           I dati sono salvati in questo browser (localStorage). Per uso multi-dispositivo servirà persistenza su database.
         </p>
       </div>
 
-      <div className="nav-cards cols-4" style={{ marginBottom: 32 }}>
-        {SUPERADMIN_NAV.map((item) => (
-          <Link key={item.to} to={item.to} className="nav-card">
-            <h3>{item.label}</h3>
-            <p>{item.description}</p>
-            <span className="nav-card-link">Vai →</span>
-          </Link>
-        ))}
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
         <button type="button" className="btn-primary-dashboard" onClick={openAddModal} disabled={noServices}>
           + Aggiungi piano
         </button>
+        <button
+          type="button"
+          onClick={() => exportPianiCsv(piani, loadServicesCatalog())}
+          style={{ ...btnSecondary, fontSize: 13 }}
+          disabled={!piani.length}
+          title="Scarica CSV (separatore ;) con inclusioni e canone calcolato"
+        >
+          Esporta piani CSV
+        </button>
+        <input
+          ref={filePianiRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: "none" }}
+          onChange={onImportPianiCsv}
+        />
+        <button
+          type="button"
+          onClick={() => filePianiRef.current?.click()}
+          style={{ ...btnSecondary, fontSize: 13 }}
+          disabled={noServices}
+          title="Stesso formato dell’export: aggiorna o aggiunge piani per id; i piani non presenti nel file restano in elenco"
+        >
+          Importa piani CSV
+        </button>
+        {importPianiError ? (
+          <span style={{ fontSize: 13, color: "#b91c1c", flex: "1 1 100%" }} role="alert">
+            {importPianiError}
+          </span>
+        ) : null}
         {noServices && (
-          <span style={{ marginLeft: 12, fontSize: 13, color: "#b45309" }}>
+          <span style={{ fontSize: 13, color: "#b45309" }}>
             Carica il catalogo servizi dalla pagina Catalogo.
           </span>
         )}
@@ -433,22 +321,49 @@ export default function Piani() {
             </p>
           </div>
 
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Validità (giorni)</label>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+            Validità listino (mesi di calendario)
+          </label>
           <input
             type="number"
             min={1}
             step={1}
-            value={draft?.validitaGiorni ?? ""}
+            value={draft?.validitaMesi ?? 1}
             onChange={(e) => {
               const v = e.target.value;
-              updateDraftField("validitaGiorni", v === "" ? null : v);
+              updateDraftField("validitaMesi", v === "" ? 1 : v);
             }}
-            placeholder="es. 30"
+            placeholder="es. 1"
             style={inputBase}
           />
           <p style={{ fontSize: 12, color: "#64748b", margin: "-8px 0 12px" }}>
-            Durata dell&apos;abbonamento o del periodo di fatturazione, in giorni.
+            Un mese = <strong>mese solare</strong> (gennaio, febbraio, … con i loro giorni reali), non 30 giorni fissi.
+            L&apos;<strong>abbonamento annuale</strong> del cliente (12 mesi + sconto) si imposta in{" "}
+            <strong>Clienti → Abbonamento</strong>.
           </p>
+
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+            Sconto se abbonamento annuale (anticipo 12 mensilità) %
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={draft?.scontoAbbonamentoAnnualePercent ?? 0}
+            onChange={(e) => updateDraftField("scontoAbbonamentoAnnualePercent", e.target.value)}
+            style={inputBase}
+          />
+          <p style={{ fontSize: 12, color: "#64748b", margin: "-8px 0 12px" }}>
+            Se il cliente paga <strong>un&apos;unica rata annuale</strong>, questo è lo sconto sul totale{" "}
+            <strong>12 × canone mensile</strong> (indicativo commercialmente; il valore effettivo lo registri sul cliente).
+          </p>
+          {computedMonthly > 0 && Number(draft?.scontoAbbonamentoAnnualePercent) > 0 ? (
+            <p style={{ fontSize: 12, color: "#166534", margin: "-4px 0 12px", fontWeight: 600 }}>
+              Esempio annuale: {formatEuro(annualTotalFromMonthlyEuro(computedMonthly, draft.scontoAbbonamentoAnnualePercent))}{" "}
+              /anno (al netto dello sconto) vs {formatEuroMonth(computedMonthly)} × 12.
+            </p>
+          ) : null}
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <input
@@ -614,11 +529,25 @@ export default function Piani() {
               <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 8px" }}>
                 Totale = somma dei servizi inclusi (prezzi del catalogo).
               </p>
-              {p.validitaGiorni != null && (
+              {p.validitaMesi != null && (
                 <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 8px" }}>
-                  Validità: <strong>{p.validitaGiorni} giorni</strong>
+                  Validità listino: <strong>{formatValiditaMesiLabel(p.validitaMesi)}</strong> (calendario)
                 </p>
               )}
+              {Number(p.scontoAbbonamentoAnnualePercent) > 0 && sumMonthlyFromInclusioni(p.inclusioni, services) > 0 ? (
+                <p style={{ fontSize: 13, color: "#166534", margin: "0 0 8px" }}>
+                  Annuale (indicativo): <strong>−{Number(p.scontoAbbonamentoAnnualePercent)}%</strong> sul totale 12 mesi →{" "}
+                  <strong>
+                    {formatEuro(
+                      annualTotalFromMonthlyEuro(
+                        sumMonthlyFromInclusioni(p.inclusioni, services),
+                        p.scontoAbbonamentoAnnualePercent,
+                      ),
+                    )}
+                    /anno
+                  </strong>
+                </p>
+              ) : null}
               {p.descrizione && (
                 <p style={{ fontSize: 14, color: "#555", margin: "0 0 12px" }}>{p.descrizione}</p>
               )}

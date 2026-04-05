@@ -3,18 +3,22 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { devLog, devWarn } from "@/lib/devLog"
-import { computePermessiAree, normalizeLegacyAllAccessTrue } from "@/utils/operativeAreaAccess"
+import {
+  computePermessiAree,
+  normalizeLegacyAllAccessTrue,
+  normalizeRuoloOperativo,
+} from "@/utils/operativeAreaAccess"
 
 const AuthContext = createContext()
 
-const SESSION_CHECK_TIMEOUT_MS = 6000
-/** getSession() può restare in attesa su rete lenta / tablet */
-const GET_SESSION_TIMEOUT_MS = 10000
+/** getSession() — timeout più stretto per UI più reattiva (rete lenta può comunque fallire e ripetere login) */
+const GET_SESSION_TIMEOUT_MS = 6000
 /** Oltre questo tempo il gate auth si chiude comunque (evita "Accesso in corso..." infinito) */
-const AUTH_LOADING_FAILSAFE_MS = 20000
-const LOAD_USER_DATA_TIMEOUT_MS = 12000
-const LOAD_USER_DATA_RETRY_DELAY_MS = 500
-const SESSION_PROPAGATION_DELAY_MS = 200
+const AUTH_LOADING_FAILSAFE_MS = 14000
+const LOAD_USER_DATA_TIMEOUT_MS = 8000
+const LOAD_USER_DATA_RETRY_DELAY_MS = 150
+/** Micro-ritardo dopo sessione: 0 = nessuna attesa artificiale tra getSession e load profilo */
+const SESSION_PROPAGATION_DELAY_MS = 0
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -107,18 +111,14 @@ export function AuthProvider({ children }) {
         lastLoadedUserIdRef.current = userId
         devLog("Auth", "utente STAFF", { ruolo: staffData.ruolo, tenant_id: staffData.tenant_id })
         setTipoUtente("staff")
-        setRuolo(
+        const ruoloNorm =
           staffData.ruolo != null && String(staffData.ruolo).trim() !== ""
-            ? String(staffData.ruolo).toLowerCase().trim()
+            ? normalizeRuoloOperativo(String(staffData.ruolo).trim())
             : null
-        )
+        setRuolo(ruoloNorm)
         setTenantId(staffData.tenant_id)
         const normalized = normalizeLegacyAllAccessTrue(staffData)
-        const ruoloForPermessi =
-          staffData.ruolo != null && String(staffData.ruolo).trim() !== ""
-            ? String(staffData.ruolo).toLowerCase().trim()
-            : null
-        setPermessiAree(computePermessiAree(normalized, ruoloForPermessi))
+        setPermessiAree(computePermessiAree(normalized, ruoloNorm))
         retryPendingRef.current = false
         setLoadingSafe(false)
         return
@@ -206,12 +206,8 @@ export function AuthProvider({ children }) {
     }
 
     let cancelled = false
-    const timeoutId = setTimeout(() => {
-      if (cancelled) return
-      devLog("Auth", "timeout verifica sessione, forzo loading=false")
-      forceLoadingFalse()
-    }, SESSION_CHECK_TIMEOUT_MS)
-
+    /** Non usare un timeout breve che imposta loading=false mentre getSession() è ancora in corso:
+     * su nuova scheda la sessione da localStorage può arrivare dopo >3s e ProtectedRoute mandava a /login a utenti già autenticati. */
     const failsafeId = setTimeout(() => {
       if (cancelled) return
       devWarn("Auth", "failsafe: loading=false dopo attesa massima (evita schermata bloccata)")
@@ -242,7 +238,9 @@ export function AuthProvider({ children }) {
         setUser(currentUser)
         latestUserIdRef.current = currentUser?.id ?? null
         if (currentUser) {
-          await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
+          if (SESSION_PROPAGATION_DELAY_MS > 0) {
+            await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
+          }
           await loadUserData(currentUser.id)
         } else {
           forceLoadingFalse()
@@ -251,7 +249,6 @@ export function AuthProvider({ children }) {
         if (!cancelled) devWarn("Auth", "init eccezione", err?.message || err, err)
       } finally {
         if (!cancelled) {
-          clearTimeout(timeoutId)
           clearTimeout(failsafeId)
           forceLoadingFalse()
           devLog("Auth", "init completato, loading=false")
@@ -279,7 +276,9 @@ export function AuthProvider({ children }) {
               return
             }
             loadUserDataInProgressRef.current = false
-            await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
+            if (SESSION_PROPAGATION_DELAY_MS > 0) {
+              await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
+            }
             await loadUserData(currentUser.id)
           } else {
             lastLoadedUserIdRef.current = null
@@ -298,7 +297,6 @@ export function AuthProvider({ children }) {
 
     return () => {
       cancelled = true
-      clearTimeout(timeoutId)
       clearTimeout(failsafeId)
       if (retryTimeoutIdRef.current) {
         clearTimeout(retryTimeoutIdRef.current)
@@ -325,13 +323,25 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     devLog("Auth", "logout")
-    await supabase.auth.signOut()
+    try {
+      /* scope local = pulisce storage su questo browser (sessione persistente) */
+      await supabase.auth.signOut({ scope: "local" })
+    } catch (e) {
+      devWarn("Auth", "signOut errore (prosegui pulizia stato locale)", e?.message ?? e, e)
+    }
     setUser(null)
     setTipoUtente(null)
     setRuolo(null)
     setTenantId(null)
     setPermessiAree(null)
+    lastLoadedUserIdRef.current = null
+    latestUserIdRef.current = null
     forceLoadingFalse()
+  }
+
+  /** Dopo link reset password (flusso recovery Supabase). */
+  const updatePassword = async (newPassword) => {
+    return supabase.auth.updateUser({ password: newPassword })
   }
 
   return (
@@ -345,6 +355,7 @@ export function AuthProvider({ children }) {
         loading,
         login,
         logout,
+        updatePassword,
       }}
     >
       {children}

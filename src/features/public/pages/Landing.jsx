@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import LandingPlansSection from "@/features/public/components/LandingPlansSection"
 import "../../../styles/landing.css"
 
 export default function Landing() {
@@ -152,68 +153,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section id="piani" className="pricing-section">
-        <p className="pricing-badge">Piani chiari</p>
-        <h2 className="pricing-title">
-          Scala quando sei pronto
-        </h2>
-        <p className="pricing-subtitle">
-          Nessun piano “free” permanente: inizi con <strong>14 giorni di prova</strong> sul <strong>piano che scegli</strong>, poi prosegui con l’abbonamento relativo. Contattaci per i dettagli.
-        </p>
-        <div className="pricing-grid">
-          <div className="pricing-card featured">
-            <div className="pricing-card-header">
-              <span className="pricing-tag">Per iniziare</span>
-              <span className="pricing-name">Prova 14 giorni</span>
-              <div className="pricing-price">
-                <span className="pricing-amount">14 giorni</span>
-              </div>
-              <p className="pricing-desc">Scegli il piano e provalo per 14 giorni</p>
-            </div>
-            <ul className="pricing-features">
-              <li>Accesso al piano selezionato (Base / Pro / Enterprise)</li>
-              <li>Non è un piano a tempo indeterminato: serve per decidere</li>
-              <li>Al termine attivi un piano a pagamento con l’admin</li>
-            </ul>
-            <Link to="/contatti#prova-gratuita" className="pricing-cta primary">Richiedi la prova</Link>
-          </div>
-
-          <div className="pricing-card">
-            <div className="pricing-card-header">
-              <span className="pricing-name">Piani Pro / Business</span>
-              <div className="pricing-price">
-                <span className="pricing-amount">Da concordare</span>
-              </div>
-              <p className="pricing-desc">Funzioni e limiti per sede</p>
-            </div>
-            <ul className="pricing-features">
-              <li>Piani commerciali definiti dalla piattaforma (es. Pro)</li>
-              <li>Ogni piano elenca cosa include (punti vendita, report, …)</li>
-              <li>Gestione da area Super Admin</li>
-            </ul>
-            <Link to="/contatti#prova-gratuita" className="pricing-cta secondary">Chiedi un preventivo</Link>
-          </div>
-
-          <div className="pricing-card">
-            <div className="pricing-card-header">
-              <span className="pricing-name">Enterprise</span>
-              <div className="pricing-price">
-                <span className="pricing-amount">Su misura</span>
-              </div>
-              <p className="pricing-desc">Gruppi e franchising</p>
-            </div>
-            <ul className="pricing-features">
-              <li>Integrazioni e volumi dedicati</li>
-              <li>Account e SLA concordati</li>
-              <li>Personalizzazioni sul modello</li>
-            </ul>
-            <Link to="/contatti" className="pricing-cta secondary">Contattaci</Link>
-          </div>
-        </div>
-        <p className="pricing-note">
-          Gli abbonamenti includono aggiornamenti del prodotto. I dettagli economici e le funzioni per piano sono gestiti in piattaforma insieme all’amministratore.
-        </p>
-      </section>
+      <LandingPlansSection />
 
       <section className="cta-block">
         <div className="cta-inner">

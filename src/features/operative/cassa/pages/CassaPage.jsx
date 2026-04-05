@@ -29,6 +29,7 @@ import {
   chiudiGiornata,
   enrichProductsWithPrezzoCalcolato,
   searchAnagraficaClienti,
+  enrichOrdineDetailIngredientiSummaries,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
@@ -44,10 +45,32 @@ import {
   groupPizzeBySlotOrarioRitiro,
   slotColor,
 } from "@/features/operative/cassa/utils/planningUtils"
+import {
+  cartItemsToComandaRighe,
+  printComandaKitchen,
+  comandaPayloadFromOrdineDetail,
+} from "@/features/operative/cassa/utils/printComanda"
+import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Da pagare", "Altro"]
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
+
+/** Ordini collegati all’anagrafica cliente (delivery: nome+indirizzo; negozio: stesso nome cliente). */
+function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
+  if (!cliente) return []
+  const nomeNorm = (cliente.nome || "").trim().toLowerCase()
+  const indNorm = (cliente.indirizzo || "").trim().toLowerCase()
+  return (ordini || []).filter((o) => {
+    const oNome = (o.nome_cliente ?? "").trim().toLowerCase()
+    const oInd = (o.indirizzo_consegna ?? "").trim().toLowerCase()
+    const tipo = (o.tipo_ordine || "").toLowerCase()
+    if (tipo === "delivery") {
+      return oNome === nomeNorm && oInd === indNorm
+    }
+    return oNome === nomeNorm && nomeNorm.length > 0
+  })
+}
 
 export default function CassaPage() {
   const { tenantId, tenantData } = useTenant()
@@ -74,6 +97,8 @@ export default function CassaPage() {
   const [checkoutNomeCliente, setCheckoutNomeCliente] = useState("")
   const [checkoutSelectedSlot, setCheckoutSelectedSlot] = useState(null)
   const [checkoutError, setCheckoutError] = useState(null)
+  /** Dopo conferma ordine, se non stampa automatica: payload per ristampare comanda. */
+  const [pendingComandaPrint, setPendingComandaPrint] = useState(null)
   const [showRiepilogo, setShowRiepilogo] = useState(false)
   const [showImpostazioniCassa, setShowImpostazioniCassa] = useState(false)
   const [ordiniOggi, setOrdiniOggi] = useState([])
@@ -92,6 +117,7 @@ export default function CassaPage() {
   const [chiudiGiornataLoading, setChiudiGiornataLoading] = useState(false)
   const [lastOrderModalDetail, setLastOrderModalDetail] = useState(null)
   const [lastOrderLoading, setLastOrderLoading] = useState(false)
+  const [lastOrderDetailLoading, setLastOrderDetailLoading] = useState(false)
   const [ordiniOnlineDisabilitati, setOrdiniOnlineDisabilitati] = useState(false)
   const [showPaginaOrdini, setShowPaginaOrdini] = useState(false)
   const [ordiniSearch, setOrdiniSearch] = useState("")
@@ -135,71 +161,35 @@ export default function CassaPage() {
   const loadProducts = useCallback(async () => {
     if (!tenantId || !activeCategory) return
 
-    const data = await getProductsByCategory(
-      tenantId,
-      activeCategory
-    )
+    const data = await getProductsByCategory(tenantId, activeCategory)
     const sorted = sortByOrdine(data || [])
-    const withPrezzo = await enrichProductsWithPrezzoCalcolato(tenantId, sorted)
-    setProducts(withPrezzo)
+    const ids = (sorted || []).map((p) => p.id).filter(Boolean)
     try {
-      const ids = (withPrezzo || []).map((p) => p.id).filter(Boolean)
-      if (ids.length) {
-        const [map, idsMap] = await Promise.all([
-          getProductIngredientiMap(tenantId, ids),
-          getProductIngredientIdsMap(tenantId, ids),
-        ])
-        setProductIngredientiMap(map || {})
-        setProductIngredientIdsMap(idsMap || {})
-      } else {
-        setProductIngredientiMap({})
-        setProductIngredientIdsMap({})
-      }
+      const [withPrezzo, map, idsMap] = await Promise.all([
+        enrichProductsWithPrezzoCalcolato(tenantId, sorted),
+        ids.length ? getProductIngredientiMap(tenantId, ids) : Promise.resolve({}),
+        ids.length ? getProductIngredientIdsMap(tenantId, ids) : Promise.resolve({}),
+      ])
+      setProducts(withPrezzo)
+      setProductIngredientiMap(map || {})
+      setProductIngredientIdsMap(idsMap || {})
     } catch (e) {
-      console.warn("Caricamento ingredienti per lista cassa:", e)
+      console.warn("Caricamento prodotti / ingredienti cassa:", e)
+      try {
+        const fallback = await enrichProductsWithPrezzoCalcolato(tenantId, sorted)
+        setProducts(fallback)
+      } catch {
+        setProducts(sorted)
+      }
       setProductIngredientiMap({})
       setProductIngredientIdsMap({})
     }
   }, [tenantId, activeCategory])
 
   useEffect(() => {
-    loadCategories()
-  }, [loadCategories])
-
-  useEffect(() => {
     loadProducts()
   }, [loadProducts])
 
-  useEffect(() => {
-    if (!tenantId) return
-    getIngredients(tenantId)
-      .then((list) => {
-        const esauriti = (list || []).filter((i) => i.attivo === false).map((i) => i.id)
-        setIngredientiEsauritiIds(esauriti)
-      })
-      .catch(() => setIngredientiEsauritiIds([]))
-  }, [tenantId])
-
-  // Permesso: utente cassa può modificare parametri operativi (impostazioni cassa)
-  useEffect(() => {
-    const loadPermesso = async () => {
-      if (!tenantId || !user?.email) {
-        setCanEditParametriCassa(false)
-        return
-      }
-      try {
-        const list = await getRuoliPizzeria(tenantId)
-        const me = (list || []).find((r) => r.email === user.email)
-        setCanEditParametriCassa(Boolean(me?.puo_modificare_parametri))
-      } catch (e) {
-        console.warn("Errore caricamento permessi ruoli:", e)
-        setCanEditParametriCassa(false)
-      }
-    }
-    loadPermesso()
-  }, [tenantId, user?.email])
-
-  // Ordini: carichiamo solo la giornata odierna (UTC) per evitare ordini vecchi in lista
   const loadOrdini = useCallback(async () => {
     if (!tenantId) return
     try {
@@ -210,9 +200,44 @@ export default function CassaPage() {
       setOrdiniOggi([])
     }
   }, [tenantId])
+
+  /** Categorie + ordini giornata + ingredienti esauriti + permessi: tutto in parallelo (meno attese in cascata). */
   useEffect(() => {
-    loadOrdini()
-  }, [loadOrdini])
+    if (!tenantId) return
+    let cancelled = false
+    const loadPermesso = async () => {
+      if (!user?.email) {
+        if (!cancelled) setCanEditParametriCassa(false)
+        return
+      }
+      try {
+        const list = await getRuoliPizzeria(tenantId)
+        if (cancelled) return
+        const me = (list || []).find((r) => r.email === user.email)
+        setCanEditParametriCassa(Boolean(me?.puo_modificare_parametri))
+      } catch (e) {
+        console.warn("Errore caricamento permessi ruoli:", e)
+        if (!cancelled) setCanEditParametriCassa(false)
+      }
+    }
+    void Promise.all([
+      loadCategories(),
+      loadOrdini(),
+      getIngredients(tenantId)
+        .then((list) => {
+          if (cancelled) return
+          const esauriti = (list || []).filter((i) => i.attivo === false).map((i) => i.id)
+          setIngredientiEsauritiIds(esauriti)
+        })
+        .catch(() => {
+          if (!cancelled) setIngredientiEsauritiIds([])
+        }),
+      loadPermesso(),
+    ])
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId, user?.email, loadCategories, loadOrdini])
 
   useEffect(() => {
     if (!tenantId || !ordiniOggi.length) {
@@ -232,7 +257,8 @@ export default function CassaPage() {
       const ids = (detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)
       const prodotti = ids.length ? await getProdottiByIds(tenantId, ids) : []
       const productNames = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
-      setOrdineDetail({ ...detail, productNames })
+      const enriched = await enrichOrdineDetailIngredientiSummaries(tenantId, { ...detail, productNames })
+      setOrdineDetail(enriched)
     } catch (e) {
       console.error(e)
     } finally {
@@ -245,26 +271,13 @@ export default function CassaPage() {
     setLastOrderLoading(true)
     setLastOrderModalDetail(null)
     try {
-      const data = await getOrders(tenantId, { todayOnly: true, limit: 100 })
-      const nomeNorm = (selectedCliente.nome || "").trim()
-      const indirizzoNorm = (selectedCliente.indirizzo || "").trim()
-      const match = (o) => {
-        const tipo = (o.tipo_ordine || "").toLowerCase()
-        if (tipo !== "delivery") return false
-        const oNome = (o.nome_cliente ?? o.nome ?? "").trim()
-        const oInd = (o.indirizzo_consegna ?? o.indirizzo ?? "").trim()
-        return oNome === nomeNorm && oInd === indirizzoNorm
-      }
-      const last = (data || []).find(match)
-      if (!last) {
+      const data = await getOrders(tenantId, { limit: 400 })
+      const matches = ordiniFiltratiPerClienteAnagrafica(data, selectedCliente)
+      if (!matches.length) {
         setLastOrderModalDetail({ empty: true })
         return
       }
-      const detail = await getOrderDetail(last.id)
-      const ids = (detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)
-      const prodotti = ids.length ? await getProdottiByIds(tenantId, ids) : []
-      const productNames = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
-      setLastOrderModalDetail({ ...detail, productNames })
+      setLastOrderModalDetail({ mode: "list", ordini: matches })
     } catch (e) {
       console.error(e)
       setLastOrderModalDetail({ error: e?.message || "Errore caricamento" })
@@ -272,6 +285,31 @@ export default function CassaPage() {
       setLastOrderLoading(false)
     }
   }, [tenantId, selectedCliente])
+
+  const loadClienteOrdineDetail = useCallback(
+    async (ordineId) => {
+      if (!tenantId || !ordineId) return
+      setLastOrderDetailLoading(true)
+      try {
+        const detail = await getOrderDetail(ordineId)
+        const ids = (detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)
+        const prodotti = ids.length ? await getProdottiByIds(tenantId, ids) : []
+        const productNames = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
+        const base = { ...detail, productNames }
+        const enriched = await enrichOrdineDetailIngredientiSummaries(tenantId, base)
+        setLastOrderModalDetail((prev) => {
+          const historyOrdini = prev?.mode === "list" ? prev.ordini : prev?.historyOrdini || []
+          return { mode: "detail", historyOrdini, ...enriched }
+        })
+      } catch (e) {
+        console.error(e)
+        alert("Errore caricamento ordine. " + (e?.message || ""))
+      } finally {
+        setLastOrderDetailLoading(false)
+      }
+    },
+    [tenantId],
+  )
 
   const handleSegnaPagato = useCallback(async (ordineId, nuovoTipo) => {
     try {
@@ -301,7 +339,11 @@ export default function CassaPage() {
       setModificaOrdineModal(null)
       if (ordineDetail?.id === modificaOrdineModal.id) {
         const detail = await getOrderDetail(modificaOrdineModal.id)
-        setOrdineDetail(detail)
+        const ids = (detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)
+        const prodotti = ids.length ? await getProdottiByIds(tenantId, ids) : []
+        const productNames = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
+        const enriched = await enrichOrdineDetailIngredientiSummaries(tenantId, { ...detail, productNames })
+        setOrdineDetail(enriched)
       }
       loadOrdini()
     } catch (e) {
@@ -310,7 +352,7 @@ export default function CassaPage() {
     } finally {
       setModificaOrdineSaving(false)
     }
-  }, [modificaOrdineModal?.id, modificaForm, ordineDetail?.id, loadOrdini])
+  }, [modificaOrdineModal?.id, modificaForm, ordineDetail?.id, loadOrdini, tenantId])
 
   const handleSpostaOrdinePlanning = useCallback(async (ordineId, nuovoOrarioRitiro) => {
     setPlanningSpostaLoading(ordineId)
@@ -432,7 +474,34 @@ export default function CassaPage() {
     setProfiloClienteModalOpen(false)
   }
 
-  const setCassaHeader = useCassaHeader()?.setContent
+  const cassaHeaderApi = useCassaHeader()
+  const setCassaHeader = cassaHeaderApi?.setContent
+  const setCassaSidebar = cassaHeaderApi?.setSidebar
+
+  useLayoutEffect(() => {
+    if (!setCassaSidebar) return
+    if (!canEditParametriCassa) {
+      setCassaSidebar(null)
+      return () => setCassaSidebar(null)
+    }
+    setCassaSidebar(
+      <button
+        type="button"
+        style={{
+          ...styles.impostazioniBtn,
+          width: "100%",
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        onClick={() => setShowImpostazioniCassa(true)}
+      >
+        Impostazioni cassa
+      </button>,
+    )
+    return () => setCassaSidebar(null)
+  }, [setCassaSidebar, canEditParametriCassa])
 
   useLayoutEffect(() => {
     if (!setCassaHeader) return
@@ -504,9 +573,9 @@ export default function CassaPage() {
                 onClick={openUltimoOrdineCliente}
                 disabled={lastOrderLoading}
                 style={{ padding: "8px 14px", background: "#1976d2", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600 }}
-                title="Vedi ultimo ordine di questo cliente"
+                title="Storico ordini di questo cliente (ultimi 400 ordini)"
               >
-                {lastOrderLoading ? "..." : "Ultimo ordine"}
+                {lastOrderLoading ? "..." : "Storico ordini"}
               </button>
               <button
                 type="button"
@@ -643,7 +712,11 @@ export default function CassaPage() {
         const defaultPayload = {
           ingredientiModifiche: defaultModifiche,
           extraIngredienti: [],
-          ingredientiCotturaSummary: "",
+          ingredientiCotturaSummary: buildComandaIngredientiSummary(
+            ingList,
+            defaultModifiche,
+            [],
+          ),
         }
         addToCartWithIngredienti(product, defaultPayload)
         return
@@ -717,12 +790,14 @@ export default function CassaPage() {
   const handleCheckout = async () => {
     if (!cart.length || !tenantId || loading) return
     setCheckoutError(null)
+    setPendingComandaPrint(null)
+    const snapshotCart = cart.map((row) => ({ ...row }))
     try {
       setLoading(true)
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
       const orarioRitiro = checkoutSelectedSlot?.label ?? ""
-      await createOrder(tenantId, {
+      const orderId = await createOrder(tenantId, {
         totale: total,
         stato: ORDER_STATUS,
         items: cart.map((p) => ({
@@ -730,6 +805,7 @@ export default function CassaPage() {
           quantita: p.qty,
           prezzo: p.prezzo,
           formatoNome: p.formatoNome ?? undefined,
+          ingredientiCotturaSummary: p.ingredientiCotturaSummary ?? undefined,
         })),
         note: checkoutNote.trim() || undefined,
         tipoPagamento: checkoutTipoPagamento || undefined,
@@ -747,6 +823,35 @@ export default function CassaPage() {
       setSelectedCliente(null)
       setShowRiepilogo(false)
       loadOrdini()
+
+      const po = tenantData?.parametri_operativi || {}
+      const righeComanda = cartItemsToComandaRighe(snapshotCart)
+      let detail = null
+      try {
+        detail = await getOrderDetail(orderId)
+      } catch (e) {
+        console.warn("[Cassa] getOrderDetail dopo conferma:", e)
+      }
+      const printPayload = {
+        tenantNome: tenantData?.nome || "Locale",
+        orderId,
+        numero: detail?.numero ?? detail?.numero_ordine,
+        createdAt: detail?.createdAt ?? detail?.created_at ?? new Date().toISOString(),
+        tipoOrdine,
+        nomeCliente: nomeCliente || undefined,
+        orarioRitiro: orarioRitiro || undefined,
+        indirizzoConsegna: indirizzoConsegna.trim() || undefined,
+        note: checkoutNote.trim() || undefined,
+        tipoPagamento: checkoutTipoPagamento || undefined,
+        righe: righeComanda,
+        parametri: po,
+      }
+      const autoStampa = po.comanda_stampa_auto === true || po.comanda_stampa_auto === "true"
+      if (autoStampa) {
+        printComandaKitchen(printPayload)
+      } else {
+        setPendingComandaPrint(printPayload)
+      }
     } catch (err) {
       console.error("Errore checkout:", err)
       setCheckoutError(err?.message ?? "Errore durante il checkout. Verifica la RPC create_order_with_items e le colonne note/tipo_pagamento.")
@@ -971,7 +1076,33 @@ export default function CassaPage() {
   }
 
   return (
-    <div style={styles.wrapper}>
+    <div style={styles.pageColumn}>
+      {pendingComandaPrint && (
+        <div style={styles.comandaBanner} role="status">
+          <span>
+            Ordine registrato
+            {pendingComandaPrint.numero != null && pendingComandaPrint.numero !== ""
+              ? ` (#${pendingComandaPrint.numero})`
+              : ""}
+            . Stampa la comanda per la cucina.
+          </span>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              style={styles.comandaBannerBtn}
+              onClick={() => {
+                printComandaKitchen(pendingComandaPrint)
+              }}
+            >
+              Stampa comanda
+            </button>
+            <button type="button" style={styles.comandaBannerDismiss} onClick={() => setPendingComandaPrint(null)}>
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
+      <div style={styles.wrapper}>
       {showPaginaOrdini && (
         <div style={styles.modalOverlay} onClick={() => setShowPaginaOrdini(false)} role="dialog" aria-modal="true">
           <div style={{ ...styles.detailModal, maxWidth: 520, width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
@@ -1237,13 +1368,6 @@ export default function CassaPage() {
           </div>
         )}
 
-        {!showPlanningBar && canEditParametriCassa && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <button type="button" style={styles.impostazioniBtn} onClick={() => setShowImpostazioniCassa(true)}>
-              Impostazioni cassa
-            </button>
-          </div>
-        )}
         <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
           <input
             type="text"
@@ -1375,10 +1499,16 @@ export default function CassaPage() {
                 const nomeProdotto = ordineDetail.productNames?.[r.prodottoId ?? r.prodotto_id] ?? "—"
                 const formatoNome = r.formatoNome ?? r.formato_nome
                 const label = formatoNome ? `${nomeProdotto} (${formatoNome})` : nomeProdotto
+                const ing = r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
                 return (
-                  <li key={r.id || i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-                    <span>{label} x {r.quantita}</span>
-                    <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                  <li key={r.id || i} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span>{label} × {r.quantita}</span>
+                      <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                    </div>
+                    {ing ? (
+                      <div style={{ fontSize: 12, color: "#555", marginTop: 4, lineHeight: 1.35 }}>{ing}</div>
+                    ) : null}
                   </li>
                 )
               })}
@@ -1388,6 +1518,16 @@ export default function CassaPage() {
               Pagamento: {(ordineDetail.tipo_pagamento || "—").toLowerCase().includes("da pagare") ? "⏳ Da pagare" : (ordineDetail.tipo_pagamento || "—")}
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#1565c0" }}
+                onClick={() => {
+                  const payload = comandaPayloadFromOrdineDetail(ordineDetail, tenantData)
+                  if (payload) printComandaKitchen(payload)
+                }}
+              >
+                Stampa comanda
+              </button>
               {(ordineDetail.tipo_pagamento || "").toLowerCase().includes("da pagare") && (
                 <button
                   type="button"
@@ -1550,18 +1690,63 @@ export default function CassaPage() {
 
       {lastOrderModalDetail && !lastOrderLoading && (
         <div style={styles.modalOverlay} onClick={() => setLastOrderModalDetail(null)} role="dialog" aria-modal="true">
-          <div style={styles.detailModal} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...styles.detailModal, maxWidth: lastOrderModalDetail.mode === "list" ? 520 : 560 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0 }}>Ultimo ordine</h3>
+              <h3 style={{ margin: 0 }}>
+                {lastOrderModalDetail.mode === "detail" ? `Ordine #${lastOrderModalDetail.numero ?? "—"}` : "Storico ordini"}
+              </h3>
               <button type="button" style={styles.planningBarClose} onClick={() => setLastOrderModalDetail(null)}>✕</button>
             </div>
             {lastOrderModalDetail.empty ? (
-              <p style={{ color: "#666" }}>Nessun ordine trovato per questo cliente.</p>
+              <p style={{ color: "#666" }}>Nessun ordine trovato per questo cliente negli ultimi ordini caricati.</p>
             ) : lastOrderModalDetail.error ? (
               <p style={{ color: "#c62828" }}>{lastOrderModalDetail.error}</p>
+            ) : lastOrderModalDetail.mode === "list" ? (
+              <>
+                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#666" }}>
+                  Seleziona un ordine (dal più recente). Elenco fino a 400 ordini del locale.
+                </p>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "min(60vh, 420px)", overflowY: "auto" }}>
+                  {(lastOrderModalDetail.ordini || []).map((o) => {
+                    const num = o.numero ?? o.numero_ordine ?? "—"
+                    const when = o.createdAt ?? o.created_at
+                    const whenStr = when ? new Date(when).toLocaleString("it-IT") : "—"
+                    return (
+                      <li key={o.id} style={{ borderBottom: "1px solid #eee" }}>
+                        <button
+                          type="button"
+                          onClick={() => loadClienteOrdineDetail(o.id)}
+                          disabled={lastOrderDetailLoading}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "12px 8px",
+                            border: "none",
+                            background: "transparent",
+                            cursor: lastOrderDetailLoading ? "wait" : "pointer",
+                            fontSize: 14,
+                          }}
+                        >
+                          <div style={{ fontWeight: 600 }}>#{num} · € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</div>
+                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{whenStr}</div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {lastOrderDetailLoading && <p style={{ marginTop: 12, color: "#666" }}>Caricamento dettaglio…</p>}
+              </>
             ) : (
               <>
-                <p style={{ margin: "0 0 8px", color: "#666" }}>Ordine #{lastOrderModalDetail.numero ?? "—"}</p>
+                <button
+                  type="button"
+                  style={{ ...styles.planningBarToggle, marginBottom: 14 }}
+                  onClick={() =>
+                    setLastOrderModalDetail({ mode: "list", ordini: lastOrderModalDetail.historyOrdini || [] })
+                  }
+                >
+                  ← Torna all&apos;elenco
+                </button>
                 <p style={{ margin: "0 0 8px", color: "#666" }}>
                   {lastOrderModalDetail.tipo_ordine === "delivery" ? "Consegna" : "Ritiro in negozio"}
                 </p>
@@ -1579,29 +1764,87 @@ export default function CassaPage() {
                     const nomeProdotto = lastOrderModalDetail.productNames?.[r.prodottoId ?? r.prodotto_id] ?? "—"
                     const formatoNome = r.formatoNome ?? r.formato_nome
                     const label = formatoNome ? `${nomeProdotto} (${formatoNome})` : nomeProdotto
+                    const ing =
+                      r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
                     return (
-                      <li key={r.id || i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-                        <span>{label} x {r.quantita}</span>
-                        <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                      <li key={r.id || i} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span>{label} × {r.quantita}</span>
+                          <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                        </div>
+                        {ing ? (
+                          <div style={{ fontSize: 12, color: "#555", marginTop: 4, lineHeight: 1.35 }}>{ing}</div>
+                        ) : null}
                       </li>
                     )
                   })}
                 </ul>
                 <p style={{ fontWeight: 600, marginBottom: 12 }}>Totale: € {typeof lastOrderModalDetail.totale === "number" ? lastOrderModalDetail.totale.toFixed(2) : lastOrderModalDetail.totale ?? "—"}</p>
                 <p style={{ margin: 0, fontSize: 13 }}>Pagamento: {lastOrderModalDetail.tipo_pagamento || "—"}</p>
+                <button
+                  type="button"
+                  style={{ ...styles.impostazioniBtn, marginTop: 16, background: "#1565c0" }}
+                  onClick={() => {
+                    const payload = comandaPayloadFromOrdineDetail(lastOrderModalDetail, tenantData)
+                    if (payload) printComandaKitchen(payload)
+                  }}
+                >
+                  Stampa comanda
+                </button>
               </>
             )}
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
 
 const styles = {
+  pageColumn: {
+    display: "flex",
+    flexDirection: "column",
+    height: "100vh",
+    width: "100%",
+    minHeight: 0,
+  },
   wrapper: {
     display: "flex",
-    height: "100vh",
+    flex: 1,
+    minHeight: 0,
+  },
+  comandaBanner: {
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+    padding: "10px 16px",
+    background: "#e8f5e9",
+    borderBottom: "1px solid #a5d6a7",
+    fontSize: 14,
+    color: "#1b5e20",
+  },
+  comandaBannerBtn: {
+    padding: "8px 14px",
+    background: "#2e7d32",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 14,
+  },
+  comandaBannerDismiss: {
+    padding: "8px 14px",
+    background: "#fff",
+    color: "#333",
+    border: "1px solid #ccc",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 14,
   },
   productsArea: {
     flex: 3,

@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom"
-import { useAuth } from "@/contexts/AuthContext"
+import { useAuth } from "@/app/contexts/AuthContext"
 import { devLog } from "@/lib/devLog"
 
 export default function CustomerRoute() {

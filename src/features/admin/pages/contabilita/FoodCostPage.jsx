@@ -1,0 +1,164 @@
+import { useMemo, useState } from "react";
+import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
+import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+
+function marginePct(costoAlKg, pesoG, prezzoVendita) {
+  const kg = Number(pesoG) / 1000;
+  const costo = Number(costoAlKg) * kg;
+  const vendita = Number(prezzoVendita);
+  if (!vendita || vendita <= 0) return null;
+  return ((vendita - costo) / vendita) * 100;
+}
+
+export default function FoodCostPage() {
+  const { data, setData, ready } = useTenantLocalJson("contabilita_foodcost", { righe: [] });
+  const [ingrediente, setIngrediente] = useState("");
+  const [costoAlKg, setCostoAlKg] = useState("");
+  const [pesoTeoricoG, setPesoTeoricoG] = useState("");
+  const [prezzoVendita, setPrezzoVendita] = useState("");
+  const [note, setNote] = useState("");
+
+  const rows = useMemo(() => data.righe, [data.righe]);
+
+  if (!ready) {
+    return <p className="text-gray-400 text-sm">Caricamento…</p>;
+  }
+
+  function add() {
+    if (!ingrediente.trim()) return;
+    const row = {
+      id: newLocalId(),
+      ingrediente: ingrediente.trim(),
+      costoAlKg: Number(costoAlKg) || 0,
+      pesoTeoricoG: Number(pesoTeoricoG) || 0,
+      prezzoVendita: Number(prezzoVendita) || 0,
+      note: note.trim(),
+    };
+    setData((d) => ({ ...d, righe: [row, ...d.righe] }));
+    setIngrediente("");
+    setCostoAlKg("");
+    setPesoTeoricoG("");
+    setPrezzoVendita("");
+    setNote("");
+  }
+
+  function remove(id) {
+    setData((d) => ({ ...d, righe: d.righe.filter((r) => r.id !== id) }));
+  }
+
+  return (
+    <AdminModuleShell
+      title="Food cost"
+      lead="Verifica costo ingrediente al kg rispetto al peso teorico in ricetta e al prezzo di vendita: utile per margine stimato per porzione."
+      specTitle="Logica (semplificata)"
+      specChildren={
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          <li>Costo teorico = (costo €/kg) × (peso g / 1000).</li>
+          <li>Margine % = (prezzo vendita − costo teorico) / prezzo vendita × 100.</li>
+          <li>Il peso può rappresentare la quota ingrediente su una porzione venduta.</li>
+        </ul>
+      }
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+          gap: 10,
+          marginBottom: 20,
+          alignItems: "end",
+        }}
+      >
+        <div style={{ gridColumn: "span 2" }}>
+          <label style={{ fontSize: 12, color: "#64748b" }}>Ingrediente / voce</label>
+          <input
+            value={ingrediente}
+            onChange={(e) => setIngrediente(e.target.value)}
+            style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, color: "#64748b" }}>Costo €/kg</label>
+          <input
+            type="number"
+            step="0.01"
+            value={costoAlKg}
+            onChange={(e) => setCostoAlKg(e.target.value)}
+            style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, color: "#64748b" }}>Peso teorico (g)</label>
+          <input
+            type="number"
+            step="0.1"
+            value={pesoTeoricoG}
+            onChange={(e) => setPesoTeoricoG(e.target.value)}
+            style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, color: "#64748b" }}>Prezzo vendita €</label>
+          <input
+            type="number"
+            step="0.01"
+            value={prezzoVendita}
+            onChange={(e) => setPrezzoVendita(e.target.value)}
+            style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+          />
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={{ fontSize: 12, color: "#64748b" }}>Note</label>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+          />
+        </div>
+        <button type="button" className="btn-primary" onClick={add}>
+          Aggiungi riga
+        </button>
+      </div>
+
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <thead>
+          <tr style={{ textAlign: "left", borderBottom: "2px solid #e2e8f0", color: "#64748b" }}>
+            <th style={{ padding: "10px 8px" }}>Voce</th>
+            <th style={{ padding: "10px 8px" }}>€/kg</th>
+            <th style={{ padding: "10px 8px" }}>g teorici</th>
+            <th style={{ padding: "10px 8px" }}>Costo teorico</th>
+            <th style={{ padding: "10px 8px" }}>Prezzo vendita</th>
+            <th style={{ padding: "10px 8px" }}>Margine %</th>
+            <th style={{ padding: "10px 8px" }} />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const kg = r.pesoTeoricoG / 1000;
+            const costoTeo = r.costoAlKg * kg;
+            const m = marginePct(r.costoAlKg, r.pesoTeoricoG, r.prezzoVendita);
+            return (
+              <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "10px 8px", fontWeight: 600 }}>{r.ingrediente}</td>
+                <td style={{ padding: "10px 8px" }}>€ {r.costoAlKg.toFixed(2)}</td>
+                <td style={{ padding: "10px 8px" }}>{r.pesoTeoricoG}</td>
+                <td style={{ padding: "10px 8px" }}>€ {costoTeo.toFixed(2)}</td>
+                <td style={{ padding: "10px 8px" }}>€ {r.prezzoVendita.toFixed(2)}</td>
+                <td style={{ padding: "10px 8px", fontWeight: m != null && m < 0 ? 600 : 400, color: m != null && m < 0 ? "#b91c1c" : "#0f172a" }}>
+                  {m == null ? "—" : `${m.toFixed(1)} %`}
+                </td>
+                <td style={{ padding: "10px 8px" }}>
+                  <button type="button" style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }} onClick={() => remove(r.id)}>
+                    Elimina
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {rows.length === 0 ? (
+        <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessuna analisi food cost.</p>
+      ) : null}
+    </AdminModuleShell>
+  );
+}
