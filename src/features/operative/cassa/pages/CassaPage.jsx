@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo, useCallback, useLayoutEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { useAuth } from "@/app/contexts/AuthContext"
+import { useTenantServizi } from "@/app/hooks/useTenantServizi"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs"
@@ -180,8 +182,12 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 }
 
 export default function CassaPage() {
+  const navigate = useNavigate()
   const { tenantId, tenantData } = useTenant()
   const { user, logout } = useAuth()
+  const { hasServizio, enforcementActive } = useTenantServizi()
+  /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
+  const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
 
   const [categories, setCategories] = useState([])
   const [activeCategory, setActiveCategory] = useState(null)
@@ -736,6 +742,23 @@ export default function CassaPage() {
           >
             Planning
           </button>
+          <button
+            type="button"
+            onClick={() => navigate("/operative/cassa/fidelity")}
+            style={{
+              ...cassaToolbarCompactBtn,
+              background: fidelityServizioOk ? "#7b1fa2" : "#9e9e9e",
+              color: "#fff",
+              fontWeight: 600,
+            }}
+            title={
+              fidelityServizioOk
+                ? "Fidelity Card — punti e tessere clienti"
+                : "Fidelity: servizio non attivo sul piano (vedi messaggio aprendo)"
+            }
+          >
+            Fidelity
+          </button>
         </div>
       </div>
     )
@@ -749,6 +772,8 @@ export default function CassaPage() {
     deliverySearchResults,
     deliverySearchLoading,
     lastOrderLoading,
+    fidelityServizioOk,
+    navigate,
   ])
 
   /////////////////////////////////////////////////////////
@@ -1267,7 +1292,26 @@ export default function CassaPage() {
         </div>
       )}
       <div style={styles.ordiniSection}>
-        <h3 style={styles.ordiniTitle}>Ordini</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+          <h3 style={{ ...styles.ordiniTitle, margin: 0 }}>Ordini</h3>
+          <button
+            type="button"
+            onClick={() => navigate("/operative/cassa/fidelity")}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 8,
+              border: "none",
+              background: fidelityServizioOk ? "#7b1fa2" : "#9e9e9e",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+            title="Apri gestione Fidelity Card"
+          >
+            Fidelity Card
+          </button>
+        </div>
         <ul style={styles.ordiniList}>
           {ordiniOggiFiltered.map((o) => {
             const tp = (o.tipo_pagamento || "").toLowerCase()

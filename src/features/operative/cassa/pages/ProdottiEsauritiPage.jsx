@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useLayoutEffect } from "reac
 import { Link, useNavigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
+import { useTenantServizi } from "@/app/hooks/useTenantServizi"
 import {
   getIngredients,
   updateIngredient,
@@ -23,6 +24,8 @@ const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 export default function ProdottiEsauritiPage() {
   const { tenantId, tenantData, refreshTenant } = useTenant()
   const navigate = useNavigate()
+  const { hasServizio, enforcementActive } = useTenantServizi()
+  const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
   const [ingredients, setIngredients] = useState([])
   const [impastiList, setImpastiList] = useState([])
   const [categories, setCategories] = useState([])
@@ -214,12 +217,29 @@ export default function ProdottiEsauritiPage() {
           >
             Ordini
           </button>
+          <button
+            type="button"
+            onClick={() => navigate("/operative/cassa/fidelity")}
+            style={{
+              ...cassaToolbarCompactBtn,
+              background: fidelityServizioOk ? "#7b1fa2" : "#9e9e9e",
+              color: "#fff",
+              fontWeight: 600,
+            }}
+            title={
+              fidelityServizioOk
+                ? "Fidelity Card — punti e tessere clienti"
+                : "Fidelity: servizio non attivo sul piano"
+            }
+          >
+            Fidelity
+          </button>
         </div>
       </div>
     )
     setCassaHeader(toolbar)
     return () => setCassaHeader(null)
-  }, [setCassaHeader, tipoOrdine, navigate])
+  }, [setCassaHeader, tipoOrdine, navigate, fidelityServizioOk])
 
   return (
     <div style={styles.wrapper}>

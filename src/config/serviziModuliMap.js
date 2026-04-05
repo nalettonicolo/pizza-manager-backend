@@ -102,8 +102,12 @@ export const SCHEDE_SERVIZI_IMPLEMENTAZIONE = {
   },
   fidelity_card: {
     sintesi: "Carta fedeltà: punti per clienti anagrafica cassa, codice carta e movimenti.",
-    moduli: [{ label: "Fidelity Card", paths: ["/admin/fidelity"] }],
-    riferimentiCodice: ["src/features/admin/pages/FidelityCardPage.jsx", "adminService (getFidelitySaldi, …)"],
+    moduli: [{ label: "Fidelity Card", paths: ["/admin/fidelity", "/operative/cassa/fidelity"] }],
+    riferimentiCodice: [
+      "src/features/admin/pages/FidelityCardPage.jsx",
+      "src/features/operative/cassa/pages/CassaFidelityPage.jsx",
+      "adminService (getFidelitySaldi, …)",
+    ],
   },
   supporto_prioritario: {
     sintesi: "Offerta commerciale: nessun modulo dedicato in app.",

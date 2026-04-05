@@ -254,8 +254,8 @@ export const IDS_BASE = [
   "magazzino_gestione",
   "contabilita_locale",
 ];
-/** Pro e Trial: include Base + ordini online cliente. */
-export const IDS_PRO = [...IDS_BASE, "ordini_online"];
+/** Pro e Trial: include Base + ordini online cliente + fidelity (punti anagrafica cassa). */
+export const IDS_PRO = [...IDS_BASE, "ordini_online", "fidelity_card"];
 export const IDS_ENTERPRISE = [...IDS_PRO, "tablet_ruoli"];
 /** Tutti gli id presenti in `SERVIZI_APP` (si aggiorna automaticamente con il registro). */
 export const IDS_FULL = SERVIZI_APP.map((s) => s.id);

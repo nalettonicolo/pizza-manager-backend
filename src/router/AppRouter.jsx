@@ -85,6 +85,7 @@ const FidelityCardPage = lazy(() => import("@/features/admin/pages/FidelityCardP
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
 const CassaPage = lazy(() => import("@/features/operative/cassa/pages/CassaPage"));
 const ProdottiEsauritiPage = lazy(() => import("@/features/operative/cassa/pages/ProdottiEsauritiPage"));
+const CassaFidelityPage = lazy(() => import("@/features/operative/cassa/pages/CassaFidelityPage"));
 const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"));
 const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"));
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"));
@@ -354,6 +355,7 @@ export default function AppRouter() {
           <Route path="/operative" element={<Navigate to="/operative/dashboard" replace />} />
           <Route path="/operative/dashboard" element={<Suspense fallback={<PageFallback />}><OperativeDashboard /></Suspense>} />
           <Route path="/operative/cassa" element={<Suspense fallback={<PageFallback />}><CassaPage /></Suspense>} />
+          <Route path="/operative/cassa/fidelity" element={<Suspense fallback={<PageFallback />}><CassaFidelityPage /></Suspense>} />
           <Route path="/operative/cassa/prodotti-esauriti" element={<Suspense fallback={<PageFallback />}><ProdottiEsauritiPage /></Suspense>} />
           <Route path="/operative/cassa/ingredienti-esauriti" element={<Navigate to="/operative/cassa/prodotti-esauriti" replace />} />
           <Route path="/operative/turni" element={<Suspense fallback={<PageFallback />}><OperativeTurniPage /></Suspense>} />
