@@ -165,7 +165,8 @@ export default function SviluppoPage() {
       >
         <h2 style={{ marginTop: 0, fontSize: 17, color: "#5b21b6" }}>Roadmap: un servizio alla volta</h2>
         <p style={{ margin: "0 0 14px", fontSize: 14, color: "#475569", lineHeight: 1.55 }}>
-          Ordine di lavoro in <code style={{ fontSize: 12 }}>src/config/serviziRoadmapSteps.js</code>. Un solo stato{" "}
+          Ordine di lavoro in <code style={{ fontSize: 12 }}>src/config/serviziRoadmapSteps.js</code>. Ogni voce ha{" "}
+          <strong>percentuale</strong> (stima 0–100) e <strong>resto</strong> (cosa manca; una riga per punto). Un solo stato{" "}
           <strong>In corso</strong> (<code>wip</code>): quando chiudi uno step, imposta <code>ok</code> e sposta <code>wip</code> sul
           successivo. Per <strong>provare l&apos;app come tenant</strong> (licenza di prova) usa{" "}
           <Link to="/contatti#prova-gratuita">Contatti — Prova 14 giorni</Link>; da ogni scheda servizio apri i link in{" "}
@@ -180,6 +181,21 @@ export default function SviluppoPage() {
             <span style={{ color: "#64748b", fontSize: 13 }}>({focusServizio.id})</span>
             <br />
             <span style={{ color: "#64748b" }}>{focusServizio.nota}</span>
+            <br />
+            <span style={{ display: "inline-block", marginTop: 10, fontWeight: 800, fontSize: 18, color: "#d35400" }}>
+              {(focusServizio.percentuale ?? 0)}% completamento stimato (roadmap)
+            </span>
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 14,
+                color: "#0f172a",
+                lineHeight: 1.55,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {focusServizio.resto ?? "—"}
+            </div>
           </p>
         ) : (
           <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b" }}>Nessun servizio in <code>wip</code>: impostane uno nel file roadmap.</p>
@@ -190,7 +206,9 @@ export default function SviluppoPage() {
               <tr>
                 <th>Stato</th>
                 <th>Servizio</th>
-                <th>Note step</th>
+                <th style={{ textAlign: "right", whiteSpace: "nowrap" }}>% roadmap</th>
+                <th>Cosa resta</th>
+                <th>Contesto</th>
               </tr>
             </thead>
             <tbody>
@@ -219,7 +237,33 @@ export default function SviluppoPage() {
                       </Link>
                       <div style={{ fontSize: 12, color: "#94a3b8" }}>{row.id}</div>
                     </td>
-                    <td style={{ fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{row.nota}</td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        verticalAlign: "top",
+                        fontWeight: 800,
+                        fontSize: 16,
+                        color: "#d35400",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {row.percentuale ?? 0}%
+                    </td>
+                    <td
+                      style={{
+                        fontSize: 13,
+                        color: "#1e293b",
+                        lineHeight: 1.55,
+                        verticalAlign: "top",
+                        maxWidth: 380,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {row.resto}
+                    </td>
+                    <td style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, verticalAlign: "top", maxWidth: 280 }}>
+                      {row.nota}
+                    </td>
                   </tr>
                 );
               })}
