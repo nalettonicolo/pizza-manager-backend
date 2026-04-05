@@ -25,6 +25,8 @@ import {
   readConsegnaDomicilioAttiva,
   readFidelityAbilitaClientiDomicilio,
   readFidelityProgramSlice,
+  readFidelityModalitaAccredito,
+  FIDELITY_MODALITA_OPTIONS,
 } from "@/utils/fidelityProgramConfig"
 
 function anagraficaLabel(row) {
@@ -48,6 +50,7 @@ export default function FidelityCardPage() {
   const [saldi, setSaldi] = useState([])
   const [nomeProgramma, setNomeProgramma] = useState("Fidelity Card")
   const [puntiPerEuro, setPuntiPerEuro] = useState("1")
+  const [modalitaAccredito, setModalitaAccredito] = useState("euro")
   const [timbriPerPizza, setTimbriPerPizza] = useState("0")
   const [timbriSchedaTotale, setTimbriSchedaTotale] = useState("0")
   const [premiRows, setPremiRows] = useState(() => [])
@@ -98,6 +101,7 @@ export default function FidelityCardPage() {
           setNomeProgramma(String(po.fidelity_nome_programma || "Fidelity Card"))
           setPuntiPerEuro(String(po.fidelity_punti_per_euro ?? "1"))
           const fp = readFidelityProgramSlice(po)
+          setModalitaAccredito(readFidelityModalitaAccredito(po))
           setTimbriPerPizza(String(fp.timbriPerPizza))
           setTimbriSchedaTotale(String(fp.timbriSchedaTotale))
           setPremiRows(
@@ -151,6 +155,10 @@ export default function FidelityCardPage() {
           ...prev,
           fidelity_nome_programma: nomeProgramma.trim() || "Fidelity Card",
           fidelity_punti_per_euro: pe,
+          fidelity_modalita_accredito:
+            modalitaAccredito === "pizza" || modalitaAccredito === "entrambi"
+              ? modalitaAccredito
+              : "euro",
           fidelity_timbri_per_pizza: tpp,
           fidelity_timbri_scheda_totale: tst,
           fidelity_premi: premiParsed,
@@ -294,8 +302,8 @@ export default function FidelityCardPage() {
       </h1>
       <p style={styles.hint}>
         Programma punti collegato ai <strong>clienti anagrafica</strong> (creati dalla cassa). Abilita il servizio nel
-        piano dal Super Admin (<code>fidelity_card</code>), poi iscrivi i clienti e gestisci i punti da qui.         Puoi impostare timbri per pizza, premi a soglia e il nome al bancone collegato al codice carta. L’accredito
-        automatico in cassa sugli ordini si potrà collegare in un secondo step usando queste regole.
+        piano dal Super Admin (<code>fidelity_card</code>), poi iscrivi i clienti e gestisci i punti da qui.         Puoi scegliere se accumulare verso i premi in base agli euro, alle pizze o a entrambi; impostare timbri, premi a
+        soglia e il nome al bancone. L’accredito automatico in cassa userà queste regole.
       </p>
 
       <section style={styles.card}>
@@ -322,11 +330,31 @@ export default function FidelityCardPage() {
           />
         </label>
 
+        <label style={styles.label}>
+          Come si accumula verso i premi (accredito automatico futuro in cassa)
+          <select
+            value={modalitaAccredito}
+            onChange={(e) => setModalitaAccredito(e.target.value)}
+            style={styles.select}
+          >
+            {FIDELITY_MODALITA_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p style={styles.small}>
+          {FIDELITY_MODALITA_OPTIONS.find((o) => o.id === modalitaAccredito)?.hint ||
+            "I premi sotto sono sempre espressi in timbri sulla scheda; questa scelta definisce se guadagni timbri/punti dagli euro, dalle pizze o da entrambi."}
+        </p>
+
         <h3 style={styles.h3}>Timbri e premi</h3>
         <p style={styles.small}>
           Il saldo è un unico numero (punti/timbri). Sulla tessera, la griglia mostra l’avanzamento sulla{" "}
           <strong>scheda corrente</strong> (es. 10 caselle); al completamento ricomincia da capo. Le soglie premio si
-          intendono su quella scheda (es. 6 e 10 timbri).
+          intendono sempre in <strong>timbri sulla scheda</strong> (es. 6 e 10), indipendentemente se accumuli da euro o
+          da pizze.
         </p>
         <label style={styles.label}>
           Timbri per ogni pizza acquistata (0 = non usare questa regola; utile per accredito automatico futuro)

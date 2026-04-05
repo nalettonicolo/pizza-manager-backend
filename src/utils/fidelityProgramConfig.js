@@ -2,6 +2,38 @@
  * Regole programma fidelity da `parametri_operativi` (timbri, premi, ecc.).
  */
 
+/** @typedef {'euro' | 'pizza' | 'entrambi'} FidelityModalitaAccredito */
+
+export const FIDELITY_MODALITA_OPTIONS = [
+  {
+    id: "euro",
+    label: "Solo in base agli euro spesi",
+    hint: "L’accumulo (e l’accredito automatico futuro) userà i punti per euro. I premi restano espressi in timbri sulla scheda.",
+  },
+  {
+    id: "pizza",
+    label: "Solo in base alle pizze acquistate",
+    hint: "L’accumulo userà i timbri per pizza. Imposta «Timbri per ogni pizza» > 0. I premi restano a X timbri sulla scheda.",
+  },
+  {
+    id: "entrambi",
+    label: "Euro e pizze insieme",
+    hint: "In futuro la cassa potrà sommare accredito da euro e da pizze nello stesso saldo. I premi restano a X timbri sulla scheda.",
+  },
+]
+
+/**
+ * Come si guadagnano punti/timbri verso i premi (accredito automatico futuro).
+ * @param {Record<string, unknown>} po
+ * @returns {FidelityModalitaAccredito}
+ */
+export function readFidelityModalitaAccredito(po) {
+  const raw = po && typeof po === "object" ? po : {}
+  const v = String(raw.fidelity_modalita_accredito || "euro").toLowerCase()
+  if (v === "pizza" || v === "entrambi") return v
+  return "euro"
+}
+
 /** @typedef {{ soglia: number, descrizione: string }} FidelityPremio */
 
 /**
@@ -73,6 +105,7 @@ export function readFidelityAbilitaClientiDomicilio(po) {
 
 export function readFidelityProgramSlice(po) {
   const raw = po && typeof po === "object" ? po : {}
+  const modalitaAccredito = readFidelityModalitaAccredito(raw)
   const rawP = raw.fidelity_timbri_per_pizza
   const hasP = rawP !== undefined && rawP !== null && String(rawP).trim() !== ""
   const timbriPerPizza = hasP ? Math.max(0, Math.min(50, Number(rawP) || 0)) : 0
@@ -80,6 +113,7 @@ export function readFidelityProgramSlice(po) {
   const hasT = rawT !== undefined && rawT !== null && String(rawT).trim() !== ""
   const timbriSchedaTotale = hasT ? Math.max(0, Math.min(48, Number(rawT) || 0)) : 0
   return {
+    modalitaAccredito,
     timbriPerPizza,
     timbriSchedaTotale,
     premi: parseFidelityPremi(raw.fidelity_premi),
