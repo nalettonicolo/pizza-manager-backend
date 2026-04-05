@@ -7,20 +7,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Suddivide i vendor per cache; React deve restare nello stesso grafo di caricamento di librerie che usano
- * forwardRef/createContext (lucide-react, react-markdown, …), altrimenti in produzione si ottiene
- * "Cannot read properties of undefined (reading 'forwardRef')" tra chunk.
+ * Chunk npm: React + tutte le altre dipendenze (tranne router e supabase) nello stesso `react-vendor`.
+ * Separare micromark/mdast/hast/… in un chunk "vendor" generico crea import circolari
+ * vendor ↔ react-vendor e in produzione: "Cannot access '…' before initialization" (TDZ).
  */
 function manualChunks(id) {
   if (!id.includes("node_modules")) return;
-  if (id.includes("node_modules/react-dom") || id.includes("node_modules/react/")) return "react-vendor";
-  if (id.includes("node_modules/scheduler")) return "react-vendor";
-  if (id.includes("lucide-react") || id.includes("react-markdown") || id.includes("/prop-types/")) {
-    return "react-vendor";
-  }
-  if (id.includes("react-router")) return "router";
+  if (id.includes("node_modules/react-router")) return "router";
   if (id.includes("@supabase")) return "supabase";
-  return "vendor";
+  return "react-vendor";
 }
 
 export default defineConfig(({ command }) => ({
