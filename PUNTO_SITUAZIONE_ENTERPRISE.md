@@ -42,7 +42,7 @@ Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chi
 ### Database (Supabase)
 - **Schema completo:** `sql/schema_completo_pizzamanager.sql` (compattato). Include: core + public, vista `Prodotto` con `visibile_online`, vista **`prodotti_menu_pubblico`** per menu anonimo, **GRANT anon** su schema public e su tenants, Prodotto, punti_vendita, prodotti_menu_pubblico.
 - **Colonna:** `core.prodotti.visibile_online` (BOOLEAN DEFAULT true).
-- **Script incrementale unificato:** `sql/PM_UNIFIED_ALL.sql` (visibile_online, viste `Prodotto` / `prodotti_menu_pubblico` con categoria, colonne accesso aree, `ruoli_pizzeria`, GRANT anon, più tenant admin/public). Integrazioni backend in `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+- **Script incrementale post-baseline:** `supabase/migrations/20260406100000_post_remote_schema_unified.sql`. Delta corrente (rotativo): `sql/sql_upgrade.sql`. Integrazioni backend in `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
 - Supabase: core + public (utenti_ruoli, clienti, anagrafica_clienti, viste, trigger, RPC `create_order_with_items`, ruoli_pizzeria, tenant_admins, chiusure_giornata).
 
 ### Deploy e documentazione
@@ -56,7 +56,7 @@ Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chi
 | Problema | Soluzione |
 |----------|-----------|
 | 404 su `ordini?select=...` | Realtime in OrdinePage: `table: "Ordine"` invece di "ordini". |
-| 42501 permission denied for schema public | Script `sql/PM_UNIFIED_ALL.sql` (sezione GRANT anon). |
+| 42501 permission denied for schema public | Migration `20260406100000_post_remote_schema_unified.sql` (sezione GRANT anon). |
 | 401 Unauthorized su Prodotto/tenants | Build con `.env.production` (VITE_SUPABASE_*); messaggio in console se chiavi mancanti in prod. |
 | 42703 column Prodotto.visibile_online does not exist | Colonna `visibile_online` su core.prodotti; vista `prodotti_menu_pubblico`; frontend usa `prodotti_menu_pubblico` per getPublicMenu(). |
 | TypeError reading 'logo_url' (branding undefined) | PublicStore passa `branding` da tenant a HeroStore; HeroStore/StoreFooter/MenuPreview usano `branding ?? {}` e optional display. |
@@ -80,4 +80,4 @@ Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chi
 
 - **Deploy dopo modifiche:** vedi **DEPLOY_COMANDI.md** (backend git push, frontend build + firebase deploy, SQL su Supabase).
 - **Installazione locale:** root `npm install`; in `server/pizzeria-backend`: `npm install`, `npx prisma generate`, `npx prisma db seed`. Variabili in `.env` e `.env.production` come da DEPLOY.md.
-- **SQL Supabase:** reset completo → `sql/schema_completo_pizzamanager.sql`; solo integrazioni → `sql/PM_UNIFIED_ALL.sql`; altre integrazioni → `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+- **SQL Supabase:** reset completo → `sql/schema_completo_pizzamanager.sql`; integrazioni post-baseline → `supabase/migrations/20260406100000_post_remote_schema_unified.sql`; patch corrente → `sql/sql_upgrade.sql`; altre integrazioni → `server/pizzeria-backend/prisma/schema_integrazioni.sql`.

@@ -422,7 +422,7 @@ export async function getFidelitySaldi(tenantId) {
   const { data, error } = await supabase
     .from("fidelity_saldi")
     .select(
-      "id, anagrafica_cliente_id, punti, codice_carta, created_at, updated_at, anagrafica_clienti ( nome, telefono, indirizzo, email )",
+      "id, anagrafica_cliente_id, punti, codice_carta, nome_negozio, created_at, updated_at, anagrafica_clienti ( nome, telefono, indirizzo, email )",
     )
     .eq("tenant_id", tenantId)
     .order("updated_at", { ascending: false })
@@ -460,6 +460,21 @@ export async function enrollFidelityCliente(tenantId, anagraficaClienteId) {
     throw error
   }
   throw new Error("Impossibile generare un codice carta univoco.")
+}
+
+/** Aggiorna il nome in negozio (alias bancone) collegato al codice carta. */
+export async function updateFidelitySaldoNomeNegozio(tenantId, saldoId, nomeNegozio) {
+  if (!tenantId || !saldoId) throw new Error("Dati mancanti.")
+  const v = nomeNegozio != null ? String(nomeNegozio).trim() : ""
+  const { error } = await supabase
+    .from("fidelity_saldi")
+    .update({
+      nome_negozio: v || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("tenant_id", tenantId)
+    .eq("id", saldoId)
+  if (error) throw error
 }
 
 /**
@@ -656,7 +671,7 @@ function mapSupabaseRuoliError(error) {
   const msg = error.message || ""
   if (code === "42703" || /column .* does not exist/i.test(msg)) {
     const hint =
-      "Mancano le colonne permessi su public.utenti_ruoli. Esegui in Supabase lo script sql/PM_UNIFIED_INCREMENTAL.sql (SQL Editor)."
+      "Mancano le colonne permessi su public.utenti_ruoli. Esegui in Supabase la migration `20260406100000_post_remote_schema_unified.sql` (SQL Editor o db push)."
     return new Error(hint + (msg ? ` Dettaglio: ${msg}` : ""))
   }
   if (code === "42501" || /permission denied/i.test(msg)) {
@@ -718,7 +733,7 @@ function mapStaffPasswordNoteError(error) {
   const msg = error.message || ""
   if (code === "42P01" || /relation .* does not exist/i.test(msg)) {
     return new Error(
-      "Tabella staff_password_note assente. Esegui in Supabase la migrazione 20260403130000_staff_password_note_tenant_admin.sql (o lo script incrementale PM_UNIFIED_ALL).",
+      "Tabella staff_password_note assente. Esegui in Supabase la migration `20260406100000_post_remote_schema_unified.sql` (Supabase SQL Editor o db push).",
     )
   }
   if (code === "42501" || /permission denied/i.test(msg)) {

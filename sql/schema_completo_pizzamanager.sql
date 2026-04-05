@@ -1,8 +1,8 @@
 -- PIZZAMANAGER – Schema SQL completo (compattato). Esegui in Supabase → SQL Editor.
 -- Reset: FASE 1; DB esistente: commenta FASE 1.
 --
--- Integrazioni incrementali idempotenti (colonne accesso, viste menu, GRANT anon):
---   → sql/PM_UNIFIED_ALL.sql (incrementale unificato; ex PM_UNIFIED_INCREMENTAL)
+-- Dopo questo schema: supabase/migrations/20260406100000_post_remote_schema_unified.sql
+-- Modifiche puntuali correnti (file rotativo): sql/sql_upgrade.sql
 
 -- #############################################################################
 -- FASE 1: RESET TOTALE (opzionale – solo in sviluppo)

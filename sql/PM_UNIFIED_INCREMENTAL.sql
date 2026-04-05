@@ -1,6 +1,0 @@
--- =============================================================================
--- Deprecato come file autonomo: il contenuto incrementale è stato unito in
--- `sql/PM_UNIFIED_ALL.sql` (copia anche in
--- `supabase/migrations/20260402100000_pizzamanager_unified_incremental.sql`).
--- Esegui quello dopo il dump Supabase o su DB già allineato.
--- =============================================================================

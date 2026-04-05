@@ -55,7 +55,7 @@ npm run deploy
 
 ## Database (Supabase)
 
-Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. **Script incrementale unificato** (tutte le migrazioni 202502–202603 + ex `PM_UNIFIED_INCREMENTAL.sql`, idempotente): `sql/PM_UNIFIED_ALL.sql` (stesso contenuto di `supabase/migrations/20260402100000_pizzamanager_unified_incremental.sql`). Dopo un dump Supabase eseguire prima il dump remoto, poi questo script. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. **Incrementale post-baseline** (idempotente): `supabase/migrations/20260406100000_post_remote_schema_unified.sql`. **Solo le modifiche del momento** (file che svuoti e riempi a ogni intervento): `sql/sql_upgrade.sql`. Dopo un progetto nato da dump Supabase: prima `supabase/migrations/20260220171734_remote_schema.sql`, poi la migration incrementale. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
 
 ---
 

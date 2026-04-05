@@ -198,7 +198,7 @@ Quando un tenant ha il **menu / vetrina sul proprio dominio** (non solo su `pizz
 | `DEPLOY_COMANDI.md` | Deploy frontend (Firebase) e note backend |
 | `docs/GUIDA_ADMIN.md` | Admin tenant (menu, impostazioni, report; senza pubblicazione dominio) |
 | `docs/ARCHITETTURA_E_STATO.md` | Route vs roadmap |
-| `sql/PM_UNIFIED_ALL.sql` / `supabase/migrations/` | Schema, `parametri_operativi`, viste tenant |
+| `supabase/migrations/20260406100000_post_remote_schema_unified.sql` | Incrementale post-baseline; `sql/sql_upgrade.sql` = delta corrente (rotativo) |
 
 ---
 

@@ -2,14 +2,42 @@ import { Link } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { getPublicTenantInfo } from "@/features/services/publicService"
 import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabaseClient"
+import {
+  readConsegnaDomicilioAttiva,
+  readFidelityAbilitaClientiDomicilio,
+} from "@/utils/fidelityProgramConfig"
 
 export default function ClienteDashboardPage() {
   const { user, logout } = useAuth()
   const [nomePizzeria, setNomePizzeria] = useState("")
+  const [mostraFidelityDomicilio, setMostraFidelityDomicilio] = useState(false)
 
   useEffect(() => {
     getPublicTenantInfo().then((t) => setNomePizzeria((t?.nome || "").trim()))
   }, [])
+
+  useEffect(() => {
+    if (!user?.id) return
+    let c = false
+    supabase
+      .from("tenants")
+      .select("parametri_operativi")
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (c || error) return
+        const po = data?.parametri_operativi && typeof data.parametri_operativi === "object"
+          ? data.parametri_operativi
+          : {}
+        const programmaOn = po.fidelity_attivo !== false && po.fidelity_attivo !== "false"
+        const consegna = readConsegnaDomicilioAttiva(po)
+        const fidDom = readFidelityAbilitaClientiDomicilio(po)
+        setMostraFidelityDomicilio(Boolean(programmaOn && consegna && fidDom))
+      })
+    return () => {
+      c = true
+    }
+  }, [user?.id])
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px 48px" }}>
@@ -20,6 +48,27 @@ export default function ClienteDashboardPage() {
       <p style={{ fontSize: 14, marginBottom: 20 }}>
         Accesso come <strong>{user?.email}</strong>
       </p>
+      {mostraFidelityDomicilio ? (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: 14,
+            borderRadius: 10,
+            background: "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)",
+            border: "1px solid #ddd6fe",
+            fontSize: 14,
+            lineHeight: 1.5,
+            color: "#4c1d95",
+          }}
+        >
+          <strong>Programma fedeltà</strong>
+          <p style={{ margin: "8px 0 0", color: "#5b21b6" }}>
+            Questo locale applica la fidelity anche agli ordini a domicilio. I punti restano gestiti dalla pizzeria
+            (iscrizione e tessera); qui troverai presto il riepilogo sul tuo profilo.
+          </p>
+        </div>
+      ) : null}
+
       <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <Link
           to="/"

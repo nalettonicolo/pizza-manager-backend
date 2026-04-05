@@ -1,5 +1,20 @@
--- Fidelity Card: saldi punti legati all'anagrafica cassa + storico movimenti.
--- Configurazione (punti per euro, nome programma, attivo) in parametri_operativi tenant.
+-- =============================================================================
+-- PizzaManager — SQL UPGRADE (file “usa e sostituisci”)
+--
+-- Come usarlo:
+--   • Qui metti SOLO le modifiche SQL del periodo corrente (una feature, un fix).
+--   • Quando passi al prossimo intervento, SVUOTA tutto sotto la riga tratteggiata
+--     e incolla il nuovo script (così il file non cresce all’infinito).
+--   • Dopo l’esecuzione su Supabase: Settings → API → Reload schema se serve.
+--
+-- Bootstrap completo DB: sql/schema_completo_pizzamanager.sql
+-- Stato incrementale consolidato (tutto il post-remote_schema): vedi
+--   supabase/migrations/20260406100000_post_remote_schema_unified.sql
+-- =============================================================================
+
+-- --------------------------- INCOLLA QUI SOTTO (sostituisci ad ogni upgrade) ---
+
+-- Fidelity Card + nome in negozio + parametri consegna/domicilio (2026-04)
 
 CREATE TABLE IF NOT EXISTS public.fidelity_saldi (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -61,3 +76,27 @@ GRANT SELECT, INSERT ON public.fidelity_movimenti TO authenticated;
 
 COMMENT ON TABLE public.fidelity_saldi IS 'Punti fidelity per cliente anagrafica (cassa); codice_carta univoco per tenant.';
 COMMENT ON TABLE public.fidelity_movimenti IS 'Storico variazioni punti (manuale, ordine, ecc.).';
+
+ALTER TABLE public.fidelity_saldi
+  ADD COLUMN IF NOT EXISTS nome_negozio TEXT;
+
+COMMENT ON COLUMN public.fidelity_saldi.nome_negozio IS
+  'Nome come lo chiami in negozio (bancone); opzionale, affiancato al codice carta.';
+
+UPDATE core.tenants t
+SET parametri_operativi =
+  COALESCE(t.parametri_operativi, '{}'::jsonb)
+  || jsonb_build_object(
+    'consegna_domicilio_attiva',
+    CASE
+      WHEN COALESCE(t.parametri_operativi, '{}'::jsonb) ? 'consegna_domicilio_attiva'
+        THEN (COALESCE(t.parametri_operativi, '{}'::jsonb)->>'consegna_domicilio_attiva')::boolean
+      ELSE true
+    END,
+    'fidelity_abilita_clienti_domicilio',
+    CASE
+      WHEN COALESCE(t.parametri_operativi, '{}'::jsonb) ? 'fidelity_abilita_clienti_domicilio'
+        THEN (COALESCE(t.parametri_operativi, '{}'::jsonb)->>'fidelity_abilita_clienti_domicilio')::boolean
+      ELSE true
+    END
+  );

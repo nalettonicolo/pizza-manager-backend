@@ -1,5 +1,6 @@
 import { QRCodeSVG } from "qrcode.react"
 import { buildFidelityCardTheme } from "@/utils/fidelityCardTheme"
+import { prossimoPremioSuScheda, timbriSuSchedaCorrente } from "@/utils/fidelityProgramConfig"
 
 function patternOverlayCss(pattern, contrast) {
   const light = contrast === "chiaro"
@@ -42,6 +43,9 @@ function patternOverlayCss(pattern, contrast) {
  * @param {string} props.codiceCarta
  * @param {number} [props.scale] — scala visuale (es. 0.92 nel pannello laterale)
  * @param {string} [props.className]
+ * @param {string} [props.nomeNegozio] — alias bancone (se valorizzato ha priorità visiva sull’anagrafica)
+ * @param {number} [props.timbriSchedaTotale] — slot timbri sulla tessera (0 = nascondi griglia)
+ * @param {{ soglia: number, descrizione: string }[]} [props.premi] — premi a X timbri (sulla scheda corrente)
  */
 export default function FidelityVirtualCard({
   theme: themeProp,
@@ -54,6 +58,9 @@ export default function FidelityVirtualCard({
   codiceCarta,
   scale = 1,
   className = "",
+  nomeNegozio = "",
+  timbriSchedaTotale = 0,
+  premi = [],
 }) {
   const theme = themeProp || buildFidelityCardTheme(parametriSlice || {})
   const isLightText = theme.contrast === "chiaro"
@@ -63,6 +70,16 @@ export default function FidelityVirtualCard({
   const glassBg = isLightText ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.65)"
   const glassBorder = isLightText ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.08)"
   const qrValue = `pizzamanager:fidelity:${String(codiceCarta || "").trim()}`
+
+  const timbriTot = Math.max(0, Math.min(48, Math.floor(Number(timbriSchedaTotale) || 0)))
+  const suScheda = timbriSuSchedaCorrente(punti, timbriTot)
+  const listaPremi = Array.isArray(premi) ? premi : []
+  const nextPr = timbriTot > 0 ? prossimoPremioSuScheda(listaPremi, suScheda) : null
+  const aliasBancone = String(nomeNegozio || "").trim()
+  const nomeUfficiale = String(clienteNome || "").trim()
+  const titoloIntestatario = aliasBancone || nomeUfficiale || "—"
+  const sottoIntestatario =
+    aliasBancone && nomeUfficiale && aliasBancone !== nomeUfficiale ? nomeUfficiale : ""
 
   const gradient = `linear-gradient(135deg, ${theme.primary} 0%, ${theme.secondary} 55%, ${theme.primary} 110%)`
   const patternStyle = patternOverlayCss(theme.pattern, theme.contrast)
@@ -94,7 +111,7 @@ export default function FidelityVirtualCard({
         style={{
           position: "relative",
           width: "100%",
-          aspectRatio: "1.586 / 1",
+          ...(timbriTot > 0 ? { minHeight: 232 } : { aspectRatio: "1.586 / 1" }),
           borderRadius: theme.radius,
           background: gradient,
           boxShadow,
@@ -220,9 +237,64 @@ export default function FidelityVirtualCard({
             <div style={{ marginTop: 14 }}>
               <div style={{ fontSize: 11, color: fgMuted, marginBottom: 4 }}>Intestatario</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: fg, letterSpacing: "0.01em" }}>
-                {clienteNome || "—"}
+                {titoloIntestatario}
               </div>
+              {sottoIntestatario ? (
+                <div style={{ fontSize: 12, color: fgSoft, marginTop: 4, lineHeight: 1.35 }}>
+                  Anagrafica: {sottoIntestatario}
+                </div>
+              ) : null}
             </div>
+
+            {timbriTot > 0 ? (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: fgMuted, letterSpacing: "0.08em", marginBottom: 8 }}>
+                  Scheda timbri ({suScheda}/{timbriTot})
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    maxWidth: "100%",
+                  }}
+                >
+                  {Array.from({ length: timbriTot }, (_, i) => {
+                    const filled = i < suScheda
+                    return (
+                      <div
+                        key={i}
+                        title={filled ? "Timbro" : "Vuoto"}
+                        style={{
+                          width: 11,
+                          height: 11,
+                          borderRadius: "50%",
+                          boxSizing: "border-box",
+                          background: filled ? theme.accent : "transparent",
+                          border: filled ? `1px solid ${theme.accent}` : `1.5px dashed ${fgSoft}`,
+                          opacity: filled ? 1 : 0.55,
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+                {nextPr ? (
+                  <div style={{ fontSize: 11, color: fgMuted, marginTop: 10, lineHeight: 1.4 }}>
+                    Prossimo premio a <strong style={{ color: fg }}>{nextPr.soglia}</strong> timbri: {nextPr.descrizione}
+                    {suScheda > 0 && nextPr.soglia > suScheda ? (
+                      <span>
+                        {" "}
+                        (mancano {nextPr.soglia - suScheda})
+                      </span>
+                    ) : null}
+                  </div>
+                ) : listaPremi.length > 0 ? (
+                  <div style={{ fontSize: 11, color: fgSoft, marginTop: 8, lineHeight: 1.4 }}>
+                    Tutti i premi di questa scheda sono stati raggiunti; al completamento riparti da una nuova scheda.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14 }}>

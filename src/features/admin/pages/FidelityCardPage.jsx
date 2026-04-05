@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
@@ -10,6 +10,7 @@ import {
   applyFidelityMovimento,
   getFidelityMovimenti,
   searchAnagraficaClienti,
+  updateFidelitySaldoNomeNegozio,
 } from "@/features/admin/services/adminService"
 import FidelityVirtualCard from "@/components/fidelity/FidelityVirtualCard"
 import {
@@ -19,6 +20,12 @@ import {
   FIDELITY_CARD_VARIANTS,
   FIDELITY_CARD_PATTERNS,
 } from "@/utils/fidelityCardTheme"
+import {
+  parseFidelityPremi,
+  readConsegnaDomicilioAttiva,
+  readFidelityAbilitaClientiDomicilio,
+  readFidelityProgramSlice,
+} from "@/utils/fidelityProgramConfig"
 
 function anagraficaLabel(row) {
   const a = row?.anagrafica_clienti
@@ -41,7 +48,12 @@ export default function FidelityCardPage() {
   const [saldi, setSaldi] = useState([])
   const [nomeProgramma, setNomeProgramma] = useState("Fidelity Card")
   const [puntiPerEuro, setPuntiPerEuro] = useState("1")
+  const [timbriPerPizza, setTimbriPerPizza] = useState("0")
+  const [timbriSchedaTotale, setTimbriSchedaTotale] = useState("0")
+  const [premiRows, setPremiRows] = useState(() => [])
   const [attivo, setAttivo] = useState(true)
+  const [consegnaDomicilioAttiva, setConsegnaDomicilioAttiva] = useState(true)
+  const [fidelityClientiDomicilio, setFidelityClientiDomicilio] = useState(true)
   const [savingCfg, setSavingCfg] = useState(false)
 
   const [enrollOpen, setEnrollOpen] = useState(false)
@@ -55,6 +67,8 @@ export default function FidelityCardPage() {
   const [adjustDelta, setAdjustDelta] = useState("")
   const [adjustNote, setAdjustNote] = useState("")
   const [adjustBusy, setAdjustBusy] = useState(false)
+  const [nomeNegozioDraft, setNomeNegozioDraft] = useState("")
+  const [savingNomeNegozio, setSavingNomeNegozio] = useState(false)
 
   const [cardTheme, setCardTheme] = useState(() => buildFidelityCardTheme({}))
   const [tesseraModalRow, setTesseraModalRow] = useState(null)
@@ -83,7 +97,17 @@ export default function FidelityCardPage() {
         if (!cancelled) {
           setNomeProgramma(String(po.fidelity_nome_programma || "Fidelity Card"))
           setPuntiPerEuro(String(po.fidelity_punti_per_euro ?? "1"))
+          const fp = readFidelityProgramSlice(po)
+          setTimbriPerPizza(String(fp.timbriPerPizza))
+          setTimbriSchedaTotale(String(fp.timbriSchedaTotale))
+          setPremiRows(
+            fp.premi.length > 0
+              ? fp.premi.map((p) => ({ soglia: String(p.soglia), descrizione: p.descrizione }))
+              : [],
+          )
           setAttivo(po.fidelity_attivo !== false && po.fidelity_attivo !== "false")
+          setConsegnaDomicilioAttiva(readConsegnaDomicilioAttiva(po))
+          setFidelityClientiDomicilio(readFidelityAbilitaClientiDomicilio(po))
           setCardTheme(buildFidelityCardTheme(po))
         }
         await loadSaldi()
@@ -93,7 +117,7 @@ export default function FidelityCardPage() {
           const msg = e?.message || ""
           if (msg.includes("fidelity_saldi") || e?.code === "42P01" || msg.includes("does not exist")) {
             setError(
-              "Tabelle fidelity non trovate: applica la migration Supabase `20260403170000_fidelity_card.sql` e riprova.",
+              "Tabelle fidelity non trovate: esegui `sql/sql_upgrade.sql` (o la migration `20260406100000_post_remote_schema_unified.sql`) su Supabase e riprova.",
             )
           } else {
             setError("Impossibile caricare i dati fidelity.")
@@ -117,12 +141,23 @@ export default function FidelityCardPage() {
         ? settings.parametri_operativi
         : {}
       const pe = Math.max(0, Math.min(100, Number(puntiPerEuro) || 0))
+      const tpp = Math.max(0, Math.min(50, Number(timbriPerPizza) || 0))
+      const tst = Math.max(0, Math.min(48, Number(timbriSchedaTotale) || 0))
+      const premiParsed = parseFidelityPremi(
+        premiRows.map((r) => ({ soglia: r.soglia, descrizione: r.descrizione })),
+      )
       await updateTenantSettings(tenantId, {
         parametri_operativi: {
           ...prev,
           fidelity_nome_programma: nomeProgramma.trim() || "Fidelity Card",
           fidelity_punti_per_euro: pe,
+          fidelity_timbri_per_pizza: tpp,
+          fidelity_timbri_scheda_totale: tst,
+          fidelity_premi: premiParsed,
           fidelity_attivo: Boolean(attivo),
+          consegna_domicilio_attiva: Boolean(consegnaDomicilioAttiva),
+          fidelity_abilita_clienti_domicilio:
+            Boolean(consegnaDomicilioAttiva) && Boolean(fidelityClientiDomicilio),
           ...fidelityCardThemeKeysForSave(cardTheme),
         },
       })
@@ -191,6 +226,33 @@ export default function FidelityCardPage() {
     }
   }
 
+  useEffect(() => {
+    if (!detailRow) {
+      setNomeNegozioDraft("")
+      return
+    }
+    setNomeNegozioDraft(String(detailRow.nome_negozio || ""))
+  }, [detailRow?.id, detailRow?.nome_negozio])
+
+  const premiCorrenti = useMemo(
+    () => parseFidelityPremi(premiRows.map((r) => ({ soglia: r.soglia, descrizione: r.descrizione }))),
+    [premiRows],
+  )
+  const timbriTotCorrente = Math.max(0, Math.min(48, Number(timbriSchedaTotale) || 0))
+
+  async function saveNomeNegozioCliente() {
+    if (!tenantId || !detailRow) return
+    try {
+      setSavingNomeNegozio(true)
+      await updateFidelitySaldoNomeNegozio(tenantId, detailRow.id, nomeNegozioDraft)
+      await loadSaldi()
+    } catch (e) {
+      alert(e?.message || "Salvataggio non riuscito.")
+    } finally {
+      setSavingNomeNegozio(false)
+    }
+  }
+
   async function submitAdjust() {
     if (!tenantId || !detailRow) return
     const d = Number(adjustDelta)
@@ -232,8 +294,8 @@ export default function FidelityCardPage() {
       </h1>
       <p style={styles.hint}>
         Programma punti collegato ai <strong>clienti anagrafica</strong> (creati dalla cassa). Abilita il servizio nel
-        piano dal Super Admin (<code>fidelity_card</code>), poi iscrivi i clienti e gestisci i punti da qui. L’accredito
-        automatico a ogni ordine si può collegare in un secondo step.
+        piano dal Super Admin (<code>fidelity_card</code>), poi iscrivi i clienti e gestisci i punti da qui.         Puoi impostare timbri per pizza, premi a soglia e il nome al bancone collegato al codice carta. L’accredito
+        automatico in cassa sugli ordini si potrà collegare in un secondo step usando queste regole.
       </p>
 
       <section style={styles.card}>
@@ -259,10 +321,135 @@ export default function FidelityCardPage() {
             style={styles.input}
           />
         </label>
+
+        <h3 style={styles.h3}>Timbri e premi</h3>
+        <p style={styles.small}>
+          Il saldo è un unico numero (punti/timbri). Sulla tessera, la griglia mostra l’avanzamento sulla{" "}
+          <strong>scheda corrente</strong> (es. 10 caselle); al completamento ricomincia da capo. Le soglie premio si
+          intendono su quella scheda (es. 6 e 10 timbri).
+        </p>
+        <label style={styles.label}>
+          Timbri per ogni pizza acquistata (0 = non usare questa regola; utile per accredito automatico futuro)
+          <input
+            type="number"
+            min={0}
+            max={50}
+            step={1}
+            value={timbriPerPizza}
+            onChange={(e) => setTimbriPerPizza(e.target.value)}
+            style={styles.input}
+          />
+        </label>
+        <label style={styles.label}>
+          Timbri totali nella scheda sulla tessera (0 = nascondi griglia; consigliato 8–12)
+          <input
+            type="number"
+            min={0}
+            max={48}
+            step={1}
+            value={timbriSchedaTotale}
+            onChange={(e) => setTimbriSchedaTotale(e.target.value)}
+            style={styles.input}
+          />
+        </label>
+        <div style={{ marginBottom: 16 }}>
+          <span style={styles.labelText}>Premi personalizzabili (a X timbri sulla scheda corrente)</span>
+          {premiRows.length === 0 ? (
+            <p style={styles.muted}>Nessun premio. Aggiungi una riga oppure lascia vuoto.</p>
+          ) : (
+            premiRows.map((row, idx) => (
+              <div key={idx} style={styles.premioRow}>
+                <label style={styles.premioField}>
+                  Al timbro n.
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={row.soglia}
+                    onChange={(e) => {
+                      const next = [...premiRows]
+                      next[idx] = { ...next[idx], soglia: e.target.value }
+                      setPremiRows(next)
+                    }}
+                    style={styles.inputSmall}
+                  />
+                </label>
+                <label style={{ ...styles.premioField, flex: 1, minWidth: 140 }}>
+                  Descrizione premio
+                  <input
+                    type="text"
+                    value={row.descrizione}
+                    onChange={(e) => {
+                      const next = [...premiRows]
+                      next[idx] = { ...next[idx], descrizione: e.target.value }
+                      setPremiRows(next)
+                    }}
+                    placeholder="es. Pizza margherita omaggio"
+                    style={styles.inputFlex}
+                  />
+                </label>
+                <button
+                  type="button"
+                  style={styles.btnPremioRemove}
+                  onClick={() => setPremiRows(premiRows.filter((_, j) => j !== idx))}
+                >
+                  Rimuovi
+                </button>
+              </div>
+            ))
+          )}
+          <button
+            type="button"
+            style={styles.btnGhost}
+            onClick={() => setPremiRows([...premiRows, { soglia: "", descrizione: "" }])}
+          >
+            + Aggiungi premio
+          </button>
+        </div>
+
         <label style={{ ...styles.label, flexDirection: "row", alignItems: "center", gap: 10 }}>
           <input type="checkbox" checked={attivo} onChange={(e) => setAttivo(e.target.checked)} />
           Programma attivo
         </label>
+
+        <h3 style={{ ...styles.h3, marginTop: 20 }}>Consegna a domicilio e area cliente</h3>
+        <p style={styles.small}>
+          Controlla se il locale offre la consegna e se il programma fedeltà vale anche per chi ordina a domicilio
+          (area cliente e futuri accrediti automatici sugli ordini in consegna).
+        </p>
+        <label style={{ ...styles.label, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <input
+            type="checkbox"
+            checked={consegnaDomicilioAttiva}
+            onChange={(e) => {
+              const on = e.target.checked
+              setConsegnaDomicilioAttiva(on)
+              if (!on) setFidelityClientiDomicilio(false)
+            }}
+          />
+          Servizio consegna a domicilio attivo
+        </label>
+        <label
+          style={{
+            ...styles.label,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            opacity: consegnaDomicilioAttiva ? 1 : 0.55,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={fidelityClientiDomicilio}
+            onChange={(e) => setFidelityClientiDomicilio(e.target.checked)}
+            disabled={!consegnaDomicilioAttiva}
+          />
+          Fidelity valida anche per clienti che ordinano a domicilio
+        </label>
+        {!consegnaDomicilioAttiva ? (
+          <p style={styles.muted}>Con consegna disattivata la fidelity sul canale domicilio resta spenta.</p>
+        ) : null}
+
         <button type="button" style={styles.btnPrimary} onClick={() => void saveConfig()} disabled={savingCfg}>
           {savingCfg ? "Salvataggio…" : "Salva configurazione"}
         </button>
@@ -461,9 +648,12 @@ export default function FidelityCardPage() {
                 tenantNome={tenantNome}
                 logoUrl={logoUrl}
                 programmaNome={nomeProgramma}
-                clienteNome="Cliente di esempio"
-                punti={128}
+                clienteNome="Rossi Mario"
+                nomeNegozio="Mario al bancone"
+                punti={7}
                 codiceCarta="PM-DEMO-01"
+                timbriSchedaTotale={timbriTotCorrente}
+                premi={premiCorrenti}
                 scale={1}
               />
             </div>
@@ -485,6 +675,7 @@ export default function FidelityCardPage() {
               <tr>
                 <th style={styles.th}>Codice carta</th>
                 <th style={styles.th}>Cliente</th>
+                <th style={styles.th}>Nome in negozio</th>
                 <th style={styles.th}>Punti</th>
                 <th style={styles.th}>Azioni</th>
               </tr>
@@ -492,7 +683,7 @@ export default function FidelityCardPage() {
             <tbody>
               {saldi.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={styles.tdEmpty}>
+                  <td colSpan={5} style={styles.tdEmpty}>
                     Nessun iscritto. Usa «Iscrivi cliente» e scegli un’anagrafica dalla cassa.
                   </td>
                 </tr>
@@ -503,6 +694,7 @@ export default function FidelityCardPage() {
                       <code>{row.codice_carta}</code>
                     </td>
                     <td style={styles.td}>{anagraficaLabel(row)}</td>
+                    <td style={styles.td}>{row.nome_negozio ? <em>{row.nome_negozio}</em> : "—"}</td>
                     <td style={styles.td}>
                       <strong>{row.punti}</strong>
                     </td>
@@ -533,8 +725,11 @@ export default function FidelityCardPage() {
                 logoUrl={logoUrl}
                 programmaNome={nomeProgramma}
                 clienteNome={clienteNomeBreve(detailRow)}
+                nomeNegozio={detailRow.nome_negozio}
                 punti={detailRow.punti}
                 codiceCarta={detailRow.codice_carta}
+                timbriSchedaTotale={timbriTotCorrente}
+                premi={premiCorrenti}
                 scale={0.92}
               />
             </div>
@@ -543,6 +738,24 @@ export default function FidelityCardPage() {
               <br />
               {anagraficaLabel(detailRow)}
             </p>
+            <div style={styles.nomeNegozioBox}>
+              <span style={styles.labelText}>Nome in negozio (alias al bancone, collegato a questo codice)</span>
+              <input
+                type="text"
+                value={nomeNegozioDraft}
+                onChange={(e) => setNomeNegozioDraft(e.target.value)}
+                placeholder="es. Mario del tavolo 3"
+                style={{ ...styles.input, maxWidth: "100%", width: "100%", boxSizing: "border-box" }}
+              />
+              <button
+                type="button"
+                style={styles.btnSecondary}
+                onClick={() => void saveNomeNegozioCliente()}
+                disabled={savingNomeNegozio}
+              >
+                {savingNomeNegozio ? "Salvataggio…" : "Salva nome in negozio"}
+              </button>
+            </div>
             <div style={styles.adjustBox}>
               <span style={styles.labelText}>Variazione punti (es. +10 o -3)</span>
               <input
@@ -611,8 +824,11 @@ export default function FidelityCardPage() {
                 logoUrl={logoUrl}
                 programmaNome={nomeProgramma}
                 clienteNome={clienteNomeBreve(tesseraModalRow)}
+                nomeNegozio={tesseraModalRow.nome_negozio}
                 punti={tesseraModalRow.punti}
                 codiceCarta={tesseraModalRow.codice_carta}
+                timbriSchedaTotale={timbriTotCorrente}
+                premi={premiCorrenti}
                 scale={1.05}
               />
             </div>
@@ -826,4 +1042,42 @@ const styles = {
   asideCardWrap: { display: "flex", justifyContent: "center", marginBottom: 14 },
   tesseraModalInner: { display: "flex", justifyContent: "center", padding: "8px 0 16px" },
   modalActions: { display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 },
+  premioRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    alignItems: "flex-end",
+    marginBottom: 10,
+  },
+  premioField: { display: "flex", flexDirection: "column", gap: 4, fontSize: 13, fontWeight: 600 },
+  inputSmall: {
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    fontSize: 14,
+    width: 88,
+    boxSizing: "border-box",
+  },
+  inputFlex: {
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    fontSize: 14,
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  btnPremioRemove: {
+    padding: "8px 10px",
+    background: "transparent",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 13,
+    color: "#64748b",
+  },
+  nomeNegozioBox: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTop: "1px solid #e2e8f0",
+  },
 }
