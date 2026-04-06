@@ -132,6 +132,9 @@ CREATE TABLE IF NOT EXISTS core.punti_vendita (
 
 CREATE INDEX IF NOT EXISTS idx_punti_vendita_tenant ON core.punti_vendita(tenant_id);
 
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS consegna_area_poligono JSONB;
+COMMENT ON COLUMN core.punti_vendita.consegna_area_poligono IS 'GeoJSON Polygon WGS84; se NULL in checkout si usa parametri_operativi.consegna_area_poligono del tenant.';
+
 DROP VIEW IF EXISTS public.punti_vendita CASCADE;
 CREATE VIEW public.punti_vendita AS
   SELECT
@@ -140,6 +143,7 @@ CREATE VIEW public.punti_vendita AS
     pv.nome,
     pv.slug,
     pv.attivo,
+    pv.consegna_area_poligono,
     pv.created_at,
     pv.updated_at
   FROM core.punti_vendita pv
@@ -595,6 +599,107 @@ SELECT t.id, 'Sede principale', 'principale', true
 FROM core.tenants t
 WHERE NOT EXISTS (SELECT 1 FROM core.punti_vendita pv WHERE pv.tenant_id = t.id);
 
+
+-- =============================================================================
+-- 9) Vetrina cliente: campi normativi e pagamenti (policy HTML + Stripe/SumUp predisposizione)
+-- =============================================================================
+
+DO $legal$
+BEGIN
+  IF to_regclass('admin.tenants') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_ragione_sociale TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_piva TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_pec TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS privacy_policy_html TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS cookie_policy_html TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS pagamento_online_provider TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS stripe_publishable_key TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS sumup_merchant_public_id TEXT';
+    COMMENT ON COLUMN admin.tenants.privacy_policy_html IS 'HTML informativa privacy vetrina; se NULL si usa testo predefinito app.';
+    COMMENT ON COLUMN admin.tenants.cookie_policy_html IS 'HTML cookie policy vetrina; se NULL si usa testo predefinito app.';
+    COMMENT ON COLUMN admin.tenants.pagamento_online_provider IS 'stripe | sumup | null — checkout pubblico.';
+    COMMENT ON COLUMN admin.tenants.stripe_publishable_key IS 'Chiave pubblica Stripe (pk_...), sicura in client.';
+  END IF;
+END
+$legal$;
+
+CREATE OR REPLACE FUNCTION public.resolve_public_tenant_by_domain(p_host text)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, admin
+AS $$
+  SELECT to_jsonb(t)
+  FROM (
+    SELECT
+      id,
+      nome,
+      logo_url,
+      indirizzo,
+      email,
+      telefono,
+      orari_settimana,
+      parametri_operativi,
+      legal_ragione_sociale,
+      legal_piva,
+      legal_pec,
+      privacy_policy_html,
+      cookie_policy_html,
+      pagamento_online_provider,
+      stripe_publishable_key,
+      sumup_merchant_public_id
+    FROM admin.tenants
+    WHERE deleted_at IS NULL
+      AND (attivo IS NULL OR attivo = true)
+      AND (
+        (
+          public_domain IS NOT NULL
+          AND btrim(public_domain) <> ''
+          AND lower(btrim(public_domain)) = lower(btrim(p_host))
+        )
+        OR (
+          lower(btrim(p_host)) LIKE '%.pizzamanager.it'
+          AND lower(btrim(slug)) = lower(split_part(btrim(p_host), '.', 1))
+        )
+      )
+    LIMIT 1
+  ) t;
+$$;
+
+COMMENT ON FUNCTION public.resolve_public_tenant_by_domain(text) IS 'Menu pubblico: risolve tenant da hostname (dominio cliente collegato in admin.tenants.public_domain).';
+
+-- =============================================================================
+-- 8) punti_vendita: coordinate sede (centro mappa / marcatore area consegna)
+-- =============================================================================
+
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+COMMENT ON COLUMN core.punti_vendita.lat IS 'Latitudine sede (centro mappa e marcatore in admin aree consegna).';
+COMMENT ON COLUMN core.punti_vendita.lng IS 'Longitudine sede (centro mappa e marcatore in admin aree consegna).';
+
+DROP VIEW IF EXISTS public.punti_vendita CASCADE;
+CREATE VIEW public.punti_vendita AS
+  SELECT
+    pv.id,
+    pv.tenant_id,
+    pv.nome,
+    pv.slug,
+    pv.attivo,
+    pv.consegna_area_poligono,
+    pv.lat,
+    pv.lng,
+    pv.created_at,
+    pv.updated_at
+  FROM core.punti_vendita pv
+  WHERE pv.tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT ON public.punti_vendita TO authenticated;
+GRANT SELECT ON public.punti_vendita TO anon;
 
 -- =============================================================================
 -- Fine script consolidato sql_upgrade.sql

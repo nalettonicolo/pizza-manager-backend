@@ -358,8 +358,10 @@ export default function ModificaPizzaModal({
   }, [allIngredients, productIngIds, searchExtra])
 
   const prezzoTotale = useMemo(() => {
+    /* Prezzo listino (no promo calendario): la promo non si somma alle modifiche ingredienti. */
+    const baseListino = toNum(product?.prezzo_listino_originale ?? product?.prezzo) || 0
     const basePriceNoFormato =
-      (toNum(product?.prezzo) || 0) +
+      baseListino +
       toNum(impasti.find((i) => i.id === selectedImpastoId)?.costo_base) +
       (productIngredienti || []).reduce((s, ing) => {
         const m = modifiche[ing.id]
@@ -398,7 +400,7 @@ export default function ModificaPizzaModal({
     let total = basePriceNoFormato
     if (selectedFormato != null && selectedFormato._special == null) total += toNum(selectedFormato.prezzo)
     return Math.max(0, total)
-  }, [product?.prezzo, impasti, selectedImpastoId, formati, selectedFormatoId, modifiche, productIngredienti, extraIngredienti, allIngredients, parametri])
+  }, [product?.prezzo, product?.prezzo_listino_originale, impasti, selectedImpastoId, formati, selectedFormatoId, modifiche, productIngredienti, extraIngredienti, allIngredients, parametri])
 
   const setModifica = (ingId, field, value) => {
     setModifiche((prev) => ({

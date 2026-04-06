@@ -1,8 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
-import { updateTenantSettings } from "@/features/admin/services/adminService";
+import { updateTenantSettings, getCategories } from "@/features/admin/services/adminService";
 import DeliveryAreaMapEditor from "@/features/admin/components/DeliveryAreaMapEditor";
+import PromozioniCalendarioEditor from "@/features/admin/components/PromozioniCalendarioEditor";
+import { sortByOrdine } from "@/utils/sortByOrdine";
+
+function serializePromozioniCalendario(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((r) => ({
+    id: String(r.id || `pc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`),
+    nome: String(r.nome || "").trim(),
+    giorno_settimana: Math.min(6, Math.max(0, Number(r.giorno_settimana) || 0)),
+    ora_inizio: r.ora_inizio || "11:00",
+    ora_fine: r.ora_fine || "15:00",
+    prezzo_fisso_euro: Math.max(0, Number(r.prezzo_fisso_euro) || 0),
+    categoria_ids: Array.isArray(r.categoria_ids) ? r.categoria_ids.map(String) : [],
+    solo_senza_modifiche_ingredienti: r.solo_senza_modifiche_ingredienti !== false,
+    disabilita_fidelity: r.disabilita_fidelity === true,
+    attivo: r.attivo !== false,
+  }));
+}
 
 const defaultParametri = () => ({
   pony_lun_gio: "",
@@ -12,6 +30,7 @@ const defaultParametri = () => ({
   ritiro_ogni_min: "",
   tempo_preparazione_pizza: "",
   velocita_pony_kmh: "",
+  consegna_stima_raggio_minuti: "",
   soglia_giallo_pizze: "10",
   comanda_copie: "1",
   comanda_font_size: "13",
@@ -23,6 +42,22 @@ export default function ParametriSection() {
   const { tenantId } = useTenant();
   const [saving, setSaving] = useState(false);
   const [mapNonce, setMapNonce] = useState(0);
+  const [promoCategories, setPromoCategories] = useState([]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let c = false;
+    void getCategories(tenantId)
+      .then((d) => {
+        if (!c) setPromoCategories(sortByOrdine(d || []));
+      })
+      .catch(() => {
+        if (!c) setPromoCategories([]);
+      });
+    return () => {
+      c = true;
+    };
+  }, [tenantId]);
 
   const savedPolygonKey = useMemo(
     () => JSON.stringify(settings?.parametri_operativi?.consegna_area_poligono ?? null),
@@ -52,6 +87,11 @@ export default function ParametriSection() {
     pony_ven_dom: raw.pony_ven_dom !== undefined && raw.pony_ven_dom !== "" ? raw.pony_ven_dom : "",
     pizze_ogni_15_min: raw.pizze_ogni_15_min !== undefined && raw.pizze_ogni_15_min !== "" ? raw.pizze_ogni_15_min : (raw.pizze_ogni_min ?? ""),
     comanda_stampanti: Array.isArray(raw.comanda_stampanti) ? raw.comanda_stampanti.join(", ") : (raw.comanda_stampanti ?? ""),
+    abilita_gestione_listini_multipli:
+      raw.abilita_gestione_listini_multipli === true || raw.listini_multipli === true,
+    promozioni_calendario: Array.isArray(raw.promozioni_calendario) ? raw.promozioni_calendario : [],
+    stampa_comanda_ordine_web_automatica: raw.stampa_comanda_ordine_web_automatica === true,
+    chiusura_giornata_automatica: raw.chiusura_giornata_automatica !== false,
   };
 
   const setParam = (key, value) => {
@@ -79,6 +119,8 @@ export default function ParametriSection() {
         ritiro_ogni_min: p.ritiro_ogni_min === "" ? 0 : Number(p.ritiro_ogni_min) || 0,
         tempo_preparazione_pizza: p.tempo_preparazione_pizza === "" ? 0 : Number(p.tempo_preparazione_pizza) || 0,
         velocita_pony_kmh: p.velocita_pony_kmh === "" ? 0 : Number(p.velocita_pony_kmh) || 0,
+        consegna_stima_raggio_minuti:
+          p.consegna_stima_raggio_minuti === "" ? 15 : Math.max(1, Number(p.consegna_stima_raggio_minuti) || 15),
         soglia_giallo_pizze: p.soglia_giallo_pizze === "" ? 10 : Number(p.soglia_giallo_pizze) || 10,
         comanda_copie: p.comanda_copie === "" ? 1 : Math.max(1, Number(p.comanda_copie) || 1),
         comanda_font_size: p.comanda_font_size === "" ? 13 : Math.max(9, Number(p.comanda_font_size) || 13),
@@ -86,10 +128,14 @@ export default function ParametriSection() {
           .split(/\r?\n|,/)
           .map((v) => v.trim())
           .filter(Boolean),
+        abilita_gestione_listini_multipli: p.abilita_gestione_listini_multipli === true,
+        promozioni_calendario: serializePromozioniCalendario(p.promozioni_calendario),
         consegna_area_poligono:
           consegnaAreaPoligono && consegnaAreaPoligono.type === "Polygon"
             ? consegnaAreaPoligono
             : null,
+        stampa_comanda_ordine_web_automatica: p.stampa_comanda_ordine_web_automatica === true,
+        chiusura_giornata_automatica: p.chiusura_giornata_automatica !== false,
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
@@ -162,6 +208,42 @@ export default function ParametriSection() {
               style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
             />
           </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={p.abilita_gestione_listini_multipli}
+              onChange={(e) => setParam("abilita_gestione_listini_multipli", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              Consenti gestione listini multipli (archivio): di default un solo listino attivo; se attivo, in Menu → Listini e backup
+              puoi salvare snapshot JSON oltre all&apos;export PDF.
+            </span>
+          </label>
+          <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Ordini web (vetrina)</h3>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={p.stampa_comanda_ordine_web_automatica}
+              onChange={(e) => setParam("stampa_comanda_ordine_web_automatica", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              Stampa comanda automatica in sala per nuovi ordini web (se attiva, non vengono accodate notifiche email/webhook
+              opzionali — configura comunque la stampa in cassa).
+            </span>
+          </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={p.chiusura_giornata_automatica}
+              onChange={(e) => setParam("chiusura_giornata_automatica", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              Chiusura giornata automatica in cassa (dopo l’orario di chiusura: alle 23:59 se chiusura è 00:00, altrimenti un’ora dopo l’orario di chiusura del giorno).
+            </span>
+          </label>
           <label>
             Tempo di preparazione pizza in minuti 
             <input
@@ -179,9 +261,25 @@ export default function ParametriSection() {
               type="number"
               min={1}
               step={0.5}
-              placeholder="es. 25"
+              placeholder="es. 20"
               value={p.velocita_pony_kmh === "" ? "" : p.velocita_pony_kmh}
               onChange={(e) => setParam("velocita_pony_kmh", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Minuti per raggio area stima (consegna)
+            <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 4, lineHeight: 1.45 }}>
+              In <strong>Sedi e aree</strong> puoi generare un poligono circolare di partenza: raggio stradale stimato = velocità pony ×
+              (minuti/60). Esempio: 20 km/h e 15 min → ~5 km. Poi modifica il poligono sulla mappa come preferisci.
+            </span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              placeholder="15"
+              value={p.consegna_stima_raggio_minuti === "" ? "" : p.consegna_stima_raggio_minuti}
+              onChange={(e) => setParam("consegna_stima_raggio_minuti", e.target.value === "" ? "" : e.target.value)}
               style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
             />
           </label>
@@ -266,6 +364,18 @@ export default function ParametriSection() {
           </label>
         </div>
       </section>
+
+      <section className="dashboard-box dashboard-settings-section" style={{ marginTop: 24 }}>
+        <h2 className="dashboard-page-title" style={{ fontSize: 18, marginBottom: 12 }}>
+          Promozioni per giorno e fascia oraria
+        </h2>
+        <PromozioniCalendarioEditor
+          categories={promoCategories}
+          value={p.promozioni_calendario}
+          onChange={(v) => setParam("promozioni_calendario", v)}
+        />
+      </section>
+
       <div className="dashboard-settings-actions" style={{ marginTop: 16 }}>
         <button type="button" className="btn-primary-dashboard" onClick={handleSave} disabled={saving}>
           {saving ? "Salvataggio..." : "Salva"}

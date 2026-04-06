@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
@@ -8,6 +8,16 @@ import ErrorState from "@/components/feedback/ErrorState";
 import { getReportData } from "@/features/admin/services/adminService";
 import { formatPrice } from "@/utils/format";
 
+function defaultDateRangeStrings() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  return {
+    from: start.toISOString().slice(0, 10),
+    to: end.toISOString().slice(0, 10),
+  };
+}
+
 export default function Report() {
   const { tenantId } = useTenant();
   const { loading: authLoading } = useAuth();
@@ -15,45 +25,46 @@ export default function Report() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dateFrom, setDateFrom] = useState(() => defaultDateRangeStrings().from);
+  const [dateTo, setDateTo] = useState(() => defaultDateRangeStrings().to);
+  const dateFromRef = useRef(dateFrom);
+  const dateToRef = useRef(dateTo);
+  dateFromRef.current = dateFrom;
+  dateToRef.current = dateTo;
 
-  useEffect(() => {
-    if (authLoading) return;
-
+  const loadReport = useCallback(async () => {
     if (!tenantId) {
       setLoading(false);
       setReport(null);
       setError("Nessun tenant associato all’account: impossibile caricare il report.");
       return;
     }
-
-    let cancelled = false;
-
-    async function loadReport() {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await getReportData(tenantId);
-        if (!cancelled) {
-          setReport(data || {});
-        }
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setError("Errore nel caricamento del report.");
-          setReport(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+    const startIso = `${dateFromRef.current}T00:00:00.000`;
+    const endIso = `${dateToRef.current}T23:59:59.999`;
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getReportData(tenantId, startIso, endIso);
+      setReport(data || {});
+    } catch (err) {
+      console.error(err);
+      setError("Errore nel caricamento del report.");
+      setReport(null);
+    } finally {
+      setLoading(false);
     }
+  }, [tenantId]);
 
+  useEffect(() => {
+    if (authLoading) return;
+    if (!tenantId) {
+      setLoading(false);
+      setReport(null);
+      setError("Nessun tenant associato all’account: impossibile caricare il report.");
+      return;
+    }
     void loadReport();
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantId, authLoading]);
+  }, [tenantId, authLoading, loadReport]);
 
   if (authLoading || loading) return <Loader />;
   if (error) return <ErrorState message={error} />;
@@ -85,6 +96,19 @@ export default function Report() {
   return (
     <div style={styles.wrapper}>
       <h1 style={styles.pageTitle}>Report Vendite</h1>
+      <div style={styles.filtersRow}>
+        <label style={styles.filterLabel}>
+          Da
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={styles.dateInput} />
+        </label>
+        <label style={styles.filterLabel}>
+          A
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={styles.dateInput} />
+        </label>
+        <button type="button" className="btn-primary-dashboard" onClick={() => void loadReport()} disabled={loading}>
+          Aggiorna
+        </button>
+      </div>
       <p style={styles.hint}>
         Periodo: <strong>{periodoLabel}</strong>. Ordini con stato <strong>ANNULLATO</strong> esclusi da totali e classifica. Classifica per{" "}
         <strong>nome prodotto</strong> (e formato se presente); le categorie impostate come &quot;ingredienti&quot; non entrano in classifica.
@@ -143,6 +167,26 @@ const styles = {
     fontSize: 13,
     color: "#64748b",
     lineHeight: 1.5,
+  },
+  filtersRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 8,
+  },
+  filterLabel: {
+    display: "flex",
+    flexDirection: "column",
+    fontSize: 12,
+    color: "#64748b",
+    gap: 4,
+  },
+  dateInput: {
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    fontSize: 14,
   },
   csvBtn: {
     alignSelf: "flex-start",

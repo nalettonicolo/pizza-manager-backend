@@ -57,6 +57,26 @@ npm run deploy
 
 Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. **Incrementale post-baseline** (idempotente): `supabase/migrations/20260406100000_post_remote_schema_unified.sql`. **Solo le modifiche del momento** (file che svuoti e riempi a ogni intervento): `sql/sql_upgrade.sql`. Dopo un progetto nato da dump Supabase: prima `supabase/migrations/20260220171734_remote_schema.sql`, poi la migration incrementale. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
 
+**Checklist dopo `sql_upgrade.sql` (stabilità):** verificare che esistano colonne/viste attese (es. `core.punti_vendita.consegna_area_poligono`, vista `public.punti_vendita` aggiornata). In app: smoke manuale **vetrina** (menù + carrello), **cassa** (ordine test), **admin** (parametri, listini, sedi e aree).
+
+---
+
+## Smoke test post-deploy (manuale)
+
+1. Login admin tenant → **Impostazioni → Parametri** salva senza errori; **Promozioni** visibili.
+2. **Menu → Listini e backup**: stampa PDF; con archivio attivo, snapshot JSON e (opzionale) ripristino prezzi da backup.
+3. **Impostazioni → Sedi e aree**: mappa per PV salva senza errore RLS.
+4. **Vetrina**: prezzi promo se configurati; checkout cliente se abilitato.
+5. **Pagamenti online** (Stripe/SumUp): in app restano placeholder finché non si integrano webhook e stati; non fare affidamento su incasso reale senza test ambiente.
+
+---
+
+## Roadmap non inclusa nel codice
+
+- **Versioning listino** con data effetto / rollback completo (DB dedicato).
+- **Listino diverso per PV** (stesso listino DB oggi; archivio JSON come backup).
+- **Stripe/SumUp end-to-end**, **notifiche push/email** ordini: da progettare per tenant.
+
 ---
 
 ## Riferimenti

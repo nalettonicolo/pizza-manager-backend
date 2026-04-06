@@ -11,12 +11,11 @@ export function isServiziGateBypassed() {
 }
 
 /**
- * Gate sui servizi: attivo solo con VITE_ENFORCE_SERVIZI_PLAN=true, salvo bypass.
- * Così i deploy esistenti restano invariati finché non abiliti esplicitamente l’enforcement.
+ * Gate sui servizi: sempre disattivato — nessun blocco in base al piano o al catalogo moduli.
+ * (Il bypass VITE_DISABLE_SERVIZI_GATE resta per compatibilità con eventuali script.)
  */
 export function isServiziPlanEnforcementEnabled() {
-  if (isServiziGateBypassed()) return false;
-  return import.meta.env.VITE_ENFORCE_SERVIZI_PLAN === "true";
+  return false;
 }
 
 /**

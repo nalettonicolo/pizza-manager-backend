@@ -1941,6 +1941,14 @@ export async function updateTenantSettings(tenantId, updates) {
     "public_domain_status",
     "public_domain_requested_at",
     "sito_web_cliente",
+    "legal_ragione_sociale",
+    "legal_piva",
+    "legal_pec",
+    "privacy_policy_html",
+    "cookie_policy_html",
+    "pagamento_online_provider",
+    "stripe_publishable_key",
+    "sumup_merchant_public_id",
   ]
   const { error } = await supabase.from("tenants").update(payload).eq("id", tenantId)
   if (error) {

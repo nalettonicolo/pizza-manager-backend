@@ -49,9 +49,20 @@ export default function ProductGrid({
               )}
             </div>
             <div style={styles.rowRight}>
-              <span style={styles.price}>
-                € {Number(product.prezzo).toFixed(2)}
-              </span>
+              {product.prezzo_listino_originale != null &&
+              Number(product.prezzo_listino_originale) > Number(product.prezzo) ? (
+                <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                  <span style={{ fontSize: 12, color: "#94a3b8", textDecoration: "line-through" }}>
+                    € {Number(product.prezzo_listino_originale).toFixed(2)}
+                  </span>
+                  <span style={styles.price}>€ {Number(product.prezzo).toFixed(2)}</span>
+                  {!storefront ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#0f766e" }}>Promo</span>
+                  ) : null}
+                </span>
+              ) : (
+                <span style={styles.price}>€ {Number(product.prezzo).toFixed(2)}</span>
+              )}
               {canAdd && showModifica && !isDisabled && (
                 <button
                   type="button"

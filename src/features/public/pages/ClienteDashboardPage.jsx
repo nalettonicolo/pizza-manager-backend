@@ -85,6 +85,20 @@ export default function ClienteDashboardPage() {
           Vai al menù
         </Link>
         <Link
+          to="/ordina"
+          style={{
+            padding: "12px 16px",
+            borderRadius: 8,
+            background: "#0f766e",
+            color: "#fff",
+            textDecoration: "none",
+            fontWeight: 600,
+            textAlign: "center",
+          }}
+        >
+          Carrello / Ordine consegna
+        </Link>
+        <Link
           to="/cliente/ordini"
           style={{
             padding: "12px 16px",

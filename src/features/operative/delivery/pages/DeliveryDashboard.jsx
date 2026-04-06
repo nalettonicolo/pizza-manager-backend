@@ -58,6 +58,16 @@ export default function DeliveryDashboard() {
     return () => clearInterval(t)
   }, [loadOrders])
 
+  const setAssegnato = async (ordineId) => {
+    if (!ordineId) return
+    try {
+      await updateOrder(ordineId, { stato_consegna: "ASSEGNATO" })
+      await loadOrders({ silent: true })
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const setInViaggio = async (ordineId) => {
     if (!ordineId) return
     try {
@@ -83,7 +93,8 @@ export default function DeliveryDashboard() {
     <div style={{ padding: 24 }}>
       <h1 className="dashboard-page-title">Delivery{operatoreLabel ? ` — ${operatoreLabel}` : ""}</h1>
       <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
-        Ordini pronti per la consegna (oggi). Stato consegna su DB: <code>stato_consegna</code> — utile per rider e report operativi.
+        Ordini pronti per la consegna (oggi). Stato consegna su DB: <code>stato_consegna</code> (flusso consigliato:{" "}
+        <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>). Integrazione rider dedicata in roadmap.
         {operatoreLabel ? ` · ${operatoreLabel}` : ""}
       </p>
 
@@ -121,6 +132,15 @@ export default function DeliveryDashboard() {
                 </p>
                 {ord.note ? <p style={{ fontSize: 13, color: "#555", marginBottom: 10 }}>Note: {ord.note}</p> : null}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {sc !== "ASSEGNATO" && sc !== "IN_VIAGGIO" && sc !== "CONSEGNATO" ? (
+                    <button
+                      type="button"
+                      onClick={() => setAssegnato(ord.id)}
+                      style={{ padding: "8px 16px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+                    >
+                      Assegna rider
+                    </button>
+                  ) : null}
                   {!inViaggio ? (
                     <button
                       type="button"

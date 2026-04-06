@@ -1,8 +1,16 @@
 /**
  * Utility per il planning fasce orarie in Cassa.
  * Fasce basate su orari di apertura/chiusura (orari_settimana).
- * Allineato ai parametri: consegne_ogni_min, ritiro_ogni_min, pizze_ogni_15_min, soglia_giallo_pizze.
+ * Griglia fasce: sempre quarti d'ora (:00, :15, :30, :45). I parametri ritiro_ogni_min / consegne_ogni_min
+ * servono solo per la capacità (max pizze) in UI, non per l’intervallo tra le etichette orarie.
  */
+
+/** Griglia fissa fasce planning: quarti d'ora. */
+export const PLANNING_GRID_SLOT_MINUTES = 15
+
+function snapMinutesToQuarterUp(min) {
+  return Math.ceil(min / PLANNING_GRID_SLOT_MINUTES) * PLANNING_GRID_SLOT_MINUTES
+}
 
 /** orari_settimana: giorno 0 = Lunedì, ... 6 = Domenica. JS getDay(): 0 = Domenica, 1 = Lun, ... */
 const GIORNI = [
@@ -69,18 +77,30 @@ function endMinutesForDay(chiusuraStr) {
 }
 
 /**
+ * Ultimo minuto di inizio fascia consentito rispetto a "chiusura" (HH:mm).
+ * Chiusura 15:00 = l'ultimo slot può iniziare alle 15:00 (non fermarsi a 14:45).
+ * Sentinella mezzanotte (1440 da 00:00): niente fascia che parte a "24:00" — ultimo slot ~23:45.
+ */
+function lastSlotStartInclusive(endMinTotal, slotMinutes) {
+  if (!slotMinutes || slotMinutes < 1) slotMinutes = 15
+  if (endMinTotal >= 24 * 60) return endMinTotal - slotMinutes
+  return endMinTotal
+}
+
+/**
  * Inizio fascia (timestamp locale) contenente `date`.
  * Allineato ai minuti della giornata (come buildSlotsInOpeningHours / buildSlotsFullDay).
  * La versione precedente usava l’epoch UTC: griglia sfasata → etichette tipo :36, :51 invece di :00, :15, :30, :45.
  */
 export function slotKeyForDate(date, slotMinutes) {
-  if (!slotMinutes || slotMinutes < 1) slotMinutes = 15
+  const grid = PLANNING_GRID_SLOT_MINUTES
+  if (!slotMinutes || slotMinutes < 1) slotMinutes = grid
   const d = new Date(date)
   const y = d.getFullYear()
   const mo = d.getMonth()
   const day = d.getDate()
   const minsIntoDay = d.getHours() * 60 + d.getMinutes()
-  const slotStartMin = Math.floor(minsIntoDay / slotMinutes) * slotMinutes
+  const slotStartMin = Math.floor(minsIntoDay / grid) * grid
   const out = new Date(y, mo, day, 0, 0, 0, 0)
   out.setMinutes(slotStartMin)
   return out.getTime()
@@ -91,20 +111,22 @@ export function slotKeyForDate(date, slotMinutes) {
  * Se siamo oltre l'orario di chiusura restituisce [] (nessuna disponibilità).
  * orariOggi: { aperto, apertura, chiusura } da getTodayOrari().
  */
-export function buildSlotsInOpeningHours(slotMinutes, orariOggi, count = 24) {
-  if (!slotMinutes || slotMinutes < 1) slotMinutes = 15
+export function buildSlotsInOpeningHours(orariOggi, count = 24) {
+  const grid = PLANNING_GRID_SLOT_MINUTES
   if (!orariOggi?.aperto) return []
   const now = new Date()
   const startMin = timeToMinutes(orariOggi.apertura)
   const endMin = timeToMinutes(orariOggi.chiusura)
+  const lastStart = lastSlotStartInclusive(endMin, grid)
   const nowMin = now.getHours() * 60 + now.getMinutes()
   if (nowMin >= endMin) return [] // oltre chiusura: nessuna disponibilità
-  const firstSlotStartMin = Math.ceil(nowMin / slotMinutes) * slotMinutes
-  let slotStartMin = Math.max(firstSlotStartMin, startMin)
-  if (slotStartMin >= endMin) return []
+  const firstSlotStartMin = snapMinutesToQuarterUp(nowMin)
+  const firstAfterOpening = snapMinutesToQuarterUp(startMin)
+  let slotStartMin = Math.max(firstSlotStartMin, firstAfterOpening)
+  if (slotStartMin > lastStart) return []
   const slots = []
   for (let i = 0; i < count; i++) {
-    if (slotStartMin >= endMin) break
+    if (slotStartMin > lastStart) break
     const d = new Date(now)
     d.setHours(Math.floor(slotStartMin / 60), slotStartMin % 60, 0, 0)
     slots.push({
@@ -112,7 +134,7 @@ export function buildSlotsInOpeningHours(slotMinutes, orariOggi, count = 24) {
       label: d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
       date: new Date(d),
     })
-    slotStartMin += slotMinutes
+    slotStartMin += grid
   }
   return slots
 }
@@ -122,16 +144,19 @@ export function buildSlotsInOpeningHours(slotMinutes, orariOggi, count = 24) {
  * Per il planning lato cassa: griglia completa della giornata.
  * orariOggi: { aperto, apertura, chiusura }. Chiusura 00:00 = fine giornata (24:00).
  */
-export function buildSlotsFullDay(slotMinutes, orariOggi) {
-  if (!slotMinutes || slotMinutes < 1) slotMinutes = 15
+export function buildSlotsFullDay(orariOggi) {
+  const grid = PLANNING_GRID_SLOT_MINUTES
   if (!orariOggi?.aperto) return []
   const now = new Date()
   const startMin = timeToMinutes(orariOggi.apertura)
   let endMin = endMinutesForDay(orariOggi.chiusura)
   if (endMin <= startMin) endMin += 24 * 60
+  const lastStart = lastSlotStartInclusive(endMin, grid)
   const slots = []
-  let slotStartMin = startMin
-  while (slotStartMin < endMin) {
+  let slotStartMin = snapMinutesToQuarterUp(startMin)
+  let guard = 0
+  while (slotStartMin <= lastStart && guard < 200) {
+    guard += 1
     const h = Math.floor(slotStartMin / 60) % 24
     const min = slotStartMin % 60
     const d = new Date(now)
@@ -141,19 +166,50 @@ export function buildSlotsFullDay(slotMinutes, orariOggi) {
       label: d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
       date: new Date(d),
     })
-    slotStartMin += slotMinutes
+    slotStartMin += grid
   }
   return slots
 }
 
+/**
+ * Vetrina web: non si accetta la consegna nel quarto d’ora immediatamente successivo a quello corrente
+ * (minimo due intervalli da “ora”: fine fascia corrente + 1 fascia di buffer).
+ */
+export function minSlotStartMinutesWebDelivery(now) {
+  const grid = PLANNING_GRID_SLOT_MINUTES
+  const d = now instanceof Date ? now : new Date(now)
+  const nowMin = d.getHours() * 60 + d.getMinutes()
+  const nowSlotStart = Math.floor(nowMin / grid) * grid
+  return nowSlotStart + 2 * grid
+}
+
+export function filterSlotsWebDeliveryLeadTime(slots, nowDate) {
+  if (!Array.isArray(slots) || !slots.length) return []
+  const minM = minSlotStartMinutesWebDelivery(nowDate)
+  return slots.filter((s) => {
+    const dt = s.date instanceof Date ? s.date : new Date(s.date)
+    const sm = dt.getHours() * 60 + dt.getMinutes()
+    return sm >= minM
+  })
+}
+
+export function isSlotAllowedForWebDelivery(slotDate, nowDate) {
+  if (!slotDate) return false
+  const minM = minSlotStartMinutesWebDelivery(nowDate)
+  const dt = slotDate instanceof Date ? slotDate : new Date(slotDate)
+  const sm = dt.getHours() * 60 + dt.getMinutes()
+  return sm >= minM
+}
+
 /** Genera fasce a partire da "adesso" (per backward compat, senza orari). */
 export function buildPlanningSlots(slotMinutes, count = 12) {
-  if (!slotMinutes || slotMinutes < 1) slotMinutes = 15
+  const grid = PLANNING_GRID_SLOT_MINUTES
+  void slotMinutes
   const now = new Date()
-  const startMs = slotKeyForDate(now, slotMinutes)
+  const startMs = slotKeyForDate(now, grid)
   const slots = []
   for (let i = 0; i < count; i++) {
-    const t = new Date(startMs + i * slotMinutes * 60 * 1000)
+    const t = new Date(startMs + i * grid * 60 * 1000)
     slots.push({
       key: t.getTime(),
       label: t.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),

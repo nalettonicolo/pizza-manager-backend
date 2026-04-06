@@ -37,6 +37,7 @@ import {
   enrollFidelityCliente,
   updateOrderStato,
   applyFidelityMovimento,
+  updateTenantSettings,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
@@ -44,9 +45,9 @@ import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliver
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
 import { getLocalYYYYMMDD, orderCreatedLocalDateKey } from "@/utils/localDate"
+import { computeAutoChiusuraGiornataDate } from "@/utils/chiusuraGiornataAuto"
 import {
-  buildPlanningSlots,
-  buildSlotsInOpeningHours,
+  PLANNING_GRID_SLOT_MINUTES,
   buildSlotsFullDay,
   getTodayOrari,
   groupOrdersBySlotOrarioRitiro,
@@ -75,6 +76,7 @@ import {
   cassaToolbarCompactBtn,
 } from "@/features/operative/cassa/cassaToolbarButtonStyles"
 import { readFidelityModalitaAccredito } from "@/utils/fidelityProgramConfig"
+import { applyPromoCalendarioToProducts, fidelitySkippedByPromoCalendario } from "@/utils/promozioniCalendario"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
@@ -217,7 +219,7 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 
 export default function CassaPage() {
   const navigate = useNavigate()
-  const { tenantId, tenantData } = useTenant()
+  const { tenantId, tenantData, refreshTenant } = useTenant()
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
   const { user, logout } = useAuth()
@@ -277,11 +279,12 @@ export default function CassaPage() {
   const [lastOrderLoading, setLastOrderLoading] = useState(false)
   const [lastOrderDetailLoading, setLastOrderDetailLoading] = useState(false)
   const [ordiniOnlineDisabilitati, setOrdiniOnlineDisabilitati] = useState(false)
+  const [ordiniOnlineToggleSaving, setOrdiniOnlineToggleSaving] = useState(false)
   const [showPaginaOrdini, setShowPaginaOrdini] = useState(false)
   const [fuoriAreaModal, setFuoriAreaModal] = useState(null)
   const bypassFuoriAreaCheckRef = useRef(false)
   const [ordiniSearch, setOrdiniSearch] = useState("")
-  const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotMinutes }
+  const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotsDisponibili }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
 
   /////////////////////////////////////////////////////////
@@ -294,6 +297,12 @@ export default function CassaPage() {
     setActiveCategory(null)
     setCart([])
   }, [tenantId])
+
+  useEffect(() => {
+    const po = tenantData?.parametri_operativi
+    const off = po && typeof po === "object" && po.ordini_online_attivi === false
+    setOrdiniOnlineDisabilitati(!!off)
+  }, [tenantId, tenantData?.parametri_operativi])
 
   /////////////////////////////////////////////////////////
   // LOAD CATEGORIES
@@ -324,27 +333,29 @@ export default function CassaPage() {
     const data = await getProductsByCategory(tenantId, activeCategory)
     const sorted = sortByOrdine(data || [])
     const ids = (sorted || []).map((p) => p.id).filter(Boolean)
+    const po = tenantData?.parametri_operativi
     try {
-      const [withPrezzo, map, idsMap] = await Promise.all([
+      const [withPrezzoRaw, map, idsMap] = await Promise.all([
         enrichProductsWithPrezzoCalcolato(tenantId, sorted),
         ids.length ? getProductIngredientiMap(tenantId, ids) : Promise.resolve({}),
         ids.length ? getProductIngredientIdsMap(tenantId, ids) : Promise.resolve({}),
       ])
+      const withPrezzo = applyPromoCalendarioToProducts(withPrezzoRaw, po, new Date())
       setProducts(withPrezzo)
       setProductIngredientiMap(map || {})
       setProductIngredientIdsMap(idsMap || {})
     } catch (e) {
       console.warn("Caricamento prodotti / ingredienti cassa:", e)
       try {
-        const fallback = await enrichProductsWithPrezzoCalcolato(tenantId, sorted)
-        setProducts(fallback)
+        const fallbackRaw = await enrichProductsWithPrezzoCalcolato(tenantId, sorted)
+        setProducts(applyPromoCalendarioToProducts(fallbackRaw, po, new Date()))
       } catch {
         setProducts(sorted)
       }
       setProductIngredientiMap({})
       setProductIngredientIdsMap({})
     }
-  }, [tenantId, activeCategory])
+  }, [tenantId, activeCategory, tenantData?.parametri_operativi])
 
   useEffect(() => {
     loadProducts()
@@ -594,6 +605,34 @@ export default function CassaPage() {
       setChiudiGiornataLoading(false)
     }
   }, [tenantId, todayStr, buildPayloadContabilita, loadOrdini])
+
+  const buildPayloadContabilitaRef = useRef(buildPayloadContabilita)
+  buildPayloadContabilitaRef.current = buildPayloadContabilita
+
+  useEffect(() => {
+    if (!tenantId) return
+    const po = tenantData?.parametri_operativi || {}
+    if (po.chiusura_giornata_automatica === false) return
+    const when = computeAutoChiusuraGiornataDate(tenantData?.orari_settimana)
+    if (!when) return
+    const storageKey = `pm_auto_chiusura_done_${tenantId}_${todayStr}`
+    const tick = async () => {
+      if (typeof localStorage === "undefined") return
+      if (localStorage.getItem(storageKey)) return
+      if (Date.now() < when.getTime()) return
+      try {
+        await chiudiGiornata(tenantId, todayStr, buildPayloadContabilitaRef.current())
+        localStorage.setItem(storageKey, "1")
+        loadOrdini()
+        setShowPlanningBar(false)
+      } catch (e) {
+        console.warn("Chiusura giornata automatica", e)
+      }
+    }
+    void tick()
+    const id = setInterval(() => void tick(), 60 * 1000)
+    return () => clearInterval(id)
+  }, [tenantId, tenantData?.orari_settimana, tenantData?.parametri_operativi, todayStr, loadOrdini])
 
   const handleAnnullaOrdine = useCallback(
     async (ordineId) => {
@@ -1178,7 +1217,10 @@ export default function CassaPage() {
       })
 
       if (fidelityServizioOk && fidelitySaldoSnap?.anagrafica_cliente_id) {
-        const punti = computeAccreditoFidelityPunti(tenantData?.parametri_operativi, snapshotCart, total)
+        const skipFidelity = fidelitySkippedByPromoCalendario(tenantData?.parametri_operativi, snapshotCart, new Date())
+        const punti = skipFidelity
+          ? 0
+          : computeAccreditoFidelityPunti(tenantData?.parametri_operativi, snapshotCart, total)
         if (punti > 0) {
           try {
             await applyFidelityMovimento(
@@ -1257,7 +1299,7 @@ export default function CassaPage() {
         note: noteSnap || undefined,
         tipoPagamento: tipoPagamentoPerStampa || undefined,
         righe: ricevutaRigheFromCartSnapshot(snapshotCart),
-        totale,
+        totale: total,
         parametri: po,
         annullato: false,
       }
@@ -1308,64 +1350,57 @@ export default function CassaPage() {
   const showModificaCategoria = !["fritti", "dolci", "bibite"].includes(activeCatNome)
 
   const orariOggi = useMemo(() => getTodayOrari(tenantData?.orari_settimana), [tenantData?.orari_settimana])
-  const slotDeliveryMin = Number(parametri.consegne_ogni_min) || 15
-  const slotNegozioMin = Number(parametri.ritiro_ogni_min) || 15
+  const capacityWindowDelivery = Number(parametri.consegne_ogni_min) || 15
+  const capacityWindowNegozio = Number(parametri.ritiro_ogni_min) || 15
   const pizzeOgni15 = Number(parametri.pizze_ogni_15_min) || 8
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
-  const maxPizzeDelivery = Math.max(1, Math.round((pizzeOgni15 * slotDeliveryMin) / 15))
-  const maxPizzeNegozio = Math.max(1, Math.round((pizzeOgni15 * slotNegozioMin) / 15))
+  const maxPizzeDelivery = Math.max(1, Math.round((pizzeOgni15 * capacityWindowDelivery) / 15))
+  const maxPizzeNegozio = Math.max(1, Math.round((pizzeOgni15 * capacityWindowNegozio) / 15))
 
-  const planningSlotsDelivery = useMemo(
-    () => buildSlotsFullDay(slotDeliveryMin, orariOggi),
-    [slotDeliveryMin, orariOggi]
-  )
-  const planningSlotsNegozio = useMemo(
-    () => buildSlotsFullDay(slotNegozioMin, orariOggi),
-    [slotNegozioMin, orariOggi]
-  )
+  /** Griglia unica quarti d'ora; consegne e ritiro condividono le stesse fasce orarie. */
+  const planningSlotsGrid = useMemo(() => buildSlotsFullDay(orariOggi), [orariOggi])
   const ordiniPerSlotDelivery = useMemo(() => {
     const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
-    return groupOrdersBySlotOrarioRitiro(delivery, slotDeliveryMin)
-  }, [ordiniOggiAttivi, slotDeliveryMin])
+    return groupOrdersBySlotOrarioRitiro(delivery, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi])
   const ordiniPerSlotNegozio = useMemo(() => {
     const negozio = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
-    return groupOrdersBySlotOrarioRitiro(negozio, slotNegozioMin)
-  }, [ordiniOggiAttivi, slotNegozioMin])
+    return groupOrdersBySlotOrarioRitiro(negozio, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi])
   const ordiniBySlotDelivery = useMemo(() => {
     const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
-    return groupOrdiniBySlotOrarioRitiro(delivery, slotDeliveryMin)
-  }, [ordiniOggiAttivi, slotDeliveryMin])
+    return groupOrdiniBySlotOrarioRitiro(delivery, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi])
   const ordiniBySlotNegozio = useMemo(() => {
     const negozio = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
-    return groupOrdiniBySlotOrarioRitiro(negozio, slotNegozioMin)
-  }, [ordiniOggiAttivi, slotNegozioMin])
+    return groupOrdiniBySlotOrarioRitiro(negozio, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi])
   const pizzePerSlotDelivery = useMemo(() => {
     const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
-    return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, slotDeliveryMin)
-  }, [ordiniOggiAttivi, pizzePerOrdine, slotDeliveryMin])
+    return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi, pizzePerOrdine])
   const pizzePerSlotNegozio = useMemo(() => {
     const negozio = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       return t === "negozio" || t === ""
     })
-    return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, slotNegozioMin)
-  }, [ordiniOggiAttivi, pizzePerOrdine, slotNegozioMin])
+    return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi, pizzePerOrdine])
 
   const pizzePerSlotRiepilogo = useMemo(() => {
-    const slotMin = tipoOrdine === "delivery" ? slotDeliveryMin : slotNegozioMin
     const filtered = (ordiniOggiAttivi || []).filter((o) => {
       const t = ordineTipoOrdine(o)
       if (tipoOrdine === "delivery") return t === "delivery"
       return t === "negozio" || t === ""
     })
-    return groupPizzeBySlotOrarioRitiro(filtered, pizzePerOrdine, slotMin)
-  }, [tipoOrdine, ordiniOggiAttivi, pizzePerOrdine, slotDeliveryMin, slotNegozioMin])
+    return groupPizzeBySlotOrarioRitiro(filtered, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
+  }, [tipoOrdine, ordiniOggiAttivi, pizzePerOrdine])
 
   const ordiniFiltratiPerPagina = useMemo(() => {
     const q = (ordiniSearch || "").toLowerCase().trim()
@@ -1397,21 +1432,13 @@ export default function CassaPage() {
   }, [ordiniFiltratiPerPagina])
 
   const planningMergedRows = useMemo(() => {
-    const slotMs = slotDeliveryMin * 60 * 1000
-    return (planningSlotsDelivery || []).map((slot) => {
+    return (planningSlotsGrid || []).map((slot) => {
       const deliveryOrdini = ordiniPerSlotDelivery[slot.key] ?? 0
       const deliveryPizze = pizzePerSlotDelivery[slot.key] ?? 0
       const deliveryOrdiniList = ordiniBySlotDelivery[slot.key] || []
-      let ritiroOrdini = 0
-      let ritiroPizze = 0
-      const ritiroOrdiniList = []
-      for (const neg of planningSlotsNegozio || []) {
-        if (neg.key >= slot.key && neg.key < slot.key + slotMs) {
-          ritiroOrdini += ordiniPerSlotNegozio[neg.key] ?? 0
-          ritiroPizze += pizzePerSlotNegozio[neg.key] ?? 0
-          ritiroOrdiniList.push(...(ordiniBySlotNegozio[neg.key] || []))
-        }
-      }
+      const ritiroOrdini = ordiniPerSlotNegozio[slot.key] ?? 0
+      const ritiroPizze = pizzePerSlotNegozio[slot.key] ?? 0
+      const ritiroOrdiniList = ordiniBySlotNegozio[slot.key] || []
       return {
         slotKey: slot.key,
         label: slot.label,
@@ -1426,15 +1453,13 @@ export default function CassaPage() {
       }
     })
   }, [
-    planningSlotsDelivery,
-    planningSlotsNegozio,
+    planningSlotsGrid,
     ordiniPerSlotDelivery,
     ordiniPerSlotNegozio,
     ordiniBySlotDelivery,
     ordiniBySlotNegozio,
     pizzePerSlotDelivery,
     pizzePerSlotNegozio,
-    slotDeliveryMin,
     maxPizzeDelivery,
     maxPizzeNegozio,
     sogliaGiallo,
@@ -1803,7 +1828,24 @@ export default function CassaPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button
                   type="button"
-                  onClick={() => setOrdiniOnlineDisabilitati((v) => !v)}
+                  disabled={ordiniOnlineToggleSaving || !tenantId}
+                  onClick={() => {
+                    if (!tenantId || ordiniOnlineToggleSaving) return
+                    const nextDisabilitati = !ordiniOnlineDisabilitati
+                    setOrdiniOnlineToggleSaving(true)
+                    const base =
+                      tenantData?.parametri_operativi && typeof tenantData.parametri_operativi === "object"
+                        ? tenantData.parametri_operativi
+                        : {}
+                    const po = { ...base, ordini_online_attivi: !nextDisabilitati }
+                    void updateTenantSettings(tenantId, { parametri_operativi: po })
+                      .then(() => refreshTenant())
+                      .catch((err) => {
+                        console.error(err)
+                        window.alert(err?.message || "Salvataggio non riuscito")
+                      })
+                      .finally(() => setOrdiniOnlineToggleSaving(false))
+                  }}
                   style={{
                     padding: "6px 12px",
                     borderRadius: 6,
@@ -1812,11 +1854,16 @@ export default function CassaPage() {
                     color: "#fff",
                     fontSize: 12,
                     fontWeight: 500,
-                    cursor: "pointer",
+                    cursor: ordiniOnlineToggleSaving || !tenantId ? "default" : "pointer",
+                    opacity: ordiniOnlineToggleSaving ? 0.75 : 1,
                   }}
                   title={ordiniOnlineDisabilitati ? "Riabilita ordini online" : "Disabilita ordini online"}
                 >
-                  {ordiniOnlineDisabilitati ? "Ordini online disattivi" : "Ordini online attivi"}
+                  {ordiniOnlineToggleSaving
+                    ? "Salvataggio…"
+                    : ordiniOnlineDisabilitati
+                      ? "Ordini online disattivi"
+                      : "Ordini online attivi"}
                 </button>
                 <button type="button" style={styles.planningBarClose} onClick={() => setShowPlanningBar(false)}>✕</button>
               </div>
@@ -1831,8 +1878,12 @@ export default function CassaPage() {
               <div style={styles.planningMergedTable}>
                 <div style={styles.planningMergedHeader}>
                   <span style={styles.planningMergedCellTime}>Ora</span>
-                  <span style={{ ...styles.planningMergedCell, background: "#e3f2fd", borderColor: "#1976d2" }}>Consegne ({slotDeliveryMin} min)</span>
-                  <span style={{ ...styles.planningMergedCell, background: "#f3e5f5", borderColor: "#7b1fa2", borderRight: "none" }}>Ritiro negozio ({slotNegozioMin} min)</span>
+                  <span style={{ ...styles.planningMergedCell, background: "#e3f2fd", borderColor: "#1976d2" }}>
+                    Consegne (fasce {PLANNING_GRID_SLOT_MINUTES} min · max {maxPizzeDelivery} pizze / {capacityWindowDelivery} min)
+                  </span>
+                  <span style={{ ...styles.planningMergedCell, background: "#f3e5f5", borderColor: "#7b1fa2", borderRight: "none" }}>
+                    Ritiro negozio (fasce {PLANNING_GRID_SLOT_MINUTES} min · max {maxPizzeNegozio} pizze / {capacityWindowNegozio} min)
+                  </span>
                 </div>
                 {planningMergedRows.map((row, i) => {
                   const deliveryIndirizzi = (row.deliveryOrdiniList || [])
@@ -1861,8 +1912,7 @@ export default function CassaPage() {
                           slotKey: row.slotKey,
                           slotLabel: row.label,
                           ordini: row.deliveryOrdiniList || [],
-                          slotMinutes: slotDeliveryMin,
-                          slotsDisponibili: planningSlotsDelivery || [],
+                          slotsDisponibili: planningSlotsGrid || [],
                         })}
                         title="Clicca per vedere ordini e spostare consegne"
                       >
@@ -1888,8 +1938,7 @@ export default function CassaPage() {
                           slotKey: row.slotKey,
                           slotLabel: row.label,
                           ordini: row.ritiroOrdiniList || [],
-                          slotMinutes: slotNegozioMin,
-                          slotsDisponibili: planningSlotsNegozio || [],
+                          slotsDisponibili: planningSlotsGrid || [],
                         })}
                         title="Clicca per vedere ordini e spostare ritiri"
                       >

@@ -13,6 +13,7 @@ import OperativeLayout from "@/layouts/OperativeLayout";
 /* ================= GUARDS ================= */
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ClienteRoute from "@/components/ClienteRoute";
+import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
 import RoleLayout from "@/layouts/RoleLayout";
 
 /* ================= PUBLIC (SaaS) ================= */
@@ -39,6 +40,8 @@ const ClienteReimpostaPasswordPage = lazy(() => import("@/features/public/pages/
 const ClienteDashboardPage = lazy(() => import("@/features/public/pages/ClienteDashboardPage"));
 const ClienteOrdiniPage = lazy(() => import("@/features/public/pages/ClienteOrdiniPage"));
 const ClienteProfiloPage = lazy(() => import("@/features/public/pages/ClienteProfiloPage"));
+const ClienteVerificaEmailPage = lazy(() => import("@/features/public/pages/ClienteVerificaEmailPage"));
+const PublicOrdineCheckoutPage = lazy(() => import("@/features/public/pages/PublicOrdineCheckoutPage"));
 const SuperAdminDashboard = lazy(() => import("@/features/superadmin/pages/SuperAdminDashboard"));
 const Licenses = lazy(() => import("@/features/superadmin/pages/Licenses"));
 const Tenants = lazy(() => import("@/features/superadmin/pages/Tenants"));
@@ -62,6 +65,7 @@ const DatiPizzeriaSection = lazy(() => import("@/features/admin/pages/settings/D
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
 const OrariSection = lazy(() => import("@/features/admin/pages/settings/OrariSection"));
 const ParametriSection = lazy(() => import("@/features/admin/pages/settings/ParametriSection"));
+const PuntiVenditaAreeSection = lazy(() => import("@/features/admin/pages/settings/PuntiVenditaAreeSection"));
 const CategoriePage = lazy(() => import("@/features/admin/pages/menu/CategoriePage"));
 const FormatiPage = lazy(() => import("@/features/admin/pages/menu/FormatiPage"));
 const CotturaPage = lazy(() => import("@/features/admin/pages/menu/CotturaPage"));
@@ -72,6 +76,7 @@ const BibitePage = lazy(() => import("@/features/admin/pages/menu/BibitePage"));
 const DolciPage = lazy(() => import("@/features/admin/pages/menu/DolciPage"));
 const FrittiPage = lazy(() => import("@/features/admin/pages/menu/FrittiPage"));
 const AllergeniPage = lazy(() => import("@/features/admin/pages/menu/AllergeniPage"));
+const ListiniPage = lazy(() => import("@/features/admin/pages/menu/ListiniPage"));
 const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
 const ManualeUtentePage = lazy(() => import("@/features/admin/pages/ManualeUtentePage"));
 const MagazzinoHubPage = lazy(() => import("@/features/admin/pages/magazzino/MagazzinoHubPage"));
@@ -140,6 +145,9 @@ const isSaaS =
   isSupportHost ||
   isLocal;
 
+/** Vetrina cliente (registrazione, password): anche in localhost per sviluppo. */
+const showPublicClientAuthRoutes = !isSaaS || isLocal;
+
 /* =========================================================
    HOST RESOLVER
 ========================================================= */
@@ -178,7 +186,7 @@ export default function AppRouter() {
           }
         />
 
-        {!isSaaS && (
+        {showPublicClientAuthRoutes && (
           <>
             <Route
               path="/registrazione"
@@ -209,6 +217,14 @@ export default function AppRouter() {
 
         <Route element={<ClienteRoute />}>
           <Route
+            path="/cliente/verifica-email"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ClienteVerificaEmailPage />
+              </Suspense>
+            }
+          />
+          <Route
             path="/cliente/dashboard"
             element={
               <Suspense fallback={<PageFallback />}>
@@ -232,6 +248,16 @@ export default function AppRouter() {
               </Suspense>
             }
           />
+          <Route element={<ClienteEmailVerifiedRoute />}>
+            <Route
+              path="/ordina"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <PublicOrdineCheckoutPage />
+                </Suspense>
+              }
+            />
+          </Route>
         </Route>
 
         <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -328,6 +354,7 @@ export default function AppRouter() {
           <Route path="/admin/menu/dolci" element={<Suspense fallback={<PageFallback />}><DolciPage /></Suspense>} />
           <Route path="/admin/menu/fritti" element={<Suspense fallback={<PageFallback />}><FrittiPage /></Suspense>} />
           <Route path="/admin/menu/allergeni" element={<Suspense fallback={<PageFallback />}><AllergeniPage /></Suspense>} />
+          <Route path="/admin/menu/listini" element={<Suspense fallback={<PageFallback />}><ListiniPage /></Suspense>} />
           <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
           <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
@@ -337,6 +364,7 @@ export default function AppRouter() {
             <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />
             <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
             <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
+            <Route path="sedi-aree" element={<Suspense fallback={<PageFallback />}><PuntiVenditaAreeSection /></Suspense>} />
             <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
           </Route>
         </Route>

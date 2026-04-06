@@ -4,7 +4,6 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { usePv } from "@/app/contexts/PvContext";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
-import { usePlan } from "@/app/hooks/usePlan";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
@@ -13,7 +12,7 @@ const HEADER_HEIGHT = 56;
 
 /**
  * Voci allineate alle route reali (vedi docs/ARCHITETTURA_E_STATO.md).
- * `servizioId` → gate servizi se VITE_ENFORCE_SERVIZI_PLAN=true (bypass: VITE_DISABLE_SERVIZI_GATE). Menu/dipendenti/impostazioni restano sempre accessibili.
+ * `servizioId` → opzionale filtro voci nav; nessun redirect forzato per piano (servizi non bloccanti).
  */
 const topNavItems = [
   { to: "/admin/manuale", label: "Manuale", servizioId: null },
@@ -54,12 +53,14 @@ const menuSidebarItems = [
   { to: "/admin/menu/dolci", label: "Dolci" },
   { to: "/admin/menu/fritti", label: "Fritti" },
   { to: "/admin/menu/allergeni", label: "Allergeni" },
+  { to: "/admin/menu/listini", label: "Listini e backup" },
 ];
 
 const settingsSidebarItems = [
   { to: "/admin/settings/dati-pizzeria", label: "Dati pizzeria" },
   { to: "/admin/settings/layout", label: "Layout" },
   { to: "/admin/settings/orari", label: "Giorni e orari" },
+  { to: "/admin/settings/sedi-aree", label: "Sedi e aree" },
   { to: "/admin/settings/parametri", label: "Parametri" },
 ];
 
@@ -69,7 +70,6 @@ export default function AdminLayout() {
   const { tenantData } = useTenant();
   const { activePv, pvList, loading: pvLoading } = usePv();
   const { hasServizio, enforcementActive } = useTenantServizi();
-  const { canUseFeature } = usePlan();
   const location = useLocation();
   const isMenuArea = location.pathname.startsWith("/admin/menu");
   const isSettingsArea = location.pathname.startsWith("/admin/settings");
@@ -112,8 +112,7 @@ export default function AdminLayout() {
   }, [enforcementActive, location.pathname, hasServizio]);
 
   const ruoloKey = (ruolo && String(ruolo).toLowerCase().trim()) || "";
-  const adminNeedsPvChoice =
-    ruoloKey === "admin" && canUseFeature("multi_punto_vendita") && pvList.length > 1;
+  const adminNeedsPvChoice = ruoloKey === "admin" && pvList.length > 1;
 
   useEffect(() => {
     return prefetchWhenIdle([

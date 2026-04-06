@@ -87,6 +87,18 @@ export default function Login() {
       setError(err.message || "Errore di accesso")
     } else {
       devLog("Login", "submit ok, in attesa redirect", { userId: result?.data?.user?.id })
+      try {
+        const uid = result?.data?.user?.id
+        if (uid && typeof sessionStorage !== "undefined") {
+          const prev = sessionStorage.getItem("pm_staff_session_uid")
+          if (prev && prev !== uid) {
+            sessionStorage.removeItem("pm_staff_session_uid")
+          }
+          sessionStorage.setItem("pm_staff_session_uid", uid)
+        }
+      } catch (_) {
+        /* ignore */
+      }
     }
     setSubmitting(false)
   }

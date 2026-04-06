@@ -66,7 +66,7 @@ export async function getPublicTenantInfo() {
 
   const { data, error } = await supabase
     .from("tenants")
-    .select("id, nome, logo_url, indirizzo, email, telefono, orari_settimana, parametri_operativi")
+    .select("*")
     .limit(1)
     .maybeSingle();
 

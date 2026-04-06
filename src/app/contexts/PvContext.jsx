@@ -2,14 +2,11 @@ import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
-import { usePlan } from "@/app/hooks/usePlan"
-
 const PvContext = createContext()
 
 export function PvProvider({ children }) {
   const { user, ruolo, loading: authLoading } = useAuth()
   const { tenantId, tenantData } = useTenant()
-  const { canUseFeature } = usePlan()
 
   const [activePv, setActivePv] = useState(null)
   const [pvList, setPvList] = useState([])
@@ -46,11 +43,10 @@ export function PvProvider({ children }) {
         if (ruolo !== "superadmin") {
           if (data.length > 0) {
             const ruoloNorm = (ruolo && String(ruolo).toLowerCase().trim()) || ""
-            const multiPv = canUseFeature("multi_punto_vendita")
             const saved = localStorage.getItem("active_pv")
             const valid = saved && data.some((p) => String(p.id) === String(saved))
 
-            if (ruoloNorm === "admin" && multiPv && data.length > 1) {
+            if (ruoloNorm === "admin" && data.length > 1) {
               if (valid) {
                 setActivePv(String(saved))
               } else {

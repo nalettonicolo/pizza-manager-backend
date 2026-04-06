@@ -51,17 +51,18 @@ export default function RiepilogoOrdinePage({
   onSelectFidelity,
   onNuovaFidelityCliente,
 }) {
-  const slotMinutes = tipoOrdine === "delivery"
-    ? (Number(parametri.consegne_ogni_min) || 15)
-    : (Number(parametri.ritiro_ogni_min) || 15)
+  const capacityWindowMin =
+    tipoOrdine === "delivery"
+      ? Number(parametri.consegne_ogni_min) || 15
+      : Number(parametri.ritiro_ogni_min) || 15
   const pizzeOgni15 = Number(parametri.pizze_ogni_15_min) || 8
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
-  const maxPizzePerSlot = Math.max(1, Math.round((pizzeOgni15 * slotMinutes) / 15))
+  const maxPizzePerSlot = Math.max(1, Math.round((pizzeOgni15 * capacityWindowMin) / 15))
 
   const orariOggi = useMemo(() => getTodayOrari(orariSettimana), [orariSettimana])
   const slots = useMemo(
-    () => buildSlotsInOpeningHours(slotMinutes, orariOggi, 24),
-    [slotMinutes, orariOggi]
+    () => buildSlotsInOpeningHours(orariOggi, 24),
+    [orariOggi],
   )
 
   const pizzePerSlot = useMemo(() => {
@@ -283,7 +284,7 @@ export default function RiepilogoOrdinePage({
           Il tuo ordine: <strong>{totalPizzeOrdine} {totalPizzeOrdine === 1 ? "pizza" : "pizze"}</strong>
         </p>
         <p style={styles.hint}>
-          Seleziona un orario (obbligatorio). Solo fasce nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. Max {maxPizzePerSlot} pizze ogni {slotMinutes} min. In ogni fascia il numero indica le pizze già impegnate oggi per quell’orario ({tipoOrdine === "delivery" ? "solo consegne" : "solo ritiro in negozio"}), per organizzare il carico.
+          Seleziona un orario (obbligatorio). Fasce su quarti d’ora (:00, :15, :30, :45). Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. Capacità stimata: max {maxPizzePerSlot} pizze ogni {capacityWindowMin} min (parametri). In ogni fascia il numero indica le pizze già impegnate oggi per quell’orario ({tipoOrdine === "delivery" ? "solo consegne" : "solo ritiro in negozio"}), per organizzare il carico.
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>

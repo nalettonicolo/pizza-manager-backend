@@ -21,13 +21,8 @@ export function usePlan() {
   const plan = (tenantData?.piano || "TRIAL").toUpperCase()
   const level = PLAN_LEVELS[plan] ?? PLAN_LEVELS.TRIAL
 
-  const canUseFeature = useMemo(() => {
-    return (featureName) => {
-      const required = PLAN_FEATURES[featureName]
-      if (required == null) return true
-      return level >= required
-    }
-  }, [level])
+  /** Nessun blocco funzionale sul piano: il prodotto non limita multi‑PV, report, ecc. */
+  const canUseFeature = useMemo(() => () => true, [])
 
   return {
     plan,

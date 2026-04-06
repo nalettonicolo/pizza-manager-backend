@@ -99,8 +99,13 @@ const statoRoadmapStyle = {
 
 export default function SviluppoPage() {
   const [services, setServices] = useState(() => loadServicesCatalog());
+  const [expandedRoadmapId, setExpandedRoadmapId] = useState(null);
   const fileRef = useRef(null);
   const focusServizio = servizioRoadmapInCorso();
+
+  const toggleRoadmapRow = (id) => {
+    setExpandedRoadmapId((prev) => (prev === id ? null : id));
+  };
 
   const overall = useMemo(() => avgAvanzamento(services, (services || []).map((s) => s.id)), [services]);
 
@@ -149,10 +154,9 @@ export default function SviluppoPage() {
 
       <h1 className="dashboard-page-title">Statistiche di sviluppo</h1>
       <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748b", maxWidth: 800, lineHeight: 1.6 }}>
-        Per ogni <strong>id servizio</strong> la percentuale mostrata in basso coincide con la colonna <strong>% roadmap</strong> sopra
-        (fonte <code>serviziRoadmapSteps.js</code>); il CSV/catalogo può differire ma in questa pagina vince sempre la roadmap. Importa un
-        CSV da foglio di lavoro o modifica dal <Link to="/superadmin/servizi">Catalogo servizi</Link>. Le barre per piano usano la stessa
-        logica (media sui servizi inclusi).
+        Le percentuali e i testi «cosa manca» sono definiti in <code>serviziRoadmapSteps.js</code> (aggiorna quel file per riflettere
+        l&apos;avanzamento reale). Il CSV/catalogo serve per altri flussi; per le % qui conta la roadmap. Modifica anche dal{" "}
+        <Link to="/superadmin/servizi">Catalogo servizi</Link>. Le barre per piano usano la media sui servizi inclusi nel bundle.
       </p>
 
       <div
@@ -200,76 +204,6 @@ export default function SviluppoPage() {
         ) : (
           <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b" }}>Nessun servizio in <code>wip</code>: impostane uno nel file roadmap.</p>
         )}
-        <div className="dashboard-table-wrap" style={{ overflowX: "auto" }}>
-          <table style={{ minWidth: 560 }}>
-            <thead>
-              <tr>
-                <th>Stato</th>
-                <th>Servizio</th>
-                <th style={{ textAlign: "right", whiteSpace: "nowrap" }}>% roadmap</th>
-                <th>Cosa resta</th>
-                <th>Contesto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SERVIZI_ROADMAP_STEPS.map((row) => {
-                const st = statoRoadmapStyle[row.stato] ?? statoRoadmapStyle.todo;
-                return (
-                  <tr key={row.id}>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          padding: "4px 10px",
-                          borderRadius: 999,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          background: st.bg,
-                          color: st.color,
-                        }}
-                      >
-                        {st.label}
-                      </span>
-                    </td>
-                    <td>
-                      <Link to={`/superadmin/servizi/${encodeURIComponent(row.id)}`} style={{ fontWeight: 600 }}>
-                        {row.titolo}
-                      </Link>
-                      <div style={{ fontSize: 12, color: "#94a3b8" }}>{row.id}</div>
-                    </td>
-                    <td
-                      style={{
-                        textAlign: "right",
-                        verticalAlign: "top",
-                        fontWeight: 800,
-                        fontSize: 16,
-                        color: "#d35400",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {row.percentuale ?? 0}%
-                    </td>
-                    <td
-                      style={{
-                        fontSize: 13,
-                        color: "#1e293b",
-                        lineHeight: 1.55,
-                        verticalAlign: "top",
-                        maxWidth: 380,
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {row.resto}
-                    </td>
-                    <td style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, verticalAlign: "top", maxWidth: 280 }}>
-                      {row.nota}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       <div className="dashboard-box" style={{ marginBottom: 28, border: "1px solid #bae6fd", background: "linear-gradient(135deg, #f0f9ff 0%, #fff 50%)" }}>
@@ -338,30 +272,128 @@ export default function SviluppoPage() {
         />
       </div>
 
-      <div className="dashboard-box">
+      <div className="dashboard-box" style={{ border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>Dettaglio per servizio</h2>
-        <div className="dashboard-table-wrap" style={{ overflowX: "auto" }}>
-          <table style={{ minWidth: 520 }}>
-            <thead>
-              <tr>
-                <th>Servizio</th>
-                <th style={{ textAlign: "right", width: 140 }}>Avanzamento</th>
-              </tr>
-            </thead>
-            <tbody>
-              {services.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <span style={{ fontWeight: 600 }}>{s.nome}</span>
-                    <span style={{ color: "#94a3b8", fontSize: 12, marginLeft: 8 }}>{s.id}</span>
-                  </td>
-                  <td style={{ textAlign: "right", fontWeight: 700 }}>
-                    {percentualeEffettivaServizio(s.id, s.avanzamentoPercentuale)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b", lineHeight: 1.55 }}>
+          Clicca una riga per aprire cosa resta da sviluppare. Stato roadmap:{" "}
+          <span style={{ background: statoRoadmapStyle.ok.bg, color: statoRoadmapStyle.ok.color, padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>Ok</span>{" "}
+          <span style={{ background: statoRoadmapStyle.wip.bg, color: statoRoadmapStyle.wip.color, padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>In corso</span>{" "}
+          <span style={{ background: statoRoadmapStyle.todo.bg, color: statoRoadmapStyle.todo.color, padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>Da fare</span>.
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            alignItems: "center",
+            gap: 12,
+            padding: "10px 14px",
+            background: "#f8fafc",
+            borderBottom: "1px solid #e2e8f0",
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#64748b",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          <span>Servizio</span>
+          <span style={{ textAlign: "right", minWidth: 72 }}>Avanzamento</span>
+        </div>
+        <div role="list">
+          {SERVIZI_ROADMAP_STEPS.map((row) => {
+            const st = statoRoadmapStyle[row.stato] ?? statoRoadmapStyle.todo;
+            const open = expandedRoadmapId === row.id;
+            const puntiMancanti = String(row.resto || "")
+              .split("\n")
+              .map((l) => l.trim())
+              .filter(Boolean);
+            return (
+              <div key={row.id} role="listitem" style={{ borderBottom: "1px solid #e2e8f0" }}>
+                <button
+                  type="button"
+                  onClick={() => toggleRoadmapRow(row.id)}
+                  aria-expanded={open}
+                  style={{
+                    width: "100%",
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto",
+                    gap: 12,
+                    alignItems: "center",
+                    padding: "14px 14px",
+                    border: "none",
+                    background: open ? "#f1f5f9" : "#fff",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    font: "inherit",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontWeight: 700, color: "#0f172a" }}>{row.titolo}</span>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: st.bg,
+                          color: st.color,
+                        }}
+                      >
+                        {st.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>{row.id}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontWeight: 800, fontSize: 18, color: "#d35400", whiteSpace: "nowrap" }}>{row.percentuale ?? 0}%</span>
+                    <span style={{ color: "#94a3b8", fontSize: 14 }} aria-hidden>{open ? "▾" : "▸"}</span>
+                  </div>
+                </button>
+                {open ? (
+                  <div
+                    style={{
+                      padding: "0 14px 16px 14px",
+                      background: "#fafafa",
+                      borderTop: "1px solid #f1f5f9",
+                    }}
+                  >
+                    <p style={{ margin: "12px 0 8px", fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Cosa resta da sviluppare
+                    </p>
+                    {puntiMancanti.length ? (
+                      <ul style={{ margin: 0, paddingLeft: 22, fontSize: 14, color: "#334155", lineHeight: 1.65 }}>
+                        {puntiMancanti.map((line, i) => (
+                          <li key={i} style={{ marginBottom: 6 }}>
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>—</p>
+                    )}
+                    {row.nota ? (
+                      <>
+                        <p style={{ margin: "14px 0 6px", fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                          Contesto / stato in app
+                        </p>
+                        <p style={{ margin: 0, fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>{row.nota}</p>
+                      </>
+                    ) : null}
+                    <div style={{ marginTop: 14 }}>
+                      <Link
+                        to={`/superadmin/servizi/${encodeURIComponent(row.id)}`}
+                        style={{ fontSize: 14, fontWeight: 600, color: "#c2410c" }}
+                      >
+                        Apri scheda servizio →
+                      </Link>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
     </>

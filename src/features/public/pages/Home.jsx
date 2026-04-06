@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
@@ -22,27 +23,29 @@ const ADMIN_NAV = [
 ];
 
 export default function Home() {
+  const navigate = useNavigate();
   const { ruolo } = useAuth();
   const { tenantData, tenantId } = useTenant();
   const [venditeInsights, setVenditeInsights] = useState(null);
-  const { pvList } = usePv();
-  const { plan, isPro, isEnterprise, canUseFeature } = usePlan();
+  const { pvList, selectPv } = usePv();
+  const { plan, isPro, isEnterprise } = usePlan();
   const { hasServizio } = useTenantServizi();
   const adminNavHome = useMemo(
     () => ADMIN_NAV.filter((item) => !item.servizioId || hasServizio(item.servizioId)),
     [hasServizio],
   );
   const homeNavItems = useMemo(
-    () =>
-      HOME_NAV.filter(
-        (item) =>
-          item.to !== "/select-pv" ||
-          (canUseFeature("multi_punto_vendita") && pvList.length > 1),
-      ),
-    [canUseFeature, pvList],
+    () => HOME_NAV.filter((item) => item.to !== "/select-pv" || pvList.length > 1),
+    [pvList],
   );
 
   const isAdmin = ruolo === "admin";
+
+  const activePvs = useMemo(
+    () => (pvList || []).filter((p) => p && p.attivo !== false),
+    [pvList],
+  );
+  const showPanoramicaGruppo = isAdmin && activePvs.length > 1;
 
   useEffect(() => {
     if (!isAdmin || !tenantId) {
@@ -86,6 +89,35 @@ export default function Home() {
           <p className="text-xs text-gray-500 mb-4">
             Piano: <span className="font-medium text-gray-700">{pianoLabel}</span>
           </p>
+        )}
+        {isAdmin && activePvs.length === 1 && (
+          <p className="text-sm text-gray-600 mb-4">
+            Sede attiva: <span className="font-medium text-gray-800">{activePvs[0].nome}</span>
+          </p>
+        )}
+        {showPanoramicaGruppo && (
+          <section className="mb-8 rounded-lg border border-indigo-100 bg-indigo-50/80 p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-indigo-950 mb-1">Panoramica gruppo</h2>
+            <p className="text-xs text-indigo-900/80 mb-3">
+              Hai più sedi attive: apri la gestione nel contesto della sede che ti serve.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {activePvs.map((pv) => (
+                <button
+                  key={pv.id}
+                  type="button"
+                  onClick={() => {
+                    selectPv(pv.id);
+                    navigate("/admin/home");
+                  }}
+                  className="rounded-lg border border-indigo-200 bg-white px-4 py-3 text-left text-sm font-medium text-gray-900 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50/50"
+                >
+                  {pv.nome || "Sede"}
+                  <span className="mt-1 block text-xs font-normal text-gray-500">Imposta contesto e torna alla home</span>
+                </button>
+              ))}
+            </div>
+          </section>
         )}
         <DashboardNavCards items={homeNavItems} columns={2} />
         {isAdmin && (

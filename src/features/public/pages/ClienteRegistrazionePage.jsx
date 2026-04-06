@@ -176,6 +176,17 @@ export default function ClienteRegistrazionePage() {
                   {error}
                 </p>
               ) : null}
+              <p className="login-brand-sub" style={{ fontSize: 13, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+                Registrandoti confermi di aver letto l&apos;{" "}
+                <Link to="/privacy" style={{ color: "#c0392b", fontWeight: 600 }}>
+                  informativa sulla privacy
+                </Link>{" "}
+                e la{" "}
+                <Link to="/cookie" style={{ color: "#c0392b", fontWeight: 600 }}>
+                  cookie policy
+                </Link>
+                . Ti invieremo un&apos;email per confermare l&apos;indirizzo prima di poter ordinare online.
+              </p>
               <button type="submit" className="login-submit" disabled={busy}>
                 {busy ? "Registrazione…" : "Registrati"}
               </button>

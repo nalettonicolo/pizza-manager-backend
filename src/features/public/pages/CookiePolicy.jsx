@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import LegalPageShell from "@/features/public/components/LegalPageShell";
 import { useLegalEntity } from "@/hooks/useLegalEntity";
 import { PLATFORM_PRODUCT_NAME } from "@/config/legalEntity";
+import { applyLegalPlaceholders } from "@/utils/legalPlaceholders";
 
 export default function CookiePolicy() {
   const { loading, isSaaS, config: c } = useLegalEntity();
@@ -16,6 +17,19 @@ export default function CookiePolicy() {
 
   const titolare = c.titolareEsteso;
   const sito = isSaaS ? c.siteLabel : c.siteLabel || "questo sito";
+
+  const customCookie = !isSaaS && typeof c.cookie_policy_html === "string" && c.cookie_policy_html.trim();
+  if (customCookie) {
+    const html = applyLegalPlaceholders(c.cookie_policy_html, c.legalTenantSnapshot || {}, c.siteLabel);
+    return (
+      <LegalPageShell title="Informativa sui cookie" updatedAt="22 marzo 2026">
+        <div
+          className="legal-custom-html"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </LegalPageShell>
+    );
+  }
 
   return (
     <LegalPageShell title="Informativa sui cookie" updatedAt="22 marzo 2026">

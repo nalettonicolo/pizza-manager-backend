@@ -17,6 +17,7 @@ import {
   slotPizzeCount,
   sortedSlotLabels,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
+import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
@@ -114,8 +115,8 @@ export default function Bancone() {
   }, [orders, minutiVisibili])
 
   const slotPizze = useMemo(
-    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, slotMinutes),
-    [ordiniVisibili, pizzePerOrdine, slotMinutes]
+    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES),
+    [ordiniVisibili, pizzePerOrdine]
   )
   const slotLabels = useMemo(
     () => sortedSlotLabels(slotPizze).filter((label) => (slotPizze[label] || 0) > 0),

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import LegalPageShell from "@/features/public/components/LegalPageShell";
 import { useLegalEntity } from "@/hooks/useLegalEntity";
 import { PLATFORM_PRODUCT_NAME } from "@/config/legalEntity";
+import { applyLegalPlaceholders } from "@/utils/legalPlaceholders";
 
 const GIORNI_CONSERVAZIONE_LOG = "90";
 
@@ -163,6 +164,16 @@ function PrivacySaaS({ c }) {
 
 function PrivacyStorefront({ c }) {
   const privacyMail = <MailPrivacy email={c.emailPrivacy} />;
+  const custom = typeof c.privacy_policy_html === "string" && c.privacy_policy_html.trim();
+  if (custom) {
+    const html = applyLegalPlaceholders(c.privacy_policy_html, c.legalTenantSnapshot || {}, c.siteLabel);
+    return (
+      <div
+        className="legal-custom-html"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
   return (
     <>
       <p>

@@ -1,31 +1,76 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import CookieBanner from "@/features/public/components/CookieBanner"
+import OrdineOnlineDisattivoModal from "@/features/public/components/OrdineOnlineDisattivoModal"
+import { useAuth } from "@/app/contexts/AuthContext"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getPublicTenantInfo } from "@/features/services/publicService"
+import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
+import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
 import "@/styles/public-layout.css"
+
+const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
 
 export default function PublicLayout() {
   const isSaaS = getIsSaaSClient()
   const { pathname } = useLocation()
   const isLanding = isSaaS && pathname === "/"
   const [tenantName, setTenantName] = useState("")
+  const [publicTenantId, setPublicTenantId] = useState(null)
+  const [publicParametri, setPublicParametri] = useState(null)
+  const { tipoUtente, tenantId: authTenantId, loading: authLoading } = useAuth()
+  const [modalDismissed, setModalDismissed] = useState(() =>
+    typeof sessionStorage !== "undefined" && sessionStorage.getItem(DISMISS_KEY) === "1",
+  )
 
   useEffect(() => {
     let cancelled = false
     if (isLanding) {
       setTenantName("")
-      return () => { cancelled = true }
+      setPublicTenantId(null)
+      setPublicParametri(null)
+      return () => {
+        cancelled = true
+      }
     }
     getPublicTenantInfo()
       .then((tenant) => {
-        if (!cancelled) setTenantName((tenant?.nome || "").trim())
+        if (!cancelled) {
+          setTenantName((tenant?.nome || "").trim())
+          setPublicTenantId(tenant?.id ?? null)
+          const po = tenant?.parametri_operativi
+          setPublicParametri(po && typeof po === "object" ? po : null)
+        }
       })
       .catch(() => {
-        if (!cancelled) setTenantName("")
+        if (!cancelled) {
+          setTenantName("")
+          setPublicTenantId(null)
+          setPublicParametri(null)
+        }
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [isLanding])
+
+  const showOrdineOnlineModal = useMemo(() => {
+    if (authLoading || isLanding || !publicTenantId) return false
+    if (tipoUtente !== "cliente" || !authTenantId) return false
+    if (String(authTenantId) !== String(publicTenantId)) return false
+    if (readOrdiniOnlineAttivi(publicParametri)) return false
+    if (modalDismissed) return false
+    return true
+  }, [authLoading, isLanding, publicTenantId, tipoUtente, authTenantId, publicParametri, modalDismissed])
+
+  const dismissOrdineOnlineModal = () => {
+    try {
+      sessionStorage.setItem(DISMISS_KEY, "1")
+    } catch {
+      /* ignore */
+    }
+    setModalDismissed(true)
+  }
 
   const logoLabel = isLanding ? "PizzaManager" : (tenantName || "PizzaManager")
 
@@ -83,7 +128,9 @@ export default function PublicLayout() {
       </header>
 
       <main className="public-layout-main">
-        <Outlet />
+        <PublicCartProvider tenantId={publicTenantId}>
+          <Outlet />
+        </PublicCartProvider>
       </main>
 
       <footer className="public-layout-footer">
@@ -101,6 +148,8 @@ export default function PublicLayout() {
       </footer>
 
       <CookieBanner />
+
+      <OrdineOnlineDisattivoModal open={showOrdineOnlineModal} onDismiss={dismissOrdineOnlineModal} localeNome={tenantName} />
     </div>
   )
 }

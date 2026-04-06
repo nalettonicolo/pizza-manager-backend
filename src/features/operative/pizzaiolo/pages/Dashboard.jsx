@@ -17,6 +17,7 @@ import {
   slotPizzeCount,
   sortedSlotLabels,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
+import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -46,8 +47,6 @@ export default function PizzaioloDashboard() {
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
   const tempoViaggioMinuti = Number(parametri.pizzaiolo_tempo_viaggio_minuti) || partenzaConsegneMinuti
-  const slotMinutes = Number(parametri.ritiro_ogni_min) || Number(parametri.consegne_ogni_min) || 15
-
   const loadOrders = useCallback(async (opts = {}) => {
     const silent = opts.silent === true
     if (!tenantId) return
@@ -124,8 +123,8 @@ export default function PizzaioloDashboard() {
   )
 
   const slotPizze = useMemo(
-    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, slotMinutes),
-    [ordiniVisibili, pizzePerOrdine, slotMinutes]
+    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES),
+    [ordiniVisibili, pizzePerOrdine]
   )
   const slotLabels = useMemo(
     () => sortedSlotLabels(slotPizze).filter((label) => (slotPizze[label] || 0) > 0),

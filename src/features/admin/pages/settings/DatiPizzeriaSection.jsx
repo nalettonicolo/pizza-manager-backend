@@ -163,6 +163,16 @@ export default function DatiPizzeriaSection() {
       };
       if (settings.lat != null) payload.lat = settings.lat;
       if (settings.lng != null) payload.lng = settings.lng;
+      if (settings.legal_ragione_sociale !== undefined) payload.legal_ragione_sociale = settings.legal_ragione_sociale || null;
+      if (settings.legal_piva !== undefined) payload.legal_piva = settings.legal_piva || null;
+      if (settings.legal_pec !== undefined) payload.legal_pec = settings.legal_pec || null;
+      if (settings.privacy_policy_html !== undefined) payload.privacy_policy_html = settings.privacy_policy_html || null;
+      if (settings.cookie_policy_html !== undefined) payload.cookie_policy_html = settings.cookie_policy_html || null;
+      if (settings.pagamento_online_provider !== undefined)
+        payload.pagamento_online_provider = settings.pagamento_online_provider || null;
+      if (settings.stripe_publishable_key !== undefined) payload.stripe_publishable_key = settings.stripe_publishable_key || null;
+      if (settings.sumup_merchant_public_id !== undefined)
+        payload.sumup_merchant_public_id = settings.sumup_merchant_public_id || null;
       await updateTenantSettings(tenantId, payload);
       if (refreshTenant) await refreshTenant();
       alert("Dati pizzeria salvati.");
@@ -280,6 +290,88 @@ export default function DatiPizzeriaSection() {
                 referrerPolicy="no-referrer-when-downgrade"
               />
             </div>
+          </label>
+        </div>
+      </section>
+
+      <section className="dashboard-box dashboard-settings-section">
+        <h2 className="dashboard-settings-section-title">Vetrina web — normativa e pagamenti online</h2>
+        <p className="dati-pizzeria-hint" style={{ marginBottom: 16, lineHeight: 1.55 }}>
+          Testi privacy/cookie con segnaposto tipo <code>{"{{nome_attivita}}"}</code>, <code>{"{{piva}}"}</code>,{" "}
+          <code>{"{{pec}}"}</code>, <code>{"{{indirizzo}}"}</code>, <code>{"{{email}}"}</code>. Se lasci vuoti, restano i
+          testi predefiniti dell&apos;app.
+        </p>
+        <div className="dashboard-settings-fields">
+          <label>
+            Ragione sociale (P.IVA / contratti)
+            <input
+              type="text"
+              value={settings?.legal_ragione_sociale || ""}
+              onChange={(e) => setSettings({ ...settings, legal_ragione_sociale: e.target.value })}
+            />
+          </label>
+          <label>
+            Partita IVA
+            <input
+              type="text"
+              value={settings?.legal_piva || ""}
+              onChange={(e) => setSettings({ ...settings, legal_piva: e.target.value })}
+            />
+          </label>
+          <label>
+            PEC
+            <input
+              type="text"
+              value={settings?.legal_pec || ""}
+              onChange={(e) => setSettings({ ...settings, legal_pec: e.target.value })}
+            />
+          </label>
+          <label>
+            Pagamento online — provider (predisposizione)
+            <select
+              value={settings?.pagamento_online_provider || ""}
+              onChange={(e) => setSettings({ ...settings, pagamento_online_provider: e.target.value || null })}
+            >
+              <option value="">Non configurato</option>
+              <option value="stripe">Stripe</option>
+              <option value="sumup">SumUp</option>
+            </select>
+          </label>
+          <label>
+            Stripe — chiave pubblica (pk_…)
+            <input
+              type="text"
+              value={settings?.stripe_publishable_key || ""}
+              onChange={(e) => setSettings({ ...settings, stripe_publishable_key: e.target.value })}
+              placeholder="pk_live_… o pk_test_…"
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            SumUp — merchant / id pubblico
+            <input
+              type="text"
+              value={settings?.sumup_merchant_public_id || ""}
+              onChange={(e) => setSettings({ ...settings, sumup_merchant_public_id: e.target.value })}
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            Privacy policy (HTML, opzionale)
+            <textarea
+              rows={5}
+              value={settings?.privacy_policy_html || ""}
+              onChange={(e) => setSettings({ ...settings, privacy_policy_html: e.target.value })}
+              placeholder="<p>Informativa personalizzata… {{nome_attivita}}</p>"
+            />
+          </label>
+          <label>
+            Cookie policy (HTML, opzionale)
+            <textarea
+              rows={5}
+              value={settings?.cookie_policy_html || ""}
+              onChange={(e) => setSettings({ ...settings, cookie_policy_html: e.target.value })}
+            />
           </label>
         </div>
       </section>

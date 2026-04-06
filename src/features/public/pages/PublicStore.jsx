@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { UtensilsCrossed } from "lucide-react";
 
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -12,6 +12,8 @@ import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs";
 import { getPublicMenu, getPublicTenantInfo } from "@/features/services/publicService";
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { sortByOrdine } from "@/utils/sortByOrdine";
+import { usePublicCart } from "@/app/contexts/PublicCartContext";
+import { applyPromoCalendarioToProducts } from "@/utils/promozioniCalendario";
 
 function isTodayClosed(orariSettimana) {
   if (!Array.isArray(orariSettimana) || !orariSettimana.length) return false;
@@ -45,6 +47,7 @@ export default function PublicStore() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { addItem, totalQty } = usePublicCart();
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -52,6 +55,7 @@ export default function PublicStore() {
   const [tenantName, setTenantName] = useState(null);
   const [branding, setBranding] = useState(null);
   const [menuTheme, setMenuTheme] = useState(null);
+  const [tenantParametri, setTenantParametri] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
 
   useEffect(() => {
@@ -62,6 +66,11 @@ export default function PublicStore() {
         const tenant = await getPublicTenantInfo();
         if (tenant) {
           setTenantName(tenant.nome || null);
+          setTenantParametri(
+            tenant.parametri_operativi && typeof tenant.parametri_operativi === "object"
+              ? tenant.parametri_operativi
+              : null
+          );
           if (tenant.orari_settimana) {
             setClosedToday(isTodayClosed(tenant.orari_settimana));
           }
@@ -75,6 +84,7 @@ export default function PublicStore() {
         } else {
           setBranding(null);
           setMenuTheme(null);
+          setTenantParametri(null);
         }
         const menuData = await getPublicMenu({ tenantId: tenant?.id ?? null });
         setMenu(menuData || []);
@@ -117,8 +127,9 @@ export default function PublicStore() {
     if (!menu.length) return [];
     if (!categories.length) return menu;
     if (!activeCategoryId) return [];
-    return menu.filter((p) => p.categoria_id === activeCategoryId);
-  }, [menu, categories.length, activeCategoryId]);
+    const raw = menu.filter((p) => p.categoria_id === activeCategoryId);
+    return applyPromoCalendarioToProducts(raw, tenantParametri, new Date());
+  }, [menu, categories.length, activeCategoryId, tenantParametri]);
 
   const handleAddProduct = useCallback(
     (product) => {
@@ -129,9 +140,11 @@ export default function PublicStore() {
             pendingProductId: product?.id ?? null,
           },
         });
+        return;
       }
+      addItem(product);
     },
-    [user, navigate, location]
+    [user, navigate, location, addItem]
   );
 
   const ingredientiMap = useMemo(
@@ -180,6 +193,16 @@ export default function PublicStore() {
         )}
         {!user && (
           <p style={styles.loginHint}>Accedi per aggiungere al carrello (si apre il login).</p>
+        )}
+        {user && totalQty > 0 && (
+          <div style={styles.cartBar}>
+            <span>
+              Carrello: <strong>{totalQty}</strong> {totalQty === 1 ? "articolo" : "articoli"}
+            </span>
+            <Link to="/ordina" style={styles.cartBarBtn}>
+              Procedi all&apos;ordine (consegna)
+            </Link>
+          </div>
         )}
         {!menu.length && (
           <p style={styles.emptyMenuHint}>
@@ -257,5 +280,28 @@ const styles = {
     background: "#f8fafc",
     borderRadius: 8,
     border: "1px solid #e2e8f0",
+  },
+  cartBar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 16,
+    padding: "12px 14px",
+    background: "#ecfdf5",
+    border: "1px solid #a7f3d0",
+    borderRadius: 8,
+    fontSize: 14,
+    color: "#14532d",
+  },
+  cartBarBtn: {
+    padding: "8px 14px",
+    background: "#0f766e",
+    color: "#fff",
+    borderRadius: 8,
+    fontWeight: 700,
+    textDecoration: "none",
+    fontSize: 14,
   },
 };

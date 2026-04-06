@@ -70,6 +70,12 @@ export function getStorefrontLegalConfig(tenant) {
       nomeAttivita: "",
       titolareEsercente: "",
       providerLegalName: PLATFORM_PRODUCT_NAME,
+      legalTenantSnapshot: null,
+      privacy_policy_html: null,
+      cookie_policy_html: null,
+      legal_ragione_sociale: null,
+      legal_piva: null,
+      legal_pec: null,
     };
   }
 
@@ -97,6 +103,13 @@ export function getStorefrontLegalConfig(tenant) {
     nomeAttivita,
     titolareEsercente,
     providerLegalName: PLATFORM_PRODUCT_NAME,
+    /** Snapshot tenant (RPC / DB) per segnaposto {{nome_attivita}}, {{piva}}, … */
+    legalTenantSnapshot: tenant,
+    privacy_policy_html: tenant.privacy_policy_html ?? null,
+    cookie_policy_html: tenant.cookie_policy_html ?? null,
+    legal_ragione_sociale: tenant.legal_ragione_sociale ?? null,
+    legal_piva: tenant.legal_piva ?? null,
+    legal_pec: tenant.legal_pec ?? null,
   };
 }
 

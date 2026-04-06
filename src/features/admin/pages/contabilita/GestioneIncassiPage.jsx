@@ -10,7 +10,7 @@ import {
   insertContabilitaMovimento,
   deleteContabilitaMovimento,
 } from "@/features/admin/services/adminService";
-import { aggregateIncassiDaOrdini } from "@/utils/incassiFromOrdini";
+import { aggregateIncassiDaOrdini, aggregateIncassiContantiElettronicoDaOrdini } from "@/utils/incassiFromOrdini";
 
 function mapDbRowToUi(row) {
   return {
@@ -37,6 +37,7 @@ export default function GestioneIncassiPage() {
   const [storageBackend, setStorageBackend] = useState(null);
   const [storageProbeDone, setStorageProbeDone] = useState(false);
   const [storageLoadErr, setStorageLoadErr] = useState(null);
+  const [autoSyncBusy, setAutoSyncBusy] = useState(false);
   const probedRef = useRef(false);
 
   useEffect(() => {
@@ -118,6 +119,52 @@ export default function GestioneIncassiPage() {
   }, [movimenti]);
 
   const suggerimentoOrdini = useMemo(() => aggregateIncassiDaOrdini(ordiniOggi), [ordiniOggi]);
+  const macroOrdini = useMemo(() => aggregateIncassiContantiElettronicoDaOrdini(ordiniOggi), [ordiniOggi]);
+
+  const registraIncassiAutomaticiDaOrdini = useCallback(async () => {
+    if (!tenantId || storageBackend !== "db") return;
+    const oggi = new Date().toISOString().slice(0, 10);
+    setAutoSyncBusy(true);
+    try {
+      const inserted = [];
+      if (macroOrdini.contanti > 0) {
+        const r = await insertContabilitaMovimento(tenantId, {
+          data: oggi,
+          descrizione: `Sistema — incasso contanti da ordini (${oggi})`,
+          importo: macroOrdini.contanti,
+          tipo: "contanti",
+        });
+        inserted.push(mapDbRowToUi(r));
+      }
+      if (macroOrdini.elettronico > 0) {
+        const r = await insertContabilitaMovimento(tenantId, {
+          data: oggi,
+          descrizione: `Sistema — incasso elettronico da ordini (${oggi})`,
+          importo: macroOrdini.elettronico,
+          tipo: "elettronico",
+        });
+        inserted.push(mapDbRowToUi(r));
+      }
+      if (macroOrdini.altro > 0) {
+        const r = await insertContabilitaMovimento(tenantId, {
+          data: oggi,
+          descrizione: `Sistema — da pagare / altro da ordini (${oggi})`,
+          importo: macroOrdini.altro,
+          tipo: "elettronico",
+        });
+        inserted.push(mapDbRowToUi(r));
+      }
+      if (inserted.length) {
+        setMovimenti((prev) => [...inserted, ...prev]);
+      } else {
+        alert("Nessun importo da registrare (ordini vuoti o già a zero).");
+      }
+    } catch (e) {
+      alert("Registrazione automatica non riuscita. " + (e?.message || ""));
+    } finally {
+      setAutoSyncBusy(false);
+    }
+  }, [tenantId, storageBackend, macroOrdini]);
 
   const add = useCallback(async () => {
     const imp = Number(importo);
@@ -242,8 +289,30 @@ export default function GestioneIncassiPage() {
                   </span>
                 ))}
             </div>
+            <div style={{ marginTop: 10, fontSize: 13, color: "#334155" }}>
+              <strong>Ripartizione automatica (euristica)</strong>: contanti € {macroOrdini.contanti.toFixed(2)} · elettronico €{" "}
+              {macroOrdini.elettronico.toFixed(2)}
+              {macroOrdini.altro > 0 ? (
+                <>
+                  {" "}
+                  · altro (da pagare / non classificato) € {macroOrdini.altro.toFixed(2)}
+                </>
+              ) : null}
+            </div>
+            {storageBackend === "db" ? (
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ marginTop: 12 }}
+                disabled={autoSyncBusy}
+                onClick={() => void registraIncassiAutomaticiDaOrdini()}
+              >
+                {autoSyncBusy ? "Registrazione…" : "Registra movimenti da ordini (oggi)"}
+              </button>
+            ) : null}
             <p style={{ margin: "10px 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
-              Suggerimento per incrociare con i movimenti manuali sotto; i totali reali restano quelli che registri qui o in cassa.
+              Suggerimento per incrociare con i movimenti manuali sotto; il pulsante crea righe in tabella in base agli ordini (puoi
+              duplicare importi se avevi già registrato manualmente — controlla prima).
             </p>
           </>
         )}
