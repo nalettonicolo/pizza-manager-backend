@@ -3,6 +3,11 @@ import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 
 const ITEMS = [
   {
+    to: "/admin/magazzino/movimenti-db",
+    label: "Movimenti (database)",
+    description: "Carichi e scarichi su Supabase — base per giacenza e tracciabilità",
+  },
+  {
     to: "/admin/magazzino/ordini-fornitori",
     label: "Ordini fornitori",
     description: "Grossisti, agenti, listini e soglie di riordino",

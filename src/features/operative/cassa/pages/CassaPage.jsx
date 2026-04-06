@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, useLayoutEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
+import { usePv } from "@/app/contexts/PvContext"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenantServizi } from "@/app/hooks/useTenantServizi"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
@@ -35,6 +36,7 @@ import {
   searchFidelityCassa,
   enrollFidelityCliente,
   updateOrderStato,
+  applyFidelityMovimento,
 } from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
@@ -72,9 +74,10 @@ import {
   cassaNuovoClienteBtn,
   cassaToolbarCompactBtn,
 } from "@/features/operative/cassa/cassaToolbarButtonStyles"
+import { readFidelityModalitaAccredito } from "@/utils/fidelityProgramConfig"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
-const TIPI_PAGAMENTO = ["Contanti", "Carta", "Da pagare", "Altro"]
+const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 
 /** La vista PostgREST `Ordine` può restituire snake_case o camelCase: normalizziamo ovunque in cassa. */
@@ -122,6 +125,24 @@ function orarioVisualizzatoLista(o) {
  * Separa solo se il primo segmento non sembra già un indirizzo (Via, Viale, …).
  * Accetta trattini − – — - e spaziature irregolari.
  */
+function computeAccreditoFidelityPunti(parametriOperativi, cart, totaleOrdine) {
+  const po = parametriOperativi && typeof parametriOperativi === "object" ? parametriOperativi : {}
+  if (po.fidelity_attivo === false || po.fidelity_attivo === "false") return 0
+  const modalita = readFidelityModalitaAccredito(po)
+  if (modalita === "nessuno" || modalita === "entrambi") return 0
+  if (modalita === "euro") {
+    const pe = Number(po.fidelity_punti_per_euro)
+    const factor = Number.isFinite(pe) && pe > 0 ? pe : 1
+    return Math.max(0, Math.floor((Number(totaleOrdine) || 0) * factor))
+  }
+  if (modalita === "pizza") {
+    const tpp = Math.max(1, Math.min(100, Number(po.fidelity_timbri_per_pizza) || 1))
+    const qty = (cart || []).reduce((s, i) => s + (Number(i.qty) || 0), 0)
+    return Math.max(0, Math.floor(qty * tpp))
+  }
+  return 0
+}
+
 function splitNomeDaIndirizzoConsegna(raw) {
   const t = String(raw || "")
     .replace(/\u00a0/g, " ")
@@ -197,6 +218,8 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 export default function CassaPage() {
   const navigate = useNavigate()
   const { tenantId, tenantData } = useTenant()
+  const pvCtx = usePv()
+  const activePvId = pvCtx?.activePv ?? null
   const { user, logout } = useAuth()
   const { hasServizio, enforcementActive } = useTenantServizi()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
@@ -220,6 +243,8 @@ export default function CassaPage() {
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [checkoutNote, setCheckoutNote] = useState("")
   const [checkoutTipoPagamento, setCheckoutTipoPagamento] = useState(TIPI_PAGAMENTO[0])
+  const [checkoutMistoContanti, setCheckoutMistoContanti] = useState("")
+  const [checkoutMistoCarta, setCheckoutMistoCarta] = useState("")
   const [checkoutNomeCliente, setCheckoutNomeCliente] = useState("")
   const [checkoutSelectedSlot, setCheckoutSelectedSlot] = useState(null)
   const [checkoutError, setCheckoutError] = useState(null)
@@ -1080,8 +1105,31 @@ export default function CassaPage() {
     setPendingRicevutaPrint(null)
     const snapshotCart = cart.map((row) => ({ ...row }))
     const noteSnap = checkoutNote.trim()
+    const fidelitySaldoSnap = selectedFidelitySaldo
     try {
       setLoading(true)
+      let pagamentoDettaglio = null
+      let tipoPagamentoFinale = checkoutTipoPagamento || ""
+      if (checkoutTipoPagamento === "Misto") {
+        const c1 = Number(String(checkoutMistoContanti).replace(",", ".")) || 0
+        const c2 = Number(String(checkoutMistoCarta).replace(",", ".")) || 0
+        if (Math.abs(c1 + c2 - total) > 0.02) {
+          setCheckoutError("Pagamento misto: la somma di contanti e carta deve coincidere con il totale ordine.")
+          setLoading(false)
+          return
+        }
+        if (c1 <= 0 && c2 <= 0) {
+          setCheckoutError("Pagamento misto: indica almeno un importo tra contanti e carta.")
+          setLoading(false)
+          return
+        }
+        pagamentoDettaglio = [
+          ...(c1 > 0 ? [{ tipo: "Contanti", importo: c1 }] : []),
+          ...(c2 > 0 ? [{ tipo: "Carta", importo: c2 }] : []),
+        ]
+        tipoPagamentoFinale = "Misto"
+      }
+
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
       const orarioRitiro = checkoutSelectedSlot?.label ?? ""
@@ -1110,6 +1158,7 @@ export default function CassaPage() {
       const orderId = await createOrder(tenantId, {
         totale: total,
         stato: ORDER_STATUS,
+        puntoVenditaId: activePvId || undefined,
         items: cart.map((p) => ({
           prodotto_id: p.id,
           quantita: p.qty,
@@ -1118,17 +1167,38 @@ export default function CassaPage() {
           ingredientiCotturaSummary: p.ingredientiCotturaSummary ?? undefined,
         })),
         note: noteSnap || undefined,
-        tipoPagamento: checkoutTipoPagamento || undefined,
+        tipoPagamento: tipoPagamentoFinale || undefined,
         tipoOrdine: tipoOrdine || undefined,
         nomeCliente: nomeCliente || undefined,
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna || undefined,
         consegnaLng,
         consegnaLat,
+        pagamentoDettaglio,
       })
+
+      if (fidelityServizioOk && fidelitySaldoSnap?.anagrafica_cliente_id) {
+        const punti = computeAccreditoFidelityPunti(tenantData?.parametri_operativi, snapshotCart, total)
+        if (punti > 0) {
+          try {
+            await applyFidelityMovimento(
+              tenantId,
+              fidelitySaldoSnap.anagrafica_cliente_id,
+              punti,
+              "accredito_ordine",
+              `Ordine ${orderId}`,
+              orderId,
+            )
+          } catch (fe) {
+            console.warn("[Cassa] accredito fidelity:", fe)
+          }
+        }
+      }
       setCart([])
       setCheckoutNote("")
       setCheckoutTipoPagamento(TIPI_PAGAMENTO[0])
+      setCheckoutMistoContanti("")
+      setCheckoutMistoCarta("")
       setCheckoutNomeCliente("")
       setCheckoutSelectedSlot(null)
       setDeliverySearch("")
@@ -1141,6 +1211,12 @@ export default function CassaPage() {
       loadOrdini()
 
       const po = tenantData?.parametri_operativi || {}
+      let tipoPagamentoPerStampa = tipoPagamentoFinale || checkoutTipoPagamento
+      if (checkoutTipoPagamento === "Misto") {
+        const c1 = Number(String(checkoutMistoContanti).replace(",", ".")) || 0
+        const c2 = Number(String(checkoutMistoCarta).replace(",", ".")) || 0
+        tipoPagamentoPerStampa = `Misto (Contanti €${c1.toFixed(2)} + Carta €${c2.toFixed(2)})`
+      }
       const righeComanda = cartItemsToComandaRighe(snapshotCart)
       let detail = null
       try {
@@ -1158,7 +1234,7 @@ export default function CassaPage() {
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna.trim() || undefined,
         note: noteSnap || undefined,
-        tipoPagamento: checkoutTipoPagamento || undefined,
+        tipoPagamento: tipoPagamentoPerStampa || undefined,
         righe: righeComanda,
         parametri: po,
       }
@@ -1179,7 +1255,7 @@ export default function CassaPage() {
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna.trim() || undefined,
         note: noteSnap || undefined,
-        tipoPagamento: checkoutTipoPagamento || undefined,
+        tipoPagamento: tipoPagamentoPerStampa || undefined,
         righe: ricevutaRigheFromCartSnapshot(snapshotCart),
         totale,
         parametri: po,
@@ -1381,7 +1457,17 @@ export default function CassaPage() {
           checkoutNote={checkoutNote}
           onCheckoutNoteChange={setCheckoutNote}
           checkoutTipoPagamento={checkoutTipoPagamento}
-          onCheckoutTipoPagamentoChange={setCheckoutTipoPagamento}
+          onCheckoutTipoPagamentoChange={(v) => {
+            setCheckoutTipoPagamento(v)
+            if (v !== "Misto") {
+              setCheckoutMistoContanti("")
+              setCheckoutMistoCarta("")
+            }
+          }}
+          checkoutMistoContanti={checkoutMistoContanti}
+          checkoutMistoCarta={checkoutMistoCarta}
+          onCheckoutMistoContantiChange={setCheckoutMistoContanti}
+          onCheckoutMistoCartaChange={setCheckoutMistoCarta}
           checkoutNomeCliente={checkoutNomeCliente}
           onCheckoutNomeClienteChange={setCheckoutNomeCliente}
           selectedSlot={checkoutSelectedSlot}

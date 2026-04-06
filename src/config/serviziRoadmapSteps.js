@@ -1,20 +1,15 @@
 /**
- * Roadmap lavorazione **servizio per servizio**.
+ * Roadmap lavorazione **servizio per servizio** (target ultra‑enterprise).
  *
- * Regole:
- * - Un solo servizio con `stato: "wip"` = focus corrente (prossimo da portare avanti / collaudare).
- * - `ok` = considerato chiuso per il rilascio attuale (puoi riaprire se serve).
- * - `todo` = da fare / non iniziato.
- * - `percentuale` = stima completamento funzionale 0–100 (indipendente dal CSV catalogo servizi).
- * - `resto` = cosa manca ancora (una riga per voce; `\n` per elenco).
+ * `percentuale` è la fonte di verità mostrata anche nel catalogo servizi (registro) e in
+ * Super Admin → Statistiche di sviluppo (tabella dettaglio allineata).
  *
- * Quando chiudi uno step: metti `ok`, sposta `wip` sul successivo.
+ * `resto` = gap verso livello enterprise (SLO, sicurezza, osservabilità, multi‑tenant, compliance).
  */
 
 /** @typedef {"ok" | "wip" | "todo"} StatoServizioStep */
 
 /**
- * Ordine = sequenza consigliata (dipendenze operative: prima cassa/comanda, poi canali, poi admin avanzato).
  * @type {Array<{
  *   id: string,
  *   titolo: string,
@@ -29,109 +24,109 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "ordini_cassa",
     titolo: "Ordini a cassa e incassi",
     stato: "ok",
-    percentuale: 88,
+    percentuale: 93,
     resto:
-      "Pagamento misto (schema + UI).\nRegistratore telematico / adempimenti fiscali.\nIntegrazione POS hardware.\nTurno cassa obbligatorio e chiusura legata al turno.\nAllineamento completo multi-PV (PvContext ovunque).\nOgni pezzo resta opzionale: il core cassa non deve dipendere da servizi disabilitati.",
-    nota: "Cassa, planning, annulli, ricevuta cliente, strip incassi, JSON giornata; gate `ordini_cassa`; piano Base.",
+      "Turno cassa obbligatorio con apertura/chiusura vincolata e riconciliazione incassi.\nRegistratore telematico / compliance fiscale (XML, chiusure, annulli certificati).\nIntegrazione POS certificati (PAX, Ingenico, protocolli proprietari) + fallback manuale.\nPagamento misto: split illimitato, arrotondamenti, sconti riga e sconto globale con audit.\nOmnicanalità: stesso motore ordine per cassa, kiosk, QR tavolo senza divergenze di totale.\nOsservabilità: metriche latency checkout, errori RPC, tracing distribuito.\nDisaster recovery: coda offline locale con sync idempotente e risoluzione conflitti.\nMulti‑PV: ogni ordine, listino e chiusura legata al PV con report consolidato gruppo.\nPenetration test periodici su RLS e RPC; segregazione dati tra tenant verificata.\nAccessibilità WCAG 2.2 su flussi cassa critici; i18n completa (date, valute, IVA).",
+    nota: "Cassa, planning, annulli, ricevuta, strip incassi, JSON giornata, PV su ordine, pagamento misto (DB+UI); core indipendente dai gate servizio.",
   },
   {
     id: "stampa_comanda",
     titolo: "Stampa comanda (reparti)",
-    stato: "wip",
-    percentuale: 72,
+    stato: "ok",
+    percentuale: 88,
     resto:
-      "QA end-to-end su dispositivo reale (stampa + PDF).\nVerifica permessi e parametri su più tenant.\nEventuale affinamento template comanda/ricevuta in impostazioni.\nCon `ordini_cassa` attivo la stampa resta utilizzabile anche senza id catalogo `stampa_comanda` separato.",
-    nota: "Parametri comanda, reparti con IP, stampa per reparto; `useTenantServizi` non deve bloccare il flusso se il modulo catalogo è off.",
+      "Driver stampa nativi (ESC/POS via bridge) oltre al dialogo browser.\nCode di stampa per reparto con retry, dead letter e alert se stampante offline.\nTemplate versionati (A/B) e anteprima pixel‑perfect per ogni larghezza rotolo.\nTest automatici snapshot HTML comanda/ricevuta su CI.\nTelemetria: tempo stampa, copie per ordine, errori per IP/reparto.\nIntegrazione con bilance / etichettatrici per peso variabile.\nConformità HACCP: tracciamento lotto su stampa ove richiesto.",
+    nota: "Parametri comanda, reparti IP, stampa per reparto; stampa non bloccata se modulo catalogo disattivo.",
   },
   {
     id: "gestione_consegne",
     titolo: "Gestione consegne",
-    stato: "todo",
-    percentuale: 52,
+    stato: "wip",
+    percentuale: 60,
     resto:
-      "Rider / assegnazione e stato consegna.\nNotifiche (SMS/push/email) dove previsto.\nMappa operativa consegna in dashboard.\nAffinare dashboard `/operative/delivery` e pony.\nArea poligono già lato server + cassa; resta UX cliente e rider.",
-    nota: "Delivery dashboard; percorso operativo consegne.",
+      "Assegnazione rider con ottimizzazione percorso (VRP leggero) e SLA stimato lato cliente.\nStati consegna granulari (assegnato, in ritiro, in viaggio, consegnato, problema) + `stato_consegna` in DB.\nNotifiche multicanale (SMS, email, push) con template e preferenze opt‑in.\nApp rider dedicata o PWA con geolocalizzazione e proof of delivery (firma/foto).\nMappa live per sala comando; heatmap ritardi.\nIntegrazione aggregator (Glovo, Uber Eats) tramite API normalizzate.\nContratti di servizio: timeout, rimborsi automatici, escalation.\nMetriche NPS post‑consegna e analisi causa ritardo.",
+    nota: "Poligono server-side, coordinate su ordine, dashboard delivery; in corso UX rider e notifiche.",
   },
   {
     id: "ordini_online",
     titolo: "Ordini online (cliente)",
     stato: "todo",
-    percentuale: 38,
+    percentuale: 44,
     resto:
-      "Carrello e checkout pubblico stabili.\nPagamenti online e conferme.\nNotifiche ordine al locale e al cliente.\nCoerenza con area consegna e geocoding.\nTest smoke su dominio/preview.",
-    nota: "Store pubblico, pubblicazione sito; canale cliente.",
+      "Checkout con carrello persistente, guest e account, GDPR completo.\nPagamenti: Stripe/Adyen, 3DS2, salvataggio metodo, rimborsi e partial capture.\nAnti‑frode: velocity limits, CAPTCHA, lista blocchi indirizzi.\nSEO + Core Web Vitals; PWA installabile; preview ambienti staging/prod.\nCMS leggero per landing e promozioni time‑boxed.\nWebhooks ordine → cucina con firma HMAC e idempotency key.\nLoad test su picco weekend; CDN asset statici; rate limit API pubblica.",
+    nota: "Store pubblico esistente; consolidare pagamenti, notifiche e hardening sicurezza.",
   },
   {
     id: "tablet_ruoli",
     titolo: "Schermate tablet / ruoli operativi",
     stato: "todo",
-    percentuale: 42,
+    percentuale: 52,
     resto:
-      "Cucina, bancone, pizzaiolo, delivery: permessi per area.\nAffinare stati ordine e transizioni.\nResilienza (reconnect, errori rete).\nCoerenza con annulli e planning.",
-    nota: "Tablet operativi; ruoli pizzeria.",
+      "Matrice permessi per schermata e azione (non solo area).\nStati ordine con macchina a stati validata server‑side e UI sincrona (Realtime).\nModalità kiosk con logout automatico e sessione corta.\nResilienza: Service Worker, coda azioni offline, risoluzione conflitti.\nAccessibilità touch target 48dp, contrasto, lettura distanza.\nLog strutturati per audit operativo (chi ha cambiato stato e quando).\nDark mode e temi per ambiente cucina/bancone.",
+    nota: "Cucina, bancone, pizzaiolo, delivery; permessi aree; da rafforzare Realtime e audit.",
   },
   {
     id: "report_analisi",
     titolo: "Report e analisi",
     stato: "todo",
-    percentuale: 48,
+    percentuale: 60,
     resto:
-      "Export CSV/PDF.\nFiltri periodo e confronti.\nKPI allineati agli ordini reali (escludere annullati dove serve).\nEventuale collegamento a magazzino / food cost.",
-    nota: "Report admin vendite e analisi.",
+      "Export CSV/PDF/XLSX schedulati con consegna email sicura.\nFiltri periodo, confronto YoY, drill‑down fino a riga ordine.\nEsclusione coerente ordini annullati e notte fiscale.\nDashboard executive: margini, mix prodotti, ore di picco, forecast base ML.\nRow‑level security su dataset export; watermark PDF con tenant e utente.\nAPI read‑only per BI esterno (Snowflake, Looker) con OAuth.\nConsolidamento multi‑PV e multi‑brand in un’unica vista gruppo.",
+    nota: "Report 30gg e top prodotti; export CSV; esclusione annullati in pipeline dati.",
   },
   {
     id: "multi_sede",
     titolo: "Punti vendita multipli",
     stato: "todo",
-    percentuale: 40,
+    percentuale: 68,
     resto:
-      "Select PV e PvContext su tutte le viste sensibili.\nMenu, parametri, ordini legati al PV corretto.\nReport e cassa per sede.",
-    nota: "Multi-PV; allineamento dati per punto vendita.",
+      "Propagazione menu/listino con promozione staging→prod per PV.\nPermessi: utente legato a uno o più PV; admin gruppo con vista aggregata.\nInventario e DDT per sede; trasferimenti inter‑deposito con documento.\nChiusura cassa e fiscale per PV + consolidato.\nBranding (logo, colori) per PV sul canale cliente.\nDisaster: fail‑over DNS per sede isolata.\nTest E2E su switch PV durante sessione ordine.",
+    nota: "PvContext, ordini con `punto_vendita_id`, seed sede principale; estendere menu/report/chiusure.",
   },
   {
     id: "ruoli_avanzati",
     titolo: "Ruoli e permessi avanzati",
     stato: "todo",
-    percentuale: 32,
+    percentuale: 42,
     resto:
-      "Matrice permessi più fine (per pagina/azione).\nEventuale audit log modifiche.\nAllineo con `RuoliPage` e ruoli pizzeria.",
-    nota: "Permessi granulari; audit.",
+      "RBAC fine: risorsa + azione + condizione (es. solo propri ordini).\nDeleghe temporanee e approvazioni a due mani per azioni sensibili.\nAudit log immutabile (append‑only) con export e retention legale.\nSSO SAML/OIDC per gruppi multi‑locale.\nReview accessi trimestrale e report utenti inattivi.\nSeparazione compiti SoD (chi crea fattura non può approvare pagamento).\nIntegrazione SCIM per provisioning utenti da HR.",
+    nota: "Ruoli pizzeria e aree operative; manca matrice fine e audit centralizzato.",
   },
   {
     id: "menu_listini",
     titolo: "Menu e listini",
     stato: "todo",
-    percentuale: 58,
+    percentuale: 64,
     resto:
-      "Definire gate `menu_listini` vs listino minimo cassa.\nDocumentazione `useTenantServizi` e piani.\nEvitare che disattivare il modulo rompa la cassa (listino minimo).",
-    nota: "Admin menu; listini e prezzi.",
+      "Versioning listino con data effetto e rollback.\nListino dinamico (happy hour, canale delivery vs sala).\nAllergeni e nutrizione con fonte normativa aggiornabile.\nGate `menu_listini` vs listino minimo cassa documentato e testato.\nImport massivo da CSV/Excel con validazione e dry‑run.\nSincronizzazione verso canali esterni (aggregator) da un’unica sorgente.\nBlocco modifiche in finestra di chiusura inventario.",
+    nota: "Admin menu completo; definire gate commerciali e listino minimo non bloccante.",
   },
   {
     id: "magazzino_gestione",
     titolo: "Magazzino (fornitori / DDT)",
     stato: "todo",
-    percentuale: 28,
+    percentuale: 48,
     resto:
-      "Migrazione dati da localStorage a Supabase.\nRLS e permessi.\nFlussi fornitori, ordini, DDT collegati dove serve alla contabilità.",
-    nota: "Oggi molto in locale; persistenza cloud è il salto principale.",
+      "Migrazione completa dati localStorage → Supabase con job una tantum.\nGiacenza valorizzata (FIFO/medio); inventari ciclici e rettifiche firmate.\nOrdini fornitore con conferma, ricezione parziale, fattura abbinata.\nDDT elettronici e integrazione SDI dove applicabile.\nAlert scadenze e lotti; traceability verso piatto venduto.\nIntegrazione bilancia e lettura EAN.\nKPI: fill rate, giorni di copertura, ABC analysis.",
+    nota: "Tabella `magazzino_movimenti` + UI base; fornitori/DDT ancora prevalentemente locale.",
   },
   {
     id: "contabilita_locale",
     titolo: "Contabilità locale",
     stato: "todo",
-    percentuale: 34,
+    percentuale: 64,
     resto:
-      "Persistenza incassi/spese/fatture su DB (non solo local JSON).\nRiconciliazione con ordini cassa opzionale ma utile.\nFatturazione elettronica fuori scope immediato.\nLa cassa e i totali ordine restano utilizzabili senza questo modulo.",
-    nota: "Registro manuale incassi in app; hint da ordini già letti da Supabase.",
+      "Piano dei conti minimo; prima nota con causali e IVA.\nRiconciliazione bancaria import estratti CSV/MT940.\nCollegamento incassi POS vs movimenti cassa e vs ordini.\nChiusura esercizio e report per commercialista (FEC / normativa locale).\nWorkflow approvazione spese con allegati e policy limite.\nBackup cifrato e right to erasure documentato.\nIntegrazione fatturazione elettronica attiva/passiva completa.",
+    nota: "Incassi manuali su DB + hint ordini; spese/fatture ancora da consolidare su DB.",
   },
   {
     id: "fidelity_card",
     titolo: "Fidelity Card",
     stato: "todo",
-    percentuale: 44,
+    percentuale: 62,
     resto:
-      "Accredito punti da ordine cassa end-to-end.\nQR tessera e lettura rapida.\nTest movimenti e storico.\nGate servizio: se disattivo, cassa senza blocco (già orientato così).",
-    nota: "Iscrizioni; migration Supabase; integrazione ordine.",
+      "Regole premio complesse (multi‑livello, partner, scadenze punti).\nCampagne push segmentate; A/B test offerte.\nQR dinamici firmati e anti‑replay.\nFraud detection su accumuli anomali.\nPortale cliente self‑service saldo e storico.\nIntegrazione wallet Apple/Google.\nGDPR: export e cancellazione dati programma.",
+    nota: "Accredito automatico post‑ordine cassa (euro/pizza); iscrizioni e movimenti in DB.",
   },
   {
     id: "supporto_prioritario",
@@ -139,26 +134,26 @@ export const SERVIZI_ROADMAP_STEPS = [
     stato: "todo",
     percentuale: 0,
     resto:
-      "Definizione offerta commerciale e SLA.\nNessun gate applicativo richiesto.",
-    nota: "Offerta commerciale; nessun gate app.",
+      "SLA misurati (tempo prima risposta, tempo risoluzione) con ticketing integrato.\nRunbook incident e comunicazione stato (status page).\nHealth check tenant e alert proattivi.\nCanale dedicato enterprise (Slack/Teams) con escalation 24/7.\nQuarterly Business Review con roadmap condivisa.",
+    nota: "Offerta commerciale; nessun gate in app.",
   },
   {
     id: "gestione_tavoli",
     titolo: "Gestione tavoli (sala)",
     stato: "todo",
-    percentuale: 10,
+    percentuale: 14,
     resto:
-      "Modello sale / tavoli / comande.\nUI sala e collegamento a cassa.\nMVP da progettare.",
-    nota: "Roadmap: mappa sale, tavoli, comande.",
+      "Modello sale/tavoli/comande con stati (libero, occupato, conto).\nSplit bill, coperto, servizio, note sala.\nIntegrazione stampanti scontrino al tavolo.\nPrenotazioni con capienza e no‑show.\nMappe SVG interattive e drag‑drop tavoli.\nCoordinamento con cucina per priorità tavolo.\nAnalytics tempo medio occupazione e turni.",
+    nota: "Roadmap; MVP modello dati e UI sala da progettare.",
   },
   {
     id: "api_integrazioni",
     titolo: "API e integrazioni",
     stato: "todo",
-    percentuale: 26,
+    percentuale: 36,
     resto:
-      "Backend Nest: endpoint stabili, versionamento.\nAuth e rate limit.\nWebhook documentati e test.\nIntegrazioni terze (delivery aggregator, ecc.) valutate per fasi.",
-    nota: "Nest parziale; API pubbliche stabili.",
+      "OpenAPI 3.1 pubblicata, semver, changelog e deprecation policy.\nOAuth2 client credentials + scope per tenant.\nRate limit, quota, burst e header Retry‑After.\nWebhooks firmati (HMAC) con delivery garantita e dead letter.\nSandbox isolata e dati sintetici.\nSDK ufficiali (Node, .NET).\nCertificazione SOC2 Type II per layer API.",
+    nota: "Nest parziale; serve piattaforma integrazioni documentata e osservabile.",
   },
   {
     id: "account_manager",
@@ -166,8 +161,8 @@ export const SERVIZI_ROADMAP_STEPS = [
     stato: "todo",
     percentuale: 0,
     resto:
-      "Processo commerciale e assegnazione clienti.\nNessun sviluppo prodotto obbligatorio.",
-    nota: "Solo commerciale.",
+      "Processo CRM condiviso, success plan annuale, health score tenant.\nReview trimestrale utilizzo moduli e adozione.\nRoadmap personalizzata e priorità in backlog condiviso.\nTraining on‑site opzionale.",
+    nota: "Solo commerciale / organizzazione.",
   },
   {
     id: "sla_personalizzazioni",
@@ -175,10 +170,19 @@ export const SERVIZI_ROADMAP_STEPS = [
     stato: "todo",
     percentuale: 0,
     resto:
-      "Accordi su tempi e custom per tenant.\nProgetti su misura fuori roadmap standard.",
-    nota: "Commerciale / progetti.",
+      "Contratti con penali/sconti legati a SLA sviluppo e uptime.\nAmbiente staging dedicato per custom.\nFeature flags per rollout graduale personalizzazioni.\nDocumentazione as‑built per ogni custom (handover interno).",
+    nota: "Commerciale / legali / progetti su misura.",
   },
 ];
+
+/** Allinea la colonna «Dettaglio per servizio» alla tabella roadmap (stesso id). */
+export const ROADMAP_PERCENT_BY_ID = Object.fromEntries(SERVIZI_ROADMAP_STEPS.map((s) => [s.id, s.percentuale]));
+
+export function percentualeEffettivaServizio(servizioId, fallbackDaCatalogo) {
+  const r = ROADMAP_PERCENT_BY_ID[servizioId]
+  if (r != null && Number.isFinite(r)) return Math.min(100, Math.max(0, r))
+  return Math.min(100, Math.max(0, Number(fallbackDaCatalogo) || 0))
+}
 
 export function servizioRoadmapInCorso() {
   return SERVIZI_ROADMAP_STEPS.find((s) => s.stato === "wip") ?? null;

@@ -60,14 +60,38 @@ export default function Report() {
   if (!report) return null;
 
   const topList = Array.isArray(report.topProdotti) ? report.topProdotti : [];
+  const periodoLabel =
+    report.periodoInizio && report.periodoFine
+      ? `${new Date(report.periodoInizio).toLocaleDateString("it-IT")} — ${new Date(report.periodoFine).toLocaleDateString("it-IT")}`
+      : "ultimi 30 giorni";
+
+  const exportCsv = () => {
+    const lines = [
+      "metrica,valore",
+      `totale_ordini,${report.totaleOrdini ?? 0}`,
+      `fatturato_euro,${Number(report.fatturato ?? 0).toFixed(2)}`,
+      "",
+      "posizione,prodotto,quantita",
+      ...topList.map((row, idx) => `${idx + 1},"${String(row.nome || "").replace(/"/g, '""')}",${row.quantita ?? 0}`),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `report-vendite-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   return (
     <div style={styles.wrapper}>
       <h1 style={styles.pageTitle}>Report Vendite</h1>
       <p style={styles.hint}>
-        Periodo: ultimi 30 giorni. Classifica per <strong>nome prodotto</strong> (e formato se presente); le categorie
-        impostate come &quot;ingredienti&quot; non entrano in classifica.
+        Periodo: <strong>{periodoLabel}</strong>. Ordini con stato <strong>ANNULLATO</strong> esclusi da totali e classifica. Classifica per{" "}
+        <strong>nome prodotto</strong> (e formato se presente); le categorie impostate come &quot;ingredienti&quot; non entrano in classifica.
       </p>
+      <button type="button" onClick={exportCsv} style={styles.csvBtn}>
+        Scarica CSV
+      </button>
 
       <div style={styles.row}>
         <div style={styles.card}>
@@ -119,6 +143,18 @@ const styles = {
     fontSize: 13,
     color: "#64748b",
     lineHeight: 1.5,
+  },
+  csvBtn: {
+    alignSelf: "flex-start",
+    padding: "8px 16px",
+    fontSize: 14,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    color: "#334155",
+    cursor: "pointer",
+    marginBottom: 8,
   },
   row: {
     display: "grid",

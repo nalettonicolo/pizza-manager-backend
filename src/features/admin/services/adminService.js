@@ -20,6 +20,11 @@ function getTodayRange() {
   }
 }
 
+function ordineRowIsAnnullato(o) {
+  const s = String(o?.stato ?? "").trim().toUpperCase()
+  return s === "ANNULLATO"
+}
+
 ///////////////////////////////////////////////////////////
 // ===================== DASHBOARD ======================
 ///////////////////////////////////////////////////////////
@@ -118,7 +123,8 @@ export async function getTenantVenditeInsights(tenantId, opts = {}) {
     }
   }
   const limitOrders = Math.min(500, Math.max(50, Number(opts.limitOrders) || 320))
-  const ordini = await getOrders(tenantId, { limit: limitOrders })
+  const ordiniRaw = await getOrders(tenantId, { limit: limitOrders })
+  const ordini = (ordiniRaw || []).filter((o) => !ordineRowIsAnnullato(o))
   const ids = ordini.map((o) => o.id).filter(Boolean)
   const righe = ids.length ? await getRigheByOrdineIds(ids) : []
   const qtyByPid = {}
@@ -186,6 +192,8 @@ export async function createOrder(tenantId, payload) {
     indirizzoConsegna = "",
     consegnaLng = null,
     consegnaLat = null,
+    pagamentoDettaglio = null,
+    puntoVenditaId = null,
   } = payload
 
   const rpcArgs = {
@@ -206,12 +214,14 @@ export async function createOrder(tenantId, payload) {
     p_orario_ritiro: orarioRitiro ?? "",
     p_indirizzo_consegna: indirizzoConsegna ?? "",
   }
-  if (consegnaLng != null && Number.isFinite(Number(consegnaLng))) {
-    rpcArgs.p_consegna_lng = Number(consegnaLng)
-  }
-  if (consegnaLat != null && Number.isFinite(Number(consegnaLat))) {
-    rpcArgs.p_consegna_lat = Number(consegnaLat)
-  }
+  rpcArgs.p_consegna_lng =
+    consegnaLng != null && Number.isFinite(Number(consegnaLng)) ? Number(consegnaLng) : null
+  rpcArgs.p_consegna_lat =
+    consegnaLat != null && Number.isFinite(Number(consegnaLat)) ? Number(consegnaLat) : null
+  rpcArgs.p_pagamento_dettaglio =
+    pagamentoDettaglio != null && typeof pagamentoDettaglio === "object" ? pagamentoDettaglio : null
+  rpcArgs.p_punto_vendita_id =
+    puntoVenditaId != null && String(puntoVenditaId).trim() !== "" ? puntoVenditaId : null
 
   const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
 
@@ -245,12 +255,93 @@ export async function updateOrder(ordineId, updates) {
   if (updates.note !== undefined) row.note = updates.note
   if (updates.tipo_pagamento !== undefined) row.tipo_pagamento = updates.tipo_pagamento
   if (updates.indirizzo_consegna !== undefined) row.indirizzo_consegna = updates.indirizzo_consegna
+  if (updates.pagamento_dettaglio !== undefined) row.pagamento_dettaglio = updates.pagamento_dettaglio
+  if (updates.stato_consegna !== undefined) row.stato_consegna = updates.stato_consegna
+  if (updates.consegna_lng !== undefined) row.consegna_lng = updates.consegna_lng
+  if (updates.consegna_lat !== undefined) row.consegna_lat = updates.consegna_lat
+  if (updates.punto_vendita_id !== undefined) row.punto_vendita_id = updates.punto_vendita_id
   if (Object.keys(row).length === 0) return
   const { error } = await supabase
     .from("Ordine")
     .update(row)
     .eq("id", ordineId)
   if (error) throw error
+}
+
+/** True se la tabella contabilita_movimenti è esposta e leggibile (dopo sql_upgrade.sql). */
+export async function contabilitaMovimentiTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("contabilita_movimenti").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function listContabilitaMovimenti(tenantId, opts = {}) {
+  const { limit = 500 } = opts
+  const { data, error } = await supabase
+    .from("contabilita_movimenti")
+    .select("id, tenant_id, data_mov, descrizione, importo, tipo, created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+export async function insertContabilitaMovimento(tenantId, payload) {
+  const { data, error } = await supabase
+    .from("contabilita_movimenti")
+    .insert({
+      tenant_id: tenantId,
+      data_mov: payload.data,
+      descrizione: payload.descrizione ?? "",
+      importo: payload.importo,
+      tipo: payload.tipo,
+    })
+    .select("id, data_mov, descrizione, importo, tipo")
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteContabilitaMovimento(id) {
+  const { error } = await supabase.from("contabilita_movimenti").delete().eq("id", id)
+  if (error) throw error
+}
+
+/** True se la tabella è esposta a PostgREST (dopo sql_upgrade.sql). */
+export async function magazzinoMovimentiTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("magazzino_movimenti").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function listMagazzinoMovimenti(tenantId, opts = {}) {
+  const { limit = 200 } = opts
+  const { data, error } = await supabase
+    .from("magazzino_movimenti")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+export async function insertMagazzinoMovimento(tenantId, payload) {
+  const { data, error } = await supabase
+    .from("magazzino_movimenti")
+    .insert({
+      tenant_id: tenantId,
+      prodotto_id: payload.prodotto_id ?? null,
+      descrizione: payload.descrizione ?? "",
+      qty_delta: payload.qty_delta,
+      unita: payload.unita ?? "pz",
+      riferimento: payload.riferimento ?? null,
+    })
+    .select("id")
+    .single()
+  if (error) throw error
+  return data
 }
 
 /** Dettaglio ordine con righe (e nomi prodotto se disponibili). */
@@ -1672,14 +1763,15 @@ export async function getOrdersByDateRange(
 ) {
   let q = supabase
     .from("Ordine")
-    .select("id, totale, createdAt")
+    .select("id, totale, createdAt, stato")
     .eq("tenantId", tenantId)
   if (startDate != null) q = q.gte("createdAt", startDate)
   if (endDate != null) q = q.lte("createdAt", endDate)
   const { data, error } = await q.order("createdAt", { ascending: false })
 
   if (error) throw error
-  return data || []
+  const rows = data || []
+  return rows.filter((o) => !ordineRowIsAnnullato(o))
 }
 
 function getDefaultReportRange() {
@@ -1811,6 +1903,8 @@ export async function getReportData(
     fatturato: totalRevenue,
     topProdotti,
     topProdotto,
+    periodoInizio: range.start,
+    periodoFine: range.end,
   }
 }
 

@@ -35,7 +35,7 @@ export const SERVIZI_APP = [
       "Incassi e gestione del flusso ordini al banco",
     ],
     prezzoDefaultEuro: 24,
-    avanzamentoDefaultPercentuale: 95,
+    avanzamentoDefaultPercentuale: 93,
     codiceRiferimento: "operative/cassa, flusso ordini area operativa",
   },
   {
@@ -48,7 +48,7 @@ export const SERVIZI_APP = [
       "Regole configurabili (punti per euro); base per accrediti automatici da ordini",
     ],
     prezzoDefaultEuro: 14,
-    avanzamentoDefaultPercentuale: 55,
+    avanzamentoDefaultPercentuale: 62,
     codiceRiferimento: "admin/fidelity, tabelle fidelity_saldi e fidelity_movimenti",
   },
   {
@@ -60,7 +60,7 @@ export const SERVIZI_APP = [
       "Integrazione con flusso cassa e reparti (cucina, bancone, ecc.)",
     ],
     prezzoDefaultEuro: 9,
-    avanzamentoDefaultPercentuale: 90,
+    avanzamentoDefaultPercentuale: 88,
     codiceRiferimento: "flusso cassa / bancone",
   },
   {
@@ -72,7 +72,7 @@ export const SERVIZI_APP = [
       "Ottimizzazione tempi di consegna e gestione ritardi",
     ],
     prezzoDefaultEuro: 14,
-    avanzamentoDefaultPercentuale: 88,
+    avanzamentoDefaultPercentuale: 60,
     codiceRiferimento: "operative/delivery",
   },
   {
@@ -85,7 +85,7 @@ export const SERVIZI_APP = [
       "Notifiche nuovo ordine in pizzeria",
     ],
     prezzoDefaultEuro: 32,
-    avanzamentoDefaultPercentuale: 82,
+    avanzamentoDefaultPercentuale: 44,
     codiceRiferimento: "PublicStore, OrdinePage, pubblicazione sito",
   },
   {
@@ -99,7 +99,7 @@ export const SERVIZI_APP = [
       "Il bancone ha visione coordinata del flusso; interfacce touch per reparto",
     ],
     prezzoDefaultEuro: 38,
-    avanzamentoDefaultPercentuale: 92,
+    avanzamentoDefaultPercentuale: 52,
     codiceRiferimento: "AppRouter operative/*, permessiAree",
   },
   {
@@ -112,7 +112,7 @@ export const SERVIZI_APP = [
       "Statistiche per prendere decisioni operative",
     ],
     prezzoDefaultEuro: 12,
-    avanzamentoDefaultPercentuale: 88,
+    avanzamentoDefaultPercentuale: 60,
     codiceRiferimento: "admin/report",
   },
   {
@@ -124,7 +124,7 @@ export const SERVIZI_APP = [
       "Parametri e menu per sede dove previsto",
     ],
     prezzoDefaultEuro: 18,
-    avanzamentoDefaultPercentuale: 85,
+    avanzamentoDefaultPercentuale: 68,
     codiceRiferimento: "SelectPuntoVendita, tenant multi-PV",
   },
   {
@@ -136,7 +136,7 @@ export const SERVIZI_APP = [
       "Possibilità di richiedere utenti aggiuntivi su misura",
     ],
     prezzoDefaultEuro: 10,
-    avanzamentoDefaultPercentuale: 90,
+    avanzamentoDefaultPercentuale: 42,
     codiceRiferimento: "admin/ruoli, permessi aree operative",
   },
   {
@@ -148,7 +148,7 @@ export const SERVIZI_APP = [
       "Categorie, prezzi e varianti come da esigenza del locale",
     ],
     prezzoDefaultEuro: 8,
-    avanzamentoDefaultPercentuale: 92,
+    avanzamentoDefaultPercentuale: 64,
     codiceRiferimento: "admin/menu/*",
   },
   {
@@ -161,7 +161,7 @@ export const SERVIZI_APP = [
       "Dati per tenant salvati nel browser fino a integrazione database",
     ],
     prezzoDefaultEuro: 11,
-    avanzamentoDefaultPercentuale: 78,
+    avanzamentoDefaultPercentuale: 48,
     codiceRiferimento: "admin/magazzino/*, useTenantLocalJson",
   },
   {
@@ -174,7 +174,7 @@ export const SERVIZI_APP = [
       "Collegamento logico ai DDT di magazzino",
     ],
     prezzoDefaultEuro: 11,
-    avanzamentoDefaultPercentuale: 75,
+    avanzamentoDefaultPercentuale: 64,
     codiceRiferimento: "admin/contabilita/*, useTenantLocalJson",
   },
   {
@@ -204,7 +204,7 @@ export const SERVIZI_APP = [
     categoria: "Enterprise",
     funzioni: ["Endpoint per sistemi esterni", "Integrazione con POS, delivery partner, ecc."],
     prezzoDefaultEuro: 45,
-    avanzamentoDefaultPercentuale: 42,
+    avanzamentoDefaultPercentuale: 36,
     codiceRiferimento: "server/pizzeria-backend, API turni / integrazioni parziali",
   },
   {

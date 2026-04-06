@@ -21,6 +21,10 @@ export default function RiepilogoOrdinePage({
   onCheckoutNoteChange,
   checkoutTipoPagamento,
   onCheckoutTipoPagamentoChange,
+  checkoutMistoContanti = "",
+  checkoutMistoCarta = "",
+  onCheckoutMistoContantiChange,
+  onCheckoutMistoCartaChange,
   checkoutNomeCliente = "",
   onCheckoutNomeClienteChange,
   selectedSlot = null,
@@ -71,7 +75,14 @@ export default function RiepilogoOrdinePage({
   const noSlotDisponibili = !orariOggi.aperto || slots.length === 0
   const totalPizzeOrdine = (cart || []).reduce((s, i) => s + (i.qty || 0), 0)
   const nomeClienteObbligatorio = tipoOrdine === "negozio" && !(checkoutNomeCliente || "").trim()
-  const canConfirm = cart.length > 0 && !loading && selectedSlot && !noSlotDisponibili && !nomeClienteObbligatorio
+  const isMisto = checkoutTipoPagamento === "Misto"
+  const mistoC1 = Number(String(checkoutMistoContanti).replace(",", ".")) || 0
+  const mistoC2 = Number(String(checkoutMistoCarta).replace(",", ".")) || 0
+  const mistoSumOk = Math.abs(mistoC1 + mistoC2 - Number(total)) <= 0.02
+  const mistoImportiOk = mistoC1 >= 0 && mistoC2 >= 0 && (mistoC1 > 0 || mistoC2 > 0)
+  const mistoOk = !isMisto || (mistoSumOk && mistoImportiOk)
+  const canConfirm =
+    cart.length > 0 && !loading && selectedSlot && !noSlotDisponibili && !nomeClienteObbligatorio && mistoOk
 
   return (
     <div style={styles.wrapper}>
@@ -132,6 +143,44 @@ export default function RiepilogoOrdinePage({
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
+        {isMisto ? (
+          <div style={{ marginTop: 14 }}>
+            <p style={{ fontSize: 13, color: "#555", margin: "0 0 10px", lineHeight: 1.45 }}>
+              Indica gli importi: la somma deve essere uguale al totale (€ {formatPrice(total)}).
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+              <div style={{ flex: "1 1 140px" }}>
+                <label style={styles.label}>Contanti (€)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={checkoutMistoContanti}
+                  onChange={(e) => onCheckoutMistoContantiChange?.(e.target.value)}
+                  placeholder="0,00"
+                  style={styles.input}
+                />
+              </div>
+              <div style={{ flex: "1 1 140px" }}>
+                <label style={styles.label}>Carta (€)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={checkoutMistoCarta}
+                  onChange={(e) => onCheckoutMistoCartaChange?.(e.target.value)}
+                  placeholder="0,00"
+                  style={styles.input}
+                />
+              </div>
+            </div>
+            {!mistoOk && isMisto ? (
+              <p style={{ fontSize: 13, color: "#c62828", margin: "10px 0 0", fontWeight: 600 }}>
+                {!mistoImportiOk
+                  ? "Indica almeno un importo tra contanti e carta."
+                  : "La somma non coincide con il totale ordine."}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.section}>
@@ -287,7 +336,9 @@ export default function RiepilogoOrdinePage({
                 ? "Nessun orario disponibile"
                 : !selectedSlot
                   ? "Seleziona un orario"
-                  : "Conferma ordine"}
+                  : isMisto && !mistoOk
+                    ? "Correggi importi pagamento misto"
+                    : "Conferma ordine"}
         </button>
       </div>
     </div>

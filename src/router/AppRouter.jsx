@@ -77,6 +77,7 @@ const ManualeUtentePage = lazy(() => import("@/features/admin/pages/ManualeUtent
 const MagazzinoHubPage = lazy(() => import("@/features/admin/pages/magazzino/MagazzinoHubPage"));
 const OrdiniFornitoriPage = lazy(() => import("@/features/admin/pages/magazzino/OrdiniFornitoriPage"));
 const DdtPage = lazy(() => import("@/features/admin/pages/magazzino/DdtPage"));
+const MagazzinoMovimentiDbPage = lazy(() => import("@/features/admin/pages/magazzino/MagazzinoMovimentiDbPage"));
 const ContabilitaHubPage = lazy(() => import("@/features/admin/pages/contabilita/ContabilitaHubPage"));
 const FatturePage = lazy(() => import("@/features/admin/pages/contabilita/FatturePage"));
 const PagamentiFatturePage = lazy(() => import("@/features/admin/pages/contabilita/PagamentiFatturePage"));
@@ -305,6 +306,7 @@ export default function AppRouter() {
           <Route path="/admin/magazzino" element={<Suspense fallback={<PageFallback />}><MagazzinoHubPage /></Suspense>} />
           <Route path="/admin/magazzino/ordini-fornitori" element={<Suspense fallback={<PageFallback />}><OrdiniFornitoriPage /></Suspense>} />
           <Route path="/admin/magazzino/ddt" element={<Suspense fallback={<PageFallback />}><DdtPage /></Suspense>} />
+          <Route path="/admin/magazzino/movimenti-db" element={<Suspense fallback={<PageFallback />}><MagazzinoMovimentiDbPage /></Suspense>} />
           <Route path="/admin/contabilita" element={<Suspense fallback={<PageFallback />}><ContabilitaHubPage /></Suspense>} />
           <Route path="/admin/contabilita/fatture" element={<Suspense fallback={<PageFallback />}><FatturePage /></Suspense>} />
           <Route path="/admin/contabilita/pagamenti-fatture" element={<Suspense fallback={<PageFallback />}><PagamentiFatturePage /></Suspense>} />

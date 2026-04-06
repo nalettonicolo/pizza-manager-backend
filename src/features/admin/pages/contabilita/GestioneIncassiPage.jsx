@@ -1,14 +1,30 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
 import { useTenant } from "@/app/contexts/TenantContext";
-import { getOrders } from "@/features/admin/services/adminService";
+import {
+  getOrders,
+  contabilitaMovimentiTableReachable,
+  listContabilitaMovimenti,
+  insertContabilitaMovimento,
+  deleteContabilitaMovimento,
+} from "@/features/admin/services/adminService";
 import { aggregateIncassiDaOrdini } from "@/utils/incassiFromOrdini";
+
+function mapDbRowToUi(row) {
+  return {
+    id: row.id,
+    data: row.data_mov,
+    descrizione: row.descrizione || "",
+    importo: Number(row.importo),
+    tipo: row.tipo,
+  };
+}
 
 export default function GestioneIncassiPage() {
   const { tenantId } = useTenant();
-  const { data, setData, ready } = useTenantLocalJson("contabilita_incassi", { movimenti: [] });
+  const { data, setData, ready: localReady, storageKey } = useTenantLocalJson("contabilita_incassi", { movimenti: [] });
   const [dataMov, setDataMov] = useState(() => new Date().toISOString().slice(0, 10));
   const [descrizione, setDescrizione] = useState("");
   const [importo, setImporto] = useState("");
@@ -16,6 +32,57 @@ export default function GestioneIncassiPage() {
   const [ordiniOggi, setOrdiniOggi] = useState([]);
   const [ordiniHintLoading, setOrdiniHintLoading] = useState(false);
   const [ordiniHintErr, setOrdiniHintErr] = useState(null);
+
+  const [movimenti, setMovimenti] = useState([]);
+  const [storageBackend, setStorageBackend] = useState(null);
+  const [storageProbeDone, setStorageProbeDone] = useState(false);
+  const [storageLoadErr, setStorageLoadErr] = useState(null);
+  const probedRef = useRef(false);
+
+  useEffect(() => {
+    probedRef.current = false;
+    setStorageProbeDone(false);
+    setStorageBackend(null);
+    setMovimenti([]);
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!tenantId || !localReady || probedRef.current) return;
+    probedRef.current = true;
+    let cancelled = false;
+    setStorageLoadErr(null);
+    (async () => {
+      try {
+        const dbOk = await contabilitaMovimentiTableReachable(tenantId);
+        if (cancelled) return;
+        if (dbOk) {
+          const rows = await listContabilitaMovimenti(tenantId);
+          if (cancelled) return;
+          setMovimenti(rows.map(mapDbRowToUi));
+          setStorageBackend("db");
+        } else {
+          setMovimenti(data.movimenti || []);
+          setStorageBackend("local");
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setStorageLoadErr(e?.message || "Errore storage");
+          setMovimenti(data.movimenti || []);
+          setStorageBackend("local");
+        }
+      } finally {
+        if (!cancelled) setStorageProbeDone(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, localReady, data.movimenti]);
+
+  useEffect(() => {
+    if (storageBackend !== "local") return;
+    setMovimenti(data.movimenti || []);
+  }, [storageBackend, data.movimenti]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -43,22 +110,18 @@ export default function GestioneIncassiPage() {
   const totali = useMemo(() => {
     let contanti = 0;
     let elettronico = 0;
-    for (const m of data.movimenti || []) {
+    for (const m of movimenti || []) {
       if (m.tipo === "contanti") contanti += m.importo;
       else elettronico += m.importo;
     }
     return { contanti, elettronico, totale: contanti + elettronico };
-  }, [data.movimenti]);
+  }, [movimenti]);
 
   const suggerimentoOrdini = useMemo(() => aggregateIncassiDaOrdini(ordiniOggi), [ordiniOggi]);
 
-  if (!ready) {
-    return <p className="text-gray-400 text-sm">Caricamento…</p>;
-  }
-
-  function add() {
+  const add = useCallback(async () => {
     const imp = Number(importo);
-    if (!imp || imp <= 0) return;
+    if (!imp || imp <= 0 || !tenantId) return;
     const row = {
       id: newLocalId(),
       data: dataMov,
@@ -66,19 +129,45 @@ export default function GestioneIncassiPage() {
       importo: imp,
       tipo,
     };
-    setData((d) => ({ ...d, movimenti: [row, ...d.movimenti] }));
+    if (storageBackend === "db") {
+      try {
+        const inserted = await insertContabilitaMovimento(tenantId, row);
+        setMovimenti((prev) => [{ id: inserted.id, data: inserted.data_mov, descrizione: inserted.descrizione, importo: Number(inserted.importo), tipo: inserted.tipo }, ...prev]);
+      } catch (e) {
+        alert("Salvataggio database non riuscito. " + (e?.message || ""));
+        return;
+      }
+    } else {
+      setData((d) => ({ ...d, movimenti: [row, ...d.movimenti] }));
+    }
     setDescrizione("");
     setImporto("");
-  }
+  }, [importo, tenantId, dataMov, descrizione, tipo, storageBackend, setData]);
 
-  function remove(id) {
-    setData((d) => ({ ...d, movimenti: d.movimenti.filter((x) => x.id !== id) }));
+  const remove = useCallback(
+    async (id) => {
+      if (storageBackend === "db") {
+        try {
+          await deleteContabilitaMovimento(id);
+          setMovimenti((prev) => prev.filter((x) => x.id !== id));
+        } catch (e) {
+          alert("Eliminazione non riuscita. " + (e?.message || ""));
+        }
+      } else {
+        setData((d) => ({ ...d, movimenti: d.movimenti.filter((x) => x.id !== id) }));
+      }
+    },
+    [storageBackend, setData],
+  );
+
+  if (!localReady || !storageProbeDone) {
+    return <p className="text-gray-400 text-sm">Caricamento…</p>;
   }
 
   return (
     <AdminModuleShell
       title="Gestione incassi"
-      lead="Registro manuale degli incassi (contanti ed elettronico). Per il dettaglio vendite giornaliere continua a usare la Cassa e i Report."
+      lead="Registro manuale degli incassi (contanti ed elettronico). Con il database aggiornato (sql_upgrade.sql) i movimenti si salvano su Supabase; altrimenti restano nel browser (localStorage)."
       specTitle="Ambito"
       specChildren={
         <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -87,11 +176,34 @@ export default function GestioneIncassiPage() {
             Report vendite: <Link to="/admin/report">Admin → Report</Link>.
           </li>
           <li>
-            Il riquadro «Da ordini oggi» legge solo gli ordini in database (stesso criterio della cassa): non richiede il modulo contabilità né altri servizi a pagamento.
+            Il riquadro «Da ordini oggi» legge solo gli ordini in database: non richiede moduli a pagamento.
           </li>
         </ul>
       }
     >
+      {storageLoadErr ? (
+        <p style={{ marginBottom: 12, fontSize: 13, color: "#b45309" }}>
+          Storage database non usato ({storageLoadErr}); uso localStorage{storageKey ? ` (${storageKey})` : ""}.
+        </p>
+      ) : null}
+      <div
+        style={{
+          marginBottom: 16,
+          padding: 10,
+          borderRadius: 8,
+          fontSize: 13,
+          background: storageBackend === "db" ? "#ecfdf5" : "#f8fafc",
+          border: storageBackend === "db" ? "1px solid #6ee7b7" : "1px solid #e2e8f0",
+          color: "#334155",
+        }}
+      >
+        {storageBackend === "db" ? (
+          <strong>Persistenza: database Supabase (tabella contabilita_movimenti).</strong>
+        ) : (
+          <strong>Persistenza: solo questo browser (localStorage). Esegui sql/sql_upgrade.sql su Supabase per attivare il DB.</strong>
+        )}
+      </div>
+
       <div
         style={{
           marginBottom: 20,
@@ -184,7 +296,7 @@ export default function GestioneIncassiPage() {
             style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
           />
         </div>
-        <button type="button" className="btn-primary" onClick={add}>
+        <button type="button" className="btn-primary" onClick={() => void add()}>
           Registra incasso
         </button>
       </div>
@@ -221,14 +333,18 @@ export default function GestioneIncassiPage() {
           </tr>
         </thead>
         <tbody>
-          {data.movimenti.map((r) => (
+          {movimenti.map((r) => (
             <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
               <td style={{ padding: "10px 8px" }}>{r.data}</td>
               <td style={{ padding: "10px 8px" }}>{r.descrizione}</td>
               <td style={{ padding: "10px 8px" }}>{r.tipo === "contanti" ? "Contanti" : "Elettronico"}</td>
               <td style={{ padding: "10px 8px" }}>€ {r.importo.toFixed(2)}</td>
               <td style={{ padding: "10px 8px" }}>
-                <button type="button" style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }} onClick={() => remove(r.id)}>
+                <button
+                  type="button"
+                  style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }}
+                  onClick={() => void remove(r.id)}
+                >
                   Elimina
                 </button>
               </td>
@@ -236,7 +352,7 @@ export default function GestioneIncassiPage() {
           ))}
         </tbody>
       </table>
-      {data.movimenti.length === 0 ? (
+      {movimenti.length === 0 ? (
         <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessun movimento manuale.</p>
       ) : null}
     </AdminModuleShell>

@@ -9,7 +9,7 @@ import {
 import { loadServicesCatalog, saveServicesCatalog } from "@/features/superadmin/catalog/servicesStorage";
 import { applyServiziCsvToCatalog, parseServiziCsv } from "@/features/superadmin/utils/parseServiziCsv";
 import { exportServiziCatalogCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
-import { SERVIZI_ROADMAP_STEPS, servizioRoadmapInCorso } from "@/config/serviziRoadmapSteps";
+import { SERVIZI_ROADMAP_STEPS, servizioRoadmapInCorso, percentualeEffettivaServizio } from "@/config/serviziRoadmapSteps";
 
 const PLAN_TIERS = [
   {
@@ -41,7 +41,7 @@ const PLAN_TIERS = [
 function avgAvanzamento(services, ids) {
   const list = (services || []).filter((s) => ids.includes(s.id));
   if (!list.length) return 0;
-  const sum = list.reduce((a, s) => a + (Number(s.avanzamentoPercentuale) || 0), 0);
+  const sum = list.reduce((a, s) => a + percentualeEffettivaServizio(s.id, s.avanzamentoPercentuale), 0);
   return Math.round((sum / list.length) * 10) / 10;
 }
 
@@ -149,10 +149,10 @@ export default function SviluppoPage() {
 
       <h1 className="dashboard-page-title">Statistiche di sviluppo</h1>
       <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748b", maxWidth: 800, lineHeight: 1.6 }}>
-        L&apos;avanzamento per servizio è un valore 0–100% (campo <strong>avanzamento_percentuale</strong> nel CSV). Importa un CSV
-        aggiornato da foglio di lavoro oppure modifica i valori dal{" "}
-        <Link to="/superadmin/servizi">Catalogo servizi</Link>. Le barre per piano mostrano la media dei servizi inclusi in quel piano
-        commerciale.
+        Per ogni <strong>id servizio</strong> la percentuale mostrata in basso coincide con la colonna <strong>% roadmap</strong> sopra
+        (fonte <code>serviziRoadmapSteps.js</code>); il CSV/catalogo può differire ma in questa pagina vince sempre la roadmap. Importa un
+        CSV da foglio di lavoro o modifica dal <Link to="/superadmin/servizi">Catalogo servizi</Link>. Le barre per piano usano la stessa
+        logica (media sui servizi inclusi).
       </p>
 
       <div
@@ -355,7 +355,9 @@ export default function SviluppoPage() {
                     <span style={{ fontWeight: 600 }}>{s.nome}</span>
                     <span style={{ color: "#94a3b8", fontSize: 12, marginLeft: 8 }}>{s.id}</span>
                   </td>
-                  <td style={{ textAlign: "right", fontWeight: 700 }}>{Number(s.avanzamentoPercentuale) || 0}%</td>
+                  <td style={{ textAlign: "right", fontWeight: 700 }}>
+                    {percentualeEffettivaServizio(s.id, s.avanzamentoPercentuale)}%
+                  </td>
                 </tr>
               ))}
             </tbody>
