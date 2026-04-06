@@ -60,7 +60,7 @@ const settingsSidebarItems = [
   { to: "/admin/settings/dati-pizzeria", label: "Dati pizzeria" },
   { to: "/admin/settings/layout", label: "Layout" },
   { to: "/admin/settings/orari", label: "Giorni e orari" },
-  { to: "/admin/settings/sedi-aree", label: "Sedi e aree" },
+  { to: "/admin/settings/area-consegna", label: "Area di consegna" },
   { to: "/admin/settings/parametri", label: "Parametri" },
 ];
 

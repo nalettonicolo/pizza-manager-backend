@@ -193,12 +193,68 @@ export function filterSlotsWebDeliveryLeadTime(slots, nowDate) {
   })
 }
 
+/**
+ * Opzioni filtro vetrina (parametri_operativi), personalizzabili da Admin → Parametri.
+ * @typedef {{ enabled: boolean, endHour: number, minute: number }} WebVetrinaQuarterFilter
+ */
+
+/**
+ * Legge la regola “solo un quarto d’ora” per il checkout consegna web.
+ * Default: attivo, ora fine 15, minuto 45 (comportamento precedente).
+ */
+export function getWebVetrinaSlotQuarterFilter(parametri) {
+  const po = parametri && typeof parametri === "object" ? parametri : {}
+  const enabled = po.vetrina_consegna_filtro_quarto_attivo !== false
+  let endHour = Number(po.vetrina_consegna_filtro_quarto_ora_fine)
+  if (!Number.isFinite(endHour)) endHour = 15
+  endHour = Math.min(23, Math.max(0, Math.floor(endHour)))
+  let minute = Number(po.vetrina_consegna_filtro_quarto_minuto)
+  if (![0, 15, 30, 45].includes(minute)) minute = 45
+  return { enabled, endHour, minute }
+}
+
+/** @deprecated Usare {@link getWebVetrinaSlotQuarterFilter}; mantenuto per compatibilità lettura. */
+export const WEB_DELIVERY_MORNING_RULE_END_HOUR = 15
+
+/**
+ * Vetrina web (consegna): se attivo in parametri, fino a `endHour` (esclusa) mostra solo slot con `minute` scelto
+ * (dopo lead-time). Dopo `endHour` valgono tutti i quarti. Non sostituisce il lead-time.
+ * @param {unknown} parametri — `parametri_operativi` tenant (anche parziale)
+ */
+export function filterSlotsWebDeliveryVetrinaQuarter(slots, nowDate, parametri) {
+  if (!Array.isArray(slots) || !slots.length) return []
+  const { enabled, endHour, minute } = getWebVetrinaSlotQuarterFilter(parametri)
+  if (!enabled) return slots
+  const d = nowDate instanceof Date ? nowDate : new Date(nowDate)
+  if (d.getHours() >= endHour) return slots
+  return slots.filter((s) => {
+    const dt = s.date instanceof Date ? s.date : new Date(s.date)
+    return dt.getMinutes() === minute
+  })
+}
+
+/** @deprecated Usare {@link filterSlotsWebDeliveryVetrinaQuarter} con parametri tenant. */
+export function filterSlotsWebDeliveryMorning45Only(slots, nowDate) {
+  return filterSlotsWebDeliveryVetrinaQuarter(slots, nowDate, {})
+}
+
 export function isSlotAllowedForWebDelivery(slotDate, nowDate) {
   if (!slotDate) return false
   const minM = minSlotStartMinutesWebDelivery(nowDate)
   const dt = slotDate instanceof Date ? slotDate : new Date(slotDate)
   const sm = dt.getHours() * 60 + dt.getMinutes()
   return sm >= minM
+}
+
+/** Lead-time + regola quarti vetrina (stessa logica di {@link filterSlotsWebDeliveryVetrinaQuarter}). */
+export function isSlotAllowedForWebDeliveryFull(slotDate, nowDate, parametri) {
+  if (!isSlotAllowedForWebDelivery(slotDate, nowDate)) return false
+  const { enabled, endHour, minute } = getWebVetrinaSlotQuarterFilter(parametri)
+  if (!enabled) return true
+  const now = nowDate instanceof Date ? nowDate : new Date(nowDate)
+  if (now.getHours() >= endHour) return true
+  const dt = slotDate instanceof Date ? slotDate : new Date(slotDate)
+  return dt.getMinutes() === minute
 }
 
 /** Genera fasce a partire da "adesso" (per backward compat, senza orari). */

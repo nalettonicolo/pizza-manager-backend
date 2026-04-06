@@ -56,6 +56,13 @@ export default function SuperAdminDashboard() {
         </p>
       </header>
 
+      <div className="sa-callout-muted" style={{ marginBottom: 20, maxWidth: 720 }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
+          <strong>Registratore cassa (standalone):</strong> prototipo enterprise POS + fatture + DDT, isolato dai tenant —{" "}
+          <Link to="/superadmin/registratore-cassa">apri la console</Link>.
+        </p>
+      </div>
+
       <div className="stat-cards cols-4">
         <div className="stat-card">
           <p className="stat-label">Clienti totali</p>

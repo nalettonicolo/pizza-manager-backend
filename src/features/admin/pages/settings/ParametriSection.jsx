@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { updateTenantSettings, getCategories } from "@/features/admin/services/adminService";
-import DeliveryAreaMapEditor from "@/features/admin/components/DeliveryAreaMapEditor";
 import PromozioniCalendarioEditor from "@/features/admin/components/PromozioniCalendarioEditor";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 
@@ -29,8 +28,6 @@ const defaultParametri = () => ({
   consegne_ogni_min: "",
   ritiro_ogni_min: "",
   tempo_preparazione_pizza: "",
-  velocita_pony_kmh: "",
-  consegna_stima_raggio_minuti: "",
   soglia_giallo_pizze: "10",
   comanda_copie: "1",
   comanda_font_size: "13",
@@ -41,7 +38,6 @@ export default function ParametriSection() {
   const { settings, setSettings } = useOutletContext();
   const { tenantId } = useTenant();
   const [saving, setSaving] = useState(false);
-  const [mapNonce, setMapNonce] = useState(0);
   const [promoCategories, setPromoCategories] = useState([]);
 
   useEffect(() => {
@@ -59,23 +55,6 @@ export default function ParametriSection() {
     };
   }, [tenantId]);
 
-  const savedPolygonKey = useMemo(
-    () => JSON.stringify(settings?.parametri_operativi?.consegna_area_poligono ?? null),
-    [settings?.parametri_operativi?.consegna_area_poligono],
-  );
-
-  const [consegnaAreaPoligono, setConsegnaAreaPoligono] = useState(null);
-
-  useEffect(() => {
-    const po = settings?.parametri_operativi;
-    const raw = po?.consegna_area_poligono;
-    if (raw && typeof raw === "object" && raw.type === "Polygon") {
-      setConsegnaAreaPoligono(raw);
-    } else {
-      setConsegnaAreaPoligono(null);
-    }
-  }, [savedPolygonKey]);
-
   const raw = settings?.parametri_operativi && typeof settings.parametri_operativi === "object"
     ? settings.parametri_operativi
     : {};
@@ -92,6 +71,14 @@ export default function ParametriSection() {
     promozioni_calendario: Array.isArray(raw.promozioni_calendario) ? raw.promozioni_calendario : [],
     stampa_comanda_ordine_web_automatica: raw.stampa_comanda_ordine_web_automatica === true,
     chiusura_giornata_automatica: raw.chiusura_giornata_automatica !== false,
+    vetrina_consegna_filtro_quarto_attivo: raw.vetrina_consegna_filtro_quarto_attivo !== false,
+    vetrina_consegna_filtro_quarto_ora_fine:
+      raw.vetrina_consegna_filtro_quarto_ora_fine !== undefined && raw.vetrina_consegna_filtro_quarto_ora_fine !== ""
+        ? raw.vetrina_consegna_filtro_quarto_ora_fine
+        : "15",
+    vetrina_consegna_filtro_quarto_minuto: [0, 15, 30, 45].includes(Number(raw.vetrina_consegna_filtro_quarto_minuto))
+      ? String(raw.vetrina_consegna_filtro_quarto_minuto)
+      : "45",
   };
 
   const setParam = (key, value) => {
@@ -99,11 +86,6 @@ export default function ParametriSection() {
       ...settings,
       parametri_operativi: { ...(settings?.parametri_operativi || {}), [key]: value },
     });
-  };
-
-  const mapCenter = {
-    lat: settings?.lat ?? null,
-    lng: settings?.lng ?? null,
   };
 
   async function handleSave() {
@@ -118,9 +100,6 @@ export default function ParametriSection() {
         consegne_ogni_min: p.consegne_ogni_min === "" ? 0 : Number(p.consegne_ogni_min) || 0,
         ritiro_ogni_min: p.ritiro_ogni_min === "" ? 0 : Number(p.ritiro_ogni_min) || 0,
         tempo_preparazione_pizza: p.tempo_preparazione_pizza === "" ? 0 : Number(p.tempo_preparazione_pizza) || 0,
-        velocita_pony_kmh: p.velocita_pony_kmh === "" ? 0 : Number(p.velocita_pony_kmh) || 0,
-        consegna_stima_raggio_minuti:
-          p.consegna_stima_raggio_minuti === "" ? 15 : Math.max(1, Number(p.consegna_stima_raggio_minuti) || 15),
         soglia_giallo_pizze: p.soglia_giallo_pizze === "" ? 10 : Number(p.soglia_giallo_pizze) || 10,
         comanda_copie: p.comanda_copie === "" ? 1 : Math.max(1, Number(p.comanda_copie) || 1),
         comanda_font_size: p.comanda_font_size === "" ? 13 : Math.max(9, Number(p.comanda_font_size) || 13),
@@ -130,12 +109,14 @@ export default function ParametriSection() {
           .filter(Boolean),
         abilita_gestione_listini_multipli: p.abilita_gestione_listini_multipli === true,
         promozioni_calendario: serializePromozioniCalendario(p.promozioni_calendario),
-        consegna_area_poligono:
-          consegnaAreaPoligono && consegnaAreaPoligono.type === "Polygon"
-            ? consegnaAreaPoligono
-            : null,
         stampa_comanda_ordine_web_automatica: p.stampa_comanda_ordine_web_automatica === true,
         chiusura_giornata_automatica: p.chiusura_giornata_automatica !== false,
+        vetrina_consegna_filtro_quarto_attivo: p.vetrina_consegna_filtro_quarto_attivo !== false,
+        vetrina_consegna_filtro_quarto_ora_fine:
+          p.vetrina_consegna_filtro_quarto_ora_fine === "" ? 15 : Math.min(23, Math.max(0, Number(p.vetrina_consegna_filtro_quarto_ora_fine) || 15)),
+        vetrina_consegna_filtro_quarto_minuto: [0, 15, 30, 45].includes(Number(p.vetrina_consegna_filtro_quarto_minuto))
+          ? Number(p.vetrina_consegna_filtro_quarto_minuto)
+          : 45,
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
@@ -244,6 +225,44 @@ export default function ParametriSection() {
               Chiusura giornata automatica in cassa (dopo l’orario di chiusura: alle 23:59 se chiusura è 00:00, altrimenti un’ora dopo l’orario di chiusura del giorno).
             </span>
           </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={p.vetrina_consegna_filtro_quarto_attivo !== false}
+              onChange={(e) => setParam("vetrina_consegna_filtro_quarto_attivo", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              <strong>Checkout consegna (vetrina):</strong> limita le fasce orarie al solo quarto d’ora scelto fino all’ora indicata
+              (es. solo :45 fino alle 15:00). Dopo quell’ora il cliente vede tutti i quarti d’ora. Disattiva per mostrare sempre
+              :00, :15, :30, :45 (dopo il tempo minimo di preparazione).
+            </span>
+          </label>
+          <label>
+            Ora fino a cui applica il filtro (0–23, esclusa: dopo l’ora indicata si usano tutti i quarti)
+            <input
+              type="number"
+              min={0}
+              max={23}
+              placeholder="15"
+              value={p.vetrina_consegna_filtro_quarto_ora_fine === "" ? "" : p.vetrina_consegna_filtro_quarto_ora_fine}
+              onChange={(e) => setParam("vetrina_consegna_filtro_quarto_ora_fine", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Minuto della fascia (in quell’intervallo orario)
+            <select
+              value={p.vetrina_consegna_filtro_quarto_minuto || "45"}
+              onChange={(e) => setParam("vetrina_consegna_filtro_quarto_minuto", e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            >
+              <option value="0">:00</option>
+              <option value="15">:15</option>
+              <option value="30">:30</option>
+              <option value="45">:45</option>
+            </select>
+          </label>
           <label>
             Tempo di preparazione pizza in minuti 
             <input
@@ -252,34 +271,6 @@ export default function ParametriSection() {
               placeholder="es. 5"
               value={p.tempo_preparazione_pizza === "" ? "" : p.tempo_preparazione_pizza}
               onChange={(e) => setParam("tempo_preparazione_pizza", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Velocità pony in km/h 
-            <input
-              type="number"
-              min={1}
-              step={0.5}
-              placeholder="es. 20"
-              value={p.velocita_pony_kmh === "" ? "" : p.velocita_pony_kmh}
-              onChange={(e) => setParam("velocita_pony_kmh", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Minuti per raggio area stima (consegna)
-            <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 4, lineHeight: 1.45 }}>
-              In <strong>Sedi e aree</strong> puoi generare un poligono circolare di partenza: raggio stradale stimato = velocità pony ×
-              (minuti/60). Esempio: 20 km/h e 15 min → ~5 km. Poi modifica il poligono sulla mappa come preferisci.
-            </span>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              placeholder="15"
-              value={p.consegna_stima_raggio_minuti === "" ? "" : p.consegna_stima_raggio_minuti}
-              onChange={(e) => setParam("consegna_stima_raggio_minuti", e.target.value === "" ? "" : e.target.value)}
               style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
             />
           </label>
@@ -294,41 +285,7 @@ export default function ParametriSection() {
               style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
             />
           </label>
-          <div style={{ marginTop: 16, maxWidth: 720 }}>
-            <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Area di consegna (mappa)</h3>
-            <p style={{ fontSize: 13, color: "#666", marginBottom: 8, lineHeight: 1.5 }}>
-              Disegna il poligono sulla mappa: gli ordini <strong>delivery</strong> dei clienti da casa vengono accettati solo se
-              l&apos;indirizzo (geocodificato) cade <strong>dentro</strong> l&apos;area. In <strong>cassa</strong> puoi sempre confermare,
-              anche fuori area, dopo l&apos;avviso.
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setConsegnaAreaPoligono(null);
-                  setMapNonce((n) => n + 1);
-                }}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid #ccc",
-                  background: "#f5f5f5",
-                  cursor: "pointer",
-                  fontSize: 14,
-                }}
-              >
-                Rimuovi area
-              </button>
-            </div>
-            <DeliveryAreaMapEditor
-              key={`${savedPolygonKey}-${mapNonce}`}
-              center={mapCenter}
-              value={consegnaAreaPoligono}
-              onChange={setConsegnaAreaPoligono}
-              height={420}
-            />
-          </div>
-          <h3 style={{ margin: "8px 0 0", fontSize: 16 }}>Comanda</h3>
+          <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Comanda</h3>
           <label>
             Numero copie comanda
             <input

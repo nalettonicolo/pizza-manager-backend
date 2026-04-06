@@ -286,6 +286,10 @@ export default function CassaPage() {
   const [ordiniSearch, setOrdiniSearch] = useState("")
   const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotsDisponibili }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
+  /** Notifiche non bloccanti: nuovi ordini web (polling); niente modal sopra il riepilogo ordine. */
+  const [cassaWebToasts, setCassaWebToasts] = useState([])
+  const cassaSessionStartMsRef = useRef(null)
+  const seenOrderIdsForToastRef = useRef(new Set())
 
   /////////////////////////////////////////////////////////
   // RESET ON TENANT CHANGE
@@ -296,6 +300,9 @@ export default function CassaPage() {
     setProducts([])
     setActiveCategory(null)
     setCart([])
+    cassaSessionStartMsRef.current = Date.now()
+    seenOrderIdsForToastRef.current = new Set()
+    setCassaWebToasts([])
   }, [tenantId])
 
   useEffect(() => {
@@ -371,6 +378,35 @@ export default function CassaPage() {
       setOrdiniOggi([])
     }
   }, [tenantId])
+
+  useEffect(() => {
+    if (!tenantId) return
+    const t = setInterval(() => {
+      void loadOrdini()
+    }, 40000)
+    return () => clearInterval(t)
+  }, [tenantId, loadOrdini])
+
+  useEffect(() => {
+    if (!tenantId || cassaSessionStartMsRef.current == null) return
+    const start = cassaSessionStartMsRef.current
+    for (const o of ordiniOggi || []) {
+      const id = o?.id
+      if (!id || seenOrderIdsForToastRef.current.has(id)) continue
+      seenOrderIdsForToastRef.current.add(id)
+      const raw = o.createdAt ?? o.created_at ?? o.updatedAt ?? o.updated_at
+      const ts = raw ? new Date(raw).getTime() : 0
+      if (!Number.isFinite(ts) || ts < start) continue
+      const note = String(o.note ?? "").toLowerCase()
+      if (!note.includes("ordine web")) continue
+      const toastId = `web-${id}-${ts}`
+      const num = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
+      setCassaWebToasts((prev) => [...prev.slice(-3), { toastId, numero: num, ordineId: id }])
+      window.setTimeout(() => {
+        setCassaWebToasts((prev) => prev.filter((x) => x.toastId !== toastId))
+      }, 14000)
+    }
+  }, [tenantId, ordiniOggi])
 
   /** Categorie + ordini giornata + ingredienti esauriti + permessi: tutto in parallelo (meno attese in cascata). */
   useEffect(() => {
@@ -1549,6 +1585,65 @@ export default function CassaPage() {
 
   return (
     <div style={styles.pageColumn}>
+      <div
+        aria-live="polite"
+        style={{
+          position: "fixed",
+          right: 16,
+          bottom: 16,
+          zIndex: 10040,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          maxWidth: 320,
+          pointerEvents: "none",
+        }}
+      >
+        {cassaWebToasts.map((tw) => (
+          <div
+            key={tw.toastId}
+            style={{
+              pointerEvents: "auto",
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "#0f172a",
+              color: "#fff",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+              fontSize: 14,
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <span>
+              Nuovo ordine web
+              {tw.numero != null && tw.numero !== "—" ? (
+                <>
+                  {" "}
+                  <strong>#{tw.numero}</strong>
+                </>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCassaWebToasts((prev) => prev.filter((x) => x.toastId !== tw.toastId))}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "#94a3b8",
+                cursor: "pointer",
+                fontSize: 18,
+                lineHeight: 1,
+                padding: 0,
+              }}
+              aria-label="Chiudi"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
       {fuoriAreaModal && (
         <div style={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="fuori-area-title">
           <div

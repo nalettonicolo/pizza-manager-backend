@@ -115,6 +115,8 @@ export default function DeliveryAreaMapEditor({
           zoom: centerOk ? 14 : 6,
           mapTypeControl: false,
           streetViewControl: false,
+          /** Rotella = zoom quando il cursore è sulla mappa (default API: cooperative = serve Ctrl+rotella). */
+          gestureHandling: "greedy",
         })
         mapRef.current = map
 

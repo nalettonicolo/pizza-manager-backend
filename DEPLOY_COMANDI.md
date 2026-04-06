@@ -65,7 +65,7 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 
 1. Login admin tenant → **Impostazioni → Parametri** salva senza errori; **Promozioni** visibili.
 2. **Menu → Listini e backup**: stampa PDF; con archivio attivo, snapshot JSON e (opzionale) ripristino prezzi da backup.
-3. **Impostazioni → Sedi e aree**: mappa per PV salva senza errore RLS.
+3. **Impostazioni → Area di consegna**: mappa globale e per PV salva senza errore RLS.
 4. **Vetrina**: prezzi promo se configurati; checkout cliente se abilitato.
 5. **Pagamenti online** (Stripe/SumUp): in app restano placeholder finché non si integrano webhook e stati; non fare affidamento su incasso reale senza test ambiente.
 

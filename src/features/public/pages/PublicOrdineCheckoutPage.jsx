@@ -10,7 +10,9 @@ import {
   getTodayOrari,
   buildSlotsFullDay,
   filterSlotsWebDeliveryLeadTime,
-  isSlotAllowedForWebDelivery,
+  filterSlotsWebDeliveryVetrinaQuarter,
+  getWebVetrinaSlotQuarterFilter,
+  isSlotAllowedForWebDeliveryFull,
   PLANNING_GRID_SLOT_MINUTES,
 } from "@/features/operative/cassa/utils/planningUtils"
 import { maybeNotifyNewWebOrder } from "@/utils/webOrderNotifications"
@@ -20,6 +22,8 @@ import { readConsegnaDomicilioAttiva } from "@/utils/fidelityProgramConfig"
 import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
 import { resolveMatchingPuntiVendita } from "@/utils/resolvePvForDelivery"
 import { OnlinePaymentPlaceholder, describePaymentProvider } from "@/features/public/components/OnlinePaymentPlaceholder"
+
+const PARAMETRI_OPERATIVI_VUOTI = {}
 
 function isTodayClosed(orariSettimana) {
   if (!Array.isArray(orariSettimana) || !orariSettimana.length) return false
@@ -94,15 +98,21 @@ export default function PublicOrdineCheckoutPage() {
   }, [])
 
   const orariOggi = useMemo(() => getTodayOrari(tenant?.orari_settimana), [tenant?.orari_settimana])
-  const parametri = tenant?.parametri_operativi && typeof tenant.parametri_operativi === "object" ? tenant.parametri_operativi : {}
+  const parametri = useMemo(() => {
+    const po = tenant?.parametri_operativi
+    return po && typeof po === "object" ? po : PARAMETRI_OPERATIVI_VUOTI
+  }, [tenant?.parametri_operativi])
   const slotMin = PLANNING_GRID_SLOT_MINUTES
   const consegnaOn = readConsegnaDomicilioAttiva(parametri)
   const closedToday = isTodayClosed(tenant?.orari_settimana)
+  const quarterFilterUi = useMemo(() => getWebVetrinaSlotQuarterFilter(parametri), [parametri])
+
   const slots = useMemo(() => {
     if (closedToday || !orariOggi.aperto) return []
     const all = buildSlotsFullDay(orariOggi)
-    return filterSlotsWebDeliveryLeadTime(all, new Date())
-  }, [closedToday, orariOggi, slotTick])
+    const afterLead = filterSlotsWebDeliveryLeadTime(all, new Date())
+    return filterSlotsWebDeliveryVetrinaQuarter(afterLead, new Date(), parametri)
+  }, [closedToday, orariOggi, slotTick, parametri])
 
   useEffect(() => {
     setSelectedSlot((prev) => {
@@ -221,7 +231,7 @@ export default function PublicOrdineCheckoutPage() {
       setError("Seleziona una fascia oraria di consegna.")
       return
     }
-    if (!isSlotAllowedForWebDelivery(selectedSlot.date, new Date())) {
+    if (!isSlotAllowedForWebDeliveryFull(selectedSlot.date, new Date(), parametri)) {
       setError(
         "La fascia scelta non è più disponibile: serve almeno un intervallo di preparazione (non si può prenotare il quarto d’ora subito dopo l’orario attuale). Aggiorna le fasce e riprova.",
       )
@@ -435,6 +445,14 @@ export default function PublicOrdineCheckoutPage() {
           <h2 style={{ fontSize: 16, marginBottom: 8 }}>Fascia oraria</h2>
           <p style={{ fontSize: 13, color: "#64748b", marginBottom: 10, lineHeight: 1.45 }}>
             Le prime fasce troppo vicine all’orario attuale non sono selezionabili (tempo minimo di preparazione).
+            {quarterFilterUi.enabled && new Date().getHours() < quarterFilterUi.endHour ? (
+              <>
+                {" "}
+                Fino alle <strong>{quarterFilterUi.endHour}:00</strong> le consegne sono proposte solo ai minuti{" "}
+                <strong>:{String(quarterFilterUi.minute).padStart(2, "0")}</strong> (es. 11:{String(quarterFilterUi.minute).padStart(2, "0")}),
+                compatibilmente con i tempi di preparazione e consegna. Configurabile in Amministrazione → Parametri operativi.
+              </>
+            ) : null}
           </p>
           {slots.length === 0 ? (
             <p style={{ color: "#b45309" }}>Nessuna fascia disponibile (orario di chiusura o giorno chiuso).</p>

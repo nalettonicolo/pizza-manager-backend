@@ -55,6 +55,7 @@ const SuperadminGuideDocPage = lazy(() => import("@/features/superadmin/pages/Su
 const SviluppoPage = lazy(() => import("@/features/superadmin/pages/SviluppoPage"));
 const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/ServizioSchedaPage"));
 const SuperadminIngressoPage = lazy(() => import("@/features/superadmin/pages/SuperadminIngressoPage"));
+const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
 
 /* ================= ADMIN (lazy) ================= */
@@ -65,7 +66,7 @@ const DatiPizzeriaSection = lazy(() => import("@/features/admin/pages/settings/D
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
 const OrariSection = lazy(() => import("@/features/admin/pages/settings/OrariSection"));
 const ParametriSection = lazy(() => import("@/features/admin/pages/settings/ParametriSection"));
-const PuntiVenditaAreeSection = lazy(() => import("@/features/admin/pages/settings/PuntiVenditaAreeSection"));
+const AreaConsegnaSection = lazy(() => import("@/features/admin/pages/settings/AreaConsegnaSection"));
 const CategoriePage = lazy(() => import("@/features/admin/pages/menu/CategoriePage"));
 const FormatiPage = lazy(() => import("@/features/admin/pages/menu/FormatiPage"));
 const CotturaPage = lazy(() => import("@/features/admin/pages/menu/CotturaPage"));
@@ -307,6 +308,14 @@ export default function AppRouter() {
             <Route path="/superadmin/guide" element={<Suspense fallback={<PageFallback />}><SuperadminGuideHub /></Suspense>} />
             <Route path="/superadmin/guide/:docSlug" element={<Suspense fallback={<PageFallback />}><SuperadminGuideDocPage /></Suspense>} />
             <Route path="/superadmin/sviluppo" element={<Suspense fallback={<PageFallback />}><SviluppoPage /></Suspense>} />
+            <Route
+              path="/superadmin/registratore-cassa"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminRegistratoreCassaPage />
+                </Suspense>
+              }
+            />
             <Route path="/superadmin/home-pizzeria" element={<Suspense fallback={<PageFallback />}><Home /></Suspense>} />
           </Route>
         </Route>
@@ -364,7 +373,8 @@ export default function AppRouter() {
             <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />
             <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
             <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
-            <Route path="sedi-aree" element={<Suspense fallback={<PageFallback />}><PuntiVenditaAreeSection /></Suspense>} />
+            <Route path="area-consegna" element={<Suspense fallback={<PageFallback />}><AreaConsegnaSection /></Suspense>} />
+            <Route path="sedi-aree" element={<Navigate to="/admin/settings/area-consegna" replace />} />
             <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
           </Route>
         </Route>

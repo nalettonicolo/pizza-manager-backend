@@ -31,6 +31,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/superadmin/guide", label: "Documentazione" },
       { to: "/superadmin/sviluppo", label: "Roadmap" },
+      { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
       { to: "/superadmin/home-pizzeria", label: "Anteprima sito" },
       { to: "/superadmin/settings", label: "Sistema" },
     ],
@@ -56,6 +57,7 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/Settings"),
       () => import("@/features/superadmin/pages/SuperadminIngressoPage"),
       () => import("@/features/superadmin/pages/ServizioSchedaPage"),
+      () => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"),
     ]);
   }, []);
 
