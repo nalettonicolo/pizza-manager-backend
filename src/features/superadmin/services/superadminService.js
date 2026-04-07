@@ -591,3 +591,98 @@ export async function getPlatformStats() {
     recentTenants: tenants.slice(0, 5),
   };
 }
+
+const REGISTRATORE_TABLE = "superadmin_registratore_state";
+const REGISTRATORE_AUDIT_TABLE = "superadmin_registratore_audit";
+
+function isRegistratoreUnavailableError(err) {
+  if (!err) return false;
+  const m = String(err.message ?? err ?? "");
+  const c = err.code;
+  return (
+    isTableNotInSchemaCacheError(err) ||
+    c === "PGRST205" ||
+    c === "42P01" ||
+    /relation .* does not exist/i.test(m)
+  );
+}
+
+/**
+ * Carica lo stato JSON del registratore cassa standalone (solo riga dell'utente corrente).
+ * RLS: superadmin solo propria riga.
+ */
+export async function fetchRegistratoreState(userId) {
+  if (!userId) {
+    return { row: null, error: null, unavailable: true };
+  }
+  const { data, error } = await supabase
+    .from(REGISTRATORE_TABLE)
+    .select("payload, updated_at, revision")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    if (isRegistratoreUnavailableError(error)) {
+      return { row: null, error, unavailable: true };
+    }
+    logSupabaseError("superadmin.fetchRegistratoreState", error, { userId });
+    return { row: null, error, unavailable: false };
+  }
+  return { row: data, error: null, unavailable: false };
+}
+
+/**
+ * Salva (upsert) il blob JSON sul server.
+ * `revision` e `updated_at` sono impostati dai trigger DB (multi-scheda: ultimo salvataggio vince).
+ * @returns {{ revision: number, updated_at: string } | null}
+ */
+export async function upsertRegistratoreState(userId, payload) {
+  if (!userId) {
+    throw new Error("userId obbligatorio");
+  }
+  const { data, error } = await supabase
+    .from(REGISTRATORE_TABLE)
+    .upsert({ user_id: userId, payload }, { onConflict: "user_id" })
+    .select("revision, updated_at")
+    .single();
+
+  if (error) {
+    if (isRegistratoreUnavailableError(error)) {
+      const e = new Error("Tabella non disponibile");
+      e.code = "UNAVAILABLE";
+      throw e;
+    }
+    logSupabaseError("superadmin.upsertRegistratoreState", error, { userId });
+    throw error;
+  }
+  return data
+    ? {
+        revision: Number(data.revision) || 1,
+        updated_at: data.updated_at,
+      }
+    : null;
+}
+
+/**
+ * Ultime voci audit append-only (solo superadmin, proprio user_id).
+ */
+export async function fetchRegistratoreAuditLog(userId, { limit = 20 } = {}) {
+  if (!userId) {
+    return { rows: [], error: null, unavailable: true };
+  }
+  const { data, error } = await supabase
+    .from(REGISTRATORE_AUDIT_TABLE)
+    .select("id, op, revision, created_at, payload_before, payload_after")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(100, Math.max(1, limit)));
+
+  if (error) {
+    if (isRegistratoreUnavailableError(error)) {
+      return { rows: [], error, unavailable: true };
+    }
+    logSupabaseError("superadmin.fetchRegistratoreAuditLog", error, { userId });
+    return { rows: [], error, unavailable: false };
+  }
+  return { rows: data ?? [], error: null, unavailable: false };
+}

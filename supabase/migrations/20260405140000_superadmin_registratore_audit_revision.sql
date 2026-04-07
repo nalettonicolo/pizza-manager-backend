@@ -1,77 +1,11 @@
--- =============================================================================
--- PizzaManager — SQL UPGRADE (solo modifiche da qui in avanti)
--- =============================================================================
---
--- Lo storico degli script manuali è stato suddiviso in moduli riutilizzabili:
---   sql/modules/01_fidelity_tenant.sql … 10_punti_vendita_lat_lng_view.sql
--- Esegui i moduli IN ORDINE su un database nuovo o se mancano oggetti elencati
--- nel README della cartella modules.
---
--- Questo file serve per:
---   • Nuove migration incrementali (copia-incolla in Supabase SQL Editor dopo review)
---   • Oppure: aggiungi un file in supabase/migrations/YYYYMMDDHHMMSS_nome.sql per CLI
---
--- (Nessuna istruzione DDL obbligatoria qui finché non serve una modifica nuova.)
---
--- =============================================================================
+-- Registratore Super Admin: revisione monotona (multi-scheda, ultima scrittura vince al save)
+-- + audit append-only (nessun UPDATE/DELETE da client).
 
--- -----------------------------------------------------------------------------
--- 2026-04-05 — Registratore cassa Super Admin (sync enterprise su Supabase)
--- Copia anche in: supabase/migrations/20260405120000_superadmin_registratore_state.sql
--- -----------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS public.superadmin_registratore_state (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL UNIQUE REFERENCES auth.users (id) ON DELETE CASCADE,
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_superadmin_registratore_state_user
-  ON public.superadmin_registratore_state (user_id);
-
-COMMENT ON TABLE public.superadmin_registratore_state IS
-  'Stato registratore cassa standalone (Super Admin). Un blob JSON per utente; nessun tenant_id.';
-
-ALTER TABLE public.superadmin_registratore_state ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "superadmin_registratore_state_superadmin_all" ON public.superadmin_registratore_state;
-
-CREATE POLICY "superadmin_registratore_state_superadmin_all"
-  ON public.superadmin_registratore_state
-  FOR ALL
-  TO authenticated
-  USING (
-    auth.uid() = user_id
-    AND EXISTS (
-      SELECT 1
-      FROM public.utenti_ruoli ur
-      WHERE ur.user_id = auth.uid()
-        AND lower(trim(ur.ruolo)) = 'superadmin'
-        AND (ur.attivo IS DISTINCT FROM false)
-    )
-  )
-  WITH CHECK (
-    auth.uid() = user_id
-    AND EXISTS (
-      SELECT 1
-      FROM public.utenti_ruoli ur
-      WHERE ur.user_id = auth.uid()
-        AND lower(trim(ur.ruolo)) = 'superadmin'
-        AND (ur.attivo IS DISTINCT FROM false)
-    )
-  );
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.superadmin_registratore_state TO authenticated;
-
--- -----------------------------------------------------------------------------
--- 2026-04-05 — Registratore Super Admin: revision + audit append-only
--- Copia anche in: supabase/migrations/20260405140000_superadmin_registratore_audit_revision.sql
--- -----------------------------------------------------------------------------
-
+-- 1) Colonna revision (idempotente su DB già migrati senza colonna)
 ALTER TABLE public.superadmin_registratore_state
   ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 1;
 
+-- 2) Trigger: updated_at + revision gestiti solo lato server (ignora valori client)
 CREATE OR REPLACE FUNCTION public.tg_superadmin_registratore_state_biu()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -98,6 +32,7 @@ CREATE TRIGGER tr_superadmin_registratore_state_biu
   FOR EACH ROW
   EXECUTE FUNCTION public.tg_superadmin_registratore_state_biu();
 
+-- 3) Audit append-only
 CREATE TABLE IF NOT EXISTS public.superadmin_registratore_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
@@ -133,8 +68,11 @@ CREATE POLICY "superadmin_registratore_audit_select_own"
     )
   );
 
+-- Nessuna policy INSERT/UPDATE/DELETE per authenticated: solo trigger (SECURITY DEFINER).
+
 GRANT SELECT ON public.superadmin_registratore_audit TO authenticated;
 
+-- 4) Trigger audit (dopo commit logica stato)
 CREATE OR REPLACE FUNCTION public.tg_superadmin_registratore_audit_aiu()
 RETURNS TRIGGER
 LANGUAGE plpgsql

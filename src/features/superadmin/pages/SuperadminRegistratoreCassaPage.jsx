@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
-import { useSuperadminLocalJson } from "@/features/superadmin/hooks/useSuperadminLocalJson";
-
-const STORAGE_KEY = "registratore_standalone_v2";
+import {
+  getInitialRegistratoreState,
+  REGISTRATORE_STORAGE_KEY,
+  useSuperadminRegistratoreEnterprise,
+} from "@/features/superadmin/hooks/useSuperadminRegistratoreEnterprise";
 
 const ALIQUOTE = [
   { value: 22, label: "22%" },
@@ -26,16 +28,6 @@ function emptyCarrello() {
     clienteIndirizzo: "",
     note: "",
     pagamento: "contanti",
-  };
-}
-
-function initialState() {
-  return {
-    carrello: emptyCarrello(),
-    vendite: [],
-    fattureCliente: [],
-    fatturePassive: [],
-    ddt: [],
   };
 }
 
@@ -67,9 +59,27 @@ function formatEuro(n) {
 }
 
 export default function SuperadminRegistratoreCassaPage() {
-  const emptyState = useMemo(() => initialState(), []);
-  const { data, setData, ready } = useSuperadminLocalJson(STORAGE_KEY, emptyState);
+  const {
+    data,
+    setData,
+    ready,
+    syncStatus,
+    syncError,
+    serverUpdatedAt,
+    serverRevision,
+    remoteUnavailable,
+    saveNow,
+    conflict,
+    takeRemoteConflict,
+    dismissConflictKeepLocal,
+    checkRemoteNewerRevision,
+    auditRows,
+    auditLoading,
+    auditError,
+    refreshAudit,
+  } = useSuperadminRegistratoreEnterprise();
   const [tab, setTab] = useState("cassa");
+  const [auditOpen, setAuditOpen] = useState(false);
   const [printPayload, setPrintPayload] = useState(null);
 
   useEffect(() => {
@@ -132,8 +142,14 @@ export default function SuperadminRegistratoreCassaPage() {
   }
 
   function resetAll() {
-    if (!window.confirm("Azzerare tutti i dati locali del registratore (vendite, fatture, DDT)?")) return;
-    setData(initialState());
+    if (
+      !window.confirm(
+        "Azzerare tutti i dati del registratore (vendite, fatture, DDT)? Verranno aggiornati anche server e cache locale.",
+      )
+    ) {
+      return;
+    }
+    setData(getInitialRegistratoreState());
   }
 
   function openPrint(kind, doc) {
@@ -149,12 +165,123 @@ export default function SuperadminRegistratoreCassaPage() {
         <p className="sa-page-kicker">Strumenti piattaforma</p>
         <h1 className="dashboard-page-title sa-page-title">Registratore di cassa (standalone)</h1>
         <p className="sa-page-lede">
-          Modulo <strong>enterprise</strong> distaccato dal servizio tenant: nessuna chiamata agli ordini o al database
-          pizzeria. I dati restano nel browser (localStorage, chiave <code>pm_superadmin_{STORAGE_KEY}</code>). Ideale per
-          testare flussi POS, emissione documenti e integrazioni future (stampanti fiscali, SDI, magazzino) senza impattare
-          i clienti SaaS.
+          Modulo <strong>enterprise</strong> distaccato dal servizio tenant: nessun ordine né tabella pizzeria. Stato su{" "}
+          <strong>Supabase</strong> (<code>superadmin_registratore_state</code> con <code>revision</code> monotona;{" "}
+          <code>superadmin_registratore_audit</code> append-only per ogni salvataggio). Multi-scheda: se hai modifiche non
+          salvate e un’altra finestra salva, compare un avviso; altrimenti al ritorno sulla scheda i dati server aggiornati si
+          applicano da soli. Cache locale: <code>pm_superadmin_{REGISTRATORE_STORAGE_KEY}</code>.
         </p>
       </header>
+
+      {conflict ? (
+        <div className="sa-reg-conflict" role="alert">
+          <p style={{ margin: "0 0 10px", fontWeight: 700 }}>
+            Altra sessione ha salvato una versione più recente (revisione {conflict.remoteRevision}).
+          </p>
+          <p style={{ margin: "0 0 12px", fontSize: 14, color: "#5c534c", lineHeight: 1.5 }}>
+            Hai modifiche locali non ancora inviate. Puoi scaricare i dati dal server (perdi le modifiche in questa scheda) o
+            ignorare e continuare: al prossimo salvataggio la tua copia sovrascriverà il server (ultima scrittura vince).
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <button type="button" className="btn-primary" onClick={takeRemoteConflict}>
+              Usa dati dal server
+            </button>
+            <button type="button" className="sa-btn-outline" onClick={dismissConflictKeepLocal}>
+              Ignora, tengo le mie modifiche
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="sa-reg-sync-bar" role="status">
+        {syncStatus === "loading" ? (
+          <span className="sa-reg-sync-pill sa-reg-sync-loading">Caricamento da server…</span>
+        ) : syncStatus === "saving" ? (
+          <span className="sa-reg-sync-pill sa-reg-sync-saving">Salvataggio su Supabase…</span>
+        ) : syncStatus === "error" && syncError ? (
+          <span className="sa-reg-sync-pill sa-reg-sync-err">{syncError}</span>
+        ) : remoteUnavailable || syncStatus === "local_only" ? (
+          <span className="sa-reg-sync-pill sa-reg-sync-warn">
+            Solo cache locale — applica la migrazione SQL o verifica il ruolo superadmin
+          </span>
+        ) : serverUpdatedAt ? (
+          <span className="sa-reg-sync-pill sa-reg-sync-ok">
+            Sincronizzato
+            {serverRevision != null ? ` · rev. ${serverRevision}` : ""} ·{" "}
+            {new Date(serverUpdatedAt).toLocaleString("it-IT")}
+          </span>
+        ) : (
+          <span className="sa-reg-sync-pill sa-reg-sync-ok">Pronto · sync automatica dopo ogni modifica</span>
+        )}
+        {!remoteUnavailable && syncStatus !== "loading" && (
+          <>
+            <button type="button" className="sa-btn-outline sa-reg-sync-btn" onClick={() => void checkRemoteNewerRevision()}>
+              Controlla aggiornamenti
+            </button>
+            <button type="button" className="sa-btn-outline sa-reg-sync-btn" onClick={() => saveNow()}>
+              Salva ora su server
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="sa-reg-audit-block">
+        <button
+          type="button"
+          className="sa-reg-audit-toggle"
+          aria-expanded={auditOpen}
+          onClick={() => {
+            setAuditOpen((o) => !o);
+            if (!auditOpen) void refreshAudit();
+          }}
+        >
+          Log audit append-only {auditOpen ? "▼" : "▶"}
+        </button>
+        {auditOpen ? (
+          <div className="sa-reg-audit-body">
+            {auditLoading ? (
+              <p className="sa-reg-audit-muted">Caricamento…</p>
+            ) : auditError ? (
+              <p className="sa-reg-audit-err">{auditError}</p>
+            ) : auditRows.length === 0 ? (
+              <p className="sa-reg-audit-muted">Nessuna voce (salva almeno una volta dopo la migrazione audit).</p>
+            ) : (
+              <>
+                <p className="sa-reg-audit-muted" style={{ marginBottom: 10 }}>
+                  Ogni riga è immutabile lato client; conserva payload prima/dopo per tracciabilità.
+                </p>
+                <div className="sa-table-wrap">
+                  <table className="sa-data-table">
+                    <thead>
+                      <tr>
+                        <th>Data (UTC)</th>
+                        <th>Op</th>
+                        <th>Revisione</th>
+                        <th>Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditRows.map((r) => (
+                        <tr key={r.id}>
+                          <td>{r.created_at ? new Date(r.created_at).toLocaleString("it-IT") : "—"}</td>
+                          <td>{r.op}</td>
+                          <td>{r.revision}</td>
+                          <td style={{ fontSize: 12 }}>
+                            {r.op === "update" ? "snapshot prima/dopo in DB" : "primo salvataggio"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button type="button" className="sa-btn-outline" style={{ marginTop: 10 }} onClick={() => void refreshAudit()}>
+                  Aggiorna elenco
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       <div className="sa-reg-toolbar">
         <div className="sa-tabs" role="tablist" aria-label="Sezioni registratore">
