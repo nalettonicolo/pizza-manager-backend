@@ -23,6 +23,7 @@ import {
   getIngredients,
   getRuoliPizzeria,
   createOrder,
+  turniCassaAperto,
   getOrders,
   getOrderDetail,
   getProdottiByIds,
@@ -143,6 +144,17 @@ function computeAccreditoFidelityPunti(parametriOperativi, cart, totaleOrdine) {
     return Math.max(0, Math.floor(qty * tpp))
   }
   return 0
+}
+
+/** Con `cassa_turno_obbligatorio` attivo: serve turno aperto; se c’è PV attivo deve coincidere col turno. */
+function turnoOkForCassa(po, turno, activePvId) {
+  if (!po || po.cassa_turno_obbligatorio !== true) return true
+  if (!turno || turno.id == null) return false
+  if (activePvId) {
+    const tpv = turno.punto_vendita_id ?? turno.puntoVenditaId
+    if (tpv == null || String(tpv) !== String(activePvId)) return false
+  }
+  return true
 }
 
 function splitNomeDaIndirizzoConsegna(raw) {
@@ -286,6 +298,8 @@ export default function CassaPage() {
   const [ordiniSearch, setOrdiniSearch] = useState("")
   const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotsDisponibili }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
+  const [turnoCassa, setTurnoCassa] = useState(null)
+  const [turnoCassaLoading, setTurnoCassaLoading] = useState(false)
   /** Notifiche non bloccanti: nuovi ordini web (polling); niente modal sopra il riepilogo ordine. */
   const [cassaWebToasts, setCassaWebToasts] = useState([])
   const cassaSessionStartMsRef = useRef(null)
@@ -303,7 +317,34 @@ export default function CassaPage() {
     cassaSessionStartMsRef.current = Date.now()
     seenOrderIdsForToastRef.current = new Set()
     setCassaWebToasts([])
+    setTurnoCassa(null)
   }, [tenantId])
+
+  const loadTurnoCassa = useCallback(async () => {
+    if (!tenantId || !user?.id) return
+    setTurnoCassaLoading(true)
+    try {
+      const row = await turniCassaAperto(tenantId)
+      setTurnoCassa(row)
+    } catch (e) {
+      console.warn("[Cassa] turno cassa:", e)
+      setTurnoCassa(null)
+    } finally {
+      setTurnoCassaLoading(false)
+    }
+  }, [tenantId, user?.id])
+
+  useEffect(() => {
+    void loadTurnoCassa()
+  }, [loadTurnoCassa])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadTurnoCassa()
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [loadTurnoCassa])
 
   useEffect(() => {
     const po = tenantData?.parametri_operativi
@@ -1178,6 +1219,19 @@ export default function CassaPage() {
     setCheckoutError(null)
     setPendingComandaPrint(null)
     setPendingRicevutaPrint(null)
+    const poGate = tenantData?.parametri_operativi || {}
+    if (poGate.cassa_turno_obbligatorio === true) {
+      if (turnoCassaLoading) {
+        setCheckoutError("Verifica turno cassa in corso… riprova tra un attimo.")
+        return
+      }
+      if (!turnoOkForCassa(poGate, turnoCassa, activePvId)) {
+        setCheckoutError(
+          "È obbligatorio un turno cassa aperto per questo punto vendita. Vai in Operative → Turni oppure seleziona il PV corretto.",
+        )
+        return
+      }
+    }
     const snapshotCart = cart.map((row) => ({ ...row }))
     const noteSnap = checkoutNote.trim()
     const fidelitySaldoSnap = selectedFidelitySaldo
@@ -1234,6 +1288,8 @@ export default function CassaPage() {
         totale: total,
         stato: ORDER_STATUS,
         puntoVenditaId: activePvId || undefined,
+        turnoOperatoriId:
+          turnoCassa?.id != null && Number.isFinite(Number(turnoCassa.id)) ? Number(turnoCassa.id) : undefined,
         items: cart.map((p) => ({
           prodotto_id: p.id,
           quantita: p.qty,
@@ -1376,6 +1432,10 @@ export default function CassaPage() {
   }, [filteredProducts, productIngredientIdsMap, ingredientiEsauritiIds, tenantData?.parametri_operativi?.prodotti_esauriti])
 
   const parametri = tenantData?.parametri_operativi || {}
+  const turnoCassaBloccante =
+    parametri.cassa_turno_obbligatorio === true &&
+    !turnoCassaLoading &&
+    !turnoOkForCassa(parametri, turnoCassa, activePvId)
   const haStampantiReparto = useMemo(
     () => normalizeComandaRepartiStampanti(parametri?.comanda_reparti_stampanti).length > 0,
     [parametri?.comanda_reparti_stampanti],
@@ -1510,6 +1570,37 @@ export default function CassaPage() {
   if (showRiepilogo) {
     return (
       <>
+        {turnoCassaBloccante ? (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 12,
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "#fff7ed",
+              border: "1px solid #fdba74",
+              color: "#9a3412",
+              fontSize: 14,
+              lineHeight: 1.45,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <span>
+              <strong>Turno cassa obbligatorio:</strong> apri un turno per il punto vendita attivo prima di incassare ordini.
+            </span>
+            <button
+              type="button"
+              className="cassa-toolbar-compact-btn"
+              onClick={() => navigate("/operative/turni")}
+              style={{ fontWeight: 600 }}
+            >
+              Vai ai turni
+            </button>
+          </div>
+        ) : null}
         <RiepilogoOrdinePage
           cart={cart}
           total={total}
@@ -1585,6 +1676,37 @@ export default function CassaPage() {
 
   return (
     <div style={styles.pageColumn}>
+      {turnoCassaBloccante ? (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 12,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "#fff7ed",
+            border: "1px solid #fdba74",
+            color: "#9a3412",
+            fontSize: 14,
+            lineHeight: 1.45,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span>
+            <strong>Turno cassa obbligatorio:</strong> apri un turno per il punto vendita attivo prima di incassare ordini.
+          </span>
+          <button
+            type="button"
+            className="cassa-toolbar-compact-btn"
+            onClick={() => navigate("/operative/turni")}
+            style={{ fontWeight: 600 }}
+          >
+            Vai ai turni
+          </button>
+        </div>
+      ) : null}
       <div
         aria-live="polite"
         style={{

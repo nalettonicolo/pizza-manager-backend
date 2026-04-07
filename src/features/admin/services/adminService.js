@@ -176,7 +176,7 @@ export async function getTenantVenditeInsights(tenantId, opts = {}) {
 
 /**
  * Crea un ordine con righe (cassa / cliente).
- * Richiede RPC create_order_with_items e colonne note/tipo_pagamento su core.ordini.
+ * Richiede RPC create_order_with_items e colonne su core.ordini (incl. `turno_operatori_id` opzionale).
  * @returns {Promise<string>} ID ordine creato
  */
 export async function createOrder(tenantId, payload) {
@@ -194,6 +194,7 @@ export async function createOrder(tenantId, payload) {
     consegnaLat = null,
     pagamentoDettaglio = null,
     puntoVenditaId = null,
+    turnoOperatoriId = null,
   } = payload
 
   const rpcArgs = {
@@ -222,6 +223,10 @@ export async function createOrder(tenantId, payload) {
     pagamentoDettaglio != null && typeof pagamentoDettaglio === "object" ? pagamentoDettaglio : null
   rpcArgs.p_punto_vendita_id =
     puntoVenditaId != null && String(puntoVenditaId).trim() !== "" ? puntoVenditaId : null
+  rpcArgs.p_turno_operatori_id =
+    turnoOperatoriId != null && turnoOperatoriId !== "" && Number.isFinite(Number(turnoOperatoriId))
+      ? Number(turnoOperatoriId)
+      : null
 
   const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
 
@@ -1906,6 +1911,62 @@ export async function getReportData(
     periodoInizio: range.start,
     periodoFine: range.end,
   }
+}
+
+///////////////////////////////////////////////////////////
+// ===================== TURNI CASSA (RPC) ================
+///////////////////////////////////////////////////////////
+
+/** Turno aperto per l’utente corrente sul tenant, o null. */
+export async function turniCassaAperto(tenantId) {
+  if (!tenantId) return null
+  const { data, error } = await supabase.rpc("turni_cassa_aperto", { p_tenant_id: tenantId })
+  if (error) {
+    logSupabaseError("admin.turniCassaAperto", error, { tenantId })
+    throw error
+  }
+  return data ?? null
+}
+
+export async function turniCassaApri(tenantId, puntoVenditaId) {
+  if (!tenantId || !puntoVenditaId) {
+    throw new Error("tenant e punto vendita obbligatori")
+  }
+  const { data, error } = await supabase.rpc("turni_cassa_apri", {
+    p_tenant_id: tenantId,
+    p_punto_vendita_id: puntoVenditaId,
+  })
+  if (error) {
+    logSupabaseError("admin.turniCassaApri", error, { tenantId })
+    throw error
+  }
+  return data
+}
+
+/**
+ * Chiusura turno con riconciliazione (fondo contato obbligatorio).
+ * @param {{ fondoContatoEuro: number, incassoAttesoEuro?: number|null, note?: string|null }} params
+ */
+export async function turniCassaChiudi(tenantId, params) {
+  if (!tenantId) throw new Error("tenant obbligatorio")
+  const fondo = params?.fondoContatoEuro
+  if (fondo == null || Number.isNaN(Number(fondo))) {
+    throw new Error("fondo contato obbligatorio")
+  }
+  const { data, error } = await supabase.rpc("turni_cassa_chiudi", {
+    p_tenant_id: tenantId,
+    p_fondo_contato_euro: Number(fondo),
+    p_incasso_atteso_euro:
+      params?.incassoAttesoEuro != null && params.incassoAttesoEuro !== ""
+        ? Number(params.incassoAttesoEuro)
+        : null,
+    p_note_chiusura: params?.note != null ? String(params.note) : null,
+  })
+  if (error) {
+    logSupabaseError("admin.turniCassaChiudi", error, { tenantId })
+    throw error
+  }
+  return data
 }
 
 ///////////////////////////////////////////////////////////

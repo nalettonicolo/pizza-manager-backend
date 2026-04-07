@@ -206,6 +206,51 @@ export default function SviluppoPage() {
         )}
       </div>
 
+      <div
+        className="dashboard-box"
+        style={{
+          marginBottom: 28,
+          border: "1px solid #d9f99d",
+          background: "linear-gradient(135deg, #f7fee7 0%, #fff 55%)",
+        }}
+      >
+        <h2 style={{ marginTop: 0, fontSize: 17, color: "#3f6212" }}>Prossimi passi (cosa manca ancora)</h2>
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
+          Sintesi operativa: il dettaglio resta nelle righe espandibili sotto e in{" "}
+          <code style={{ fontSize: 12 }}>serviziRoadmapSteps.js</code>. Qui i colli di bottiglia principali da creare o
+          completare.
+        </p>
+        <ul style={{ margin: 0, paddingLeft: 22, fontSize: 14, color: "#334155", lineHeight: 1.7 }}>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Pagamenti online (Stripe/SumUp):</strong> flusso end-to-end (Edge Function, webhook, 3DS, rimborsi) —
+            oggi solo predisposizione chiavi in Dati pizzeria.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Consegne:</strong> stati rider granulari, app/PWA rider, notifiche SMS/push, ottimizzazione percorsi
+            (oltre a poligono e dashboard attuali).
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Magazzino / contabilità:</strong> migrazione da localStorage a tabelle Supabase complete; DDT/fatture
+            collegati e IVA strutturata.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Report / export:</strong> CSV schedulati, PDF, drill-down, confronti periodo; watermark e RLS su export.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Ruoli enterprise:</strong> RBAC fine, audit immutabile su tutte le azioni sensibili, SSO (vedi voce
+            roadmap dedicata).
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Piattaforma Super Admin:</strong> registratore cassa standalone con sync DB + audit append-only (dopo
+            migrazione SQL); estensioni future senza toccare i tenant.
+          </li>
+          <li style={{ marginBottom: 0 }}>
+            <strong>Maps / Places:</strong> in Dati pizzeria usare <code>PlaceAutocompleteElement</code> e abilitare{" "}
+            <strong>Places API (New)</strong> sul progetto Google Cloud della chiave Maps (altrimenti il widget non risponde).
+          </li>
+        </ul>
+      </div>
+
       <div className="dashboard-box" style={{ marginBottom: 28, border: "1px solid #bae6fd", background: "linear-gradient(135deg, #f0f9ff 0%, #fff 50%)" }}>
         <h2 style={{ marginTop: 0, fontSize: 17, color: "#0369a1" }}>Checklist sviluppo / go-live (Super Admin)</h2>
         <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.55 }}>

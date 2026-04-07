@@ -51,10 +51,11 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "ordini_online",
     titolo: "Ordini online (cliente)",
     stato: "wip",
-    percentuale: 63,
+    percentuale: 65,
     resto:
-      "Account obbligatorio + conferma email; checkout con poligono PV, promozioni, fidelity+promo, `create_order_with_items`.\nPagamenti online (Stripe/SumUp): sviluppo end-to-end solo quando sarà disponibile un gateway reale collegabile (Edge Function, webhook, 3DS, rimborsi).\nAnti‑frode: velocity limits, CAPTCHA, lista blocchi indirizzi.\nSEO + Core Web Vitals; PWA.\nNotifiche nuovo ordine al locale: non prioritarie se attiva stampa comanda automatica; altrimenti email/Edge.\nVincolo operativo slot: ordine non accettabile per il quarto d’ora immediatamente successivo alla fascia/orario di inserimento (da applicare in checkout).\nWebhook ordine con firma HMAC; rate limit API pubblica.\nLoad test weekend.",
-    nota: "Carrello, checkout, PV/poligoni, promozioni, blocco ordini cassa, policy HTML; pagamenti carta in attesa gateway reale; notifiche sostituibili da stampa comanda automatica.",
+      "Account obbligatorio + conferma email; checkout con poligono PV, promozioni, fidelity+promo, `create_order_with_items`.\nPagamenti online (Stripe/SumUp): sviluppo end-to-end solo quando sarà disponibile un gateway reale collegabile (Edge Function, webhook, 3DS, rimborsi).\nAnti‑frode: velocity limits, CAPTCHA, lista blocchi indirizzi.\nSEO + Core Web Vitals; PWA.\nNotifiche nuovo ordine al locale: non prioritarie se attiva stampa comanda automatica; altrimenti email/Edge.\nWebhook ordine con firma HMAC; rate limit API pubblica.\nLoad test weekend.",
+    nota:
+      "Carrello, checkout, PV/poligoni, promozioni, blocco ordini cassa, policy HTML; filtro slot vetrina (quarto d’ora) configurabile in Parametri operativi; indirizzo sede con PlaceAutocompleteElement (Places API New). Pagamenti carta in attesa gateway reale; notifiche sostituibili da stampa comanda automatica.",
   },
   {
     id: "tablet_ruoli",

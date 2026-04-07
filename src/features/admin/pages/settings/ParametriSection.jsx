@@ -71,6 +71,7 @@ export default function ParametriSection() {
     promozioni_calendario: Array.isArray(raw.promozioni_calendario) ? raw.promozioni_calendario : [],
     stampa_comanda_ordine_web_automatica: raw.stampa_comanda_ordine_web_automatica === true,
     chiusura_giornata_automatica: raw.chiusura_giornata_automatica !== false,
+    cassa_turno_obbligatorio: raw.cassa_turno_obbligatorio === true,
     vetrina_consegna_filtro_quarto_attivo: raw.vetrina_consegna_filtro_quarto_attivo !== false,
     vetrina_consegna_filtro_quarto_ora_fine:
       raw.vetrina_consegna_filtro_quarto_ora_fine !== undefined && raw.vetrina_consegna_filtro_quarto_ora_fine !== ""
@@ -111,6 +112,7 @@ export default function ParametriSection() {
         promozioni_calendario: serializePromozioniCalendario(p.promozioni_calendario),
         stampa_comanda_ordine_web_automatica: p.stampa_comanda_ordine_web_automatica === true,
         chiusura_giornata_automatica: p.chiusura_giornata_automatica !== false,
+        cassa_turno_obbligatorio: p.cassa_turno_obbligatorio === true,
         vetrina_consegna_filtro_quarto_attivo: p.vetrina_consegna_filtro_quarto_attivo !== false,
         vetrina_consegna_filtro_quarto_ora_fine:
           p.vetrina_consegna_filtro_quarto_ora_fine === "" ? 15 : Math.min(23, Math.max(0, Number(p.vetrina_consegna_filtro_quarto_ora_fine) || 15)),
@@ -199,6 +201,19 @@ export default function ParametriSection() {
             <span>
               Consenti gestione listini multipli (archivio): di default un solo listino attivo; se attivo, in Menu → Listini e backup
               puoi salvare snapshot JSON oltre all&apos;export PDF.
+            </span>
+          </label>
+          <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Cassa</h3>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={p.cassa_turno_obbligatorio}
+              onChange={(e) => setParam("cassa_turno_obbligatorio", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              Richiedi turno cassa aperto (stesso punto vendita attivo) prima di confermare ordini in cassa. Configura i turni in
+              Operative → Turni cassa.
             </span>
           </label>
           <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Ordini web (vetrina)</h3>

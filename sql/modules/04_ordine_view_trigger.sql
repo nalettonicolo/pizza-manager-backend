@@ -1,4 +1,4 @@
-﻿
+
 -- =============================================================================
 -- 4) Vista public."Ordine" + INSTEAD OF UPDATE
 -- =============================================================================
@@ -25,6 +25,7 @@ BEGIN
     pagamento_dettaglio = COALESCE(NEW.pagamento_dettaglio, OLD.pagamento_dettaglio),
     stato_consegna     = COALESCE(NEW.stato_consegna, OLD.stato_consegna),
     punto_vendita_id   = COALESCE(NEW.punto_vendita_id, OLD.punto_vendita_id),
+    turno_operatori_id = COALESCE(NEW.turno_operatori_id, OLD.turno_operatori_id),
     updated_at         = now()
   WHERE id = OLD.id
     AND tenant_id IN (
@@ -55,6 +56,7 @@ CREATE VIEW public."Ordine" AS
     pagamento_dettaglio,
     stato_consegna,
     punto_vendita_id,
+    turno_operatori_id,
     tenant_id AS "tenantId",
     created_at AS "createdAt",
     updated_at AS "updatedAt",
@@ -72,5 +74,5 @@ DROP TRIGGER IF EXISTS ordine_instead_of_update_trigger ON public."Ordine";
 CREATE TRIGGER ordine_instead_of_update_trigger
   INSTEAD OF UPDATE ON public."Ordine"
   FOR EACH ROW
-  EXECUTE PROCEDURE public.ordine_instead_of_update();
+  EXECUTE FUNCTION public.ordine_instead_of_update();
 

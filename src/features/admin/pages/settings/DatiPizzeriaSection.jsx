@@ -3,41 +3,10 @@ import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { updateTenantSettings } from "@/features/admin/services/adminService";
 import { KEY_TITOLARE_ESERCENTE } from "@/config/legalEntity";
+import { loadGoogleMapsScript } from "@/lib/googleMapsLoader";
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
-
-function loadGoogleMapsScript(apiKey) {
-  return new Promise((resolve, reject) => {
-    if (window.google?.maps?.places) {
-      resolve();
-      return;
-    }
-    const cbName = `__pmGoogleMapsCb_${Math.random().toString(36).slice(2, 11)}`;
-    window[cbName] = () => {
-      try {
-        delete window[cbName];
-      } catch (_) {
-        window[cbName] = undefined;
-      }
-      resolve();
-    };
-    const script = document.createElement("script");
-    /* loading=async + callback: pattern raccomandato da Google (evita warning "without loading=async"). */
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async&callback=${encodeURIComponent(cbName)}`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => {
-      try {
-        delete window[cbName];
-      } catch (_) {
-        /* ignore */
-      }
-      reject(new Error("Caricamento Google Maps fallito"));
-    };
-    document.head.appendChild(script);
-  });
-}
 
 export default function DatiPizzeriaSection() {
   const { settings, setSettings } = useOutletContext();
@@ -45,8 +14,9 @@ export default function DatiPizzeriaSection() {
   const [saving, setSaving] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
-  const addressInputRef = useRef(null);
-  const autocompleteRef = useRef(null);
+  const [geoResetKey, setGeoResetKey] = useState(0);
+  const placeAcContainerRef = useRef(null);
+  const placeAcCleanupRef = useRef(() => {});
 
   const indirizzo = settings?.indirizzo ?? "";
   const lat = settings?.lat;
@@ -60,44 +30,100 @@ export default function DatiPizzeriaSection() {
       ? parametriOperativi[KEY_TITOLARE_ESERCENTE]
       : "";
 
-  // Mappa: query per iframe (subito visibile, aggiornata in base a indirizzo o lat/lng)
   const mapQuery =
     lat != null && lng != null && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lng))
       ? `${lat},${lng}`
       : indirizzo.trim() || "Italia";
   const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`;
 
-  // Google Places Autocomplete (solo se è configurata la API key)
   useEffect(() => {
-    if (!GOOGLE_API_KEY || !addressInputRef.current) return;
+    if (!GOOGLE_API_KEY || !placeAcContainerRef.current) return;
     let cancelled = false;
-    loadGoogleMapsScript(GOOGLE_API_KEY)
-      .then(() => {
-        if (cancelled || !addressInputRef.current) return;
-        if (autocompleteRef.current) return; // già inizializzato
-        const Autocomplete = window.google?.maps?.places?.Autocomplete;
-        if (!Autocomplete) return;
-        const ac = new Autocomplete(addressInputRef.current, {
-          types: ["address"],
-          fields: ["formatted_address", "geometry"],
+
+    async function init() {
+      placeAcCleanupRef.current?.();
+      placeAcCleanupRef.current = () => {};
+
+      try {
+        await loadGoogleMapsScript(GOOGLE_API_KEY, null);
+        if (cancelled || !placeAcContainerRef.current) return;
+
+        const placesLib = await google.maps.importLibrary("places");
+        if (cancelled || !placeAcContainerRef.current) return;
+
+        const PlaceAutocompleteElement =
+          placesLib.PlaceAutocompleteElement ?? google.maps.places?.PlaceAutocompleteElement;
+        if (!PlaceAutocompleteElement) {
+          console.warn("Google Maps: PlaceAutocompleteElement non disponibile dopo importLibrary(places).");
+          return;
+        }
+
+        const el = new PlaceAutocompleteElement({
+          includedRegionCodes: ["it"],
         });
-        ac.addListener("place_changed", () => {
-          const place = ac.getPlace();
-          if (!place?.formatted_address) return;
-          const loc = place.geometry?.location;
+        el.placeholder = "Es. Via Roma 1, Roma";
+        if (indirizzo) {
+          el.value = indirizzo;
+        }
+
+        placeAcContainerRef.current.innerHTML = "";
+        placeAcContainerRef.current.appendChild(el);
+
+        const onSelect = async (event) => {
+          const placePrediction = event.placePrediction ?? event.detail?.placePrediction;
+          if (!placePrediction) return;
+          const place = placePrediction.toPlace();
+          await place.fetchFields({ fields: ["formattedAddress", "location"] });
+          const formatted = place.formattedAddress;
+          if (!formatted) return;
+          const loc = place.location;
+          let nextLat;
+          let nextLng;
+          if (loc) {
+            if (typeof loc.lat === "function") {
+              nextLat = loc.lat();
+              nextLng = loc.lng();
+            } else {
+              nextLat = loc.lat;
+              nextLng = loc.lng;
+            }
+          }
           setSettings((s) => ({
             ...s,
-            indirizzo: place.formatted_address,
-            ...(loc ? { lat: loc.lat(), lng: loc.lng() } : {}),
+            indirizzo: formatted,
+            ...(nextLat != null && nextLng != null ? { lat: nextLat, lng: nextLng } : {}),
           }));
-        });
-        autocompleteRef.current = ac;
-      })
-      .catch((err) => console.warn("Google Places Autocomplete:", err));
+        };
+
+        el.addEventListener("gmp-select", onSelect);
+
+        placeAcCleanupRef.current = () => {
+          el.removeEventListener("gmp-select", onSelect);
+          try {
+            el.remove();
+          } catch {
+            /* ignore */
+          }
+        };
+      } catch (err) {
+        console.warn("Google Places PlaceAutocompleteElement:", err);
+      }
+    }
+
+    void init();
+
     return () => {
       cancelled = true;
+      placeAcCleanupRef.current?.();
+      placeAcCleanupRef.current = () => {};
     };
-  }, [GOOGLE_API_KEY, setSettings]);
+  }, [GOOGLE_API_KEY, geoResetKey, setSettings]);
+
+  useEffect(() => {
+    const host = placeAcContainerRef.current?.firstElementChild;
+    if (!host || typeof host.value === "undefined" || !String(indirizzo).trim()) return;
+    if (!String(host.value || "").trim()) host.value = indirizzo;
+  }, [indirizzo]);
 
   async function handleUseMyLocation() {
     if (!navigator.geolocation) {
@@ -112,7 +138,7 @@ export default function DatiPizzeriaSection() {
         try {
           const res = await fetch(
             `${NOMINATIM_URL}?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { Accept: "application/json", "User-Agent": "PizzaManagerApp/1.0" } }
+            { headers: { Accept: "application/json", "User-Agent": "PizzaManagerApp/1.0" } },
           );
           const data = await res.json();
           const address = data?.display_name ?? `${latitude}, ${longitude}`;
@@ -122,6 +148,7 @@ export default function DatiPizzeriaSection() {
             lat: latitude,
             lng: longitude,
           }));
+          setGeoResetKey((k) => k + 1);
         } catch (e) {
           setGeoError("Impossibile ottenere l'indirizzo dalla posizione.");
           setSettings((s) => ({
@@ -130,6 +157,7 @@ export default function DatiPizzeriaSection() {
             lng: longitude,
             indirizzo: indirizzo || `${latitude}, ${longitude}`,
           }));
+          setGeoResetKey((k) => k + 1);
         } finally {
           setGeoLoading(false);
         }
@@ -138,7 +166,7 @@ export default function DatiPizzeriaSection() {
         setGeoError("Impossibile ottenere la posizione. Abilita la geolocalizzazione per il sito.");
         setGeoLoading(false);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
   }
 
@@ -150,9 +178,9 @@ export default function DatiPizzeriaSection() {
         settings.parametri_operativi && typeof settings.parametri_operativi === "object"
           ? { ...settings.parametri_operativi }
           : {};
-      const titolareEsercente =
+      const titolareTrim =
         typeof prevPo[KEY_TITOLARE_ESERCENTE] === "string" ? prevPo[KEY_TITOLARE_ESERCENTE].trim() : "";
-      prevPo[KEY_TITOLARE_ESERCENTE] = titolareEsercente;
+      prevPo[KEY_TITOLARE_ESERCENTE] = titolareTrim;
 
       const payload = {
         nome: settings.nome ?? "",
@@ -246,14 +274,7 @@ export default function DatiPizzeriaSection() {
           <label>
             Indirizzo
             <div className="dati-pizzeria-address-row">
-              <input
-                ref={addressInputRef}
-                type="text"
-                value={indirizzo}
-                onChange={(e) => setSettings({ ...settings, indirizzo: e.target.value })}
-                placeholder="Es. Via Roma 1, Roma"
-                autoComplete="off"
-              />
+              <div ref={placeAcContainerRef} className="dati-pizzeria-gmp-ac" />
               <button
                 type="button"
                 className="dashboard-settings-btn-secondary dati-pizzeria-geo-btn"
@@ -266,7 +287,10 @@ export default function DatiPizzeriaSection() {
             </div>
             {geoError && <p className="dati-pizzeria-geo-error">{geoError}</p>}
             {GOOGLE_API_KEY && (
-              <p className="dati-pizzeria-hint">Scrivi per vedere i suggerimenti indirizzi (Google Places).</p>
+              <p className="dati-pizzeria-hint">
+                Suggerimenti indirizzo con Google Places (widget PlaceAutocompleteElement). In Google Cloud abilita{" "}
+                <strong>Places API (New)</strong> per il progetto della chiave Maps.
+              </p>
             )}
             {mapsSearchUrl && (
               <a

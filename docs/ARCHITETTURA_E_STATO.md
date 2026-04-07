@@ -79,7 +79,13 @@ Dettaglio: **`docs/GUIDA_SUPERADMIN.md`**.
 
 ---
 
-## 6. Come aggiornare questo file
+## 6. Roadmap enterprise (cassa → offline → fiscale IT)
+
+Piano prioritizzato (blocchi, allineamento DB, perimetro normativo Italia): **`docs/ROADMAP_CASSA_ENTERPRISE.md`**.
+
+---
+
+## 7. Come aggiornare questo file
 
 1. Modifica le tabelle quando cambiano route o comportamento.
 2. Chiudi i “gap” spostando le righe e aggiornando il registro.
@@ -92,7 +98,8 @@ Dettaglio: **`docs/GUIDA_SUPERADMIN.md`**.
 | 2026-03-22 | Route dipendenti, turni; note KPI. |
 | 2026-04-03 | Super Admin ampliato (catalogo, deploy, enterprise UI, piani/landing/contatti); gate servizi; tabella sito pubblico; admin Guida e Pubblicazione in tabella menu. |
 | 2026-04-03 | Admin: route e sidebar Magazzino e Contabilità (dati locali tenant); tabella menu aggiornata. |
+| 2026-04-05 | Sezione roadmap enterprise cassa/offline/fiscale IT → `docs/ROADMAP_CASSA_ENTERPRISE.md`. |
 
 ---
 
-*Ultima revisione: 2026-04-03*
+*Ultima revisione: 2026-04-05*

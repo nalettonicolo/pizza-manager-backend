@@ -1,3 +1,36 @@
+-- Ordine: colonna turno_operatori_id + create_order_with_items(..., p_turno_operatori_id) + vista public."Ordine".
+-- Richiede core.ordini, public.turni_operatori (opzionale per FK), moduli allineati: 03/04/05.
+
+DO $e$
+BEGIN
+  IF to_regclass('core.ordini') IS NULL THEN
+    RAISE NOTICE 'core.ordini assente: salto turno_operatori_id.';
+    RETURN;
+  END IF;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS turno_operatori_id INTEGER;
+  COMMENT ON COLUMN core.ordini.turno_operatori_id IS 'Turno cassa aperto (public.turni_operatori.id) al momento dell''ordine; null per ordini web o senza turno.';
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'turni_operatori'
+      AND c.relkind = 'r'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'ordini_turno_operatori_id_fkey'
+    ) THEN
+      ALTER TABLE core.ordini
+        ADD CONSTRAINT ordini_turno_operatori_id_fkey
+        FOREIGN KEY (turno_operatori_id) REFERENCES public.turni_operatori (id) ON DELETE SET NULL;
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+END
+$e$;
+
 
 -- =============================================================================
 -- 5) pm_point_in_ring + create_order_with_items (poligono + PV + pagamento misto)
@@ -172,7 +205,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna ÃƒÂ¨ fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -268,4 +301,84 @@ COMMENT ON FUNCTION public.create_order_with_items(
   DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER
 ) IS
   'Crea ordine + righe. Delivery+poligono: clienti con lng/lat in area; staff cassa esentato. Opzionale pagamento_dettaglio JSONB, punto_vendita_id, turno_operatori_id (turno aperto cassa).';
+
+
+
+-- =============================================================================
+-- 4) Vista public."Ordine" + INSTEAD OF UPDATE
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core
+AS $tr$
+BEGIN
+  UPDATE core.ordini
+  SET
+    stato              = COALESCE(NEW.stato, OLD.stato),
+    totale             = COALESCE(NEW.totale, OLD.totale),
+    note               = COALESCE(NEW.note, OLD.note),
+    tipo_pagamento     = COALESCE(NEW.tipo_pagamento, OLD.tipo_pagamento),
+    tipo_ordine        = COALESCE(NEW.tipo_ordine, OLD.tipo_ordine),
+    nome_cliente       = NEW.nome_cliente,
+    orario_ritiro      = NEW.orario_ritiro,
+    indirizzo_consegna = NEW.indirizzo_consegna,
+    consegna_lng       = COALESCE(NEW.consegna_lng, OLD.consegna_lng),
+    consegna_lat       = COALESCE(NEW.consegna_lat, OLD.consegna_lat),
+    pagamento_dettaglio = COALESCE(NEW.pagamento_dettaglio, OLD.pagamento_dettaglio),
+    stato_consegna     = COALESCE(NEW.stato_consegna, OLD.stato_consegna),
+    punto_vendita_id   = COALESCE(NEW.punto_vendita_id, OLD.punto_vendita_id),
+    turno_operatori_id = COALESCE(NEW.turno_operatori_id, OLD.turno_operatori_id),
+    updated_at         = now()
+  WHERE id = OLD.id
+    AND tenant_id IN (
+      SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+      UNION
+      SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+    );
+  RETURN NEW;
+END;
+$tr$;
+
+DROP VIEW IF EXISTS public."Ordine" CASCADE;
+
+CREATE VIEW public."Ordine" AS
+  SELECT
+    id,
+    numero,
+    stato,
+    totale,
+    note,
+    tipo_pagamento,
+    tipo_ordine,
+    nome_cliente,
+    orario_ritiro,
+    indirizzo_consegna,
+    consegna_lng,
+    consegna_lat,
+    pagamento_dettaglio,
+    stato_consegna,
+    punto_vendita_id,
+    turno_operatori_id,
+    tenant_id AS "tenantId",
+    created_at AS "createdAt",
+    updated_at AS "updatedAt",
+    deleted_at AS "deletedAt"
+  FROM core.ordini
+  WHERE tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."Ordine" TO authenticated;
+
+DROP TRIGGER IF EXISTS ordine_instead_of_update_trigger ON public."Ordine";
+CREATE TRIGGER ordine_instead_of_update_trigger
+  INSTEAD OF UPDATE ON public."Ordine"
+  FOR EACH ROW
+  EXECUTE FUNCTION public.ordine_instead_of_update();
+
 

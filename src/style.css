@@ -1187,6 +1187,14 @@ body {
   flex: 1;
   min-width: 200px;
 }
+.dati-pizzeria-gmp-ac {
+  flex: 1;
+  min-width: 200px;
+}
+.dati-pizzeria-gmp-ac gmp-place-autocomplete {
+  display: block;
+  width: 100%;
+}
 .dati-pizzeria-geo-btn {
   white-space: nowrap;
 }
