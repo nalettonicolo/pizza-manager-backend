@@ -92,6 +92,9 @@ export default function SuperadminRegistratoreCassaPage() {
 
   const totalsCarrello = useMemo(() => calcRighe(data.carrello?.righe || []), [data.carrello?.righe]);
 
+  /** Deve restare prima di qualsiasi return (ready): stesso numero di hook ogni render. */
+  const ddtNumeri = useMemo(() => (data.ddt || []).map((r) => r.numero).filter(Boolean), [data.ddt]);
+
   if (!ready) {
     return (
       <div className="sa-callout-muted">
@@ -156,8 +159,6 @@ export default function SuperadminRegistratoreCassaPage() {
     setPrintPayload({ kind, doc, at: new Date().toISOString() });
     setTimeout(() => window.print(), 0);
   }
-
-  const ddtNumeri = useMemo(() => (data.ddt || []).map((r) => r.numero).filter(Boolean), [data.ddt]);
 
   return (
     <>
@@ -603,7 +604,7 @@ export default function SuperadminRegistratoreCassaPage() {
   );
 }
 
-function FattureSection({ data, setData, ddtNumeri, openPrint, calcRighe }) {
+function FattureSection({ data, setData, ddtNumeri, openPrint }) {
   const [numero, setNumero] = useState("");
   const [dataDoc, setDataDoc] = useState(() => new Date().toISOString().slice(0, 10));
   const [fornitore, setFornitore] = useState("");
