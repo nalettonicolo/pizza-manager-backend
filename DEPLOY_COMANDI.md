@@ -35,6 +35,19 @@ npm run deploy
 
 ---
 
+## Database Supabase (migrazioni)
+
+Prima di usare in produzione funzioni che dipendono da RPC/tabelle nuove (turni cassa, ordine↔turno, registratore Super Admin, ecc.):
+
+- **CLI:** dalla cartella progetto, `supabase db push` (o il flusso del team per applicare `supabase/migrations/*.sql` in ordine cronologico).
+- **Manuale:** copiare gli script incrementali da `sql/sql_upgrade.sql` oppure i singoli file in `supabase/migrations/` nel SQL Editor del progetto Supabase.
+
+Ordine tipico recente (esempio): `20260406115500_turni_operatori_base_if_missing.sql` → `20260406120000_cassa_turni_rpc.sql` → `20260406140000_ordine_turno_operatori.sql` (e altre già presenti nel repo). Verificare che non ci siano errori se `punti_vendita` è una VIEW (FK saltati).
+
+Stato backlog e priorità engineering: **`docs/BACKLOG_E_STATO_SVILUPPO.md`**.
+
+---
+
 ## Spiegazione
 
 ### Backend (Koyeb)

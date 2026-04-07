@@ -1970,6 +1970,23 @@ export async function turniCassaChiudi(tenantId, params) {
 }
 
 ///////////////////////////////////////////////////////////
+// ===================== CASSA AUDIT ======================
+///////////////////////////////////////////////////////////
+
+export async function logCassaAuditEvent(tenantId, { ordineId, eventType, payload }) {
+  if (!tenantId || !eventType) return
+  const { error } = await supabase.rpc("cassa_audit_log", {
+    p_tenant_id: tenantId,
+    p_ordine_id: ordineId ?? null,
+    p_event_type: eventType,
+    p_payload: payload ?? {},
+  })
+  if (error) {
+    logSupabaseError("admin.logCassaAuditEvent", error, { tenantId, eventType })
+  }
+}
+
+///////////////////////////////////////////////////////////
 // ===================== TENANT SETTINGS ================
 ///////////////////////////////////////////////////////////
 

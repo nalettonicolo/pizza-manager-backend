@@ -39,7 +39,11 @@ import {
   updateOrderStato,
   applyFidelityMovimento,
   updateTenantSettings,
+  logCassaAuditEvent,
 } from "@/features/admin/services/adminService"
+import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson"
+import { roundTotalToFiveCents } from "@/utils/cassaArrotondamento"
+import { markCheckoutStart, markCheckoutEnd } from "@/utils/cassaTelemetry"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
@@ -81,6 +85,7 @@ import { applyPromoCalendarioToProducts, fidelitySkippedByPromoCalendario } from
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
+const MAX_MISTO_RIGHE = 15
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 
 /** La vista PostgREST `Ordine` può restituire snake_case o camelCase: normalizziamo ovunque in cassa. */
@@ -106,6 +111,26 @@ function ordineOrarioRitiro(o) {
 
 function ordineCreatedAt(o) {
   return o?.createdAt ?? o?.created_at ?? null
+}
+
+function ordinePuntoVenditaId(o) {
+  const v = o?.punto_vendita_id ?? o?.puntoVenditaId
+  return v != null && String(v).trim() !== "" ? String(v) : null
+}
+
+function ordineTurnoOperatoriId(o) {
+  const v = o?.turno_operatori_id ?? o?.turnoOperatoriId
+  if (v == null || v === "") return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function parseEuroInput(s) {
+  return Number(String(s ?? "").replace(",", ".")) || 0
+}
+
+function sumMistoRighe(righe) {
+  return (righe || []).reduce((acc, r) => acc + parseEuroInput(r?.importo), 0)
 }
 
 /** Stesso criterio di `ordiniRaggruppatiPerOra`: se manca orario_ritiro in DB si usa HH:mm da createdAt. */
@@ -234,6 +259,7 @@ export default function CassaPage() {
   const { tenantId, tenantData, refreshTenant } = useTenant()
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
+  const pvList = pvCtx?.pvList ?? []
   const { user, logout } = useAuth()
   const { hasServizio, enforcementActive } = useTenantServizi()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
@@ -257,8 +283,8 @@ export default function CassaPage() {
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [checkoutNote, setCheckoutNote] = useState("")
   const [checkoutTipoPagamento, setCheckoutTipoPagamento] = useState(TIPI_PAGAMENTO[0])
-  const [checkoutMistoContanti, setCheckoutMistoContanti] = useState("")
-  const [checkoutMistoCarta, setCheckoutMistoCarta] = useState("")
+  const [mistoRighe, setMistoRighe] = useState([])
+  const [checkoutScontoGlobale, setCheckoutScontoGlobale] = useState("")
   const [checkoutNomeCliente, setCheckoutNomeCliente] = useState("")
   const [checkoutSelectedSlot, setCheckoutSelectedSlot] = useState(null)
   const [checkoutError, setCheckoutError] = useState(null)
@@ -1210,6 +1236,51 @@ export default function CassaPage() {
     )
   }, [cart])
 
+  const cassaArrotonda5CentFlag = tenantData?.parametri_operativi?.cassa_arrotonda_5_cent === true
+  const scontoEuroCheckout = useMemo(() => {
+    const raw = parseEuroInput(checkoutScontoGlobale)
+    return Math.min(Math.max(0, raw), total)
+  }, [checkoutScontoGlobale, total])
+
+  const totalBaseAfterSconto = useMemo(
+    () => Math.max(0, total - scontoEuroCheckout),
+    [total, scontoEuroCheckout]
+  )
+
+  const totalCheckout = useMemo(() => {
+    if (cassaArrotonda5CentFlag) {
+      return roundTotalToFiveCents(totalBaseAfterSconto)
+    }
+    return totalBaseAfterSconto
+  }, [totalBaseAfterSconto, cassaArrotonda5CentFlag])
+
+  useEffect(() => {
+    if (checkoutTipoPagamento !== "Misto") {
+      setMistoRighe([])
+      return
+    }
+    setMistoRighe((prev) => {
+      if (prev.length > 0) return prev
+      return [
+        { id: newLocalId(), tipo: "Contanti", importo: "" },
+        { id: newLocalId(), tipo: "Carta", importo: "" },
+      ]
+    })
+  }, [checkoutTipoPagamento])
+
+  const updateMistoRiga = useCallback((id, patch) => {
+    setMistoRighe((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+  }, [])
+  const addMistoRiga = useCallback(() => {
+    setMistoRighe((prev) => {
+      if (prev.length >= MAX_MISTO_RIGHE) return prev
+      return [...prev, { id: newLocalId(), tipo: "Contanti", importo: "" }]
+    })
+  }, [])
+  const removeMistoRiga = useCallback((id) => {
+    setMistoRighe((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.id !== id)))
+  }, [])
+
   /////////////////////////////////////////////////////////
   // CHECKOUT
   /////////////////////////////////////////////////////////
@@ -1235,29 +1306,52 @@ export default function CassaPage() {
     const snapshotCart = cart.map((row) => ({ ...row }))
     const noteSnap = checkoutNote.trim()
     const fidelitySaldoSnap = selectedFidelitySaldo
+    let telemetryCtx = null
     try {
       setLoading(true)
+      telemetryCtx = markCheckoutStart()
+      const mistoSnapshot =
+        checkoutTipoPagamento === "Misto" ? mistoRighe.map((r) => ({ ...r })) : []
       let pagamentoDettaglio = null
       let tipoPagamentoFinale = checkoutTipoPagamento || ""
       if (checkoutTipoPagamento === "Misto") {
-        const c1 = Number(String(checkoutMistoContanti).replace(",", ".")) || 0
-        const c2 = Number(String(checkoutMistoCarta).replace(",", ".")) || 0
-        if (Math.abs(c1 + c2 - total) > 0.02) {
-          setCheckoutError("Pagamento misto: la somma di contanti e carta deve coincidere con il totale ordine.")
+        const sum = sumMistoRighe(mistoRighe)
+        if (Math.abs(sum - totalCheckout) > 0.02) {
+          setCheckoutError(
+            "Pagamento misto: la somma delle righe deve coincidere con il totale da incassare.",
+          )
           setLoading(false)
+          markCheckoutEnd(telemetryCtx, {
+            ok: false,
+            tenantId,
+            errorMessage: "misto_sum_mismatch",
+          })
           return
         }
-        if (c1 <= 0 && c2 <= 0) {
-          setCheckoutError("Pagamento misto: indica almeno un importo tra contanti e carta.")
+        const rows = (mistoRighe || []).filter((r) => parseEuroInput(r.importo) > 0.001)
+        if (rows.length === 0) {
+          setCheckoutError("Pagamento misto: indica almeno un importo.")
           setLoading(false)
+          markCheckoutEnd(telemetryCtx, {
+            ok: false,
+            tenantId,
+            errorMessage: "misto_empty",
+          })
           return
         }
-        pagamentoDettaglio = [
-          ...(c1 > 0 ? [{ tipo: "Contanti", importo: c1 }] : []),
-          ...(c2 > 0 ? [{ tipo: "Carta", importo: c2 }] : []),
-        ]
+        pagamentoDettaglio = rows.map((r) => ({
+          tipo: String(r.tipo || "Contanti").trim() || "Contanti",
+          importo: Math.round(parseEuroInput(r.importo) * 100) / 100,
+        }))
         tipoPagamentoFinale = "Misto"
       }
+
+      const noteParts = []
+      if (noteSnap) noteParts.push(noteSnap)
+      if (scontoEuroCheckout > 0) {
+        noteParts.push(`[Sconto cassa €${scontoEuroCheckout.toFixed(2)}]`)
+      }
+      const noteForOrder = noteParts.length ? noteParts.join("\n") : undefined
 
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
@@ -1277,6 +1371,16 @@ export default function CassaPage() {
             if (inside === false && !bypassFuoriAreaCheckRef.current) {
               setFuoriAreaModal({ lat: coords.lat, lng: coords.lng })
               setLoading(false)
+              markCheckoutEnd(telemetryCtx, {
+                ok: false,
+                tenantId,
+                errorMessage: "fuori_area",
+              })
+              void logCassaAuditEvent(tenantId, {
+                ordineId: null,
+                eventType: "checkout_fuori_area",
+                payload: { indirizzo: addr },
+              })
               return
             }
           }
@@ -1285,7 +1389,7 @@ export default function CassaPage() {
       bypassFuoriAreaCheckRef.current = false
 
       const orderId = await createOrder(tenantId, {
-        totale: total,
+        totale: totalCheckout,
         stato: ORDER_STATUS,
         puntoVenditaId: activePvId || undefined,
         turnoOperatoriId:
@@ -1297,7 +1401,7 @@ export default function CassaPage() {
           formatoNome: p.formatoNome ?? undefined,
           ingredientiCotturaSummary: p.ingredientiCotturaSummary ?? undefined,
         })),
-        note: noteSnap || undefined,
+        note: noteForOrder,
         tipoPagamento: tipoPagamentoFinale || undefined,
         tipoOrdine: tipoOrdine || undefined,
         nomeCliente: nomeCliente || undefined,
@@ -1312,7 +1416,7 @@ export default function CassaPage() {
         const skipFidelity = fidelitySkippedByPromoCalendario(tenantData?.parametri_operativi, snapshotCart, new Date())
         const punti = skipFidelity
           ? 0
-          : computeAccreditoFidelityPunti(tenantData?.parametri_operativi, snapshotCart, total)
+          : computeAccreditoFidelityPunti(tenantData?.parametri_operativi, snapshotCart, totalCheckout)
         if (punti > 0) {
           try {
             await applyFidelityMovimento(
@@ -1328,11 +1432,26 @@ export default function CassaPage() {
           }
         }
       }
+
+      void logCassaAuditEvent(tenantId, {
+        ordineId: orderId,
+        eventType: "checkout_ok",
+        payload: {
+          totale_carrello: total,
+          sconto_cassa_euro: scontoEuroCheckout,
+          totale_incasso: totalCheckout,
+          cassa_arrotonda_5_cent: poGate.cassa_arrotonda_5_cent === true,
+          tipo_pagamento: tipoPagamentoFinale,
+          pagamento_dettaglio: pagamentoDettaglio,
+        },
+      })
+      markCheckoutEnd(telemetryCtx, { ok: true, tenantId, ordineId: orderId })
+
       setCart([])
       setCheckoutNote("")
       setCheckoutTipoPagamento(TIPI_PAGAMENTO[0])
-      setCheckoutMistoContanti("")
-      setCheckoutMistoCarta("")
+      setMistoRighe([])
+      setCheckoutScontoGlobale("")
       setCheckoutNomeCliente("")
       setCheckoutSelectedSlot(null)
       setDeliverySearch("")
@@ -1346,10 +1465,11 @@ export default function CassaPage() {
 
       const po = tenantData?.parametri_operativi || {}
       let tipoPagamentoPerStampa = tipoPagamentoFinale || checkoutTipoPagamento
-      if (checkoutTipoPagamento === "Misto") {
-        const c1 = Number(String(checkoutMistoContanti).replace(",", ".")) || 0
-        const c2 = Number(String(checkoutMistoCarta).replace(",", ".")) || 0
-        tipoPagamentoPerStampa = `Misto (Contanti €${c1.toFixed(2)} + Carta €${c2.toFixed(2)})`
+      if (tipoPagamentoFinale === "Misto" && mistoSnapshot.length) {
+        const parts = mistoSnapshot
+          .filter((r) => parseEuroInput(r.importo) > 0.001)
+          .map((r) => `${String(r.tipo || "").trim() || "?"} €${parseEuroInput(r.importo).toFixed(2)}`)
+        tipoPagamentoPerStampa = parts.length ? `Misto (${parts.join(" + ")})` : "Misto"
       }
       const righeComanda = cartItemsToComandaRighe(snapshotCart)
       let detail = null
@@ -1367,7 +1487,7 @@ export default function CassaPage() {
         nomeCliente: nomeCliente || undefined,
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna.trim() || undefined,
-        note: noteSnap || undefined,
+        note: noteForOrder || undefined,
         tipoPagamento: tipoPagamentoPerStampa || undefined,
         righe: righeComanda,
         parametri: po,
@@ -1388,10 +1508,10 @@ export default function CassaPage() {
         nomeCliente: nomeCliente || undefined,
         orarioRitiro: orarioRitiro || undefined,
         indirizzoConsegna: indirizzoConsegna.trim() || undefined,
-        note: noteSnap || undefined,
+        note: noteForOrder || undefined,
         tipoPagamento: tipoPagamentoPerStampa || undefined,
         righe: ricevutaRigheFromCartSnapshot(snapshotCart),
-        totale: total,
+        totale: totalCheckout,
         parametri: po,
         annullato: false,
       }
@@ -1404,6 +1524,16 @@ export default function CassaPage() {
     } catch (err) {
       console.error("Errore checkout:", err)
       setCheckoutError(err?.message ?? "Errore durante il checkout. Verifica la RPC create_order_with_items e le colonne note/tipo_pagamento.")
+      markCheckoutEnd(telemetryCtx, {
+        ok: false,
+        tenantId,
+        errorMessage: err?.message,
+      })
+      void logCassaAuditEvent(tenantId, {
+        ordineId: null,
+        eventType: "checkout_error",
+        payload: { message: String(err?.message || err) },
+      })
     } finally {
       setLoading(false)
     }
@@ -1604,22 +1734,22 @@ export default function CassaPage() {
         <RiepilogoOrdinePage
           cart={cart}
           total={total}
+          totalCheckout={totalCheckout}
+          scontoEuroApplicato={scontoEuroCheckout}
+          checkoutScontoGlobale={checkoutScontoGlobale}
+          onCheckoutScontoGlobaleChange={setCheckoutScontoGlobale}
           tipoOrdine={tipoOrdine}
           deliverySearch={deliverySearch}
           checkoutNote={checkoutNote}
           onCheckoutNoteChange={setCheckoutNote}
           checkoutTipoPagamento={checkoutTipoPagamento}
-          onCheckoutTipoPagamentoChange={(v) => {
-            setCheckoutTipoPagamento(v)
-            if (v !== "Misto") {
-              setCheckoutMistoContanti("")
-              setCheckoutMistoCarta("")
-            }
-          }}
-          checkoutMistoContanti={checkoutMistoContanti}
-          checkoutMistoCarta={checkoutMistoCarta}
-          onCheckoutMistoContantiChange={setCheckoutMistoContanti}
-          onCheckoutMistoCartaChange={setCheckoutMistoCarta}
+          onCheckoutTipoPagamentoChange={setCheckoutTipoPagamento}
+          mistoRighe={mistoRighe}
+          onMistoRigaChange={updateMistoRiga}
+          onAddMistoRiga={addMistoRiga}
+          onRemoveMistoRiga={removeMistoRiga}
+          maxMistoRighe={MAX_MISTO_RIGHE}
+          cassaArrotonda5Cent={cassaArrotonda5CentFlag}
           checkoutNomeCliente={checkoutNomeCliente}
           onCheckoutNomeClienteChange={setCheckoutNomeCliente}
           selectedSlot={checkoutSelectedSlot}
@@ -2392,6 +2522,28 @@ export default function CassaPage() {
             <p style={{ marginBottom: 12, fontSize: 13 }}>
               Pagamento: {(ordineDetail.tipo_pagamento || "—").toLowerCase().includes("da pagare") ? "⏳ Da pagare" : (ordineDetail.tipo_pagamento || "—")}
             </p>
+            {(ordinePuntoVenditaId(ordineDetail) || ordineTurnoOperatoriId(ordineDetail) != null) ? (
+              <p style={{ marginBottom: 12, fontSize: 12, color: "#555", lineHeight: 1.45 }}>
+                {ordinePuntoVenditaId(ordineDetail) ? (
+                  <>
+                    Punto vendita:{" "}
+                    <strong>
+                      {(() => {
+                        const id = ordinePuntoVenditaId(ordineDetail)
+                        const nome = pvList.find((p) => String(p.id) === String(id))?.nome
+                        return nome ? `${nome}` : id.slice(0, 8) + "…"
+                      })()}
+                    </strong>
+                  </>
+                ) : null}
+                {ordineTurnoOperatoriId(ordineDetail) != null ? (
+                  <>
+                    {ordinePuntoVenditaId(ordineDetail) ? " · " : null}
+                    Turno cassa: <strong>#{ordineTurnoOperatoriId(ordineDetail)}</strong>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button
                 type="button"

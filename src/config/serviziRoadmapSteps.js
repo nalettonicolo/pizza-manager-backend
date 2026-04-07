@@ -24,10 +24,10 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "ordini_cassa",
     titolo: "Ordini a cassa e incassi",
     stato: "ok",
-    percentuale: 94,
+    percentuale: 95,
     resto:
-      "Turno cassa obbligatorio con apertura/chiusura vincolata e riconciliazione incassi.\nRegistratore telematico / compliance fiscale (XML, chiusure, annulli certificati).\nIntegrazione POS certificati (PAX, Ingenico, protocolli proprietari) + fallback manuale.\nPagamento misto: split illimitato, arrotondamenti, sconti riga e sconto globale con audit.\nOmnicanalità: stesso motore ordine per cassa, kiosk, QR tavolo senza divergenze di totale.\nOsservabilità: metriche latency checkout, errori RPC, tracing distribuito.\nDisaster recovery: coda offline locale con sync idempotente e risoluzione conflitti.\nMulti‑PV: ogni ordine, listino e chiusura legata al PV con report consolidato gruppo.\nPenetration test periodici su RLS e RPC; segregazione dati tra tenant verificata.\nAccessibilità WCAG 2.2 su flussi cassa critici; i18n completa (date, valute, IVA).",
-    nota: "Cassa, planning, annulli, ricevuta, strip incassi, JSON giornata, PV su ordine, pagamento misto (DB+UI); core indipendente dai gate servizio.",
+      "Turno cassa: parametro tenant, RPC Supabase, gate checkout; ordine collegato al turno (DB+RPC).\nRegistratore telematico / compliance fiscale (XML, chiusure, annulli certificati).\nIntegrazione POS certificati (PAX, Ingenico, protocolli proprietari) + fallback manuale.\nPagamento misto: split illimitato, arrotondamenti, sconti riga e sconto globale con audit.\nOmnicanalità: stesso motore ordine per cassa, kiosk, QR tavolo senza divergenze di totale.\nOsservabilità: metriche latency checkout, errori RPC, tracing distribuito.\nDisaster recovery: coda offline locale con sync idempotente e risoluzione conflitti.\nMulti‑PV: ogni ordine, listino e chiusura legata al PV con report consolidato gruppo.\nPenetration test periodici su RLS e RPC; segregazione dati tra tenant verificata.\nAccessibilità WCAG 2.2 su flussi cassa critici; i18n completa (date, valute, IVA).",
+    nota: "Cassa, planning, annulli, ricevuta, strip incassi, JSON giornata, PV su ordine e in dettaglio ordine, pagamento misto (DB+UI), turni+riconciliazione+ordine↔turno; core indipendente dai gate servizio.",
   },
   {
     id: "stampa_comanda",

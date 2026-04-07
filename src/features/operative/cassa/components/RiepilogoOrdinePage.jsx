@@ -3,7 +3,8 @@ import { formatPrice } from "@/utils/format"
 import CartItem from "./CartItem"
 import { getTodayOrari, buildSlotsInOpeningHours } from "@/features/operative/cassa/utils/planningUtils"
 
-const TIPI_PAGAMENTO = ["Contanti", "Carta", "Altro"]
+const TIPI_MISTO_RIGA = ["Contanti", "Carta", "Altro"]
+const TIPI_PAGAMENTO_ORDINE = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
 
 function slotColor(pizzeCount, maxPizze, sogliaGiallo) {
   if (maxPizze <= 0) return "#e8f5e9"
@@ -12,24 +13,38 @@ function slotColor(pizzeCount, maxPizze, sogliaGiallo) {
   return "#c8e6c9"
 }
 
+function parseEuroInput(s) {
+  return Number(String(s ?? "").replace(",", ".")) || 0
+}
+
+function sumMistoRighe(righe) {
+  return (righe || []).reduce((acc, r) => acc + parseEuroInput(r?.importo), 0)
+}
+
 export default function RiepilogoOrdinePage({
   cart,
   total,
+  totalCheckout = total,
+  scontoEuroApplicato = 0,
+  checkoutScontoGlobale = "",
+  onCheckoutScontoGlobaleChange,
   tipoOrdine,
   deliverySearch,
   checkoutNote,
   onCheckoutNoteChange,
   checkoutTipoPagamento,
   onCheckoutTipoPagamentoChange,
-  checkoutMistoContanti = "",
-  checkoutMistoCarta = "",
-  onCheckoutMistoContantiChange,
-  onCheckoutMistoCartaChange,
+  mistoRighe = [],
+  onMistoRigaChange,
+  onAddMistoRiga,
+  onRemoveMistoRiga,
+  maxMistoRighe = 15,
+  cassaArrotonda5Cent = false,
   checkoutNomeCliente = "",
   onCheckoutNomeClienteChange,
   selectedSlot = null,
   onSlotSelect,
-  tipiPagamento = TIPI_PAGAMENTO,
+  tipiPagamento = TIPI_PAGAMENTO_ORDINE,
   parametri = {},
   orariSettimana,
   onConfirm,
@@ -77,13 +92,20 @@ export default function RiepilogoOrdinePage({
   const totalPizzeOrdine = (cart || []).reduce((s, i) => s + (i.qty || 0), 0)
   const nomeClienteObbligatorio = tipoOrdine === "negozio" && !(checkoutNomeCliente || "").trim()
   const isMisto = checkoutTipoPagamento === "Misto"
-  const mistoC1 = Number(String(checkoutMistoContanti).replace(",", ".")) || 0
-  const mistoC2 = Number(String(checkoutMistoCarta).replace(",", ".")) || 0
-  const mistoSumOk = Math.abs(mistoC1 + mistoC2 - Number(total)) <= 0.02
-  const mistoImportiOk = mistoC1 >= 0 && mistoC2 >= 0 && (mistoC1 > 0 || mistoC2 > 0)
+  const mistoSum = sumMistoRighe(mistoRighe)
+  const tc = Number(totalCheckout ?? total) || 0
+  const mistoSumOk = Math.abs(mistoSum - tc) <= 0.02
+  const mistoImportiOk =
+    !isMisto ||
+    (mistoRighe || []).some((r) => parseEuroInput(r.importo) > 0.001)
   const mistoOk = !isMisto || (mistoSumOk && mistoImportiOk)
   const canConfirm =
-    cart.length > 0 && !loading && selectedSlot && !noSlotDisponibili && !nomeClienteObbligatorio && mistoOk
+    cart.length > 0 &&
+    !loading &&
+    selectedSlot &&
+    !noSlotDisponibili &&
+    !nomeClienteObbligatorio &&
+    mistoOk
 
   return (
     <div style={styles.wrapper}>
@@ -117,7 +139,35 @@ export default function RiepilogoOrdinePage({
             ))}
           </ul>
         )}
-        <p style={styles.totale}>Totale: € {formatPrice(total)}</p>
+        <p style={styles.totale}>Totale articoli: € {formatPrice(total)}</p>
+        {(scontoEuroApplicato > 0 || Math.abs(tc - total) > 0.001) && (
+          <p style={{ ...styles.totale, fontSize: 15, marginTop: 6, color: "#333" }}>
+            Totale da incassare: € {formatPrice(tc)}
+            {cassaArrotonda5Cent ? (
+              <span style={{ fontSize: 12, fontWeight: 400, color: "#666", marginLeft: 8 }}>
+                (arrotondato a 0,05 €)
+              </span>
+            ) : null}
+          </p>
+        )}
+      </div>
+
+      <div style={styles.section}>
+        <label style={styles.label}>Sconto a cassa (€, opzionale)</label>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={checkoutScontoGlobale}
+          onChange={(e) => onCheckoutScontoGlobaleChange?.(e.target.value)}
+          placeholder="0 — massimo pari al totale articoli"
+          style={styles.input}
+        />
+        {scontoEuroApplicato > 0 ? (
+          <p style={{ fontSize: 12, color: "#555", marginTop: 6, lineHeight: 1.4 }}>
+            Verrà registrato in nota ordine come{" "}
+            <strong>[Sconto cassa €{scontoEuroApplicato.toFixed(2)}]</strong>.
+          </p>
+        ) : null}
       </div>
 
       {tipoOrdine === "negozio" && (
@@ -147,37 +197,68 @@ export default function RiepilogoOrdinePage({
         {isMisto ? (
           <div style={{ marginTop: 14 }}>
             <p style={{ fontSize: 13, color: "#555", margin: "0 0 10px", lineHeight: 1.45 }}>
-              Indica gli importi: la somma deve essere uguale al totale (€ {formatPrice(total)}).
+              Aggiungi righe (Contanti / Carta / Altro): la somma deve essere uguale al totale da incassare (€{" "}
+              {formatPrice(tc)}).
             </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-              <div style={{ flex: "1 1 140px" }}>
-                <label style={styles.label}>Contanti (€)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={checkoutMistoContanti}
-                  onChange={(e) => onCheckoutMistoContantiChange?.(e.target.value)}
-                  placeholder="0,00"
-                  style={styles.input}
-                />
+            {(mistoRighe || []).map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  alignItems: "flex-end",
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ flex: "1 1 120px" }}>
+                  <label style={styles.label}>Tipo</label>
+                  <select
+                    value={row.tipo || "Contanti"}
+                    onChange={(e) => onMistoRigaChange?.(row.id, { tipo: e.target.value })}
+                    style={styles.select}
+                  >
+                    {TIPI_MISTO_RIGA.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 100px" }}>
+                  <label style={styles.label}>Importo (€)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.importo}
+                    onChange={(e) => onMistoRigaChange?.(row.id, { importo: e.target.value })}
+                    placeholder="0,00"
+                    style={styles.input}
+                  />
+                </div>
+                <button
+                  type="button"
+                  style={styles.mistoRemoveBtn}
+                  disabled={(mistoRighe || []).length <= 1}
+                  onClick={() => onRemoveMistoRiga?.(row.id)}
+                >
+                  Rimuovi
+                </button>
               </div>
-              <div style={{ flex: "1 1 140px" }}>
-                <label style={styles.label}>Carta (€)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={checkoutMistoCarta}
-                  onChange={(e) => onCheckoutMistoCartaChange?.(e.target.value)}
-                  placeholder="0,00"
-                  style={styles.input}
-                />
-              </div>
-            </div>
+            ))}
+            <button
+              type="button"
+              style={styles.mistoAddBtn}
+              disabled={(mistoRighe || []).length >= maxMistoRighe}
+              onClick={() => onAddMistoRiga?.()}
+            >
+              + Aggiungi riga
+            </button>
             {!mistoOk && isMisto ? (
               <p style={{ fontSize: 13, color: "#c62828", margin: "10px 0 0", fontWeight: 600 }}>
                 {!mistoImportiOk
-                  ? "Indica almeno un importo tra contanti e carta."
-                  : "La somma non coincide con il totale ordine."}
+                  ? "Indica almeno un importo in una riga."
+                  : "La somma non coincide con il totale da incassare."}
               </p>
             ) : null}
           </div>
@@ -475,6 +556,25 @@ const styles = {
     borderRadius: 8,
     fontSize: 16,
     fontWeight: 600,
+    cursor: "pointer",
+  },
+  mistoAddBtn: {
+    marginTop: 4,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #81c784",
+    background: "#e8f5e9",
+    color: "#1b5e20",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  mistoRemoveBtn: {
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid #ddd",
+    background: "#fafafa",
+    fontSize: 13,
     cursor: "pointer",
   },
   fidelityHint: {

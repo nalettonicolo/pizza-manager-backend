@@ -83,6 +83,10 @@ Dettaglio: **`docs/GUIDA_SUPERADMIN.md`**.
 
 Piano prioritizzato (blocchi, allineamento DB, perimetro normativo Italia): **`docs/ROADMAP_CASSA_ENTERPRISE.md`**.
 
+Backlog realistico, dipendenze esterne e ordine di lavoro: **`docs/BACKLOG_E_STATO_SVILUPPO.md`**.
+
+Questionario perimetro **gestionale completo** (stakeholder, priorità, migrazione locale→DB): **`docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md`**.
+
 ---
 
 ## 7. Come aggiornare questo file
@@ -99,7 +103,9 @@ Piano prioritizzato (blocchi, allineamento DB, perimetro normativo Italia): **`d
 | 2026-04-03 | Super Admin ampliato (catalogo, deploy, enterprise UI, piani/landing/contatti); gate servizi; tabella sito pubblico; admin Guida e Pubblicazione in tabella menu. |
 | 2026-04-03 | Admin: route e sidebar Magazzino e Contabilità (dati locali tenant); tabella menu aggiornata. |
 | 2026-04-05 | Sezione roadmap enterprise cassa/offline/fiscale IT → `docs/ROADMAP_CASSA_ENTERPRISE.md`. |
+| 2026-04-05 | Backlog engineering / stato → `docs/BACKLOG_E_STATO_SVILUPPO.md`. |
+| 2026-04-06 | Link a questionario gestionale completo → `docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md`. |
 
 ---
 
-*Ultima revisione: 2026-04-05*
+*Ultima revisione: 2026-04-06*

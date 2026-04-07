@@ -500,3 +500,7 @@ GRANT EXECUTE ON FUNCTION public.turni_cassa_chiudi(uuid, numeric, numeric, text
 --   supabase/migrations/20260406140000_ordine_turno_operatori.sql
 -- Moduli sorgente: sql/modules/03_ordini_extensions.sql, 04_ordine_view_trigger.sql, 05_pm_point_create_order.sql
 -- -----------------------------------------------------------------------------
+-- -----------------------------------------------------------------------------
+-- 2026-04-06 — Audit cassa append-only + RPC public.cassa_audit_log
+--   supabase/migrations/20260406150000_cassa_ordine_audit.sql
+-- -----------------------------------------------------------------------------

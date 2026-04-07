@@ -86,6 +86,8 @@ Dipendenze: schema DB allineato; RPC stabili; eventuali vincoli di un futuro mod
 
 ## Collegamenti
 
+- Questionario fiscale / stakeholder (IT, non consulenza legale): `docs/ANALISI_PERIMETRO_FISCALE_E_QUESTIONARIO_SVILUPPO.md`.
+- Questionario **gestionale completo** (scope, moduli, priorità, migrazione dati): `docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md`.
 - Roadmap servizio UI: `src/config/serviziRoadmapSteps.js` (`ordini_cassa`).
 - Architettura route vs stato: `docs/ARCHITETTURA_E_STATO.md`.
 - Script SQL incrementali: `sql/sql_upgrade.sql`.
