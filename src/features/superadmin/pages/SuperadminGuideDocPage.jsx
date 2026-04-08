@@ -9,6 +9,11 @@ const LOADERS = {
   architettura: () => import("@docs/ARCHITETTURA_E_STATO.md?raw"),
   "csv-ingredienti": () => import("@docs/GUIDA_CSV_INGREDIENTI.md?raw"),
   deploy: () => import("@root/DEPLOY_COMANDI.md?raw"),
+  "roadmap-cassa-enterprise": () => import("@docs/ROADMAP_CASSA_ENTERPRISE.md?raw"),
+  "backlog-stato-sviluppo": () => import("@docs/BACKLOG_E_STATO_SVILUPPO.md?raw"),
+  "analisi-fiscale-questionario": () => import("@docs/ANALISI_PERIMETRO_FISCALE_E_QUESTIONARIO_SVILUPPO.md?raw"),
+  "analisi-gestionale-questionario": () => import("@docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md?raw"),
+  "qa-smoke-checklist": () => import("@docs/QA_CHECKLIST_SMOKE.md?raw"),
 };
 
 const TITLES = {
@@ -18,6 +23,11 @@ const TITLES = {
   architettura: "Architettura e stato",
   "csv-ingredienti": "Guida CSV ingredienti",
   deploy: "Comandi deploy",
+  "roadmap-cassa-enterprise": "Roadmap enterprise (cassa → offline → fiscale IT)",
+  "backlog-stato-sviluppo": "Backlog e stato sviluppo",
+  "analisi-fiscale-questionario": "Analisi perimetro fiscale (questionario)",
+  "analisi-gestionale-questionario": "Analisi gestionale completo (questionario)",
+  "qa-smoke-checklist": "QA — checklist smoke test",
 };
 
 export default function SuperadminGuideDocPage() {

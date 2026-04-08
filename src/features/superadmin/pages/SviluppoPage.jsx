@@ -11,6 +11,15 @@ import { applyServiziCsvToCatalog, parseServiziCsv } from "@/features/superadmin
 import { exportServiziCatalogCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
 import { SERVIZI_ROADMAP_STEPS, servizioRoadmapInCorso, percentualeEffettivaServizio } from "@/config/serviziRoadmapSteps";
 
+/** Stessi slug di `SuperadminGuideDocPage` / `SuperadminGuideHub` (DOCS_SVILUPPO). */
+const LINK_DOCS_SVILUPPO = [
+  { slug: "roadmap-cassa-enterprise", label: "Roadmap enterprise (cassa → offline → fiscale IT)" },
+  { slug: "backlog-stato-sviluppo", label: "Backlog e stato sviluppo" },
+  { slug: "analisi-fiscale-questionario", label: "Analisi perimetro fiscale — questionario stakeholder" },
+  { slug: "analisi-gestionale-questionario", label: "Analisi gestionale completo — questionario stakeholder" },
+  { slug: "qa-smoke-checklist", label: "QA — checklist smoke test" },
+];
+
 const PLAN_TIERS = [
   {
     key: "base",
@@ -158,6 +167,31 @@ export default function SviluppoPage() {
         l&apos;avanzamento reale). Il CSV/catalogo serve per altri flussi; per le % qui conta la roadmap. Modifica anche dal{" "}
         <Link to="/superadmin/servizi">Catalogo servizi</Link>. Le barre per piano usano la media sui servizi inclusi nel bundle.
       </p>
+
+      <div
+        className="dashboard-box"
+        style={{
+          marginBottom: 28,
+          border: "1px solid #94a3b8",
+          background: "linear-gradient(135deg, #f8fafc 0%, #fff 58%)",
+        }}
+      >
+        <h2 style={{ marginTop: 0, fontSize: 17, color: "#0f172a" }}>Documenti di sviluppo</h2>
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.55 }}>
+          File markdown in <code>docs/</code>, letti in-app come le altre guide (
+          <Link to="/superadmin/guide">Documentazione</Link>
+          ). Aggiorna il repository e ridistribuisci il build per modificare i testi.
+        </p>
+        <ul style={{ margin: 0, paddingLeft: 22, fontSize: 14, color: "#334155", lineHeight: 1.75 }}>
+          {LINK_DOCS_SVILUPPO.map((d) => (
+            <li key={d.slug} style={{ marginBottom: 6 }}>
+              <Link to={`/superadmin/guide/${d.slug}`} style={{ fontWeight: 600, color: "#0369a1" }}>
+                {d.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div
         className="dashboard-box"

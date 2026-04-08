@@ -33,6 +33,35 @@ const DOCS = [
   },
 ];
 
+/** Documenti product/engineering (stessa cartella `docs/`, link dalla pagina Roadmap). */
+const DOCS_SVILUPPO = [
+  {
+    slug: "roadmap-cassa-enterprise",
+    title: "Roadmap enterprise cassa",
+    description: "Blocchi cassa, offline, fiscale IT; allineamento DB e perimetro normativo.",
+  },
+  {
+    slug: "backlog-stato-sviluppo",
+    title: "Backlog e stato sviluppo",
+    description: "Cosa è realistico in codice, dipendenze esterne, ordine di lavoro.",
+  },
+  {
+    slug: "analisi-fiscale-questionario",
+    title: "Questionario perimetro fiscale (IT)",
+    description: "Stakeholder, RT/corrispettivi, integrazioni — non sostituisce il commercialista.",
+  },
+  {
+    slug: "analisi-gestionale-questionario",
+    title: "Questionario gestionale completo",
+    description: "Scope moduli, priorità, migrazione localStorage → Supabase.",
+  },
+  {
+    slug: "qa-smoke-checklist",
+    title: "QA — smoke test",
+    description: "Checklist manuale pre/post deploy e Supabase Auth.",
+  },
+];
+
 export default function SuperadminGuideHub() {
   return (
     <>
@@ -45,6 +74,24 @@ export default function SuperadminGuideHub() {
           e ridistribuisci il build.
         </p>
       </header>
+      <h2 className="sa-section-title" style={{ marginBottom: 16, fontSize: 18, color: "#0f172a" }}>
+        Documenti di sviluppo e roadmap product
+      </h2>
+      <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748b", maxWidth: 720, lineHeight: 1.55 }}>
+        Stessi file in <code>docs/</code>; accessibili anche da <Link to="/superadmin/sviluppo">Super Admin → Roadmap</Link>.
+      </p>
+      <div className="nav-cards cols-3" style={{ marginBottom: 36 }}>
+        {DOCS_SVILUPPO.map((d) => (
+          <Link key={d.slug} to={`/superadmin/guide/${d.slug}`} className="nav-card">
+            <h3>{d.title}</h3>
+            <p>{d.description}</p>
+            <span className="nav-card-link">Apri →</span>
+          </Link>
+        ))}
+      </div>
+      <h2 className="sa-section-title" style={{ marginBottom: 16, fontSize: 18, color: "#0f172a" }}>
+        Guide operative e tecniche
+      </h2>
       <div className="nav-cards cols-3" style={{ marginBottom: 32 }}>
         {DOCS.map((d) => (
           <Link key={d.slug} to={`/superadmin/guide/${d.slug}`} className="nav-card">
