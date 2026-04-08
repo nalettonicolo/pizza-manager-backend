@@ -1,5 +1,5 @@
-import { Fragment, useEffect } from "react";
-import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
+import { Fragment, useEffect, useState } from "react";
+import { Outlet, NavLink, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import "@/styles/superadmin-enterprise.css";
@@ -38,9 +38,45 @@ const NAV_GROUPS = [
   },
 ];
 
+const MOBILE_NAV_MQ = "(max-width: 768px)";
+
 export default function SuperAdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_NAV_MQ);
+    const onChange = () => {
+      if (!mq.matches) setMobileNavOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_NAV_MQ);
+    if (!mobileNavOpen || !mq.matches) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     return prefetchWhenIdle([
@@ -75,7 +111,7 @@ export default function SuperAdminLayout() {
             <span className="superadmin-bar-email" title={user?.email}>
               {user?.email}
             </span>
-            <span>Super Admin</span>
+            <span className="sa-bar-role-label">Super Admin</span>
             <button
               type="button"
               className="superadmin-bar-logout"
@@ -88,15 +124,47 @@ export default function SuperAdminLayout() {
             >
               Esci
             </button>
+            <button
+              type="button"
+              className="sa-nav-mobile-toggle"
+              aria-expanded={mobileNavOpen}
+              aria-controls="sa-nav-primary"
+              id="sa-nav-mobile-toggle"
+              aria-label={mobileNavOpen ? "Chiudi menu di navigazione" : "Apri menu di navigazione"}
+              onClick={() => setMobileNavOpen((o) => !o)}
+            >
+              <span className="sa-nav-mobile-toggle-icon" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="sa-nav-mobile-toggle-text">Menu</span>
+            </button>
           </div>
         </div>
-        <nav className="sa-nav-clustered" aria-label="Navigazione Super Admin">
+        {mobileNavOpen ? (
+          <div
+            className="sa-mobile-nav-backdrop"
+            role="presentation"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        ) : null}
+        <nav
+          id="sa-nav-primary"
+          className={`sa-nav-clustered${mobileNavOpen ? " sa-nav-clustered--open" : ""}`}
+          aria-label="Navigazione Super Admin"
+        >
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="sa-nav-cluster">
               <span className="sa-nav-cluster-label">{group.label}</span>
               <div className="sa-nav-cluster-links">
                 {group.items.map((item) => (
-                  <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? "active" : "")}>
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setMobileNavOpen(false)}
+                  >
                     {item.label}
                   </NavLink>
                 ))}
