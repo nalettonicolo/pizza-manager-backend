@@ -16,8 +16,13 @@ export default function RepartiQuadTestPage() {
   const [reloadKey, setReloadKey] = useState(0)
 
   const origin = typeof window !== "undefined" ? window.location.origin : ""
+  /** pm_embed=1: le singole viste non reindirizzano alla griglia 4×4 (iframe / Edge). */
   const frames = useMemo(
-    () => PANES.map((p) => ({ ...p, src: `${origin}${p.path}` })),
+    () =>
+      PANES.map((p) => ({
+        ...p,
+        src: `${origin}${p.path}?pm_embed=1`,
+      })),
     [origin],
   )
 

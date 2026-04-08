@@ -988,3 +988,18 @@ CREATE TRIGGER ordine_instead_of_update_trigger
   INSTEAD OF UPDATE ON public."Ordine"
   FOR EACH ROW
   EXECUTE FUNCTION public.ordine_instead_of_update();
+
+-- ---------------------------------------------------------------------------
+-- Menu pubblico anon: RLS su core.prodotti (20260408140000_prodotti_menu_pubblico_anon_rls)
+-- ---------------------------------------------------------------------------
+DROP POLICY IF EXISTS prodotti_public_menu_anon_select ON core.prodotti;
+
+CREATE POLICY prodotti_public_menu_anon_select
+  ON core.prodotti
+  FOR SELECT
+  TO anon
+  USING (
+    deleted_at IS NULL
+    AND (attivo IS NULL OR attivo = true)
+    AND (visibile_online IS NULL OR visibile_online = true)
+  );
