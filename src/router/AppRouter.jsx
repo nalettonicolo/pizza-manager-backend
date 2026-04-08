@@ -104,6 +104,7 @@ const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"))
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"));
 const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"));
 const OperativeTurniPage = lazy(() => import("@/features/operative/pages/OperativeTurniPage"));
+const RepartiQuadTestPage = lazy(() => import("@/features/operative/pages/RepartiQuadTestPage"));
 
 const PageFallback = () => <div className="p-6 flex items-center justify-center min-h-[120px]"><span className="text-gray-400 text-sm">Caricamento...</span></div>;
 
@@ -407,6 +408,14 @@ export default function AppRouter() {
           <Route path="/operative/pizzaioli" element={<Suspense fallback={<PageFallback />}><PizzaioloDashboard /></Suspense>} />
           <Route path="/operative/delivery" element={<Suspense fallback={<PageFallback />}><DeliveryDashboard /></Suspense>} />
           <Route path="/operative/pony" element={<Navigate to="/operative/delivery" replace />} />
+          <Route
+            path="/operative/test-reparti-quad"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <RepartiQuadTestPage />
+              </Suspense>
+            }
+          />
         </Route>
       )}
 

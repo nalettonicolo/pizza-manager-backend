@@ -64,7 +64,13 @@ Dettaglio testuale per servizio: `resto` in `serviziRoadmapSteps.js`.
 
 ---
 
-## 6. Riferimenti
+## 6. Cose da fare / follow-up (prodotto & architettura)
+
+- **Flussi “tutto nell’app” vs siti clienti su GitHub**: decidere se mantenere vetrina/ordini nel motore unico (Supabase + SPA) o quando proporre siti/landing per cliente su repo separati; trade-off branding, sync menu, costi operativi e supporto (discussione dedicata, non bloccante per lo sviluppo corrente).
+
+---
+
+## 7. Riferimenti
 
 | Documento | Contenuto |
 |-----------|-----------|
@@ -75,4 +81,4 @@ Dettaglio testuale per servizio: `resto` in `serviziRoadmapSteps.js`.
 
 ---
 
-*Ultima revisione: 2026-04-06*
+*Ultima revisione: 2026-04-05*

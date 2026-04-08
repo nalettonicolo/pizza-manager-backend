@@ -1,8 +1,10 @@
 import { useMemo } from "react";
+import { Navigate } from "react-router-dom";
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { isOperativeAreaPermitted } from "@/utils/operativePathEligibility";
+import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 
 const OPERATIVE_NAV = Object.freeze([
   { to: "/operative/cassa", label: "Cassa", description: "Incassi e ordini", servizioId: "ordini_cassa", areaKey: "cassa" },
@@ -14,7 +16,10 @@ const OPERATIVE_NAV = Object.freeze([
 ]);
 
 export default function OperativeDashboard() {
-  const { permessiAree } = useAuth();
+  const { permessiAree, user } = useAuth();
+  if (isQuadRepartiTestEmail(user?.email)) {
+    return <Navigate to="/operative/test-reparti-quad" replace />;
+  }
   const { hasServizio } = useTenantServizi();
   const items = useMemo(
     () =>

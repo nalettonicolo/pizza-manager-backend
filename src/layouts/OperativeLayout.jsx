@@ -17,6 +17,7 @@ import { OPERATIVE_AREA_NAV } from "@/constants/operativeNav";
 import { findOperativeNavItemForPath, resolveFirstOperativePath } from "@/utils/operativePathEligibility";
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
+import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -86,6 +87,8 @@ export default function OperativeLayout() {
   const operatoreLabel = labelFromEmailPrefix(user?.email ?? "");
   const isCassaPage = location.pathname === "/operative/cassa" || location.pathname.startsWith("/operative/cassa/");
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
+  const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
+  const operativeFullBleed = isPizzaioloPage || isRepartiQuadTestPage;
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
@@ -145,16 +148,18 @@ export default function OperativeLayout() {
   }
 
   if (location.pathname === "/operative" || location.pathname === "/operative/") {
-    return <Navigate to={firstAllowedPath} replace />;
+    const homeOp =
+      isQuadRepartiTestEmail(user?.email) ? "/operative/test-reparti-quad" : firstAllowedPath;
+    return <Navigate to={homeOp} replace />;
   }
   if (!canAccessCurrent && firstAllowedPath) {
     return <Navigate to={firstAllowedPath} replace />;
   }
-  const wrapClass = `dashboard-wrap theme-admin${tenantThemeClass}${isPizzaioloPage ? " pizzaiolo-fullscreen" : ""}`;
+  const wrapClass = `dashboard-wrap theme-admin${tenantThemeClass}${operativeFullBleed ? " pizzaiolo-fullscreen" : ""}`;
 
   return (
     <div className={wrapClass} style={themeStyle}>
-      {!isPizzaioloPage && (
+      {!operativeFullBleed && (
         <aside className="dashboard-sidebar">
           {logoUrl && (
             <div style={{ marginBottom: 16, textAlign: "center" }}>
@@ -188,7 +193,7 @@ export default function OperativeLayout() {
           </div>
         </aside>
       )}
-      <div className={`dashboard-main${isPizzaioloPage ? " pizzaiolo-fullscreen-main" : ""}`}>
+      <div className={`dashboard-main${operativeFullBleed ? " pizzaiolo-fullscreen-main" : ""}`}>
         <CassaHeaderContext.Provider value={{ setContent: setCassaToolbar, setSidebar: setCassaSidebar }}>
           {isPizzaioloPage && (
             <div className="pizzaiolo-floating-bar" role="toolbar" aria-label="Azioni Pizzaiolo">
@@ -208,7 +213,7 @@ export default function OperativeLayout() {
               </button>
             </div>
           )}
-          {!isPizzaioloPage && (
+          {!operativeFullBleed && (
             <header className="dashboard-header">
               <h1 className="dashboard-header-title">
                 {headerTitle}
@@ -225,7 +230,7 @@ export default function OperativeLayout() {
               </div>
             </header>
           )}
-          <main className={`dashboard-content${isPizzaioloPage ? " pizzaiolo-content-full" : ""}`}>
+          <main className={`dashboard-content${operativeFullBleed ? " pizzaiolo-content-full" : ""}`}>
             <Outlet context={{ operatoreLabel, ruolo }} />
           </main>
         </CassaHeaderContext.Provider>

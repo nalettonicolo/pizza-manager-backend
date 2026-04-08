@@ -63,7 +63,7 @@ export default function PublicStore() {
       try {
         setLoading(true);
         setError(null);
-        const tenant = await getPublicTenantInfo();
+        const tenant = await getPublicTenantInfo({ search: location.search });
         if (tenant) {
           setTenantName(tenant.nome || null);
           setTenantParametri(

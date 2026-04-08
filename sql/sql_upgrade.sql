@@ -5,14 +5,12 @@
 -- Moduli nominati in sql/modules/ e supabase/migrations/; il testo SQL completo
 -- degli ultimi interventi è scritto sotto nello stesso file (nessun rinvio obbligatorio).
 --
--- 2026-04-08 — Consegne / rider (due blocchi da eseguire in ordine):
---   (1) Enum stato_delivery, tabelle rider/percorsi/outbox, colonne su core.ordini, RLS
---       = stesso contenuto di supabase/migrations/20260408120000_rider_delivery_enterprise.sql
---       e sql/modules/11_rider_delivery_enterprise.sql
---   (2) Funzione + vista public."Ordine" + trigger (colonne rider)
---       = stesso contenuto di supabase/migrations/20260408121000_ordine_view_rider_columns.sql
---       e sql/modules/04_ordine_view_trigger.sql
--- Prerequisito per (1)-(2): core.ordini con colonne da sql/modules/03_ordini_extensions.sql
+-- 2026-04-08 — Due blocchi SQL in coda al file (eseguire in ordine):
+--   (1) schema rider / percorsi / outbox / colonne core.ordini / RLS
+--       — allineato a 20260408120000 e 11_rider_delivery_enterprise.sql
+--   (2) funzione + vista public."Ordine" + trigger
+--       — allineato a 20260408121000 e 04_ordine_view_trigger.sql
+-- Prerequisito: sql/modules/03_ordini_extensions.sql su core.ordini
 --
 -- =============================================================================
 
@@ -506,11 +504,23 @@ GRANT EXECUTE ON FUNCTION public.turni_cassa_chiudi(uuid, numeric, numeric, text
 -- -----------------------------------------------------------------------------
 
 -- =============================================================================
--- 2026-04-08 (1) — Rider / consegne: schema DB (regola A = bloccato_cucina su percorso)
--- Copia: supabase/migrations/20260408120000_rider_delivery_enterprise.sql
+-- (1) schema rider / percorsi / outbox / colonne core.ordini / RLS
+-- Allineato a: supabase/migrations/20260408120000_rider_delivery_enterprise.sql
+--              sql/modules/11_rider_delivery_enterprise.sql
 -- =============================================================================
 
--- Enum stato logistica (affianca stato_consegna TEXT legacy)
+-- =============================================================================
+-- 11) Rider / consegne enterprise — anagrafica rider, turni, percorsi, eventi
+-- =============================================================================
+-- Regola A (logistica): il flag bloccato_cucina su consegna_percorso_ordine indica
+-- ordini non riordinabili al ricalcolo percorso (es. già in forno).
+--
+-- Dipendenze: core.tenants, core.ordini, core.punti_vendita (opzionale), core.users (opzionale)
+-- Prerequisiti progetto: 03_ordini_extensions.sql (tipo_ordine, stato_consegna, coordinate, turno cassa, …)
+-- Allineamento: supabase/migrations/20260408120000_rider_delivery_enterprise.sql
+-- =============================================================================
+
+-- --- Enum stato logistica delivery (affianca stato_consegna TEXT legacy) ----------
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
@@ -883,9 +893,13 @@ GRANT SELECT, INSERT ON core.ordine_consegna_evento TO authenticated;
 GRANT SELECT, INSERT ON public.notifiche_outbox TO authenticated;
 
 -- =============================================================================
--- 2026-04-08 (2) — Vista public."Ordine" + trigger INSTEAD OF UPDATE (colonne rider)
--- Copia: supabase/migrations/20260408121000_ordine_view_rider_columns.sql
--- Eseguire dopo il blocco (1) sopra.
+-- (2) funzione + vista public."Ordine" + trigger
+-- Allineato a: supabase/migrations/20260408121000_ordine_view_rider_columns.sql
+--              sql/modules/04_ordine_view_trigger.sql
+-- =============================================================================
+
+-- =============================================================================
+-- 4) Vista public."Ordine" + INSTEAD OF UPDATE
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()

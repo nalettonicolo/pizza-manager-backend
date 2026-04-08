@@ -36,6 +36,17 @@
   min-width: 0;
 }
 
+/* Vetrina /negozio e /preview: nav sempre visibile (non usa .nav-center che su mobile SaaS è nascosto) */
+.public-layout-nav-vetrina {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  min-width: 0;
+}
+
 .public-layout-header-trailing {
   display: flex;
   align-items: center;

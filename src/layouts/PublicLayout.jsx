@@ -15,6 +15,8 @@ export default function PublicLayout() {
   const isSaaS = getIsSaaSClient()
   const { pathname, search } = useLocation()
   const isLanding = isSaaS && pathname === "/"
+  /** Pagina vendita online: nav centrale (landing la mostra solo su `/`). */
+  const isVetrinaPage = pathname === "/negozio" || pathname === "/preview"
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [tenantName, setTenantName] = useState("")
   const [publicTenantId, setPublicTenantId] = useState(null)
@@ -111,6 +113,19 @@ export default function PublicLayout() {
         <Link to="/" className="public-layout-logo">
           {logoLabel}
         </Link>
+        {isVetrinaPage ? (
+          <nav className="public-layout-nav-vetrina" aria-label="Menu vetrina">
+            <a href="#public-menu" className="public-layout-header-link">
+              Menù
+            </a>
+            <Link to="/contatti" className="public-layout-header-link">
+              Contatti
+            </Link>
+            <Link to="/support" className="public-layout-header-link">
+              Supporto
+            </Link>
+          </nav>
+        ) : null}
         {isLanding ? (
           <>
             <nav className="public-layout-nav-center" aria-label="Sezioni">
