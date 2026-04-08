@@ -18,6 +18,7 @@ import {
   sortedSlotLabels,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
+import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
@@ -164,10 +165,23 @@ export default function Bancone() {
 
   const renderCard = (ord, isDelivery) => {
     const ritardo = getRitardoMinuti(ord, partenzaConsegneMinuti)
+    const urgPartenza = isDelivery && isDeliveryUrgentPartenzaBancone(ord, parametri)
     const righe = righePerOrdine[ord.id] || []
     const pagamento = (ord.tipo_pagamento || "").trim()
     return (
-      <div key={ord.id} style={styles.card}>
+      <div
+        key={ord.id}
+        style={{
+          ...styles.card,
+          ...(urgPartenza
+            ? {
+                border: "2px solid #e65100",
+                background: "#fff8e1",
+                boxShadow: "0 0 0 1px rgba(230,81,0,0.35)",
+              }
+            : {}),
+        }}
+      >
         <div style={styles.cardRow}>
           <button
             type="button"
@@ -188,7 +202,24 @@ export default function Bancone() {
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && openDetail(ord.id)}
           >
-            <strong>{ord.nome_cliente || "—"}</strong>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <strong>{ord.nome_cliente || "—"}</strong>
+              {urgPartenza ? (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: "#bf360c",
+                    background: "#ffe0b2",
+                    padding: "2px 8px",
+                    borderRadius: 6,
+                  }}
+                  title="Consegna: partenza rider in finestra critica"
+                >
+                  PARTENZA URGENTE
+                </span>
+              ) : null}
+            </div>
             {ord.orario_ritiro && (
               <span style={styles.orarioPagamentoRow}>
                 <span style={styles.orarioCard}>{ord.orario_ritiro}</span>

@@ -18,6 +18,7 @@ import {
   sortedSlotLabels,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
+import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -172,11 +173,24 @@ export default function PizzaioloDashboard() {
 
   const renderCard = (ord, isDelivery) => {
     const ritardo = getRitardoMinuti(ord, partenzaConsegneMinuti)
+    const urgForno = isDelivery && isDeliveryUrgentForno(ord, parametri, partenzaConsegneMinuti)
     const mapsUrl = isDelivery ? googleMapsUrl(ord.indirizzo_consegna) : null
     const righe = righePerOrdine[ord.id] || []
     const pagamento = (ord.tipo_pagamento || "").trim()
     return (
-      <div key={ord.id} style={styles.card}>
+      <div
+        key={ord.id}
+        style={{
+          ...styles.card,
+          ...(urgForno
+            ? {
+                border: "2px solid #e65100",
+                background: "#fff8e1",
+                boxShadow: "0 0 0 1px rgba(230,81,0,0.35)",
+              }
+            : {}),
+        }}
+      >
         <div style={styles.cardRow}>
           <button
             type="button"
@@ -198,11 +212,30 @@ export default function PizzaioloDashboard() {
             onKeyDown={(e) => e.key === "Enter" && openDetail(ord.id)}
           >
             {isDelivery && mapsUrl ? (
-              <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={styles.mapsLink} onClick={(e) => e.stopPropagation()}>
-                <strong>{ord.nome_cliente || "—"}</strong>
-                <br />
-                <span style={styles.indirizzo}>{ord.indirizzo_consegna || "—"}</span>
-              </a>
+              <>
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={styles.mapsLink} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <strong>{ord.nome_cliente || "—"}</strong>
+                    {urgForno ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: "#bf360c",
+                          background: "#ffe0b2",
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                        }}
+                        title="Consegna: mandare al forno con urgenza (finestra critica)"
+                      >
+                        FORNO URGENTE
+                      </span>
+                    ) : null}
+                  </div>
+                  <br />
+                  <span style={styles.indirizzo}>{ord.indirizzo_consegna || "—"}</span>
+                </a>
+              </>
             ) : (
               <>
                 <strong>{ord.nome_cliente || "—"}</strong>

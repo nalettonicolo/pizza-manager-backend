@@ -1,6 +1,7 @@
 
 -- =============================================================================
 -- 3) Estensioni core.ordini
+-- Logistica rider enterprise (rider_id, percorsi, stato_delivery enum): modulo 11.
 -- =============================================================================
 
 DO $$

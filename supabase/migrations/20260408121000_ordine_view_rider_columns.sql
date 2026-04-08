@@ -1,7 +1,5 @@
-
--- =============================================================================
--- 4) Vista public."Ordine" + INSTEAD OF UPDATE
--- =============================================================================
+-- Vista public."Ordine" + trigger: colonne rider (dopo 20260408120000_rider_delivery_enterprise.sql)
+-- Fonte: sql/modules/04_ordine_view_trigger.sql
 
 CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()
 RETURNS TRIGGER
@@ -89,4 +87,3 @@ CREATE TRIGGER ordine_instead_of_update_trigger
   INSTEAD OF UPDATE ON public."Ordine"
   FOR EACH ROW
   EXECUTE FUNCTION public.ordine_instead_of_update();
-

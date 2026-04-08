@@ -7,13 +7,16 @@ import {
   updateOrderStato,
 } from "@/features/admin/services/adminService"
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
+import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
 const POLL_MS = 10000
 
 export default function Cucina() {
-  const { tenantId } = useTenant()
+  const { tenantId, tenantData } = useTenant()
+  const parametri = tenantData?.parametri_operativi || {}
+  const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -103,10 +106,23 @@ export default function Cucina() {
         <p style={styles.muted}>Nessun ordine in preparazione.</p>
       ) : (
         <ul style={styles.list}>
-          {orders.map((ord) => (
+          {orders.map((ord) => {
+            const urg =
+              (ord.tipo_ordine || "").toLowerCase() === "delivery" &&
+              isDeliveryUrgentForno(ord, parametri, partenzaConsegneMinuti)
+            return (
             <li
               key={ord.id}
-              style={styles.card}
+              style={{
+                ...styles.card,
+                ...(urg
+                  ? {
+                      border: "2px solid #e65100",
+                      background: "#fff8e1",
+                      boxShadow: "0 0 0 1px rgba(230,81,0,0.35)",
+                    }
+                  : {}),
+              }}
               onClick={() => openDetail(ord.id)}
               onKeyDown={(e) => e.key === "Enter" && openDetail(ord.id)}
               role="button"
@@ -115,7 +131,24 @@ export default function Cucina() {
             >
               <div style={styles.cardHeader}>
                 <strong>Ordine #{ord.numero}</strong>
-                <span style={styles.totale}>€ {Number(ord.totale ?? 0).toFixed(2)}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {urg ? (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: "#bf360c",
+                        background: "#ffe0b2",
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                      }}
+                      title="Consegna: mandare al forno con urgenza (finestra critica)"
+                    >
+                      FORNO URGENTE
+                    </span>
+                  ) : null}
+                  <span style={styles.totale}>€ {Number(ord.totale ?? 0).toFixed(2)}</span>
+                </span>
               </div>
               <div style={styles.cardMeta}>
                 {ord.nome_cliente && (
@@ -128,7 +161,8 @@ export default function Cucina() {
               </div>
               <span style={styles.tapHint}>Tocca per dettaglio</span>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
 

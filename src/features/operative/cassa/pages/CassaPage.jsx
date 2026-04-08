@@ -47,6 +47,7 @@ import { markCheckoutStart, markCheckoutEnd } from "@/utils/cassaTelemetry"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
+import { ordineDeliveryRichiedeAttenzione } from "@/utils/riderDeliveryConfig"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
 import { getLocalYYYYMMDD, orderCreatedLocalDateKey } from "@/utils/localDate"
@@ -656,6 +657,22 @@ export default function CassaPage() {
     () => (ordiniOggiFiltered || []).filter((o) => !ordineIsAnnullato(o)),
     [ordiniOggiFiltered],
   )
+
+  const [deliveryAlertTick, setDeliveryAlertTick] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setDeliveryAlertTick((t) => t + 1), 30000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const deliveryAttenzioneInfo = useMemo(() => {
+    const po = tenantData?.parametri_operativi || {}
+    const partenza = Number(po.pizzaiolo_partenza_consegne_minuti) || 30
+    const list = (ordiniOggiAttivi || []).filter((o) => ordineDeliveryRichiedeAttenzione(o, po, partenza))
+    return {
+      count: list.length,
+      numeri: list.map((o) => o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "?").slice(0, 12),
+    }
+  }, [ordiniOggiAttivi, tenantData?.parametri_operativi, deliveryAlertTick])
 
   const incassiOggi = useMemo(() => aggregateIncassiDaOrdini(ordiniOggiAttivi), [ordiniOggiAttivi])
 
@@ -2125,6 +2142,26 @@ export default function CassaPage() {
             </div>
           </div>
         </div>
+        {deliveryAttenzioneInfo.count > 0 ? (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "#fff3e0",
+              border: "1px solid #e65100",
+              color: "#bf360c",
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            <strong>Consegne in criticità:</strong> {deliveryAttenzioneInfo.count} ordine
+            {deliveryAttenzioneInfo.count === 1 ? "" : "i"} (forno / partenza / ritardo). Numeri:{" "}
+            {deliveryAttenzioneInfo.numeri.join(", ")}
+            {deliveryAttenzioneInfo.count > deliveryAttenzioneInfo.numeri.length ? "…" : ""}
+          </div>
+        ) : null}
         <ul style={styles.ordiniList}>
           {ordiniOggiFiltered.map((o) => {
             const tp = (o.tipo_pagamento || "").toLowerCase()

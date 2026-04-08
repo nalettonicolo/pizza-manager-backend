@@ -81,6 +81,31 @@ export default function ParametriSection() {
     vetrina_consegna_filtro_quarto_minuto: [0, 15, 30, 45].includes(Number(raw.vetrina_consegna_filtro_quarto_minuto))
       ? String(raw.vetrina_consegna_filtro_quarto_minuto)
       : "45",
+    rider_velocita_media_kmh:
+      raw.rider_velocita_media_kmh !== undefined && raw.rider_velocita_media_kmh !== ""
+        ? String(raw.rider_velocita_media_kmh)
+        : "28",
+    rider_velocita_mal_tempo_kmh:
+      raw.rider_velocita_mal_tempo_kmh !== undefined && raw.rider_velocita_mal_tempo_kmh !== ""
+        ? String(raw.rider_velocita_mal_tempo_kmh)
+        : "22",
+    rider_ritardo_soglia_min:
+      raw.rider_ritardo_soglia_min !== undefined && raw.rider_ritardo_soglia_min !== ""
+        ? String(raw.rider_ritardo_soglia_min)
+        : "5",
+    rider_tempo_fermata_cliente_min:
+      raw.rider_tempo_fermata_cliente_min !== undefined && raw.rider_tempo_fermata_cliente_min !== ""
+        ? String(raw.rider_tempo_fermata_cliente_min)
+        : "2",
+    rider_forno_evidenza_min:
+      raw.rider_forno_evidenza_min !== undefined && raw.rider_forno_evidenza_min !== ""
+        ? String(raw.rider_forno_evidenza_min)
+        : "15",
+    rider_partenza_buffer_min:
+      raw.rider_partenza_buffer_min !== undefined && raw.rider_partenza_buffer_min !== ""
+        ? String(raw.rider_partenza_buffer_min)
+        : "5",
+    rider_ricalcolo_automatico: raw.rider_ricalcolo_automatico === true,
   };
 
   const setParam = (key, value) => {
@@ -121,6 +146,19 @@ export default function ParametriSection() {
         vetrina_consegna_filtro_quarto_minuto: [0, 15, 30, 45].includes(Number(p.vetrina_consegna_filtro_quarto_minuto))
           ? Number(p.vetrina_consegna_filtro_quarto_minuto)
           : 45,
+        rider_velocita_media_kmh:
+          p.rider_velocita_media_kmh === "" ? 28 : Math.min(120, Math.max(5, Number(p.rider_velocita_media_kmh) || 28)),
+        rider_velocita_mal_tempo_kmh:
+          p.rider_velocita_mal_tempo_kmh === "" ? 22 : Math.min(120, Math.max(5, Number(p.rider_velocita_mal_tempo_kmh) || 22)),
+        rider_ritardo_soglia_min:
+          p.rider_ritardo_soglia_min === "" ? 5 : Math.min(180, Math.max(1, Number(p.rider_ritardo_soglia_min) || 5)),
+        rider_tempo_fermata_cliente_min:
+          p.rider_tempo_fermata_cliente_min === "" ? 2 : Math.min(60, Math.max(0, Number(p.rider_tempo_fermata_cliente_min) || 2)),
+        rider_forno_evidenza_min:
+          p.rider_forno_evidenza_min === "" ? 15 : Math.min(120, Math.max(1, Number(p.rider_forno_evidenza_min) || 15)),
+        rider_partenza_buffer_min:
+          p.rider_partenza_buffer_min === "" ? 5 : Math.min(60, Math.max(0, Number(p.rider_partenza_buffer_min) || 5)),
+        rider_ricalcolo_automatico: p.rider_ricalcolo_automatico === true,
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
@@ -291,6 +329,90 @@ export default function ParametriSection() {
               <option value="45">:45</option>
             </select>
           </label>
+
+          <h3 style={{ margin: "20px 0 8px", fontSize: 16 }}>Consegne / rider (logistica)</h3>
+          <p className="dati-pizzeria-hint" style={{ marginBottom: 12, lineHeight: 1.5 }}>
+            Parametri per pianificazione percorsi (Google Maps), soglie ritardo e evidenziazione in cucina/bancone. Il ricalcolo
+            percorsi non sposta ordini già in forno (regola operativa). Valori modificabili in qualsiasi momento.
+          </p>
+          <label>
+            Velocità media pianificazione (km/h)
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={p.rider_velocita_media_kmh === "" ? "" : p.rider_velocita_media_kmh}
+              onChange={(e) => setParam("rider_velocita_media_kmh", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Velocità in condizioni avverse (km/h, più bassa = tempi più lunghi)
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={p.rider_velocita_mal_tempo_kmh === "" ? "" : p.rider_velocita_mal_tempo_kmh}
+              onChange={(e) => setParam("rider_velocita_mal_tempo_kmh", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Soglia ritardo consegne (minuti) per allarmi tra reparti
+            <input
+              type="number"
+              min={1}
+              max={180}
+              value={p.rider_ritardo_soglia_min === "" ? "" : p.rider_ritardo_soglia_min}
+              onChange={(e) => setParam("rider_ritardo_soglia_min", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Tempo medio al citofono / consegna fisica (minuti per fermata)
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={p.rider_tempo_fermata_cliente_min === "" ? "" : p.rider_tempo_fermata_cliente_min}
+              onChange={(e) => setParam("rider_tempo_fermata_cliente_min", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Evidenza forno — minuti prima della scadenza “pronto per partenza rider” (cucina / pizzaioli)
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={p.rider_forno_evidenza_min === "" ? "" : p.rider_forno_evidenza_min}
+              onChange={(e) => setParam("rider_forno_evidenza_min", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label>
+            Buffer partenza rider (minuti prima dell’orario cliente) — bancone pronto
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={p.rider_partenza_buffer_min === "" ? "" : p.rider_partenza_buffer_min}
+              onChange={(e) => setParam("rider_partenza_buffer_min", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+          </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={p.rider_ricalcolo_automatico}
+              onChange={(e) => setParam("rider_ricalcolo_automatico", e.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              Ricalcolo automatico consegne (quando il modulo sarà attivo; altrimenti resta solo ricalcolo manuale in cassa).
+            </span>
+          </label>
+
           <label>
             Tempo di preparazione pizza in minuti 
             <input
