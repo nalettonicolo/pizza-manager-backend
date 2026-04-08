@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { Navigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
+import { useAuth } from "@/app/contexts/AuthContext"
+import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 import {
   getOrders,
   getOrderDetail,
@@ -31,6 +34,7 @@ function googleMapsUrl(indirizzo) {
 }
 
 export default function PizzaioloDashboard() {
+  const { user } = useAuth()
   const { tenantId, tenantData } = useTenant()
   const [orders, setOrders] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
@@ -316,6 +320,12 @@ export default function PizzaioloDashboard() {
         })()}
       </div>
     )
+  }
+
+  /** Account test 4 reparti: dopo login si atterra su /operative/pizzaioli — reindirizza alla griglia (negli iframe no). */
+  const inIframe = typeof window !== "undefined" && window.self !== window.top
+  if (isQuadRepartiTestEmail(user?.email) && !inIframe) {
+    return <Navigate to="/operative/test-reparti-quad" replace />
   }
 
   return (

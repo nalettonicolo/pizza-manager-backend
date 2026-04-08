@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { OPERATIVE_ROLE_HOME } from "@/constants/operativeRoutes"
+import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome"
 import { devLog } from "@/lib/devLog"
 import { supabase } from "@/lib/supabaseClient"
@@ -60,7 +61,10 @@ export default function Login() {
         ...OPERATIVE_ROLE_HOME,
       }
       const ruoloNorm = (ruolo && typeof ruolo === "string") ? ruolo.toLowerCase().trim() : ""
-      const targetRoute = roleRoutes[ruoloNorm] || "/operative/dashboard"
+      let targetRoute = roleRoutes[ruoloNorm] || "/operative/dashboard"
+      if (ruoloNorm === "pizzaiolo" && isQuadRepartiTestEmail(user?.email)) {
+        targetRoute = "/operative/test-reparti-quad"
+      }
 
       devLog("Login", "redirect →", targetRoute, { ruolo })
       navigate(targetRoute, { replace: true })

@@ -6,11 +6,13 @@ import { usePv } from "@/app/contexts/PvContext";
 import Loader from "@/components/feedback/Loader";
 import { OPERATIVE_ROLE_HOME } from "@/constants/operativeRoutes";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
+import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 
-function postSelectPath(ruolo) {
+function postSelectPath(ruolo, email) {
   const r = (ruolo && String(ruolo).toLowerCase().trim()) || "";
   if (r === "admin") return ADMIN_TENANT_HOME;
   if (r === "superadmin") return "/superadmin/ingresso";
+  if (r === "pizzaiolo" && isQuadRepartiTestEmail(email)) return "/operative/test-reparti-quad";
   return OPERATIVE_ROLE_HOME[r] || "/operative/dashboard";
 }
 
@@ -29,7 +31,7 @@ export default function SelectPuntoVendita() {
     if (pvList.length !== 1) return;
     autoSinglePvRef.current = true;
     selectPv(pvList[0].id);
-    navigate(postSelectPath(ruolo), { replace: true });
+    navigate(postSelectPath(ruolo, user?.email), { replace: true });
   }, [authLoading, pvLoading, user, staff, tenantId, pvList, ruolo, navigate, selectPv]);
 
   if (authLoading) {
@@ -88,7 +90,7 @@ export default function SelectPuntoVendita() {
 
   function handleSelect(pv) {
     selectPv(pv.id);
-    navigate(postSelectPath(ruolo), { replace: true });
+    navigate(postSelectPath(ruolo, user?.email), { replace: true });
   }
 
   return (

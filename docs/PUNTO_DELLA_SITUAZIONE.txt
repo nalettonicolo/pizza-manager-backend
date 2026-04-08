@@ -1,0 +1,69 @@
+Ecco un punto della situazione strutturato: visione di webapp completa, cosa è già in piedi nel repo/prodotto, e cosa resta aperto o dipende da fattori esterni. È allineato a docs/ARCHITETTURA_E_STATO.md, docs/BACKLOG_E_STATO_SVILUPPO.md, docs/ROADMAP_CASSA_ENTERPRISE.md e a PUNTO_SITUAZIONE_ENTERPRISE.md, integrato con lavori recenti (cassa enterprise, pagamenti online, rider, UX pubblico/operativo).
+
+Visione: webapp completa che vuoi
+In sintesi è una piattaforma SaaS multi-tenant per pizzerie con:
+
+Area	Ruolo
+Marketing / acquisizione	Landing, contatti, piani (listino), registrazione, supporto
+Tenant (pizzeria)	Admin: menu, listini, dipendenti, ruoli, impostazioni (dati, orari, parametri, area consegna, segreti pagamento), report, magazzino e contabilità (oggi in parte dati locali nel browser)
+Operativo	Cassa con turni e audit, cucina, bancone, pizzaiolo, delivery/pony, prodotti esauriti, turni; permessi per area e gate sui servizi del piano
+Clienti finali	Menu online / vetrina, carrello, ordine e checkout (anche pagamento online dove abilitato)
+Piattaforma	Super Admin: tenant, piani/servizi, deploy, guide, pubblicazione dominio, strumenti di test
+Enterprise (roadmap esplicita)	Cassa solida → offline/DR → allineamento fiscale IT (registratore, corrispettivi, fornitore hardware)
+Infrastruttura	Frontend (es. Firebase), DB Supabase (RLS, RPC, viste), eventuale API Nest, Edge Functions (es. pagamenti), integrazioni (Stripe, mappe, ecc.)
+Obiettivo implicito: un solo motore (ordini, menu, tenant) con UX separate per ruolo, non siti sparsi non collegati.
+
+Cosa avete già fatto (stato realistico)
+Prodotto core
+
+Routing SaaS vs dominio pizzeria: landing, home, negozio/preview, login, area admin, operativo, superadmin, area cliente (ARCHITETTURA, PUNTO_SITUAZIONE).
+Menu pubblico da vista prodotti_menu_pubblico, tenant pubblico, branding vetrina; RPC per dominio dove previsto.
+Area operativa reparti (cassa, cucina, bancone, pizzaiolo, delivery, ecc.) con permessi e, se attivo, vincolo ai servizi del tenant.
+Super Admin: dashboard tenant, catalogo servizi, UI enterprise, guide, flussi di deploy/pubblicazione come da doc.
+Cassa / enterprise (blocco A, in avanzamento)
+
+Turni cassa (RPC/tabelle), ordine legato al turno, parametri obbligatorietà turno.
+Audit cassa (cassa_ordine_audit, logging checkout), pagamento misto esteso, arrotondamenti, sconti, telemetria opzionale (BACKLOG, ROADMAP).
+Ordini online / pagamenti
+
+Lavoro su Stripe (migration, Edge create-intent, webhook, integrazione frontend) nel percorso enterprise pagamenti online; SumUp come percorso/stub dove previsto — in produzione serve sempre account, chiavi e allineamento ambiente.
+Consegne / rider
+
+Schema e migration rider / consegna enterprise (tabelle, RLS staff, eventi percorso, ecc.) nel repo; completamento funzionale e app rider restano nel backlog “grande incremento”.
+UX e stabilità recenti (sessioni)
+
+Vetrina: nav su /negozio e /preview, tenant da query string.
+Account test 4 reparti (pizzaioli@pizzamanager.it): redirect alla griglia, permessi/servizi per iframe, login/PV coerenti.
+Google Maps: caricamento singleton per evitare script duplicati e errori in Area consegna.
+Documentazione
+
+Architettura, backlog, roadmap cassa/offline/fiscale, questionari gestionale/fiscale, guide, checklist QA, comandi deploy.
+Cosa manca o è parziale (gap principali)
+Prodotto / UX
+
+Admin: nessuna home KPI dedicata; lista ordini “admin” dedicata assente; report ≠ ordini live.
+Magazzino / contabilità: molto ancora su localStorage per tenant → migrazione verso Supabase dove deciso (BACKLOG).
+Super Admin: MRR/billing/fatture PDF, monitoraggio tecnico, piani persistenti su server (oggi listino anche in browser).
+Landing: piani senza prezzi in UI come da nota architettura.
+Pubblicazione / go-live cliente: flusso principale da Super Admin, non form completo in admin tenant.
+Sicurezza e piattaforma
+
+RLS/produzione: allineamento policy (es. errori 403 su risorse anon come prodotti_menu_pubblico se il DB remoto non è allineato alle migration).
+Billing abbonamenti Stripe completo (webhook subscription, blocco per morosità) come da PUNTO_SITUAZIONE ancora da chiudere in senso prodotto.
+Chiave Google Maps da restringere per referrer in produzione.
+Roadmap enterprise (ordine concordato)
+
+Blocco	Stato tipico
+A – Cassa	Avanzato; restano osservabilità (Sentry/OTel), hardening RLS, accessibilità flussi critici, perfezionamenti multi-PV/report gruppo
+B – Offline	Non iniziato (coda locale + sync idempotente)
+C – Fiscale IT	Quadro in doc; serve fornitore/dispositivo e consulenza, non solo codice
+Dipendenze esterne (non “solo codice”)
+
+Registratore telematico / SDI, POS certificati, penetration test, SLA commerciali (BACKLOG).
+Decisione architetturale in sospeso
+
+Tutto nell’app vs siti clienti su GitHub: registrata in BACKLOG sezione 6 — da decidere quando vuoi formalizzare offerta e manutenzione.
+In una frase
+Avete una webapp ampia e coerente (tenant, operativo, pubblico, superadmin, traccia enterprise cassa/pagamenti/consegne nel repo), con perimetro enterprise ancora in evoluzione (offline, fiscale, dati admin persistiti, billing pieno, allineamento DB produzione) e qualche gap di prodotto (KPI admin, ordini admin dedicati, magazzino/contabilità su DB).
+
+Se vuoi, il passo successivo può essere salvare questo riepilogo in un file tipo docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md e aggiornare il registro in ARCHITETTURA_E_STATO.md — dimmelo e lo allineo al formato che usi già nei doc.

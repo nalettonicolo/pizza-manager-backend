@@ -52,7 +52,11 @@ export default function OperativeLayout() {
   const ruoloKey = typeof ruolo === "string" ? ruolo.toLowerCase().trim() : "";
   const defaultPath = OPERATIVE_ROLE_HOME[ruoloKey] || "/operative/dashboard";
   const permessiAreeEffective =
-    ruoloKey === "superadmin" && ENABLE_TEST_REPARTI ? PERMESSI_TUTTE_AREE : permessiAree;
+    ruoloKey === "superadmin" && ENABLE_TEST_REPARTI
+      ? PERMESSI_TUTTE_AREE
+      : isQuadRepartiTestEmail(user?.email)
+        ? PERMESSI_TUTTE_AREE
+        : permessiAree;
   const navItemsRaw = permessiAreeEffective
     ? ROLE_NAV.filter((item) => {
         if (item.servizioId && !hasServizio(item.servizioId)) return false;
@@ -76,7 +80,10 @@ export default function OperativeLayout() {
   const firstAllowedPath = resolveFirstOperativePath(navItems, defaultPath, permessiAreeEffective, hasServizio);
   const currentAreaKey = getAreaKeyForPath(location.pathname);
   const currentNavMatch = findOperativeNavItemForPath(location.pathname);
-  const servizioOk = !currentNavMatch?.servizioId || hasServizio(currentNavMatch.servizioId);
+  const servizioOk =
+    isQuadRepartiTestEmail(user?.email) ||
+    !currentNavMatch?.servizioId ||
+    hasServizio(currentNavMatch.servizioId);
   const canAccessCurrent =
     Boolean(permessiAreeEffective) &&
     servizioOk &&
