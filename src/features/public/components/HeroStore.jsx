@@ -23,28 +23,29 @@ export default function HeroStore({ branding, menuTheme }) {
 
   return (
     <section
+      className="public-store-hero"
       style={{
         background: heroBackground,
         color: "white",
-        padding: "80px 20px",
         textAlign: "center",
       }}
     >
       {safe.logo_url && (
         <img
           src={safe.logo_url}
-          alt="Logo"
-          style={{ width: 120, marginBottom: 20 }}
+          alt={safe.nome ? `Logo ${safe.nome}` : "Logo"}
+          className="public-store-hero-logo"
+          style={{ marginBottom: 20 }}
         />
       )}
 
-      <h1 style={{ fontSize: 40 }}>{safe.nome ?? "Pizzeria"}</h1>
+      <h1 className="public-store-hero-title">{safe.nome ?? "Pizzeria"}</h1>
 
       {safe.indirizzo && (
-        <p style={{ marginTop: 15 }}>{safe.indirizzo}</p>
+        <p className="public-store-hero-address">{safe.indirizzo}</p>
       )}
 
-      <div style={{ marginTop: 30, display: "flex", gap: 15, justifyContent: "center", flexWrap: "wrap" }}>
+      <div className="public-store-hero-actions">
         
         {safe.ordinazione_attiva !== false && (
           <button

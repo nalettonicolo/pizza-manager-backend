@@ -97,7 +97,7 @@ export default function PublicStore() {
     }
 
     loadData();
-  }, []);
+  }, [location.pathname, location.search]);
 
   const categories = useMemo(() => buildCategoriesFromMenu(menu), [menu]);
 
@@ -164,6 +164,7 @@ export default function PublicStore() {
 
   return (
     <div
+      className="public-store-page"
       style={{
         ...styles.wrapper,
         ...(pageBg ? { background: pageBg } : {}),
@@ -206,12 +207,15 @@ export default function PublicStore() {
         )}
         {!menu.length && (
           <p style={styles.emptyMenuHint}>
-            {location.pathname.startsWith("/preview") ? (
+            {location.pathname.startsWith("/preview") || location.pathname.startsWith("/negozio") ? (
               <>
-                Anteprima: nessun prodotto in vetrina per il tenant di riferimento, oppure la lettura del menu non è
-                consentita ad <code style={{ fontSize: 12 }}>anon</code> su Supabase (vista{" "}
-                <code style={{ fontSize: 12 }}>prodotti_menu_pubblico</code>). In Admin verifica prodotti attivi e &quot;visibili
-                online&quot;.
+                Nessun piatto in vetrina per la pizzeria selezionata. Verifica in{" "}
+                <strong>Admin → Menu</strong> che i prodotti siano <strong>attivi</strong> e{" "}
+                <strong>visibili online</strong>. Su ambiente demo la vetrina usa il tenant con slug{" "}
+                <code style={{ fontSize: 12 }}>demo</code>, oppure imposta{" "}
+                <code style={{ fontSize: 12 }}>VITE_PUBLIC_DEMO_TENANT_ID</code> nel file{" "}
+                <code style={{ fontSize: 12 }}>.env</code>, oppure aggiungi{" "}
+                <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> all&apos;URL.
               </>
             ) : (
               <>Al momento non ci sono piatti disponibili online.</>
@@ -234,7 +238,6 @@ export default function PublicStore() {
 
 const styles = {
   wrapper: {
-    padding: "24px 16px 40px",
     minHeight: "40vh",
   },
   closedBanner: {

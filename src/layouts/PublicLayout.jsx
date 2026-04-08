@@ -13,8 +13,9 @@ const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
 
 export default function PublicLayout() {
   const isSaaS = getIsSaaSClient()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const isLanding = isSaaS && pathname === "/"
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [tenantName, setTenantName] = useState("")
   const [publicTenantId, setPublicTenantId] = useState(null)
   const [publicParametri, setPublicParametri] = useState(null)
@@ -33,7 +34,7 @@ export default function PublicLayout() {
         cancelled = true
       }
     }
-    getPublicTenantInfo()
+    getPublicTenantInfo({ search })
       .then((tenant) => {
         if (!cancelled) {
           setTenantName((tenant?.nome || "").trim())
@@ -52,7 +53,29 @@ export default function PublicLayout() {
     return () => {
       cancelled = true
     }
-  }, [isLanding])
+  }, [isLanding, search])
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [pathname, search])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined
+    const onKey = (e) => {
+      if (e.key === "Escape") setMobileNavOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [mobileNavOpen])
+
+  useEffect(() => {
+    if (!isLanding || !mobileNavOpen) return undefined
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isLanding, mobileNavOpen])
 
   const showOrdineOnlineModal = useMemo(() => {
     if (authLoading || isLanding || !publicTenantId) return false
@@ -89,23 +112,65 @@ export default function PublicLayout() {
           {logoLabel}
         </Link>
         {isLanding ? (
-          <nav className="public-layout-nav-center" aria-label="Sezioni">
-            <a href="/#perche" className="public-layout-header-link">
-              Perché noi
-            </a>
-            <a href="/#funzionalita" className="public-layout-header-link">
-              Funzionalità
-            </a>
-            <a href="/#piani" className="public-layout-header-link">
-              Piani
-            </a>
-            <Link to="/support" className="public-layout-header-link">
-              Supporto
-            </Link>
-            <Link to="/contatti" className="public-layout-header-link">
-              Contatti
-            </Link>
-          </nav>
+          <>
+            <nav className="public-layout-nav-center" aria-label="Sezioni">
+              <a href="/#perche" className="public-layout-header-link">
+                Perché noi
+              </a>
+              <a href="/#funzionalita" className="public-layout-header-link">
+                Funzionalità
+              </a>
+              <a href="/#piani" className="public-layout-header-link">
+                Piani
+              </a>
+              <Link to="/support" className="public-layout-header-link">
+                Supporto
+              </Link>
+              <Link to="/contatti" className="public-layout-header-link">
+                Contatti
+              </Link>
+            </nav>
+            <button
+              type="button"
+              className="public-layout-mobile-menu-btn"
+              aria-expanded={mobileNavOpen}
+              aria-controls="public-landing-nav-mobile"
+              aria-label={mobileNavOpen ? "Chiudi menu" : "Apri menu sezioni"}
+              onClick={() => setMobileNavOpen((o) => !o)}
+            >
+              <span className="public-layout-mobile-menu-icon" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
+            {mobileNavOpen ? (
+              <>
+                <div
+                  className="public-layout-nav-mobile-backdrop"
+                  role="presentation"
+                  onClick={() => setMobileNavOpen(false)}
+                />
+                <nav id="public-landing-nav-mobile" className="public-layout-nav-mobile-panel" aria-label="Sezioni sito">
+                  <a href="/#perche" className="public-layout-nav-mobile-link" onClick={() => setMobileNavOpen(false)}>
+                    Perché noi
+                  </a>
+                  <a href="/#funzionalita" className="public-layout-nav-mobile-link" onClick={() => setMobileNavOpen(false)}>
+                    Funzionalità
+                  </a>
+                  <a href="/#piani" className="public-layout-nav-mobile-link" onClick={() => setMobileNavOpen(false)}>
+                    Piani
+                  </a>
+                  <Link to="/support" className="public-layout-nav-mobile-link" onClick={() => setMobileNavOpen(false)}>
+                    Supporto
+                  </Link>
+                  <Link to="/contatti" className="public-layout-nav-mobile-link" onClick={() => setMobileNavOpen(false)}>
+                    Contatti
+                  </Link>
+                </nav>
+              </>
+            ) : null}
+          </>
         ) : null}
         <div className="public-layout-header-trailing">
           <Link
