@@ -29,14 +29,14 @@ export function OnlinePaymentPlaceholder({ tenant, totalEuro }) {
     >
       <strong style={{ color: "#0f172a" }}>Pagamento online</strong>
       <p style={{ margin: "10px 0 0" }}>
-        Il gestionale è predisposto per integrare <strong>Stripe</strong> e <strong>SumUp</strong>. La scelta definitiva (chiavi,
-        commissioni, flusso) si configura con il cliente in fase di messa in produzione.
+        <strong>Stripe</strong> è integrato con Edge Functions (PaymentIntent), webhook e Payment Element (3DS).{" "}
+        <strong>SumUp</strong> resta in roadmap (endpoint placeholder <code>payment-sumup-placeholder</code>).
       </p>
       {provider === "stripe" && pk ? (
         <p style={{ margin: "10px 0 0", fontSize: 13 }}>
           Provider: <strong>Stripe</strong> · chiave pubblica presente (pk_…). Totale ordine:{" "}
-          <strong>€ {Number(totalEuro).toFixed(2)}</strong>. L’addebito sarà gestito tramite sessione di pagamento lato server (
-          <em>PaymentIntent</em> / Checkout) quando l’endpoint sarà attivo.
+          <strong>€ {Number(totalEuro).toFixed(2)}</strong>. Dopo «Conferma ordine» si apre il form carta (serve anche la chiave
+          segreta sk_ salvata in Amministrazione).
         </p>
       ) : provider === "stripe" ? (
         <p style={{ margin: "10px 0 0", color: "#b45309" }}>

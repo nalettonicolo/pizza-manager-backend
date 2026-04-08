@@ -1,3 +1,7 @@
 {
-    "python-envs.pythonProjects": []
+  "python-envs.pythonProjects": [],
+  "deno.enable": true,
+  "deno.enablePaths": ["supabase/functions"],
+  "deno.config": "supabase/functions/deno.json",
+  "deno.lint": false
 }

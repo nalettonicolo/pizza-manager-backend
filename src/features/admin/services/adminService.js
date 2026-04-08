@@ -2043,3 +2043,21 @@ export async function updateTenantSettings(tenantId, updates) {
     throw error
   }
 }
+
+/** Salva la chiave segreta Stripe (sk_…) lato database — solo ruolo admin tenant. */
+export async function saveTenantStripeSecret(tenantId, secret) {
+  const { error } = await supabase.rpc("save_tenant_stripe_secret", {
+    p_tenant_id: tenantId,
+    p_secret: String(secret || "").trim(),
+  })
+  if (error) throw error
+}
+
+/** True se è stata salvata una sk_ per il tenant (senza esporre il valore). */
+export async function fetchTenantStripeSecretConfigured(tenantId) {
+  const { data, error } = await supabase.rpc("tenant_payment_stripe_configured", {
+    p_tenant_id: tenantId,
+  })
+  if (error) throw error
+  return !!data
+}

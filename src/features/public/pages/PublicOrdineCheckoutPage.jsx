@@ -22,6 +22,8 @@ import { readConsegnaDomicilioAttiva } from "@/utils/fidelityProgramConfig"
 import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
 import { resolveMatchingPuntiVendita } from "@/utils/resolvePvForDelivery"
 import { OnlinePaymentPlaceholder, describePaymentProvider } from "@/features/public/components/OnlinePaymentPlaceholder"
+import StripePaymentForm from "@/features/public/components/StripePaymentForm"
+import { createStripePaymentIntentForOrdine } from "@/features/public/services/onlinePaymentService"
 
 const PARAMETRI_OPERATIVI_VUOTI = {}
 
@@ -53,6 +55,8 @@ export default function PublicOrdineCheckoutPage() {
   const [pvMatchIds, setPvMatchIds] = useState([])
   /** Aggiorna le fasce disponibili quando passa il minuto (regola lead-time). */
   const [slotTick, setSlotTick] = useState(0)
+  /** Checkout online: dopo creazione ordine, clientSecret per Stripe Elements */
+  const [stripeCheckout, setStripeCheckout] = useState(null)
 
   useEffect(() => {
     let c = false
@@ -96,6 +100,10 @@ export default function PublicOrdineCheckoutPage() {
     const id = setInterval(() => setSlotTick((n) => n + 1), 60 * 1000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    if (paymentMode !== "online") setStripeCheckout(null)
+  }, [paymentMode])
 
   const orariOggi = useMemo(() => getTodayOrari(tenant?.orari_settimana), [tenant?.orari_settimana])
   const parametri = useMemo(() => {
@@ -211,6 +219,10 @@ export default function PublicOrdineCheckoutPage() {
   const submit = async (e) => {
     e.preventDefault()
     setError(null)
+    if (stripeCheckout) {
+      setError("Completa il pagamento con carta qui sopra, oppure torna a «Pagamento alla consegna» per annullare questo passaggio.")
+      return
+    }
     if (!tenantOk || !authTenantId) {
       setError("Sessione o pizzeria non valida. Esci e accedi di nuovo.")
       return
@@ -290,6 +302,25 @@ export default function PublicOrdineCheckoutPage() {
         ordineId: orderId,
         parametri,
       })
+
+      if (paymentMode === "online" && provider === "stripe") {
+        const { clientSecret } = await createStripePaymentIntentForOrdine(orderId)
+        if (!clientSecret) {
+          throw new Error("Risposta pagamento incompleta.")
+        }
+        setStripeCheckout({ orderId, clientSecret })
+        setSubmitting(false)
+        return
+      }
+
+      if (paymentMode === "online" && provider === "sumup") {
+        setError(
+          "SumUp non è ancora collegato da questo flusso: usa pagamento alla consegna oppure Stripe. (Endpoint placeholder: payment-sumup-placeholder.)",
+        )
+        setSubmitting(false)
+        return
+      }
+
       clearCart()
       navigate(`/cliente/ordini?nuovo=${encodeURIComponent(orderId)}`)
     } catch (err) {
@@ -502,7 +533,22 @@ export default function PublicOrdineCheckoutPage() {
             />
             Pagamento online (carta)
           </label>
-          {paymentMode === "online" ? <OnlinePaymentPlaceholder tenant={tenant} totalEuro={total} /> : null}
+          {paymentMode === "online" ? (
+            <>
+              <OnlinePaymentPlaceholder tenant={tenant} totalEuro={total} />
+              {stripeCheckout?.clientSecret && describePaymentProvider(tenant) === "stripe" ? (
+                <StripePaymentForm
+                  publishableKey={tenant?.stripe_publishable_key}
+                  clientSecret={stripeCheckout.clientSecret}
+                  onSuccess={() => {
+                    clearCart()
+                    navigate(`/cliente/ordini?nuovo=${encodeURIComponent(stripeCheckout.orderId)}`)
+                  }}
+                  onError={(msg) => setError(msg)}
+                />
+              ) : null}
+            </>
+          ) : null}
         </section>
 
         {error ? (
@@ -515,6 +561,7 @@ export default function PublicOrdineCheckoutPage() {
           type="submit"
           disabled={
             submitting ||
+            Boolean(stripeCheckout && paymentMode === "online") ||
             !consegnaOn ||
             closedToday ||
             !slots.length ||
@@ -529,10 +576,14 @@ export default function PublicOrdineCheckoutPage() {
             color: "#fff",
             fontSize: 16,
             fontWeight: 700,
-            cursor: submitting ? "default" : "pointer",
+            cursor: submitting || (stripeCheckout && paymentMode === "online") ? "default" : "pointer",
           }}
         >
-          {submitting ? "Invio…" : "Conferma ordine"}
+          {submitting
+            ? "Invio…"
+            : stripeCheckout && paymentMode === "online"
+              ? "Ordine creato — completa il pagamento sopra"
+              : "Conferma ordine"}
         </button>
       </form>
 
