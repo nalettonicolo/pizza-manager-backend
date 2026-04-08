@@ -98,7 +98,8 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 - **Guida utente Super Admin (console piattaforma):** `docs/GUIDA_SUPERADMIN.md`
 - **Linee guida Admin (tenant):** `docs/GUIDA_ADMIN.md`
 - **Architettura e stato (roadmap vs codice):** `docs/ARCHITETTURA_E_STATO.md`
-- **Punto della situazione:** `PUNTO_SITUAZIONE_ENTERPRISE.md`
+- **Punto della situazione (stack / deploy):** `PUNTO_SITUAZIONE_ENTERPRISE.md`
+- **Punto della situazione (visione webapp completa):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
 - **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
 
 ---
