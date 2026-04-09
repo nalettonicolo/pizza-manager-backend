@@ -169,7 +169,6 @@ export default function Landing() {
       <footer className="landing-footer">
         <div className="footer-inner">
           <span className="footer-brand">PizzaManager</span>
-          <span className="footer-copy">© {new Date().getFullYear()} — Gestionale e SaaS per pizzerie</span>
           <nav className="footer-legal" aria-label="Informative legali">
             <Link to="/privacy">Privacy</Link>
             <Link to="/cookie">Cookie</Link>

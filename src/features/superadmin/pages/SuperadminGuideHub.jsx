@@ -60,6 +60,11 @@ const DOCS_SVILUPPO = [
     title: "QA — smoke test",
     description: "Checklist manuale pre/post deploy e Supabase Auth.",
   },
+  {
+    slug: "punto-situazione-webapp",
+    title: "Punto della situazione (webapp completa)",
+    description: "Visione prodotto, cosa c’è nel repo, gap e riferimenti.",
+  },
 ];
 
 export default function SuperadminGuideHub() {

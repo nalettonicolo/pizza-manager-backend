@@ -18,7 +18,7 @@ const OPERATIVE_NAV = Object.freeze([
 export default function OperativeDashboard() {
   const { permessiAree, user } = useAuth();
   if (isQuadRepartiTestEmail(user?.email)) {
-    return <Navigate to="/operative/test-reparti-quad" replace />;
+    return <Navigate to="/operative/pizzaiolo-ingresso" replace />;
   }
   const { hasServizio } = useTenantServizi();
   const items = useMemo(

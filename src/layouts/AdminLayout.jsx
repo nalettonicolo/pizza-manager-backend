@@ -7,6 +7,7 @@ import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
+import AppCopyrightLine from "@/components/branding/AppCopyrightLine";
 
 const HEADER_HEIGHT = 56;
 
@@ -215,6 +216,7 @@ export default function AdminLayout() {
           <div className="dashboard-content">
             <Outlet />
           </div>
+          <AppCopyrightLine className="dashboard-app-copyright" />
         </main>
       </div>
     </Fragment>

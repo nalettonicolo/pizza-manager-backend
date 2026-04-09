@@ -46,13 +46,30 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 
 ### UX e stabilità (recenti)
 
-- Vetrina: nav su `/negozio` e `/preview`, tenant da query string.
-- Account test **4 reparti** (`pizzaioli@pizzamanager.it`): griglia iframe, permessi/servizi, login/PV coerenti.
+- Vetrina: nav su `/negozio` e `/preview`, tenant da query string (`getPublicTenantInfo({ search })`).
+- Account test **4 reparti** (`pizzaioli@pizzamanager.it`): dopo login **`/operative/pizzaiolo-ingresso`** con due pulsanti (schermata Pizzaiolo full / Test 4 pannelli); griglia **senza iframe** (`MemoryRouter`); permessi/servizi; `getOperativeHomePathForStaff` punta all’ingresso.
 - **Google Maps**: caricamento singleton (niente script API duplicati in Area consegna).
+- **DB menu pubblico**: policy `anon` su `core.prodotti` per lettura righe da menù (`anon_select_prodotti_menu_pubblico`) — vedi migration `20260409120000_*` e coda `sql/sql_upgrade.sql`.
 
 ### Documentazione
 
-- Architettura, backlog, roadmap cassa/offline/fiscale, questionari, guide, QA, comandi deploy (`DEPLOY_COMANDI.md`).
+- Architettura, backlog, roadmap cassa/offline/fiscale, questionari, guide, QA, comandi deploy (`DEPLOY_COMANDI.md`). In Super Admin → Guide: scheda **punto-situazione-webapp**.
+
+---
+
+## 2.1 Checklist implementazione (sintesi repo)
+
+| Tema | Dove |
+|------|------|
+| Header vetrina SaaS | `PublicLayout.jsx`, `public-layout.css` (`public-layout-nav-vetrina`) |
+| Tenant da query | `PublicStore.jsx`, `publicService.js` |
+| Login → scelta Pizzaiolo / Test | `PIZZAIOLO_TEST_INGRESSO_PATH`, `getOperativeHomePathForStaff` in `operativeRoutes.js`; `PizzaioloIngressoPage.jsx`; `Login.jsx`, `SelectPuntoVendita.jsx` |
+| Layout operativo test | `OperativeLayout.jsx` (permessi tutte le aree + servizio OK per email test) |
+| Pizzaiolo full | Nessun redirect forzato da `/operative/pizzaioli` per l’account test |
+| Griglia 4 pannelli | `RepartiQuadTestPage.jsx` (`MemoryRouter`, no iframe) |
+| Maps una tantum | `lib/googleMapsLoader.js` |
+| Policy anon prodotti | `supabase/migrations/20260409120000_anon_select_core_prodotti_menu_pubblico.sql`, `sql/sql_upgrade.sql` |
+| Risoluzione tenant SaaS | `resolveSaaSPublicTenant` in `publicService.js` (try/catch sulla query menu) |
 
 ---
 
@@ -68,7 +85,7 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 
 ### Sicurezza e piattaforma
 
-- **RLS / produzione**: allineare migration su Supabase remoto (es. **403** su `prodotti_menu_pubblico` se schema/GRANT non allineati).
+- **RLS / produzione**: applicare su Supabase remoto la migration policy anon (dopo il merge: niente **403** su `prodotti_menu_pubblico` per `anon` se la policy è presente).
 - **Billing** abbonamenti Stripe completo (subscription, blocco accesso) ancora da chiudere come prodotto.
 - Chiave **Google Maps** da restringere per referrer in produzione.
 
@@ -108,4 +125,4 @@ Webapp **ampia e coerente** (tenant, operativo, pubblico, superadmin, traccia en
 
 ---
 
-*Ultima revisione: 2026-04-05*
+*Ultima revisione: 2026-04-05 — checklist implementazione §2.1*

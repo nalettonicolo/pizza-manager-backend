@@ -15,6 +15,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ClienteRoute from "@/components/ClienteRoute";
 import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
 import RoleLayout from "@/layouts/RoleLayout";
+import AppCopyrightLine from "@/components/branding/AppCopyrightLine";
 
 /* ================= PUBLIC (SaaS) ================= */
 import Landing from "@/features/public/pages/Landing";
@@ -105,6 +106,7 @@ const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages
 const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"));
 const OperativeTurniPage = lazy(() => import("@/features/operative/pages/OperativeTurniPage"));
 const RepartiQuadTestPage = lazy(() => import("@/features/operative/pages/RepartiQuadTestPage"));
+const PizzaioloIngressoPage = lazy(() => import("@/features/operative/pages/PizzaioloIngressoPage"));
 
 const PageFallback = () => <div className="p-6 flex items-center justify-center min-h-[120px]"><span className="text-gray-400 text-sm">Caricamento...</span></div>;
 
@@ -120,6 +122,7 @@ function SuperadminIngressoRouteShell() {
             <SuperadminIngressoPage />
           </Suspense>
         </div>
+        <AppCopyrightLine className="dashboard-app-copyright" />
       </main>
     </div>
   );
@@ -408,6 +411,14 @@ export default function AppRouter() {
           <Route path="/operative/pizzaioli" element={<Suspense fallback={<PageFallback />}><PizzaioloDashboard /></Suspense>} />
           <Route path="/operative/delivery" element={<Suspense fallback={<PageFallback />}><DeliveryDashboard /></Suspense>} />
           <Route path="/operative/pony" element={<Navigate to="/operative/delivery" replace />} />
+          <Route
+            path="/operative/pizzaiolo-ingresso"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <PizzaioloIngressoPage />
+              </Suspense>
+            }
+          />
           <Route
             path="/operative/test-reparti-quad"
             element={

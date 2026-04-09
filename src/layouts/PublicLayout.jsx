@@ -8,6 +8,7 @@ import { getPublicTenantInfo } from "@/features/services/publicService"
 import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
 import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
 import "@/styles/public-layout.css"
+import { PM_COPYRIGHT_TEXT } from "@/components/branding/AppCopyrightLine"
 
 const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
 
@@ -221,9 +222,7 @@ export default function PublicLayout() {
             <Link to="/termini">Termini e condizioni</Link>
             {isSaaS ? <Link to="/support">Supporto</Link> : null}
           </nav>
-          <span className="public-layout-footer-copy">
-            © {new Date().getFullYear()} {isSaaS ? "PizzaManager" : "Menu online"}
-          </span>
+          <span className="public-layout-footer-copy">{PM_COPYRIGHT_TEXT}</span>
         </div>
       </footer>
 

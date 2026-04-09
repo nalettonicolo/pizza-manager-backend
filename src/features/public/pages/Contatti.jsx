@@ -400,7 +400,6 @@ export default function Contatti() {
 
       <footer className="landing-footer">
         <Link to="/" style={{ marginRight: 16 }}>Torna alla home</Link>
-        © {new Date().getFullYear()} PizzaManager
       </footer>
     </div>
   );

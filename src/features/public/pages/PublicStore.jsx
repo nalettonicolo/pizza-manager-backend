@@ -211,11 +211,11 @@ export default function PublicStore() {
               <>
                 Nessun piatto in vetrina per la pizzeria selezionata. Verifica in{" "}
                 <strong>Admin → Menu</strong> che i prodotti siano <strong>attivi</strong> e{" "}
-                <strong>visibili online</strong>. Su <strong>pizzamanager.it</strong> senza parametri
-                l&apos;anteprima sceglie un tenant con menu pubblico; per forzare la tua pizzeria usa{" "}
-                <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> o{" "}
-                <code style={{ fontSize: 12 }}>?slug=&lt;slug-tenant&gt;</code>, oppure{" "}
-                <code style={{ fontSize: 12 }}>VITE_PUBLIC_DEMO_TENANT_ID</code> nel build.
+                <strong>visibili online</strong>. Su ambiente demo la vetrina usa il tenant con slug{" "}
+                <code style={{ fontSize: 12 }}>demo</code>, oppure imposta{" "}
+                <code style={{ fontSize: 12 }}>VITE_PUBLIC_DEMO_TENANT_ID</code> nel file{" "}
+                <code style={{ fontSize: 12 }}>.env</code>, oppure aggiungi{" "}
+                <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> all&apos;URL.
               </>
             ) : (
               <>Al momento non ci sono piatti disponibili online.</>

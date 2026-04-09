@@ -990,16 +990,16 @@ CREATE TRIGGER ordine_instead_of_update_trigger
   EXECUTE FUNCTION public.ordine_instead_of_update();
 
 -- ---------------------------------------------------------------------------
--- Menu pubblico anon: RLS su core.prodotti (20260408140000_prodotti_menu_pubblico_anon_rls)
+-- Anon → core.prodotti per vista prodotti_menu_pubblico (fix 403 REST)
+-- (stesso contenuto di supabase/migrations/20260409120000_anon_select_core_prodotti_menu_pubblico.sql)
 -- ---------------------------------------------------------------------------
-DROP POLICY IF EXISTS prodotti_public_menu_anon_select ON core.prodotti;
-
-CREATE POLICY prodotti_public_menu_anon_select
+DROP POLICY IF EXISTS anon_select_prodotti_menu_pubblico ON core.prodotti;
+CREATE POLICY anon_select_prodotti_menu_pubblico
   ON core.prodotti
   FOR SELECT
   TO anon
   USING (
     deleted_at IS NULL
-    AND (attivo IS NULL OR attivo = true)
-    AND (visibile_online IS NULL OR visibile_online = true)
+    AND (attivo = true OR attivo IS NULL)
+    AND (visibile_online = true OR visibile_online IS NULL)
   );

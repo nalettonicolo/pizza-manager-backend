@@ -13,6 +13,7 @@ import { SERVIZI_ROADMAP_STEPS, servizioRoadmapInCorso, percentualeEffettivaServ
 
 /** Stessi slug di `SuperadminGuideDocPage` / `SuperadminGuideHub` (DOCS_SVILUPPO). */
 const LINK_DOCS_SVILUPPO = [
+  { slug: "punto-situazione-webapp", label: "Punto della situazione — webapp completa" },
   { slug: "roadmap-cassa-enterprise", label: "Roadmap enterprise (cassa → offline → fiscale IT)" },
   { slug: "backlog-stato-sviluppo", label: "Backlog e stato sviluppo" },
   { slug: "analisi-fiscale-questionario", label: "Analisi perimetro fiscale — questionario stakeholder" },

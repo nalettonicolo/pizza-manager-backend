@@ -48,30 +48,9 @@ export function mergePublicTenantOptions(options = {}) {
 }
 
 /**
- * Tenant con più righe in prodotti_menu_pubblico (menu online effettivamente popolato).
- */
-async function pickTenantFromPublicMenuCounts() {
-  const { data: menuRows, error: menuErr } = await supabase.from("prodotti_menu_pubblico").select("tenant_id");
-  if (menuErr || !Array.isArray(menuRows) || !menuRows.length) return null;
-  const counts = new Map();
-  for (const r of menuRows) {
-    const tid = r.tenant_id;
-    if (!tid) continue;
-    counts.set(tid, (counts.get(tid) || 0) + 1);
-  }
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  for (const [tid] of sorted) {
-    const { data: t, error: e2 } = await supabase.from("tenants").select("*").eq("id", tid).maybeSingle();
-    if (!e2 && t) return t;
-  }
-  return null;
-}
-
-/**
  * Su app SaaS (localhost, app.*): risolve il tenant per anteprima /negozio /preview.
- * Priorità: UUID in query → VITE_PUBLIC_DEMO_TENANT_ID → ?slug= esplicito nell’URL
- * → tenant con più righe in prodotti_menu_pubblico (default intelligente: evita slug "demo" vuoto)
- * → slug da VITE_PUBLIC_DEMO_TENANT_SLUG o "demo" → primo tenant per created_at.
+ * Priorità: UUID in query → VITE_PUBLIC_DEMO_TENANT_ID → slug (tenantSlug o VITE_PUBLIC_DEMO_TENANT_SLUG o "demo")
+ * → primo tenant che ha righe in prodotti_menu_pubblico → primo tenant per created_at.
  */
 async function resolveSaaSPublicTenant(resolved = {}) {
   const { tenantId, tenantSlug } = resolved;
@@ -87,20 +66,34 @@ async function resolveSaaSPublicTenant(resolved = {}) {
     if (!error && data) return data;
   }
 
-  /** Solo slug passato in query (?slug=), non il default "demo" implicito */
-  const slugFromUrl = tenantSlug && String(tenantSlug).trim();
-  if (slugFromUrl) {
-    const { data, error } = await supabase.from("tenants").select("*").eq("slug", slugFromUrl).maybeSingle();
+  const slugDefault = (import.meta.env.VITE_PUBLIC_DEMO_TENANT_SLUG ?? "demo").trim();
+  const slugTry = (tenantSlug || slugDefault).trim();
+  if (slugTry) {
+    const { data, error } = await supabase.from("tenants").select("*").eq("slug", slugTry).maybeSingle();
     if (!error && data) return data;
   }
 
-  const fromMenu = await pickTenantFromPublicMenuCounts();
-  if (fromMenu) return fromMenu;
-
-  const slugFallback = (import.meta.env.VITE_PUBLIC_DEMO_TENANT_SLUG ?? "demo").trim();
-  if (slugFallback) {
-    const { data, error } = await supabase.from("tenants").select("*").eq("slug", slugFallback).maybeSingle();
-    if (!error && data) return data;
+  let menuRows = null;
+  let menuErr = null;
+  try {
+    const res = await supabase.from("prodotti_menu_pubblico").select("tenant_id");
+    menuRows = res.data;
+    menuErr = res.error;
+  } catch (e) {
+    menuErr = e;
+  }
+  if (!menuErr && Array.isArray(menuRows) && menuRows.length) {
+    const counts = new Map();
+    for (const r of menuRows) {
+      const tid = r.tenant_id;
+      if (!tid) continue;
+      counts.set(tid, (counts.get(tid) || 0) + 1);
+    }
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [tid] of sorted) {
+      const { data: t, error: e2 } = await supabase.from("tenants").select("*").eq("id", tid).maybeSingle();
+      if (!e2 && t) return t;
+    }
   }
 
   const { data: fallback, error: fbErr } = await supabase

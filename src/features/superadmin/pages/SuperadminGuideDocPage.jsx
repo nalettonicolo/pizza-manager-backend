@@ -14,6 +14,7 @@ const LOADERS = {
   "analisi-fiscale-questionario": () => import("@docs/ANALISI_PERIMETRO_FISCALE_E_QUESTIONARIO_SVILUPPO.md?raw"),
   "analisi-gestionale-questionario": () => import("@docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md?raw"),
   "qa-smoke-checklist": () => import("@docs/QA_CHECKLIST_SMOKE.md?raw"),
+  "punto-situazione-webapp": () => import("@docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md?raw"),
 };
 
 const TITLES = {
@@ -28,6 +29,7 @@ const TITLES = {
   "analisi-fiscale-questionario": "Analisi perimetro fiscale (questionario)",
   "analisi-gestionale-questionario": "Analisi gestionale completo (questionario)",
   "qa-smoke-checklist": "QA — checklist smoke test",
+  "punto-situazione-webapp": "Punto della situazione — webapp completa",
 };
 
 export default function SuperadminGuideDocPage() {

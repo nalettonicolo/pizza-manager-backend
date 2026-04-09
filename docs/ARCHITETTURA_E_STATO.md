@@ -107,7 +107,7 @@ Questionario perimetro **gestionale completo** (stakeholder, priorità, migrazio
 | 2026-04-05 | Sezione roadmap enterprise cassa/offline/fiscale IT → `docs/ROADMAP_CASSA_ENTERPRISE.md`. |
 | 2026-04-05 | Backlog engineering / stato → `docs/BACKLOG_E_STATO_SVILUPPO.md`. |
 | 2026-04-06 | Link a questionario gestionale completo → `docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md`. |
-| 2026-04-05 | Punto situazione webapp completa → `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`. |
+| 2026-04-05 | Punto situazione webapp completa → `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md` (anche Super Admin → Guide, slug `punto-situazione-webapp`). |
 
 ---
 

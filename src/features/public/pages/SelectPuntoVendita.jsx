@@ -4,16 +4,14 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { usePv } from "@/app/contexts/PvContext";
 import Loader from "@/components/feedback/Loader";
-import { OPERATIVE_ROLE_HOME } from "@/constants/operativeRoutes";
+import { getOperativeHomePathForStaff } from "@/constants/operativeRoutes";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
-import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 
 function postSelectPath(ruolo, email) {
   const r = (ruolo && String(ruolo).toLowerCase().trim()) || "";
   if (r === "admin") return ADMIN_TENANT_HOME;
   if (r === "superadmin") return "/superadmin/ingresso";
-  if (r === "pizzaiolo" && isQuadRepartiTestEmail(email)) return "/operative/test-reparti-quad";
-  return OPERATIVE_ROLE_HOME[r] || "/operative/dashboard";
+  return getOperativeHomePathForStaff(ruolo, email);
 }
 
 export default function SelectPuntoVendita() {

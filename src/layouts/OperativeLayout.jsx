@@ -9,7 +9,7 @@ import {
   requestBrowserFullscreen,
   isTabletLike,
 } from "@/hooks/usePizzaioloFullscreen";
-import { OPERATIVE_ROLE_HOME } from "@/constants/operativeRoutes";
+import { OPERATIVE_ROLE_HOME, PIZZAIOLO_TEST_INGRESSO_PATH } from "@/constants/operativeRoutes";
 import { ENABLE_TEST_REPARTI, PERMESSI_TUTTE_AREE } from "@/constants/testReparti";
 import { isDefaultAreaForRole } from "@/utils/operativeAreaAccess";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
@@ -18,6 +18,7 @@ import { findOperativeNavItemForPath, resolveFirstOperativePath } from "@/utils/
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
+import AppCopyrightLine from "@/components/branding/AppCopyrightLine";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -50,7 +51,10 @@ export default function OperativeLayout() {
   const brandName = tenantData?.nome || "Pizzeria";
 
   const ruoloKey = typeof ruolo === "string" ? ruolo.toLowerCase().trim() : "";
-  const defaultPath = OPERATIVE_ROLE_HOME[ruoloKey] || "/operative/dashboard";
+  const defaultPath =
+    isQuadRepartiTestEmail(user?.email) && ruoloKey === "pizzaiolo"
+      ? PIZZAIOLO_TEST_INGRESSO_PATH
+      : OPERATIVE_ROLE_HOME[ruoloKey] || "/operative/dashboard";
   const permessiAreeEffective =
     ruoloKey === "superadmin" && ENABLE_TEST_REPARTI
       ? PERMESSI_TUTTE_AREE
@@ -59,7 +63,7 @@ export default function OperativeLayout() {
         : permessiAree;
   const navItemsRaw = permessiAreeEffective
     ? ROLE_NAV.filter((item) => {
-        if (item.servizioId && !hasServizio(item.servizioId)) return false;
+        if (item.servizioId && !hasServizio(item.servizioId) && !isQuadRepartiTestEmail(user?.email)) return false;
         if (item.areaKey === "delivery") {
           return permessiAreeEffective.delivery === true || permessiAreeEffective.pony === true;
         }
@@ -140,15 +144,18 @@ export default function OperativeLayout() {
   if (!firstAllowedPath) {
     return (
       <div className={`dashboard-wrap theme-admin${tenantThemeClass}`} style={themeStyle}>
-        <main className="dashboard-content" style={{ maxWidth: 520, margin: "48px auto", padding: 24 }}>
-          <h1 className="dashboard-page-title">Nessuna area disponibile</h1>
-          <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>
-            Il tuo profilo non ha permessi su aree attive per questo piano, oppure i servizi abilitati per la pizzeria non
-            includono moduli collegati alle tue aree. Contatta un amministratore.
-          </p>
-          <button type="button" className="btn-logout btn-logout-red" style={{ marginTop: 20 }} onClick={() => void handleLogout()}>
-            Esci
-          </button>
+        <main className="dashboard-main" style={{ flex: 1, minWidth: 0 }}>
+          <div className="dashboard-content" style={{ maxWidth: 520, margin: "48px auto", padding: 24 }}>
+            <h1 className="dashboard-page-title">Nessuna area disponibile</h1>
+            <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>
+              Il tuo profilo non ha permessi su aree attive per questo piano, oppure i servizi abilitati per la pizzeria non
+              includono moduli collegati alle tue aree. Contatta un amministratore.
+            </p>
+            <button type="button" className="btn-logout btn-logout-red" style={{ marginTop: 20 }} onClick={() => void handleLogout()}>
+              Esci
+            </button>
+          </div>
+          <AppCopyrightLine className="dashboard-app-copyright" />
         </main>
       </div>
     );
@@ -156,7 +163,7 @@ export default function OperativeLayout() {
 
   if (location.pathname === "/operative" || location.pathname === "/operative/") {
     const homeOp =
-      isQuadRepartiTestEmail(user?.email) ? "/operative/test-reparti-quad" : firstAllowedPath;
+      isQuadRepartiTestEmail(user?.email) ? "/operative/pizzaiolo-ingresso" : firstAllowedPath;
     return <Navigate to={homeOp} replace />;
   }
   if (!canAccessCurrent && firstAllowedPath) {
@@ -241,6 +248,7 @@ export default function OperativeLayout() {
             <Outlet context={{ operatoreLabel, ruolo }} />
           </main>
         </CassaHeaderContext.Provider>
+        <AppCopyrightLine className="dashboard-app-copyright" />
       </div>
     </div>
   );

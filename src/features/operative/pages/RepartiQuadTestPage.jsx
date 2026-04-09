@@ -1,30 +1,34 @@
-import { useMemo, useState } from "react"
-import { Link, Navigate, useNavigate } from "react-router-dom"
+import { lazy, Suspense, useState } from "react"
+import { Link, Navigate, useNavigate, MemoryRouter, Routes, Route } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 
+/**
+ * Stessa SPA dei route operativi, senza iframe: in Edge (Tracking Prevention) gli iframe
+ * spesso non possono usare localStorage → sessione Supabase assente e comparsa di login / errori auth.
+ */
+const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"))
+const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"))
+const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"))
+const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"))
+
 const PANES = [
-  { path: "/operative/pizzaioli", label: "Pizzaioli", position: "In alto a sinistra" },
-  { path: "/operative/bancone", label: "Bancone", position: "In alto a destra" },
-  { path: "/operative/cucina", label: "Cucina", position: "In basso a sinistra" },
-  { path: "/operative/delivery", label: "Delivery / pony", position: "In basso a destra" },
+  { path: "/operative/pizzaioli", label: "Pizzaioli", position: "In alto a sinistra", El: PizzaioloDashboard },
+  { path: "/operative/bancone", label: "Bancone", position: "In alto a destra", El: Bancone },
+  { path: "/operative/cucina", label: "Cucina", position: "In basso a sinistra", El: Cucina },
+  { path: "/operative/delivery", label: "Delivery / pony", position: "In basso a destra", El: DeliveryDashboard },
 ]
+
+function PanelFallback() {
+  return (
+    <div style={{ padding: 16, fontSize: 13, color: "#64748b" }}>Caricamento reparto…</div>
+  )
+}
 
 export default function RepartiQuadTestPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [reloadKey, setReloadKey] = useState(0)
-
-  const origin = typeof window !== "undefined" ? window.location.origin : ""
-  /** pm_embed=1: le singole viste non reindirizzano alla griglia 4×4 (iframe / Edge). */
-  const frames = useMemo(
-    () =>
-      PANES.map((p) => ({
-        ...p,
-        src: `${origin}${p.path}?pm_embed=1`,
-      })),
-    [origin],
-  )
 
   if (!isQuadRepartiTestEmail(user?.email)) {
     return <Navigate to="/operative/dashboard" replace />
@@ -54,8 +58,14 @@ export default function RepartiQuadTestPage() {
       >
         <strong style={{ fontSize: 14, color: "#0f172a" }}>Test 4 reparti</strong>
         <span style={{ fontSize: 12, color: "#64748b" }}>
-          Pizzaioli · Bancone · Cucina · Delivery (sessione condivisa)
+          Pizzaioli · Bancone · Cucina · Delivery (sessione condivisa, senza iframe)
         </span>
+        <Link
+          to="/operative/pizzaiolo"
+          style={{ fontSize: 13, color: "#0f766e", fontWeight: 600, marginLeft: 8 }}
+        >
+          Pizzaiolo full screen
+        </Link>
         <Link
           to="/operative/dashboard"
           style={{ fontSize: 13, color: "#c0392b", fontWeight: 600, marginLeft: 8 }}
@@ -99,47 +109,60 @@ export default function RepartiQuadTestPage() {
           background: "#e2e8f0",
         }}
       >
-        {frames.map((f) => (
-          <div
-            key={f.path}
-            style={{
-              position: "relative",
-              minHeight: 0,
-              minWidth: 0,
-              background: "#fff",
-              borderRadius: 8,
-              overflow: "hidden",
-              border: "1px solid #cbd5e1",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
+        {PANES.map((f) => {
+          const Comp = f.El
+          return (
             <div
+              key={f.path}
               style={{
-                flexShrink: 0,
-                padding: "4px 8px",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#334155",
-                background: "#f8fafc",
-                borderBottom: "1px solid #e2e8f0",
+                position: "relative",
+                minHeight: 0,
+                minWidth: 0,
+                background: "#fff",
+                borderRadius: 8,
+                overflow: "hidden",
+                border: "1px solid #cbd5e1",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              {f.position}: {f.label}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#334155",
+                  background: "#f8fafc",
+                  borderBottom: "1px solid #e2e8f0",
+                }}
+              >
+                {f.position}: {f.label}
+              </div>
+              <MemoryRouter
+                key={`${f.path}-${reloadKey}`}
+                initialEntries={[f.path]}
+                initialIndex={0}
+              >
+                <div
+                  className="reparti-quad-panel-body"
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  <Suspense fallback={<PanelFallback />}>
+                    <Routes>
+                      <Route path={f.path} element={<Comp />} />
+                    </Routes>
+                  </Suspense>
+                </div>
+              </MemoryRouter>
             </div>
-            <iframe
-              key={`${f.path}-${reloadKey}`}
-              title={f.label}
-              src={f.src}
-              style={{
-                flex: 1,
-                width: "100%",
-                minHeight: 0,
-                border: "none",
-              }}
-            />
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

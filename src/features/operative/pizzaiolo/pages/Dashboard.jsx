@@ -1,8 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
-import { Navigate, useLocation } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
-import { useAuth } from "@/app/contexts/AuthContext"
-import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 import {
   getOrders,
   getOrderDetail,
@@ -34,8 +31,6 @@ function googleMapsUrl(indirizzo) {
 }
 
 export default function PizzaioloDashboard() {
-  const { user } = useAuth()
-  const location = useLocation()
   const { tenantId, tenantData } = useTenant()
   const [orders, setOrders] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
@@ -321,19 +316,6 @@ export default function PizzaioloDashboard() {
         })()}
       </div>
     )
-  }
-
-  /** Test 4 reparti: redirect alla griglia solo nella finestra principale, mai negli iframe (Edge/TP). */
-  const embedFromQuery = useMemo(
-    () => new URLSearchParams(location.search).get("pm_embed") === "1",
-    [location.search],
-  )
-  const inIframe =
-    embedFromQuery ||
-    (typeof window !== "undefined" &&
-      (window.frameElement != null || window.self !== window.top))
-  if (isQuadRepartiTestEmail(user?.email) && !inIframe) {
-    return <Navigate to="/operative/test-reparti-quad" replace />
   }
 
   return (
