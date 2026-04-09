@@ -1749,6 +1749,7 @@ export default function CassaPage() {
           </div>
         ) : null}
         <RiepilogoOrdinePage
+          staffOverrideClosing
           cart={cart}
           total={total}
           totalCheckout={totalCheckout}

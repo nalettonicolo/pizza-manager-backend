@@ -107,19 +107,61 @@ export function slotKeyForDate(date, slotMinutes) {
 }
 
 /**
+ * Fasce sullo stesso giorno da slotStartMin (incluso) fino a endMinTotale (es. 24*60 = mezzanotte).
+ */
+function buildSlotsSameDayRange(now, slotStartMin, endMinTotale, count) {
+  const grid = PLANNING_GRID_SLOT_MINUTES
+  const lastStart = lastSlotStartInclusive(endMinTotale, grid)
+  if (slotStartMin > lastStart) return []
+  const slots = []
+  let m = slotStartMin
+  for (let i = 0; i < count; i++) {
+    if (m > lastStart) break
+    const d = new Date(now)
+    d.setHours(Math.floor(m / 60), m % 60, 0, 0)
+    slots.push({
+      key: d.getTime(),
+      label: d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+      date: new Date(d),
+    })
+    m += grid
+  }
+  return slots
+}
+
+/**
  * Genera fasce orarie nell'intervallo di apertura (da apertura a chiusura).
  * Se siamo oltre l'orario di chiusura restituisce [] (nessuna disponibilità).
  * orariOggi: { aperto, apertura, chiusura } da getTodayOrari().
+ *
+ * @param {{ staffOverrideClosing?: boolean }} [options] — In cassa: consente fasce dopo la chiusura (fino a fine giornata)
+ * e, se il giorno è chiuso in calendario, comunque slot da “ora” per inserimenti operativi.
  */
-export function buildSlotsInOpeningHours(orariOggi, count = 24) {
+export function buildSlotsInOpeningHours(orariOggi, count = 24, options = {}) {
+  const staffOverrideClosing = options.staffOverrideClosing === true
   const grid = PLANNING_GRID_SLOT_MINUTES
-  if (!orariOggi?.aperto) return []
   const now = new Date()
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+
+  if (!orariOggi) return []
+
+  // Cassa: giorno “chiuso” in calendario → slot da ora a 23:45 (ordini operativi)
+  if (staffOverrideClosing && !orariOggi.aperto) {
+    return buildSlotsSameDayRange(now, snapMinutesToQuarterUp(nowMin), 24 * 60, count)
+  }
+
+  if (!orariOggi.aperto) return []
+
   const startMin = timeToMinutes(orariOggi.apertura)
   const endMin = timeToMinutes(orariOggi.chiusura)
   const lastStart = lastSlotStartInclusive(endMin, grid)
-  const nowMin = now.getHours() * 60 + now.getMinutes()
-  if (nowMin >= endMin) return [] // oltre chiusura: nessuna disponibilità
+
+  // Cassa: oltre l’orario di chiusura configurato → estendi fino a fine giornata (stesso giorno solare)
+  if (staffOverrideClosing && nowMin >= endMin) {
+    return buildSlotsSameDayRange(now, snapMinutesToQuarterUp(nowMin), 24 * 60, count)
+  }
+
+  if (nowMin >= endMin) return [] // oltre chiusura: nessuna disponibilità (cliente / flusso standard)
   const firstSlotStartMin = snapMinutesToQuarterUp(nowMin)
   const firstAfterOpening = snapMinutesToQuarterUp(startMin)
   let slotStartMin = Math.max(firstSlotStartMin, firstAfterOpening)

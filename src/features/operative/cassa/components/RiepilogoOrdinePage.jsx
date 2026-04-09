@@ -65,6 +65,8 @@ export default function RiepilogoOrdinePage({
   selectedFidelity = null,
   onSelectFidelity,
   onNuovaFidelityCliente,
+  /** Cassa: consente fasce dopo la chiusura (e in giorno “chiuso” in calendario) per inserimenti operativi */
+  staffOverrideClosing = false,
 }) {
   const capacityWindowMin =
     tipoOrdine === "delivery"
@@ -76,8 +78,8 @@ export default function RiepilogoOrdinePage({
 
   const orariOggi = useMemo(() => getTodayOrari(orariSettimana), [orariSettimana])
   const slots = useMemo(
-    () => buildSlotsInOpeningHours(orariOggi, 24),
-    [orariOggi],
+    () => buildSlotsInOpeningHours(orariOggi, 24, { staffOverrideClosing }),
+    [orariOggi, staffOverrideClosing],
   )
 
   const pizzePerSlot = useMemo(() => {
@@ -88,7 +90,7 @@ export default function RiepilogoOrdinePage({
     return map
   }, [slots, pizzePerSlotFromOrders])
 
-  const noSlotDisponibili = !orariOggi.aperto || slots.length === 0
+  const noSlotDisponibili = slots.length === 0
   const totalPizzeOrdine = (cart || []).reduce((s, i) => s + (i.qty || 0), 0)
   const nomeClienteObbligatorio = tipoOrdine === "negozio" && !(checkoutNomeCliente || "").trim()
   const isMisto = checkoutTipoPagamento === "Misto"
@@ -365,11 +367,23 @@ export default function RiepilogoOrdinePage({
           Il tuo ordine: <strong>{totalPizzeOrdine} {totalPizzeOrdine === 1 ? "pizza" : "pizze"}</strong>
         </p>
         <p style={styles.hint}>
-          Seleziona un orario (obbligatorio). Fasce su quarti d’ora (:00, :15, :30, :45). Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. Capacità stimata: max {maxPizzePerSlot} pizze ogni {capacityWindowMin} min (parametri). In ogni fascia il numero indica le pizze già impegnate oggi per quell’orario ({tipoOrdine === "delivery" ? "solo consegne" : "solo ritiro in negozio"}), per organizzare il carico.
+          Seleziona un orario (obbligatorio). Fasce su quarti d’ora (:00, :15, :30, :45).{" "}
+          {staffOverrideClosing ? (
+            <>
+              <strong>Modalità cassa:</strong> puoi prenotare anche dopo l’orario di chiusura del locale (fino a fine giornata) e, se il giorno risulta chiuso in calendario, sono comunque disponibili fasce da adesso per ordini operativi.{" "}
+            </>
+          ) : (
+            <>Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. </>
+          )}
+          Capacità stimata: max {maxPizzePerSlot} pizze ogni {capacityWindowMin} min (parametri). In ogni fascia il numero indica le pizze già impegnate oggi per quell’orario ({tipoOrdine === "delivery" ? "solo consegne" : "solo ritiro in negozio"}), per organizzare il carico.
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>
-            {!orariOggi.aperto ? "Oggi chiuso: nessun orario disponibile." : "Oltre orario di chiusura: nessun orario disponibile."}
+            {!staffOverrideClosing && !orariOggi.aperto
+              ? "Oggi chiuso: nessun orario disponibile."
+              : !staffOverrideClosing
+                ? "Oltre orario di chiusura: nessun orario disponibile."
+                : "Nessuna fascia disponibile (fine giornata o orari non configurati)."}
           </p>
         )}
         <div style={styles.slotsGrid}>
