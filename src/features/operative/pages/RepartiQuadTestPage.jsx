@@ -1,11 +1,14 @@
 import { lazy, Suspense, useState } from "react"
-import { Link, Navigate, useNavigate, MemoryRouter, Routes, Route } from "react-router-dom"
+import { Link, Navigate, useNavigate } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 
 /**
  * Stessa SPA dei route operativi, senza iframe: in Edge (Tracking Prevention) gli iframe
  * spesso non possono usare localStorage → sessione Supabase assente e comparsa di login / errori auth.
+ *
+ * Non usare MemoryRouter (o altri Router) qui: React Router 6 vieta Router annidati dentro BrowserRouter
+ * e in produzione l’invariant fallisce con Error senza messaggio → schermata bianca.
  */
 const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"))
 const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"))
@@ -61,7 +64,7 @@ export default function RepartiQuadTestPage() {
           Pizzaioli · Bancone · Cucina · Delivery (sessione condivisa, senza iframe)
         </span>
         <Link
-          to="/operative/pizzaiolo"
+          to="/operative/pizzaioli"
           style={{ fontSize: 13, color: "#0f766e", fontWeight: 600, marginLeft: 8 }}
         >
           Pizzaiolo full screen
@@ -113,7 +116,7 @@ export default function RepartiQuadTestPage() {
           const Comp = f.El
           return (
             <div
-              key={f.path}
+              key={`${f.path}-${reloadKey}`}
               style={{
                 position: "relative",
                 minHeight: 0,
@@ -139,27 +142,19 @@ export default function RepartiQuadTestPage() {
               >
                 {f.position}: {f.label}
               </div>
-              <MemoryRouter
-                key={`${f.path}-${reloadKey}`}
-                initialEntries={[f.path]}
-                initialIndex={0}
+              <div
+                className="reparti-quad-panel-body"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: "auto",
+                  WebkitOverflowScrolling: "touch",
+                }}
               >
-                <div
-                  className="reparti-quad-panel-body"
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflow: "auto",
-                    WebkitOverflowScrolling: "touch",
-                  }}
-                >
-                  <Suspense fallback={<PanelFallback />}>
-                    <Routes>
-                      <Route path={f.path} element={<Comp />} />
-                    </Routes>
-                  </Suspense>
-                </div>
-              </MemoryRouter>
+                <Suspense fallback={<PanelFallback />}>
+                  <Comp />
+                </Suspense>
+              </div>
             </div>
           )
         })}
