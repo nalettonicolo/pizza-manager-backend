@@ -19,6 +19,14 @@ function ordineStatoConsegna(o) {
   return String(o?.stato_consegna ?? o?.statoConsegna ?? "").trim()
 }
 
+function isDeliveryTipoOrdine(o) {
+  const t = String(o?.tipo_ordine ?? o?.tipoOrdine ?? "").trim().toLowerCase()
+  if (t === "delivery" || t === "consegna") return true
+  if (t === "negozio" || t === "ritiro") return false
+  const ind = String(o?.indirizzo_consegna ?? o?.indirizzoConsegna ?? "").trim()
+  return Boolean(ind)
+}
+
 function ordineConsegnaLat(o) {
   const v = o?.consegna_lat ?? o?.consegnaLat
   return v != null && Number.isFinite(Number(v)) ? Number(v) : null
@@ -34,19 +42,30 @@ export default function DeliveryDashboard() {
   const { tenantId } = useTenant()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(null)
   const loadSeqRef = useRef(0)
 
   const loadOrders = useCallback(async (opts = {}) => {
     const silent = opts.silent === true
-    if (!tenantId) return
+    if (!tenantId) {
+      setOrders([])
+      setLoadError("Tenant non disponibile: impossibile caricare gli ordini.")
+      return
+    }
     const seq = ++loadSeqRef.current
     if (!silent) setLoading(true)
     try {
-      const data = await getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 40 })
+      setLoadError(null)
+      const data = await getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 80 })
       if (seq !== loadSeqRef.current) return
-      setOrders(data || [])
+      const rows = (data || []).filter(isDeliveryTipoOrdine)
+      setOrders(rows)
     } catch (err) {
       console.error(err)
+      if (seq === loadSeqRef.current) {
+        setOrders([])
+        setLoadError(err?.message || "Errore nel caricamento ordini.")
+      }
     } finally {
       if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
@@ -93,15 +112,23 @@ export default function DeliveryDashboard() {
     <div style={{ padding: 24 }}>
       <h1 className="dashboard-page-title">Delivery{operatoreLabel ? ` — ${operatoreLabel}` : ""}</h1>
       <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
-        Ordini pronti per la consegna (oggi). Stato consegna su DB: <code>stato_consegna</code> (flusso consigliato:{" "}
-        <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>). Integrazione rider dedicata in roadmap.
+        Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
+        segnano l’ordine pronto. Stato consegna su DB: <code>stato_consegna</code> (flusso:{" "}
+        <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>). Rider dedicato in roadmap.
         {operatoreLabel ? ` · ${operatoreLabel}` : ""}
       </p>
 
-      {loading && orders.length === 0 ? (
+      {loadError ? (
+        <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }} role="alert">
+          {loadError}
+        </p>
+      ) : loading && orders.length === 0 ? (
         <p style={{ color: "#888" }}>Caricamento...</p>
       ) : orders.length === 0 ? (
-        <p style={{ color: "#888" }}>Nessun ordine da consegnare.</p>
+        <p style={{ color: "#888", lineHeight: 1.5 }}>
+          Nessun ordine delivery in stato PRONTO per oggi. Se hai ordini solo &quot;ritiro in negozio&quot;, restano in
+          Bancone / Pizzaioli; se sono ancora in preparazione, compariranno qui dopo <strong>PRONTO</strong>.
+        </p>
       ) : (
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {orders.map((ord) => {
