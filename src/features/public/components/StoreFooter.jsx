@@ -1,5 +1,3 @@
-import { PM_COPYRIGHT_TEXT } from "@/components/branding/AppCopyrightLine";
-
 export default function StoreFooter({ branding }) {
   const safe = branding ?? {};
   return (
@@ -20,7 +18,7 @@ export default function StoreFooter({ branding }) {
       <p style={{ marginTop: 20, fontSize: 14, opacity: 0.6 }}>
         © {new Date().getFullYear()} {safe.nome ?? "Pizzeria"}
       </p>
-      <p style={{ marginTop: 10, fontSize: 12, opacity: 0.45 }}>{PM_COPYRIGHT_TEXT}</p>
+      <p style={{ marginTop: 10, fontSize: 12, opacity: 0.45 }}>© 2026 PizzaManager di Naletto Nicolò</p>
     </footer>
   );
 }

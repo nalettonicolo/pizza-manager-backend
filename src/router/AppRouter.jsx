@@ -15,7 +15,6 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ClienteRoute from "@/components/ClienteRoute";
 import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
 import RoleLayout from "@/layouts/RoleLayout";
-import AppCopyrightLine from "@/components/branding/AppCopyrightLine";
 
 /* ================= PUBLIC (SaaS) ================= */
 import Landing from "@/features/public/pages/Landing";
@@ -122,7 +121,7 @@ function SuperadminIngressoRouteShell() {
             <SuperadminIngressoPage />
           </Suspense>
         </div>
-        <AppCopyrightLine className="dashboard-app-copyright" />
+        <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
       </main>
     </div>
   );

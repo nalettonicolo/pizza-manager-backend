@@ -18,7 +18,6 @@ import { findOperativeNavItemForPath, resolveFirstOperativePath } from "@/utils/
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
-import AppCopyrightLine from "@/components/branding/AppCopyrightLine";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -155,7 +154,7 @@ export default function OperativeLayout() {
               Esci
             </button>
           </div>
-          <AppCopyrightLine className="dashboard-app-copyright" />
+          <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
         </main>
       </div>
     );
@@ -248,7 +247,7 @@ export default function OperativeLayout() {
             <Outlet context={{ operatoreLabel, ruolo }} />
           </main>
         </CassaHeaderContext.Provider>
-        <AppCopyrightLine className="dashboard-app-copyright" />
+        <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
       </div>
     </div>
   );

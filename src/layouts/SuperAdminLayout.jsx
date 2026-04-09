@@ -3,7 +3,6 @@ import { Outlet, NavLink, Link, useNavigate, useLocation } from "react-router-do
 import { useAuth } from "@/app/contexts/AuthContext";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import "@/styles/superadmin-enterprise.css";
-import AppCopyrightLine from "@/components/branding/AppCopyrightLine";
 
 const NAV_GROUPS = [
   {
@@ -180,7 +179,7 @@ export default function SuperAdminLayout() {
           <div className="dashboard-content">
             <Outlet />
           </div>
-          <AppCopyrightLine className="dashboard-app-copyright" />
+          <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
         </main>
       </div>
     </Fragment>
