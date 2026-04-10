@@ -1,6 +1,0 @@
-Punto della situazione (visione completa, fatto, manca):
-vedi il documento aggiornato in Markdown:
-
-  docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md
-
-Riferimenti: docs/ARCHITETTURA_E_STATO.md, DEPLOY_COMANDI.md

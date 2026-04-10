@@ -77,7 +77,9 @@ export default function LayoutSection() {
             const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
             logoUrl = urlData?.publicUrl ?? logoUrl;
           }
-        } catch (_) {}
+        } catch {
+          /* upload opzionale: errori già gestiti da logoUrl */
+        }
         if (!logoUrl) {
           alert("Upload logo non riuscito. Crea il bucket Storage 'tenant-logos' in Supabase e riprova.");
           setSaving(false);

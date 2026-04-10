@@ -206,7 +206,7 @@ function splitNomeDaIndirizzoConsegna(raw) {
     .replace(/\s+/g, " ")
     .trim()
   if (!t) return { nomePart: "", addrPart: "", full: "" }
-  const m = t.match(/^(.+?)\s*[\u2013\u2014\u2212\-]\s*(.+)$/)
+  const m = t.match(/^(.+?)\s*[\u2013\u2014\u2212-]\s*(.+)$/)
   if (!m) return { nomePart: "", addrPart: "", full: t }
   const left = m[1].trim()
   const right = m[2].trim()

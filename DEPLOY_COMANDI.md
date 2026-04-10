@@ -35,14 +35,15 @@ npm run deploy
 
 ---
 
-## Database Supabase (migrazioni)
+## Database Supabase (schema)
 
 Prima di usare in produzione funzioni che dipendono da RPC/tabelle nuove (turni cassa, ordine↔turno, registratore Super Admin, ecc.):
 
-- **CLI:** dalla cartella progetto, `supabase db push` (o il flusso del team per applicare `supabase/migrations/*.sql` in ordine cronologico).
-- **Manuale:** copiare gli script incrementali da `sql/sql_upgrade.sql` oppure i singoli file in `supabase/migrations/` nel SQL Editor del progetto Supabase.
+- **Baseline unico:** tutto lo storico delle migration è consolidato in **`sql/schema_completo_pizzamanager.sql`** (eseguire nel **SQL Editor** Supabase per nuovo ambiente o allineamento completo).
+- **Solo patch successive al baseline:** aggiungere ed eseguire **`sql/sql_upgrade.sql`** (script incrementale idempotente).
+- **`supabase db push`:** la cartella `supabase/migrations/` non contiene più file `.sql` consolidati; per usare la CLI serve rigenerare migration da diff (`supabase db diff`) o ripristinare file dedicati al team. Flusso consigliato finché non si reintroducono migration: **SQL Editor** con gli script sopra.
 
-Ordine tipico recente (esempio): `20260406115500_turni_operatori_base_if_missing.sql` → `20260406120000_cassa_turni_rpc.sql` → `20260406140000_ordine_turno_operatori.sql` (e altre già presenti nel repo). Verificare che non ci siano errori se `punti_vendita` è una VIEW (FK saltati).
+Verificare che non ci siano errori se `punti_vendita` è una VIEW (FK saltati) quando si applicano patch che toccano FK.
 
 Stato backlog e priorità engineering: **`docs/BACKLOG_E_STATO_SVILUPPO.md`**.
 
@@ -68,7 +69,7 @@ Stato backlog e priorità engineering: **`docs/BACKLOG_E_STATO_SVILUPPO.md`**.
 
 ## Database (Supabase)
 
-Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor** ed esegui lo script necessario. Bootstrap completo: `sql/schema_completo_pizzamanager.sql`. **Incrementale post-baseline** (idempotente): `supabase/migrations/20260406100000_post_remote_schema_unified.sql`. **Solo le modifiche del momento** (file che svuoti e riempi a ogni intervento): `sql/sql_upgrade.sql`. Dopo un progetto nato da dump Supabase: prima `supabase/migrations/20260220171734_remote_schema.sql`, poi la migration incrementale. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL Editor**. **Bootstrap / allineamento completo:** `sql/schema_completo_pizzamanager.sql` (include l’ex snapshot remoto e tutte le patch che erano in `supabase/migrations/`). **Solo modifiche dopo quel baseline:** `sql/sql_upgrade.sql`. Backend Prisma: `server/pizzeria-backend/prisma/schema_integrazioni.sql`. Mappa ruoti/API vs Supabase vs backend: **`docs/ARCHITETTURA_API_E_RUOLI.md`**.
 
 **Checklist dopo `sql_upgrade.sql` (stabilità):** verificare che esistano colonne/viste attese (es. `core.punti_vendita.consegna_area_poligono`, vista `public.punti_vendita` aggiornata). In app: smoke manuale **vetrina** (menù + carrello), **cassa** (ordine test), **admin** (parametri, listini, sedi e aree).
 
@@ -98,10 +99,11 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 - **Guida utente Super Admin (console piattaforma):** `docs/GUIDA_SUPERADMIN.md`
 - **Linee guida Admin (tenant):** `docs/GUIDA_ADMIN.md`
 - **Architettura e stato (roadmap vs codice):** `docs/ARCHITETTURA_E_STATO.md`
+- **Ruoli, route e flussi dati (Supabase vs `VITE_API_URL`):** `docs/ARCHITETTURA_API_E_RUOLI.md`
 - **Punto della situazione (stack / deploy):** `PUNTO_SITUAZIONE_ENTERPRISE.md`
 - **Punto della situazione (visione webapp completa):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
 - **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
 
 ---
 
-*Ultima revisione documento: 2026-04-05*
+*Ultima revisione documento: 2026-04-10*

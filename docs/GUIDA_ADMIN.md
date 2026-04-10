@@ -33,8 +33,7 @@ Configurazione **dominio pubblico**, stato go-live, guida deploy e checklist DNS
 
 ## 4. Manuale operativo in app
 
-Il testo della voce **Manuale** (`/admin/manuale`; redirect da `/admin/guida`) è **`src/content/manualeUtente.md`**, con roadmap macro/micro in **`src/content/manualeRoadmap.js`** e pagina **`src/features/admin/pages/ManualeUtentePage.jsx`**.  
-`docs/GUIDA_UTENTE.md` è un puntatore per chi lavora sul repo.
+Il testo della voce **Manuale** (`/admin/manuale`; redirect da `/admin/guida`) è **`src/content/manualeUtente.md`**, con roadmap macro/micro in **`src/content/manualeRoadmap.js`** e pagina **`src/features/admin/pages/ManualeUtentePage.jsx`**. In cima a quel markdown c’è una nota per gli sviluppatori (deploy e link alle altre guide).
 
 ---
 
@@ -45,7 +44,7 @@ Il testo della voce **Manuale** (`/admin/manuale`; redirect da `/admin/guida`) �
 | `DEPLOY_COMANDI.md` | Build + Firebase, push backend |
 | `docs/GUIDA_SUPERADMIN.md` | Console piattaforma, piani, servizi tenant |
 | `docs/ARCHITETTURA_E_STATO.md` | Roadmap vs codice |
-| `supabase/migrations/*.sql` | Schema tenant, viste |
+| `sql/schema_completo_pizzamanager.sql` + `sql/sql_upgrade.sql` | Schema tenant, viste, RPC (baseline + patch) |
 
 ---
 

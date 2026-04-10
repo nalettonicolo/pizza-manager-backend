@@ -15,6 +15,4 @@ Esegui **in ordine numerico** su Supabase SQL Editor (o equivalente) se il datab
 | `08_seed_pv_default.sql` | Seed “Sede principale” per tenant senza PV |
 | `09_legal_public_resolve.sql` | Colonne legal/admin tenant, `resolve_public_tenant_by_domain` |
 | `10_punti_vendita_lat_lng_view.sql` | `lat`/`lng` su PV e vista aggiornata |
-Esiste anche lo schema di riferimento in `sql/schema_completo_pizzamanager.sql` e le migration in `supabase/migrations/`.
-
-Le **nuove** modifiche vanno aggiunte in `sql/sql_upgrade.sql` e/o in una migration datata sotto `supabase/migrations/`.
+Lo schema di riferimento completo è in **`sql/schema_completo_pizzamanager.sql`** (consolidato dalle ex migration). Le **nuove** modifiche incrementali vanno solo in **`sql/sql_upgrade.sql`** (o in nuove migration generate con `supabase db diff` se il team reintroduce la cartella `supabase/migrations/` per la CLI).

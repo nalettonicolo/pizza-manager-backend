@@ -3,6 +3,8 @@
   Pagina in app: Admin → Manuale (`/admin/manuale`).
 -->
 
+> **Nota per chi modifica il repo:** la roadmap in colonna sinistra e la mappa concettuale sono in **`src/content/manualeRoadmap.js`**. Dopo le modifiche: build e deploy del frontend (`npm run deploy` o `npm run deploy:hosting`). Altre guide: **`docs/GUIDA_SUPERADMIN.md`**, **`docs/GUIDA_ADMIN.md`**; consultabili anche da **Super Admin → Documentazione** (`/superadmin/guide`).
+
 ## Introduzione
 
 PizzaManager riunisce **menu**, **ordini**, **personale** e **impostazioni** del locale in un’unica console web. Questo manuale è organizzato in **macro-sezioni** (grande tema) e **micro-argomenti** (singoli argomenti): usa la **roadmap** a sinistra o la **mappa** qui sotto per saltare al punto che ti serve.

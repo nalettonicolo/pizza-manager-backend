@@ -22,6 +22,11 @@ const DOCS = [
     description: "Route, roadmap vs codice, sito pubblico, enforcement servizi.",
   },
   {
+    slug: "architettura-api-ruoli",
+    title: "Architettura API e ruoli",
+    description: "Supabase vs backend Nest (VITE_API_URL), flussi dati, env, compliance.",
+  },
+  {
     slug: "csv-ingredienti",
     title: "Guida CSV ingredienti",
     description: "Import ingredienti: Formato A e B, allergeni, UTF-8.",

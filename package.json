@@ -5,10 +5,18 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/promozioniCalendario.test.mjs",
+    "test:unit": "vitest run",
+    "test:vitest": "vitest",
+    "test:all": "npm run test && npm run test:unit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,css}\" \"tests/**/*.{js,mjs}\" \"vite.config.js\" \"eslint.config.js\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,css}\" \"tests/**/*.{js,mjs}\" \"vite.config.js\" \"eslint.config.js\"",
+    "ci:frontend": "npm run lint && npm run test:all && npm run build",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:hosting": "npm run build && npx firebase deploy --only hosting",
+    "deploy:hosting": "npm run ci:frontend && npx firebase deploy --only hosting",
     "deploy": "git push && npm run deploy:hosting"
   },
   "dependencies": {
@@ -16,6 +24,7 @@
     "@nestjs/core": "^11.1.14",
     "@nestjs/platform-express": "^11.1.14",
     "@prisma/client": "^7.4.1",
+    "@sentry/react": "^10.48.0",
     "@stripe/react-stripe-js": "^6.1.0",
     "@stripe/stripe-js": "^9.1.0",
     "@supabase/supabase-js": "^2.95.3",
@@ -36,12 +45,21 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
     "@vitejs/plugin-react": "^4.2.0",
     "baseline-browser-mapping": "^2.10.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
     "firebase-tools": "^13.0.0",
+    "globals": "^15.14.0",
+    "jsdom": "^26.0.0",
+    "prettier": "^3.4.2",
     "stripe": "^17.5.0",
     "supabase": "^2.76.12",
     "ts-node": "^10.9.2",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.0.9"
   }
 }

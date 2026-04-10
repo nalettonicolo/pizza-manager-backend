@@ -2,7 +2,10 @@ import React from "react"
 import ReactDOM from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
 
+import { initSentry } from "@/utils/initSentry.js"
 import AppRouter from "@/router/AppRouter"
+
+void initSentry()
 
 import { AuthProvider } from "@/app/contexts/AuthContext"
 import { UserProvider } from "@/app/contexts/UserContext"

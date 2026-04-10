@@ -10,7 +10,7 @@ Documento di **pianificazione tecnica** allineato alle decisioni prodotto. Non s
 |----------|-----------|
 | **1** | Completare per prime le funzionalità **cassa** (turni, incassi, coerenza PV, audit pagamenti, osservabilità dove serve). |
 | **2** | Poi **offline / disaster recovery** (coda locale, sync idempotente, conflitti). |
-| **3** | **Allineamento database** prima e durante ogni blocco: stesso schema su ambienti collegati all’app (`supabase db push` o SQL Editor da `sql/sql_upgrade.sql` / `supabase/migrations/`). |
+| **3** | **Allineamento database** prima e durante ogni blocco: stesso schema su ambienti collegati all’app (SQL Editor: `sql/schema_completo_pizzamanager.sql` + `sql/sql_upgrade.sql`; oppure `supabase db push` se sono presenti migration generate). |
 | **4** | Evolvere i **contesti in ordine di importanza e a blocchi** (vedi sotto): niente “tutto insieme”. |
 | **5** | Strutturare il perimetro per **regolamentazione fiscale italiana** (registratore telematico / corrispettivi / tracciati richiesti dal normativo vigente), con integrazioni hardware/fornitore quando definite. |
 

@@ -2,6 +2,8 @@
 
 Documento di **allineamento** tra la roadmap (visione SaaS) e ciò che è effettivamente in codice oggi. Aggiornarlo quando introduci nuove route, KPI o integrazioni backend.
 
+Per **chi chiama cosa** tra Supabase e backend Nest (`VITE_API_URL`), vedi anche **`docs/ARCHITETTURA_API_E_RUOLI.md`**.
+
 ---
 
 ## 1. Admin di pizzeria (tenant): menu ideale vs route reali

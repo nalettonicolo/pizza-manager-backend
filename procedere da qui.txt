@@ -18,7 +18,7 @@ Pubblico SaaS	Landing, negozio, login, privacy/cookie/termini, support, selezion
 Super Admin	Dashboard, clienti (tenants), catalogo servizi e piani (UI), abbonamenti/licenze, impostazioni, deploy siti clienti, home pizzeria demo
 Admin tenant	Dashboard KPI, report vendite, menu completo (categorie, formati, pizze, ingredienti, impasti, bibite, dolci, fritti, allergeni, cottura), dipendenti, ruoli, impostazioni (dati, layout, orari, parametri), pubblicazione sito (in evoluzione; doc in docs/GUIDA_ADMIN.md + migrazioni dominio pubblico)
 Operativo	Cassa (anche prodotti esauriti), cucina, bancone, pizzaioli, delivery, turni, dashboard operativa — con permessi per area
-Dominio pizzeria (non-SaaS)	Flusso ordine legacy (OrdinePage + /ordine-confermato); in parallelo lavoro su dominio pubblico + RPC per risolvere il tenant dal dominio (migrazioni supabase/migrations/20260323*.sql)
+Dominio pizzeria (non-SaaS)	Flusso ordine legacy (OrdinePage + /ordine-confermato); in parallelo lavoro su dominio pubblico + RPC per risolvere il tenant dal dominio (patch SQL in sql/sql_upgrade.sql o nuove migration se rigenerate)
 La mappa dettagliata admin vs roadmap è in docs/ARCHITETTURA_E_STATO.md (gap: lista ordini solo admin, KPI avanzati, billing, monitor, ecc.).
 
 Piani e “servizi”: come sono collegati oggi

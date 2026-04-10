@@ -180,7 +180,7 @@ Porta questa lista in riunione; **segnati le risposte** nel template sotto.
 | `docs/ROADMAP_CASSA_ENTERPRISE.md` | Fasi cassa → offline → fiscale IT. |
 | `docs/BACKLOG_E_STATO_SVILUPPO.md` | Stato backlog e vincoli esterni. |
 | `docs/ARCHITETTURA_E_STATO.md` | Route vs implementazione. |
-| `sql/sql_upgrade.sql` / `supabase/migrations/` | Migrations DB (audit, turni, ecc.). |
+| `sql/schema_completo_pizzamanager.sql` / `sql/sql_upgrade.sql` | Schema DB (audit, turni, ecc.: baseline + patch). |
 
 ---
 

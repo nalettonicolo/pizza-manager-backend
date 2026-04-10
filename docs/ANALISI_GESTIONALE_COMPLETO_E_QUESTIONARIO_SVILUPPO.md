@@ -253,7 +253,7 @@ Per dichiarare un modulo **completato** in senso enterprise (adattare al modulo)
 
 - [ ] Dati **persistiti lato server** (o motivazione documentata se locale).  
 - [ ] **RLS** e permessi ruolo verificati su casi d’uso.  
-- [ ] **Migrations** in `supabase/migrations/` e riferimento in `sql/sql_upgrade.sql` se applicabile.  
+- [ ] **SQL** su Supabase: baseline `sql/schema_completo_pizzamanager.sql` e/o patch `sql/sql_upgrade.sql` se applicabile.  
 - [ ] **Manuale utente** o help in-app aggiornato (`manualeUtente` / sezioni admin).  
 - [ ] **Test** manuali o automatici su flusso critico; build verde.  
 - [ ] **Rollback** o feature flag documentato per la release.
@@ -292,7 +292,7 @@ Il **gestionale completo** non coincide con **conformità corrispettivi**. Le de
 
 - Router e layout: `src/app/` (router, `AdminLayout`, `SuperAdminLayout`, operative).  
 - Servizi tenant e piani: `useTenantServizi.js`, `serviziRoadmapSteps.js`.  
-- SQL: `supabase/migrations/`, `sql/sql_upgrade.sql`.  
+- SQL: `sql/schema_completo_pizzamanager.sql`, `sql/sql_upgrade.sql`.  
 - Deploy: `DEPLOY_COMANDI.md`.
 
 ---

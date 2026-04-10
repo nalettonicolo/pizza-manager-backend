@@ -71,11 +71,12 @@ export default function DatiPizzeriaSection() {
         await loadGoogleMapsScript(GOOGLE_API_KEY, null);
         if (cancelled || !placeAcContainerRef.current) return;
 
-        const placesLib = await google.maps.importLibrary("places");
+        const g = window.google;
+        const placesLib = await g.maps.importLibrary("places");
         if (cancelled || !placeAcContainerRef.current) return;
 
         const PlaceAutocompleteElement =
-          placesLib.PlaceAutocompleteElement ?? google.maps.places?.PlaceAutocompleteElement;
+          placesLib.PlaceAutocompleteElement ?? g.maps.places?.PlaceAutocompleteElement;
         if (!PlaceAutocompleteElement) {
           console.warn("Google Maps: PlaceAutocompleteElement non disponibile dopo importLibrary(places).");
           return;

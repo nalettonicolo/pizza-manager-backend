@@ -1,0 +1,2 @@
+# Gli script SQL di baseline sono stati consolidati in sql/schema_completo_pizzamanager.sql.
+# Le modifiche incrementali vanno in sql/sql_upgrade.sql.

@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabaseClient.js"
+
 export const createTenant = async (nome, slug, userId) => {
   const { data: tenant, error } = await supabase
     .from("pm_tenants")

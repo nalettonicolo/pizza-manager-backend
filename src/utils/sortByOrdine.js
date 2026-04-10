@@ -6,5 +6,9 @@
  */
 export function sortByOrdine(list) {
   if (!Array.isArray(list)) return [];
-  return [...list].sort((a, b) => (Number(a?.ordine) ?? 0) - (Number(b?.ordine) ?? 0));
+  return [...list].sort((a, b) => {
+    const na = Number(a?.ordine)
+    const nb = Number(b?.ordine)
+    return (Number.isFinite(na) ? na : 0) - (Number.isFinite(nb) ? nb : 0)
+  })
 }

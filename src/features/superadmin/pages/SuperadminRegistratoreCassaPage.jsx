@@ -34,7 +34,8 @@ function emptyCarrello() {
 function calcRiga(r) {
   const qty = Math.max(0, Number(r.qty) || 0);
   const pu = Math.max(0, Number(r.prezzoImponibileUnit) || 0);
-  const al = Math.min(100, Math.max(0, Number(r.aliquotaIva) ?? 10));
+  const nAli = Number(r.aliquotaIva);
+  const al = Math.min(100, Math.max(0, Number.isFinite(nAli) ? nAli : 10));
   const imponibile = Math.round(qty * pu * 100) / 100;
   const iva = Math.round((imponibile * al) / 100 * 100) / 100;
   return { imponibile, iva, totale: Math.round((imponibile + iva) * 100) / 100 };

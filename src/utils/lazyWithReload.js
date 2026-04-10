@@ -29,7 +29,7 @@ export function createLazyWithChunkReload(reactLazy) {
         .then((m) => {
           try {
             sessionStorage.removeItem(RELOAD_KEY)
-          } catch (_) {
+          } catch {
             /* ignore */
           }
           return m
@@ -39,7 +39,7 @@ export function createLazyWithChunkReload(reactLazy) {
           try {
             if (sessionStorage.getItem(RELOAD_KEY)) throw err
             sessionStorage.setItem(RELOAD_KEY, "1")
-          } catch (_) {
+          } catch {
             throw err
           }
           window.location.reload()

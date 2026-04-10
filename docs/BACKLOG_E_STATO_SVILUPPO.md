@@ -9,7 +9,7 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 | Principio | Implicazione |
 |-----------|----------------|
 | **Nessun “big bang”** | Le voci enterprise (RT, POS certificati, offline DR, API pubbliche, SSO) richiedono mesi e spesso vendor/fornitori. |
-| **Database prima** | Ogni feature che tocca RPC/viste deve avere migration applicata su Supabase (vedi `sql/sql_upgrade.sql` e `supabase/migrations/`). |
+| **Database prima** | Ogni feature che tocca RPC/viste deve essere riflessa su Supabase: baseline `sql/schema_completo_pizzamanager.sql` per ambienti nuovi; patch in `sql/sql_upgrade.sql` per il delta. |
 | **Fonte di verità roadmap UI** | `SERVIZI_ROADMAP_STEPS` in `serviziRoadmapSteps.js` — aggiornare `nota`/`resto` quando si consegna qualcosa di verificabile. |
 | **Definition of Done** | Per una feature “chiusa”: codice + migration (se serve) + comportamento verificabile in staging o checklist manuale. |
 

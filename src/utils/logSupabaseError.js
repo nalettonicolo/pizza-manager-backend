@@ -14,3 +14,19 @@ export function logSupabaseError(scope, err, extra = {}) {
     ...extra,
   })
 }
+
+/**
+ * Log per errori HTTP (axios/fetch), senza body né header sensibili.
+ * @param {string} scope
+ * @param {import('axios').AxiosError | Error | unknown} err
+ * @param {Record<string, unknown>} [extra]
+ */
+export function logHttpError(scope, err, extra = {}) {
+  const ax = err && typeof err === "object" && "isAxiosError" in err ? err : null
+  console.error(`[${scope}]`, {
+    message: ax?.message ?? err?.message,
+    status: ax?.response?.status,
+    url: ax?.config?.url,
+    ...extra,
+  })
+}

@@ -49,7 +49,7 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 - Vetrina: nav su `/negozio` e `/preview`, tenant da query string (`getPublicTenantInfo({ search })`).
 - Account test **4 reparti** (`pizzaioli@pizzamanager.it`): dopo login **`/operative/pizzaiolo-ingresso`** con due pulsanti (schermata Pizzaiolo full / Test 4 pannelli); griglia **senza iframe** (`MemoryRouter`); permessi/servizi; `getOperativeHomePathForStaff` punta all’ingresso.
 - **Google Maps**: caricamento singleton (niente script API duplicati in Area consegna).
-- **DB menu pubblico**: policy `anon` su `core.prodotti` per lettura righe da menù (`anon_select_prodotti_menu_pubblico`) — vedi migration `20260409120000_*` e coda `sql/sql_upgrade.sql`.
+- **DB menu pubblico**: policy `anon` su `core.prodotti` per lettura righe da menù (`anon_select_prodotti_menu_pubblico`) — inclusa nel baseline `sql/schema_completo_pizzamanager.sql`; eventuali fix in `sql/sql_upgrade.sql`.
 
 ### Documentazione
 
@@ -68,7 +68,7 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 | Pizzaiolo full | Nessun redirect forzato da `/operative/pizzaioli` per l’account test |
 | Griglia 4 pannelli | `RepartiQuadTestPage.jsx` (`MemoryRouter`, no iframe) |
 | Maps una tantum | `lib/googleMapsLoader.js` |
-| Policy anon prodotti | `supabase/migrations/20260409120000_anon_select_core_prodotti_menu_pubblico.sql`, `sql/sql_upgrade.sql` |
+| Policy anon prodotti | `sql/schema_completo_pizzamanager.sql` (blocco policy anon); patch in `sql/sql_upgrade.sql` |
 | Risoluzione tenant SaaS | `resolveSaaSPublicTenant` in `publicService.js` (try/catch sulla query menu) |
 
 ---
