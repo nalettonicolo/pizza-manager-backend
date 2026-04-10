@@ -12,13 +12,20 @@ function isSaaSHost() {
   );
 }
 
-export default function HeroStore({ branding, menuTheme }) {
+export default function HeroStore({ branding, menuTheme, ordiniOnlineVetrinaOk }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const safe = branding ?? {};
-  /** Solo con tenant caricato e ordini online consentiti (vetrina): altrimenti login/registrazione restano in header. */
-  const showHeroOrderCtas = branding != null && safe.ordinazione_attiva !== false;
+  /**
+   * `ordiniOnlineVetrinaOk` viene da PublicStore (readOrdiniOnlineVetrinaAllowed) — fonte unica.
+   * Fallback su branding solo per compatibilità.
+   */
+  const vetrinaOk =
+    typeof ordiniOnlineVetrinaOk === "boolean"
+      ? ordiniOnlineVetrinaOk
+      : branding != null && safe.ordinazione_attiva !== false;
+  const showHeroOrderCtas = branding != null && vetrinaOk;
   const heroBackground = menuTheme
     ? `linear-gradient(90deg, ${menuTheme.primary} 0%, ${menuTheme.accent} 50%, ${menuTheme.accent} 100%)`
     : "var(--color-primary)";

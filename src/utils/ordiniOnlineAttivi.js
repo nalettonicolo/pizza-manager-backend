@@ -7,7 +7,9 @@ import { resolveServiziIdsForTenant } from "@/app/hooks/useTenantServizi"
  */
 export function readOrdiniOnlineAttivi(po) {
   if (!po || typeof po !== "object") return true
-  return po.ordini_online_attivi !== false
+  const v = po.ordini_online_attivi
+  if (v === false || v === "false" || v === 0) return false
+  return true
 }
 
 /**
@@ -26,6 +28,8 @@ export function tenantHasOrdiniOnlineServizioLicenza(tenantData) {
  */
 export function readOrdiniOnlineVetrinaAllowed(parametriOperativi, tenantData) {
   if (!tenantHasOrdiniOnlineServizioLicenza(tenantData)) return false
+  // Senza parametri esposti (es. RLS anon) non assumere ordini attivi: niente CTA hero / carrello vetrina.
+  if (!parametriOperativi || typeof parametriOperativi !== "object") return false
   return readOrdiniOnlineAttivi(parametriOperativi)
 }
 

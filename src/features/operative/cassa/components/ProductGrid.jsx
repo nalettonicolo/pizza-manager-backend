@@ -88,7 +88,7 @@ export default function ProductGrid({
                 >
                   Aggiungi
                 </button>
-              ) : (
+              ) : storefront ? null : (
                 <button type="button" style={styles.addBtnDisabled} title="Accedi per ordinare" disabled>
                   Aggiungi
                 </button>

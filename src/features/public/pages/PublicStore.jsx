@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { UtensilsCrossed } from "lucide-react";
 
 import { useAuth } from "@/app/contexts/AuthContext";
 import HeroStore from "@/features/public/components/HeroStore";
@@ -25,6 +24,12 @@ function isTodayClosed(orariSettimana) {
   );
   if (!row) return false;
   return !row.aperto;
+}
+
+function pickParametriOperativi(tenant) {
+  if (!tenant || typeof tenant !== "object") return null;
+  const po = tenant.parametri_operativi ?? tenant.parametriOperativi;
+  return po && typeof po === "object" ? po : null;
 }
 
 function buildCategoriesFromMenu(menu) {
@@ -60,6 +65,7 @@ export default function PublicStore() {
   /** Riga tenant completa (piano / licenza) per gate ordini online */
   const [vetrinaTenant, setVetrinaTenant] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+  const [searchPizza, setSearchPizza] = useState("");
 
   const vetrinaOrdiniOk = useMemo(
     () => readOrdiniOnlineVetrinaAllowed(tenantParametri, vetrinaTenant),
@@ -75,10 +81,7 @@ export default function PublicStore() {
         if (tenant) {
           setTenantName(tenant.nome || null);
           setVetrinaTenant(tenant);
-          const po =
-            tenant.parametri_operativi && typeof tenant.parametri_operativi === "object"
-              ? tenant.parametri_operativi
-              : null;
+          const po = pickParametriOperativi(tenant);
           setTenantParametri(po);
           if (tenant.orari_settimana) {
             setClosedToday(isTodayClosed(tenant.orari_settimana));
@@ -90,7 +93,7 @@ export default function PublicStore() {
             indirizzo: tenant.indirizzo ?? null,
             ordinazione_attiva: ordiniVetrina,
           });
-          setMenuTheme(resolveMenuTheme(tenant.parametri_operativi));
+          setMenuTheme(resolveMenuTheme(po));
         } else {
           setBranding(null);
           setMenuTheme(null);
@@ -131,19 +134,27 @@ export default function PublicStore() {
   }, [categories, selectedCategoryId]);
 
   const accent = menuTheme?.accent || "#e65100";
-  const cardBg = menuTheme?.cardBackground ?? "#ffffff";
+  /** Stesso default riga menù della cassa (`CassaPage`). */
+  const menuRowBackground = menuTheme?.cardBackground || "#f3f9f4";
   const pageBg = menuTheme?.background;
 
-  const filteredProducts = useMemo(() => {
+  const productsByCategory = useMemo(() => {
     if (!menu.length) return [];
-    if (!categories.length) return menu;
+    if (!categories.length) return [];
     if (!activeCategoryId) return [];
     const raw = menu.filter((p) => p.categoria_id === activeCategoryId);
     return applyPromoCalendarioToProducts(raw, tenantParametri, new Date());
   }, [menu, categories.length, activeCategoryId, tenantParametri]);
 
+  const filteredProducts = useMemo(() => {
+    const q = (searchPizza || "").toLowerCase().trim();
+    if (!q) return productsByCategory;
+    return productsByCategory.filter((p) => (p.nome || "").toLowerCase().includes(q));
+  }, [productsByCategory, searchPizza]);
+
   const handleAddProduct = useCallback(
     (product) => {
+      if (!vetrinaOrdiniOk) return;
       if (!user) {
         navigate("/login", {
           state: {
@@ -155,7 +166,7 @@ export default function PublicStore() {
       }
       addItem(product);
     },
-    [user, navigate, location, addItem]
+    [vetrinaOrdiniOk, user, navigate, location, addItem]
   );
 
   const ingredientiMap = useMemo(
@@ -181,7 +192,7 @@ export default function PublicStore() {
         ...(pageBg ? { background: pageBg } : {}),
       }}
     >
-      <HeroStore branding={branding} menuTheme={menuTheme} />
+      <HeroStore branding={branding} menuTheme={menuTheme} ordiniOnlineVetrinaOk={vetrinaOrdiniOk} />
 
       {closedToday && vetrinaOrdiniOk ? (
         <div style={styles.closedBannerInfo}>
@@ -194,6 +205,22 @@ export default function PublicStore() {
       ) : null}
 
       <div id="public-menu" style={styles.menuSection}>
+        {!vetrinaOrdiniOk ? (
+          <div style={styles.browseOnlyBanner}>
+            <strong>Menù in consultazione.</strong> Gli ordini online non sono attivi per questo locale (licenza o
+            impostazioni). Accedi o registrati dall&apos;angolo in alto a destra solo per gestire il tuo account; per
+            ordinare contatta la pizzeria.
+          </div>
+        ) : null}
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="text"
+            placeholder="Cerca pizza..."
+            value={searchPizza}
+            onChange={(e) => setSearchPizza(e.target.value)}
+            style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid #ddd" }}
+          />
+        </div>
         {categories.length > 0 ? (
           <CategoryTabs
             categories={categories}
@@ -203,13 +230,12 @@ export default function PublicStore() {
           />
         ) : (
           <div style={styles.menuHeaderRow}>
-            <UtensilsCrossed size={22} style={{ color: accent, flexShrink: 0 }} />
             <span style={{ ...styles.menuTitleFallback, color: accent }}>Menù</span>
           </div>
         )}
-        {!user && (
+        {vetrinaOrdiniOk && !user ? (
           <p style={styles.loginHint}>Accedi per aggiungere al carrello (si apre il login).</p>
-        )}
+        ) : null}
         {user && totalQty > 0 && vetrinaOrdiniOk ? (
           <div style={styles.cartBar}>
             <span>
@@ -246,11 +272,11 @@ export default function PublicStore() {
         <ProductGrid
           products={filteredProducts}
           ingredientiMap={ingredientiMap}
-          rowBackground={cardBg}
-          canAdd
+          rowBackground={menuRowBackground}
+          canAdd={vetrinaOrdiniOk}
           onAdd={handleAddProduct}
           showModifica={false}
-          storefront
+          storefront={false}
         />
       </div>
     </div>
@@ -348,5 +374,15 @@ const styles = {
     fontSize: 14,
     color: "#991b1b",
     lineHeight: 1.5,
+  },
+  browseOnlyBanner: {
+    marginBottom: 18,
+    padding: "14px 16px",
+    background: "#f1f5f9",
+    border: "1px solid #cbd5e1",
+    borderRadius: 10,
+    fontSize: 14,
+    color: "#334155",
+    lineHeight: 1.55,
   },
 };
