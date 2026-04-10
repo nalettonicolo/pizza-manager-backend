@@ -17,6 +17,8 @@ export default function HeroStore({ branding, menuTheme }) {
   const location = useLocation();
   const { user } = useAuth();
   const safe = branding ?? {};
+  /** Solo con tenant caricato e ordini online consentiti (vetrina): altrimenti login/registrazione restano in header. */
+  const showHeroOrderCtas = branding != null && safe.ordinazione_attiva !== false;
   const heroBackground = menuTheme
     ? `linear-gradient(90deg, ${menuTheme.primary} 0%, ${menuTheme.accent} 50%, ${menuTheme.accent} 100%)`
     : "var(--color-primary)";
@@ -45,9 +47,8 @@ export default function HeroStore({ branding, menuTheme }) {
         <p className="public-store-hero-address">{safe.indirizzo}</p>
       )}
 
-      <div className="public-store-hero-actions">
-        
-        {safe.ordinazione_attiva !== false && (
+      {showHeroOrderCtas && (
+        <div className="public-store-hero-actions">
           <button
             type="button"
             className="button-primary"
@@ -68,27 +69,26 @@ export default function HeroStore({ branding, menuTheme }) {
           >
             Ordina Online
           </button>
-        )}
-
-        <button
-          type="button"
-          style={{
-            background: "transparent",
-            border: "1px solid white",
-            padding: "12px 20px",
-            borderRadius: 8,
-            color: "white",
-            cursor: "pointer",
-          }}
-          onClick={() =>
-            navigate("/login", {
-              state: { from: `${location.pathname}${location.search || ""}` },
-            })
-          }
-        >
-          Login
-        </button>
-      </div>
+          <button
+            type="button"
+            style={{
+              background: "transparent",
+              border: "1px solid white",
+              padding: "12px 20px",
+              borderRadius: 8,
+              color: "white",
+              cursor: "pointer",
+            }}
+            onClick={() =>
+              navigate("/login", {
+                state: { from: `${location.pathname}${location.search || ""}` },
+              })
+            }
+          >
+            Login
+          </button>
+        </div>
+      )}
     </section>
   );
 }
