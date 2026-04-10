@@ -1,3 +1,5 @@
+import { resolveServiziIdsForTenant } from "@/app/hooks/useTenantServizi"
+
 /**
  * Ordini dalla vetrina: `parametri_operativi.ordini_online_attivi`.
  * Default true; solo `false` esplicito disattiva.
@@ -6,6 +8,25 @@
 export function readOrdiniOnlineAttivi(po) {
   if (!po || typeof po !== "object") return true
   return po.ordini_online_attivi !== false
+}
+
+/**
+ * Servizio `ordini_online` incluso nel bundle effettivo del tenant (piano + servizi abilitati in Super Admin).
+ * @param {unknown} tenantData — riga `tenants` o oggetto con `piano` e `parametri_operativi`
+ */
+export function tenantHasOrdiniOnlineServizioLicenza(tenantData) {
+  if (!tenantData || typeof tenantData !== "object") return false
+  return resolveServiziIdsForTenant(tenantData).has("ordini_online")
+}
+
+/**
+ * Vetrina web: ordine cliente consentito solo se licenza include ordini online **e** il locale non li ha disattivati nei parametri.
+ * @param {unknown} parametriOperativi
+ * @param {unknown} tenantData
+ */
+export function readOrdiniOnlineVetrinaAllowed(parametriOperativi, tenantData) {
+  if (!tenantHasOrdiniOnlineServizioLicenza(tenantData)) return false
+  return readOrdiniOnlineAttivi(parametriOperativi)
 }
 
 /**

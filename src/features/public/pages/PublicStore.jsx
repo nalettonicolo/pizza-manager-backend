@@ -14,6 +14,7 @@ import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 import { usePublicCart } from "@/app/contexts/PublicCartContext";
 import { applyPromoCalendarioToProducts } from "@/utils/promozioniCalendario";
+import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi";
 
 function isTodayClosed(orariSettimana) {
   if (!Array.isArray(orariSettimana) || !orariSettimana.length) return false;
@@ -56,7 +57,14 @@ export default function PublicStore() {
   const [branding, setBranding] = useState(null);
   const [menuTheme, setMenuTheme] = useState(null);
   const [tenantParametri, setTenantParametri] = useState(null);
+  /** Riga tenant completa (piano / licenza) per gate ordini online */
+  const [vetrinaTenant, setVetrinaTenant] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+
+  const vetrinaOrdiniOk = useMemo(
+    () => readOrdiniOnlineVetrinaAllowed(tenantParametri, vetrinaTenant),
+    [tenantParametri, vetrinaTenant],
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -66,25 +74,28 @@ export default function PublicStore() {
         const tenant = await getPublicTenantInfo({ search: location.search });
         if (tenant) {
           setTenantName(tenant.nome || null);
-          setTenantParametri(
+          setVetrinaTenant(tenant);
+          const po =
             tenant.parametri_operativi && typeof tenant.parametri_operativi === "object"
               ? tenant.parametri_operativi
-              : null
-          );
+              : null;
+          setTenantParametri(po);
           if (tenant.orari_settimana) {
             setClosedToday(isTodayClosed(tenant.orari_settimana));
           }
+          const ordiniVetrina = readOrdiniOnlineVetrinaAllowed(po, tenant);
           setBranding({
             nome: tenant.nome,
             logo_url: tenant.logo_url ?? null,
             indirizzo: tenant.indirizzo ?? null,
-            ordinazione_attiva: true,
+            ordinazione_attiva: ordiniVetrina,
           });
           setMenuTheme(resolveMenuTheme(tenant.parametri_operativi));
         } else {
           setBranding(null);
           setMenuTheme(null);
           setTenantParametri(null);
+          setVetrinaTenant(null);
         }
         const menuData = await getPublicMenu({ tenantId: tenant?.id ?? null });
         setMenu(menuData || []);
@@ -172,11 +183,15 @@ export default function PublicStore() {
     >
       <HeroStore branding={branding} menuTheme={menuTheme} />
 
-      {closedToday && (
+      {closedToday && vetrinaOrdiniOk ? (
+        <div style={styles.closedBannerInfo}>
+          Oggi il calendario segnala chiusura: puoi comunque <strong>ordinare online</strong> nelle fasce disponibili al checkout.
+        </div>
+      ) : closedToday ? (
         <div style={styles.closedBanner}>
           Oggi {tenantName ? `la pizzeria ${tenantName}` : "la pizzeria"} è <strong>chiusa</strong>. Le ordinazioni online non sono disponibili.
         </div>
-      )}
+      ) : null}
 
       <div id="public-menu" style={styles.menuSection}>
         {categories.length > 0 ? (
@@ -195,7 +210,7 @@ export default function PublicStore() {
         {!user && (
           <p style={styles.loginHint}>Accedi per aggiungere al carrello (si apre il login).</p>
         )}
-        {user && totalQty > 0 && (
+        {user && totalQty > 0 && vetrinaOrdiniOk ? (
           <div style={styles.cartBar}>
             <span>
               Carrello: <strong>{totalQty}</strong> {totalQty === 1 ? "articolo" : "articoli"}
@@ -204,7 +219,13 @@ export default function PublicStore() {
               Procedi all&apos;ordine (consegna)
             </Link>
           </div>
-        )}
+        ) : null}
+        {user && totalQty > 0 && !vetrinaOrdiniOk ? (
+          <p style={styles.cartBlockedHint}>
+            Carrello con articoli: gli <strong>ordini online</strong> non sono disponibili (piano licenza o impostazioni del
+            locale).
+          </p>
+        ) : null}
         {!menu.length && (
           <p style={styles.emptyMenuHint}>
             {location.pathname.startsWith("/preview") || location.pathname.startsWith("/negozio") ? (
@@ -249,6 +270,17 @@ const styles = {
     border: "1px solid #fde68a",
     color: "#92400e",
     fontSize: 14,
+  },
+  closedBannerInfo: {
+    marginTop: 24,
+    marginBottom: 16,
+    padding: "12px 16px",
+    borderRadius: 8,
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1e40af",
+    fontSize: 14,
+    lineHeight: 1.5,
   },
   menuSection: {
     marginTop: 28,
@@ -306,5 +338,15 @@ const styles = {
     fontWeight: 700,
     textDecoration: "none",
     fontSize: 14,
+  },
+  cartBlockedHint: {
+    marginBottom: 16,
+    padding: "12px 14px",
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: 8,
+    fontSize: 14,
+    color: "#991b1b",
+    lineHeight: 1.5,
   },
 };

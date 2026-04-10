@@ -6,7 +6,7 @@ import { useAuth } from "@/app/contexts/AuthContext"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getPublicTenantInfo } from "@/features/services/publicService"
 import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
-import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
+import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
 import "@/styles/public-layout.css"
 
 const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
@@ -21,6 +21,8 @@ export default function PublicLayout() {
   const [tenantName, setTenantName] = useState("")
   const [publicTenantId, setPublicTenantId] = useState(null)
   const [publicParametri, setPublicParametri] = useState(null)
+  /** Riga tenant (licenza / piano) per gate ordini online vetrina */
+  const [publicTenantRow, setPublicTenantRow] = useState(null)
   const { tipoUtente, tenantId: authTenantId, loading: authLoading } = useAuth()
   const [modalDismissed, setModalDismissed] = useState(() =>
     typeof sessionStorage !== "undefined" && sessionStorage.getItem(DISMISS_KEY) === "1",
@@ -32,6 +34,7 @@ export default function PublicLayout() {
       setTenantName("")
       setPublicTenantId(null)
       setPublicParametri(null)
+      setPublicTenantRow(null)
       return () => {
         cancelled = true
       }
@@ -43,6 +46,7 @@ export default function PublicLayout() {
           setPublicTenantId(tenant?.id ?? null)
           const po = tenant?.parametri_operativi
           setPublicParametri(po && typeof po === "object" ? po : null)
+          setPublicTenantRow(tenant && typeof tenant === "object" ? tenant : null)
         }
       })
       .catch(() => {
@@ -50,6 +54,7 @@ export default function PublicLayout() {
           setTenantName("")
           setPublicTenantId(null)
           setPublicParametri(null)
+          setPublicTenantRow(null)
         }
       })
     return () => {
@@ -83,10 +88,10 @@ export default function PublicLayout() {
     if (authLoading || isLanding || !publicTenantId) return false
     if (tipoUtente !== "cliente" || !authTenantId) return false
     if (String(authTenantId) !== String(publicTenantId)) return false
-    if (readOrdiniOnlineAttivi(publicParametri)) return false
+    if (readOrdiniOnlineVetrinaAllowed(publicParametri, publicTenantRow)) return false
     if (modalDismissed) return false
     return true
-  }, [authLoading, isLanding, publicTenantId, tipoUtente, authTenantId, publicParametri, modalDismissed])
+  }, [authLoading, isLanding, publicTenantId, tipoUtente, authTenantId, publicParametri, publicTenantRow, modalDismissed])
 
   const dismissOrdineOnlineModal = () => {
     try {

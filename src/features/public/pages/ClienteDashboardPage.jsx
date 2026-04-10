@@ -7,14 +7,19 @@ import {
   readConsegnaDomicilioAttiva,
   readFidelityAbilitaClientiDomicilio,
 } from "@/utils/fidelityProgramConfig"
+import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
 
 export default function ClienteDashboardPage() {
   const { user, logout } = useAuth()
   const [nomePizzeria, setNomePizzeria] = useState("")
   const [mostraFidelityDomicilio, setMostraFidelityDomicilio] = useState(false)
+  const [vetrinaTenant, setVetrinaTenant] = useState(null)
 
   useEffect(() => {
-    getPublicTenantInfo().then((t) => setNomePizzeria((t?.nome || "").trim()))
+    getPublicTenantInfo().then((t) => {
+      setNomePizzeria((t?.nome || "").trim())
+      setVetrinaTenant(t && typeof t === "object" ? t : null)
+    })
   }, [])
 
   useEffect(() => {
@@ -38,6 +43,12 @@ export default function ClienteDashboardPage() {
       c = true
     }
   }, [user?.id])
+
+  const parametriVetrina =
+    vetrinaTenant?.parametri_operativi && typeof vetrinaTenant.parametri_operativi === "object"
+      ? vetrinaTenant.parametri_operativi
+      : {}
+  const mostraLinkOrdineVetrina = readOrdiniOnlineVetrinaAllowed(parametriVetrina, vetrinaTenant)
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px 48px" }}>
@@ -84,20 +95,22 @@ export default function ClienteDashboardPage() {
         >
           Vai al menù
         </Link>
-        <Link
-          to="/ordina"
-          style={{
-            padding: "12px 16px",
-            borderRadius: 8,
-            background: "#0f766e",
-            color: "#fff",
-            textDecoration: "none",
-            fontWeight: 600,
-            textAlign: "center",
-          }}
-        >
-          Carrello / Ordine consegna
-        </Link>
+        {mostraLinkOrdineVetrina ? (
+          <Link
+            to="/ordina"
+            style={{
+              padding: "12px 16px",
+              borderRadius: 8,
+              background: "#0f766e",
+              color: "#fff",
+              textDecoration: "none",
+              fontWeight: 600,
+              textAlign: "center",
+            }}
+          >
+            Carrello / Ordine consegna
+          </Link>
+        ) : null}
         <Link
           to="/cliente/ordini"
           style={{

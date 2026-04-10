@@ -9,6 +9,7 @@ import Loader from "@/components/feedback/Loader"
 import {
   getTodayOrari,
   buildPublicCheckoutDeliverySlots,
+  buildPublicCheckoutDeliverySlotsClosedCalendar,
   getWebVetrinaSlotQuarterFilter,
   isSlotAllowedForWebDeliveryFull,
 } from "@/features/operative/cassa/utils/planningUtils"
@@ -16,7 +17,10 @@ import { maybeNotifyNewWebOrder } from "@/utils/webOrderNotifications"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
 import { readConsegnaDomicilioAttiva } from "@/utils/fidelityProgramConfig"
-import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
+import {
+  readOrdiniOnlineVetrinaAllowed,
+  tenantHasOrdiniOnlineServizioLicenza,
+} from "@/utils/ordiniOnlineAttivi"
 import { resolveMatchingPuntiVendita } from "@/utils/resolvePvForDelivery"
 import { OnlinePaymentPlaceholder, describePaymentProvider } from "@/features/public/components/OnlinePaymentPlaceholder"
 import StripePaymentForm from "@/features/public/components/StripePaymentForm"
@@ -108,13 +112,21 @@ export default function PublicOrdineCheckoutPage() {
     return po && typeof po === "object" ? po : PARAMETRI_OPERATIVI_VUOTI
   }, [tenant?.parametri_operativi])
   const consegnaOn = readConsegnaDomicilioAttiva(parametri)
+  const ordiniVetrinaConsentiti = readOrdiniOnlineVetrinaAllowed(parametri, tenant)
   const closedToday = isTodayClosed(tenant?.orari_settimana)
+  const calendarClosed = closedToday || !orariOggi.aperto
   const quarterFilterUi = useMemo(() => getWebVetrinaSlotQuarterFilter(parametri), [parametri])
 
   const slots = useMemo(() => {
-    if (closedToday || !orariOggi.aperto) return []
-    return buildPublicCheckoutDeliverySlots(orariOggi, new Date(), parametri)
-  }, [closedToday, orariOggi, slotTick, parametri])
+    const now = new Date()
+    if (!calendarClosed) {
+      return buildPublicCheckoutDeliverySlots(orariOggi, now, parametri)
+    }
+    if (ordiniVetrinaConsentiti) {
+      return buildPublicCheckoutDeliverySlotsClosedCalendar(now, parametri)
+    }
+    return []
+  }, [calendarClosed, ordiniVetrinaConsentiti, orariOggi, slotTick, parametri])
 
   useEffect(() => {
     setSelectedSlot((prev) => {
@@ -229,7 +241,7 @@ export default function PublicOrdineCheckoutPage() {
       setError("La consegna a domicilio non è attiva per questo locale.")
       return
     }
-    if (closedToday || !orariOggi.aperto) {
+    if (calendarClosed && !ordiniVetrinaConsentiti) {
       setError("Oggi il locale è chiuso.")
       return
     }
@@ -347,12 +359,15 @@ export default function PublicOrdineCheckoutPage() {
     )
   }
 
-  if (!readOrdiniOnlineAttivi(parametri)) {
+  if (!ordiniVetrinaConsentiti) {
+    const licenzaOk = tenantHasOrdiniOnlineServizioLicenza(tenant)
     return (
       <div style={{ padding: 24, maxWidth: 560, margin: "0 auto" }}>
         <h1 style={{ fontSize: 22, marginBottom: 12 }}>Ordine online non disponibile</h1>
         <p style={{ color: "#64748b", marginBottom: 16 }}>
-          Il locale ha temporaneamente disattivato gli ordini dalla vetrina. Puoi consultare il menù; per ordinare contatta direttamente la pizzeria.
+          {!licenzaOk
+            ? "Questo locale non ha il servizio ordini online incluso nel piano licenza (configurazione Super Admin). Puoi consultare il menù; per ordinare contatta la pizzeria."
+            : "Il locale ha temporaneamente disattivato gli ordini dalla vetrina. Puoi consultare il menù; per ordinare contatta direttamente la pizzeria."}
         </p>
         <Link to="/" style={{ fontWeight: 600, color: "#c0392b" }}>
           ← Torna al menù
@@ -385,9 +400,10 @@ export default function PublicOrdineCheckoutPage() {
           La consegna a domicilio non è attiva. Contatta la pizzeria.
         </p>
       ) : null}
-      {closedToday ? (
-        <p style={{ padding: 14, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, color: "#991b1b" }}>
-          Oggi il locale è chiuso: non è possibile ordinare.
+      {calendarClosed && ordiniVetrinaConsentiti ? (
+        <p style={{ padding: 14, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, color: "#92400e" }}>
+          Il calendario segnala chiusura oggi: con gli ordini online attivi puoi comunque prenotare la consegna nelle fasce
+          disponibili.
         </p>
       ) : null}
 
@@ -480,7 +496,12 @@ export default function PublicOrdineCheckoutPage() {
             ) : null}
           </p>
           {slots.length === 0 ? (
-            <p style={{ color: "#b45309" }}>Nessuna fascia disponibile (orario di chiusura o giorno chiuso).</p>
+            <p style={{ color: "#b45309" }}>
+              Nessuna fascia disponibile
+              {calendarClosed && ordiniVetrinaConsentiti
+                ? " nelle ore rimanenti di oggi (tempi di preparazione o filtri orari)."
+                : " (orario di chiusura o giorno chiuso)."}
+            </p>
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {slots.map((s) => {
@@ -557,7 +578,7 @@ export default function PublicOrdineCheckoutPage() {
             submitting ||
             Boolean(stripeCheckout && paymentMode === "online") ||
             !consegnaOn ||
-            closedToday ||
+            (calendarClosed && !ordiniVetrinaConsentiti) ||
             !slots.length ||
             !coords ||
             (puntiVendita.length > 0 && !selectedPvId)

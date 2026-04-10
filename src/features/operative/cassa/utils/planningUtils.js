@@ -309,6 +309,19 @@ export function buildPublicCheckoutDeliverySlots(orariOggi, nowDate, parametri) 
   return filterSlotsWebDeliveryVetrinaQuarter(afterLead, now, po)
 }
 
+/**
+ * Vetrina: giorno chiuso (o non aperto) sul calendario ma ordini dalla web attivi
+ * (`parametri_operativi.ordini_online_attivi !== false`). Stesse regole disponibilità del giorno aperto:
+ * lead-time web + filtro quarti vetrina, su fasce da “ora” fino a 23:45.
+ */
+export function buildPublicCheckoutDeliverySlotsClosedCalendar(nowDate, parametri) {
+  const now = nowDate instanceof Date ? nowDate : new Date(nowDate)
+  const po = parametri && typeof parametri === "object" ? parametri : {}
+  const startMin = minSlotStartMinutesWebDelivery(now)
+  const raw = buildSlotsSameDayRange(now, startMin, 24 * 60, 96)
+  return filterSlotsWebDeliveryVetrinaQuarter(raw, now, po)
+}
+
 /** @deprecated Usare {@link filterSlotsWebDeliveryVetrinaQuarter} con parametri tenant. */
 export function filterSlotsWebDeliveryMorning45Only(slots, nowDate) {
   return filterSlotsWebDeliveryVetrinaQuarter(slots, nowDate, {})
@@ -407,12 +420,25 @@ export function groupPizzeBySlot(ordini, pizzePerOrdine, slotMinutes) {
   return map
 }
 
-/** Converte orario_ritiro "HH:mm" nel key della fascia (timestamp inizio fascia, come buildSlotsInOpeningHours). */
+/** Converte orario_ritiro "HH:mm" (o varianti da locale) nel key della fascia (come buildSlotsInOpeningHours). */
 function orarioRitiroToSlotKey(orarioRitiroStr, slotMinutes) {
   if (!orarioRitiroStr || typeof orarioRitiroStr !== "string") return null
-  const trimmed = orarioRitiroStr.trim()
-  const [h, m] = trimmed.split(":").map(Number)
-  if (h == null || isNaN(h)) return null
+  const trimmed = orarioRitiroStr
+    .trim()
+    .replace(/\u202f/g, "")
+    .replace(/\s/g, "")
+  let h
+  let m
+  const dotOrComma = trimmed.match(/^(\d{1,2})[.:](\d{2})(?::\d{2})?/)
+  if (dotOrComma) {
+    h = Number(dotOrComma[1])
+    m = Number(dotOrComma[2])
+  } else {
+    const parts = trimmed.split(":").map(Number)
+    h = parts[0]
+    m = parts[1] ?? 0
+  }
+  if (h == null || Number.isNaN(h)) return null
   const now = new Date()
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h || 0, m || 0, 0, 0)
   return slotKeyForDate(d, slotMinutes)
@@ -424,7 +450,8 @@ export function groupPizzeBySlotOrarioRitiro(ordini, pizzePerOrdine, slotMinutes
   for (const o of ordini || []) {
     const key = orarioRitiroToSlotKey(o.orario_ritiro ?? o.orarioRitiro, slotMinutes)
     if (key == null) continue
-    const pizze = pizzePerOrdine?.[o.id] ?? 0
+    const oid = o.id != null ? String(o.id) : ""
+    const pizze = oid ? (pizzePerOrdine?.[oid] ?? pizzePerOrdine?.[o.id] ?? 0) : 0
     map[key] = (map[key] || 0) + pizze
   }
   return map

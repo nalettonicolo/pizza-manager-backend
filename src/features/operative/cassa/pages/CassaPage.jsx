@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { usePv } from "@/app/contexts/PvContext"
 import { useAuth } from "@/app/contexts/AuthContext"
-import { useTenantServizi } from "@/app/hooks/useTenantServizi"
+import { useTenantServizi, resolveServiziIdsForTenant } from "@/app/hooks/useTenantServizi"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs"
@@ -113,6 +113,18 @@ function ordineIndirizzoConsegna(o) {
 
 function ordineOrarioRitiro(o) {
   return String(o?.orario_ritiro ?? o?.orarioRitiro ?? "").trim()
+}
+
+/** Salva in DB sempre "HH:mm" allineato alla `date` della fascia (evita etichette locale ambigue). */
+function orarioRitiroFromSelectedSlot(slot) {
+  if (!slot) return ""
+  if (slot.date) {
+    const d = slot.date instanceof Date ? slot.date : new Date(slot.date)
+    if (!Number.isNaN(d.getTime())) {
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    }
+  }
+  return String(slot.label || "").trim()
 }
 
 function ordineCreatedAt(o) {
@@ -271,6 +283,10 @@ export default function CassaPage() {
   const { hasServizio, enforcementActive } = useTenantServizi()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
   const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
+  const ordiniOnlineInLicenza = useMemo(
+    () => resolveServiziIdsForTenant(tenantData).has("ordini_online"),
+    [tenantData],
+  )
 
   const [categories, setCategories] = useState([])
   const [activeCategory, setActiveCategory] = useState(null)
@@ -1453,7 +1469,7 @@ export default function CassaPage() {
 
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
-      const orarioRitiro = checkoutSelectedSlot?.label ?? ""
+      const orarioRitiro = orarioRitiroFromSelectedSlot(checkoutSelectedSlot)
 
       let consegnaLng
       let consegnaLat
@@ -1689,10 +1705,7 @@ export default function CassaPage() {
     return groupOrdersBySlotOrarioRitiro(delivery, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi])
   const ordiniPerSlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiAttivi || []).filter((o) => {
-      const t = ordineTipoOrdine(o)
-      return t === "negozio" || t === ""
-    })
+    const negozio = (ordiniOggiAttivi || []).filter((o) => !ordineIsDelivery(o))
     return groupOrdersBySlotOrarioRitiro(negozio, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi])
   const ordiniBySlotDelivery = useMemo(() => {
@@ -1700,10 +1713,7 @@ export default function CassaPage() {
     return groupOrdiniBySlotOrarioRitiro(delivery, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi])
   const ordiniBySlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiAttivi || []).filter((o) => {
-      const t = ordineTipoOrdine(o)
-      return t === "negozio" || t === ""
-    })
+    const negozio = (ordiniOggiAttivi || []).filter((o) => !ordineIsDelivery(o))
     return groupOrdiniBySlotOrarioRitiro(negozio, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi])
   const pizzePerSlotDelivery = useMemo(() => {
@@ -1711,19 +1721,14 @@ export default function CassaPage() {
     return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi, pizzePerOrdine])
   const pizzePerSlotNegozio = useMemo(() => {
-    const negozio = (ordiniOggiAttivi || []).filter((o) => {
-      const t = ordineTipoOrdine(o)
-      return t === "negozio" || t === ""
-    })
+    const negozio = (ordiniOggiAttivi || []).filter((o) => !ordineIsDelivery(o))
     return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi, pizzePerOrdine])
 
   const pizzePerSlotRiepilogo = useMemo(() => {
-    const filtered = (ordiniOggiAttivi || []).filter((o) => {
-      const t = ordineTipoOrdine(o)
-      if (tipoOrdine === "delivery") return t === "delivery"
-      return t === "negozio" || t === ""
-    })
+    const filtered = (ordiniOggiAttivi || []).filter((o) =>
+      tipoOrdine === "delivery" ? ordineIsDelivery(o) : !ordineIsDelivery(o),
+    )
     return groupPizzeBySlotOrarioRitiro(filtered, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
   }, [tipoOrdine, ordiniOggiAttivi, pizzePerOrdine])
 
@@ -2295,10 +2300,20 @@ export default function CassaPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button
                   type="button"
-                  disabled={ordiniOnlineToggleSaving || !tenantId}
+                  disabled={
+                    ordiniOnlineToggleSaving ||
+                    !tenantId ||
+                    (ordiniOnlineDisabilitati && !ordiniOnlineInLicenza)
+                  }
                   onClick={() => {
                     if (!tenantId || ordiniOnlineToggleSaving) return
                     const nextDisabilitati = !ordiniOnlineDisabilitati
+                    if (!nextDisabilitati && !ordiniOnlineInLicenza) {
+                      window.alert(
+                        "Il servizio «Ordini online» non è incluso nella licenza del locale (Super Admin). Non è possibile abilitare la vetrina.",
+                      )
+                      return
+                    }
                     setOrdiniOnlineToggleSaving(true)
                     const base =
                       tenantData?.parametri_operativi && typeof tenantData.parametri_operativi === "object"
@@ -2324,7 +2339,13 @@ export default function CassaPage() {
                     cursor: ordiniOnlineToggleSaving || !tenantId ? "default" : "pointer",
                     opacity: ordiniOnlineToggleSaving ? 0.75 : 1,
                   }}
-                  title={ordiniOnlineDisabilitati ? "Riabilita ordini online" : "Disabilita ordini online"}
+                  title={
+                    ordiniOnlineDisabilitati && !ordiniOnlineInLicenza
+                      ? "Licenza senza ordini online: abilitazione non disponibile"
+                      : ordiniOnlineDisabilitati
+                        ? "Riabilita ordini online"
+                        : "Disabilita ordini online"
+                  }
                 >
                   {ordiniOnlineToggleSaving
                     ? "Salvataggio…"

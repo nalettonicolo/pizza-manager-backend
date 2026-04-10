@@ -415,14 +415,15 @@ export async function getRigheAggregateByOrdineIds(ordineIds) {
   if (!ordineIds?.length) return {}
   const { data: righe, error } = await supabase
     .from("RigaOrdine")
-    .select("ordineId, quantita")
+    .select("*")
     .in("ordineId", ordineIds)
   if (error) throw error
   const out = {}
   for (const r of righe || []) {
-    const id = r.ordineId
+    const id = r.ordineId ?? r.ordine_id
     if (id == null) continue
-    out[id] = (out[id] || 0) + (Number(r.quantita) || 0)
+    const key = String(id)
+    out[key] = (out[key] || 0) + (Number(r.quantita ?? r.qty) || 0)
   }
   return out
 }
