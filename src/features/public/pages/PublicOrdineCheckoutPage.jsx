@@ -8,12 +8,9 @@ import { createOrder } from "@/features/admin/services/adminService"
 import Loader from "@/components/feedback/Loader"
 import {
   getTodayOrari,
-  buildSlotsFullDay,
-  filterSlotsWebDeliveryLeadTime,
-  filterSlotsWebDeliveryVetrinaQuarter,
+  buildPublicCheckoutDeliverySlots,
   getWebVetrinaSlotQuarterFilter,
   isSlotAllowedForWebDeliveryFull,
-  PLANNING_GRID_SLOT_MINUTES,
 } from "@/features/operative/cassa/utils/planningUtils"
 import { maybeNotifyNewWebOrder } from "@/utils/webOrderNotifications"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
@@ -110,16 +107,13 @@ export default function PublicOrdineCheckoutPage() {
     const po = tenant?.parametri_operativi
     return po && typeof po === "object" ? po : PARAMETRI_OPERATIVI_VUOTI
   }, [tenant?.parametri_operativi])
-  const slotMin = PLANNING_GRID_SLOT_MINUTES
   const consegnaOn = readConsegnaDomicilioAttiva(parametri)
   const closedToday = isTodayClosed(tenant?.orari_settimana)
   const quarterFilterUi = useMemo(() => getWebVetrinaSlotQuarterFilter(parametri), [parametri])
 
   const slots = useMemo(() => {
     if (closedToday || !orariOggi.aperto) return []
-    const all = buildSlotsFullDay(orariOggi)
-    const afterLead = filterSlotsWebDeliveryLeadTime(all, new Date())
-    return filterSlotsWebDeliveryVetrinaQuarter(afterLead, new Date(), parametri)
+    return buildPublicCheckoutDeliverySlots(orariOggi, new Date(), parametri)
   }, [closedToday, orariOggi, slotTick, parametri])
 
   useEffect(() => {

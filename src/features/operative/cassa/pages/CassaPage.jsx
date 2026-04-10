@@ -63,6 +63,11 @@ import {
   slotColor,
 } from "@/features/operative/cassa/utils/planningUtils"
 import {
+  loadCassaDraft,
+  saveCassaDraft,
+  clearCassaDraft,
+} from "@/features/operative/cassa/utils/cassaSessionDraft"
+import {
   cartItemsToComandaRighe,
   printComandaKitchen,
   printComandaKitchenPerReparto,
@@ -260,6 +265,7 @@ export default function CassaPage() {
   const { tenantId, tenantData, refreshTenant } = useTenant()
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
+  const pvLoading = pvCtx?.loading ?? false
   const pvList = pvCtx?.pvList ?? []
   const { user, logout } = useAuth()
   const { hasServizio, enforcementActive } = useTenantServizi()
@@ -331,6 +337,8 @@ export default function CassaPage() {
   const [cassaWebToasts, setCassaWebToasts] = useState([])
   const cassaSessionStartMsRef = useRef(null)
   const seenOrderIdsForToastRef = useRef(new Set())
+  /** Dopo ripristino bozza locale (stesso giorno / tenant / PV): abilita salvataggio automatico */
+  const [cassaDraftReady, setCassaDraftReady] = useState(false)
 
   /////////////////////////////////////////////////////////
   // RESET ON TENANT CHANGE
@@ -341,11 +349,84 @@ export default function CassaPage() {
     setProducts([])
     setActiveCategory(null)
     setCart([])
+    setCassaDraftReady(false)
     cassaSessionStartMsRef.current = Date.now()
     seenOrderIdsForToastRef.current = new Set()
     setCassaWebToasts([])
     setTurnoCassa(null)
   }, [tenantId])
+
+  /////////////////////////////////////////////////////////
+  // BOZZA ORDINE (stesso giorno locale, finché non confermi)
+  /////////////////////////////////////////////////////////
+
+  useEffect(() => {
+    if (!tenantId || pvLoading) return
+    const pvKey = activePvId ?? "nopv"
+    const draft = loadCassaDraft(tenantId, pvKey)
+    if (draft) {
+      setCart(Array.isArray(draft.cart) ? draft.cart : [])
+      if (draft.tipoOrdine) setTipoOrdine(draft.tipoOrdine)
+      if (typeof draft.deliverySearch === "string") setDeliverySearch(draft.deliverySearch)
+      if (draft.selectedCliente !== undefined) setSelectedCliente(draft.selectedCliente)
+      if (typeof draft.checkoutNote === "string") setCheckoutNote(draft.checkoutNote)
+      if (draft.checkoutTipoPagamento) setCheckoutTipoPagamento(draft.checkoutTipoPagamento)
+      if (Array.isArray(draft.mistoRighe)) setMistoRighe(draft.mistoRighe)
+      if (typeof draft.checkoutScontoGlobale === "string") setCheckoutScontoGlobale(draft.checkoutScontoGlobale)
+      if (typeof draft.checkoutNomeCliente === "string") setCheckoutNomeCliente(draft.checkoutNomeCliente)
+      if (draft.checkoutSelectedSlot) setCheckoutSelectedSlot(draft.checkoutSelectedSlot)
+      if (typeof draft.showRiepilogo === "boolean") setShowRiepilogo(draft.showRiepilogo)
+      if (typeof draft.fidelityQuery === "string") setFidelityQuery(draft.fidelityQuery)
+      if (draft.selectedFidelitySaldo !== undefined) setSelectedFidelitySaldo(draft.selectedFidelitySaldo)
+      if (typeof draft.searchPizza === "string") setSearchPizza(draft.searchPizza)
+    } else {
+      setCart([])
+    }
+    setCassaDraftReady(true)
+  }, [tenantId, activePvId, pvLoading])
+
+  useEffect(() => {
+    if (!cassaDraftReady || !tenantId || pvLoading) return
+    const pvKey = activePvId ?? "nopv"
+    const id = window.setTimeout(() => {
+      saveCassaDraft(tenantId, pvKey, {
+        cart,
+        tipoOrdine,
+        deliverySearch,
+        selectedCliente,
+        checkoutNote,
+        checkoutTipoPagamento,
+        mistoRighe,
+        checkoutScontoGlobale,
+        checkoutNomeCliente,
+        checkoutSelectedSlot,
+        showRiepilogo,
+        fidelityQuery,
+        selectedFidelitySaldo,
+        searchPizza,
+      })
+    }, 450)
+    return () => window.clearTimeout(id)
+  }, [
+    cassaDraftReady,
+    tenantId,
+    activePvId,
+    pvLoading,
+    cart,
+    tipoOrdine,
+    deliverySearch,
+    selectedCliente,
+    checkoutNote,
+    checkoutTipoPagamento,
+    mistoRighe,
+    checkoutScontoGlobale,
+    checkoutNomeCliente,
+    checkoutSelectedSlot,
+    showRiepilogo,
+    fidelityQuery,
+    selectedFidelitySaldo,
+    searchPizza,
+  ])
 
   const loadTurnoCassa = useCallback(async () => {
     if (!tenantId || !user?.id) return
@@ -1464,6 +1545,7 @@ export default function CassaPage() {
       })
       markCheckoutEnd(telemetryCtx, { ok: true, tenantId, ordineId: orderId })
 
+      clearCassaDraft(tenantId, activePvId ?? "nopv")
       setCart([])
       setCheckoutNote("")
       setCheckoutTipoPagamento(TIPI_PAGAMENTO[0])

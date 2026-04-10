@@ -134,11 +134,19 @@ function buildSlotsSameDayRange(now, slotStartMin, endMinTotale, count) {
  * Se siamo oltre l'orario di chiusura restituisce [] (nessuna disponibilità).
  * orariOggi: { aperto, apertura, chiusura } da getTodayOrari().
  *
- * @param {{ staffOverrideClosing?: boolean }} [options] — In cassa: consente fasce dopo la chiusura (fino a fine giornata)
- * e, se il giorno è chiuso in calendario, comunque slot da “ora” per inserimenti operativi.
+ * **Checkout pubblico (vetrina web):** non usare questa funzione. Usare
+ * {@link buildPublicCheckoutDeliverySlots}, che applica solo gli orari effettivamente disponibili
+ * (lead-time + filtro quarti vetrina). Qui, senza `staffOverrideClosing`, valgono solo le fasce da “ora”
+ * in poi fino a chiusura (comportamento cliente).
+ *
+ * @param {{ staffOverrideClosing?: boolean }} [options] — Solo cassa/operativi: tutte le fasce della giornata
+ * lavorativa (apertura→chiusura), non solo da “ora”; oltre la chiusura configurata estende fino a fine giornata;
+ * se il giorno è chiuso in calendario, slot da “ora” per inserimenti operativi.
  */
 export function buildSlotsInOpeningHours(orariOggi, count = 24, options = {}) {
   const staffOverrideClosing = options.staffOverrideClosing === true
+  /** Griglia 15 min: al massimo 96 fasce in 24h; la cassa deve vedere l’intera giornata, non solo 24 slot. */
+  const staffSlotCap = Math.max(count, 96)
   const grid = PLANNING_GRID_SLOT_MINUTES
   const now = new Date()
   const nowMin = now.getHours() * 60 + now.getMinutes()
@@ -147,7 +155,7 @@ export function buildSlotsInOpeningHours(orariOggi, count = 24, options = {}) {
 
   // Cassa: giorno “chiuso” in calendario → slot da ora a 23:45 (ordini operativi)
   if (staffOverrideClosing && !orariOggi.aperto) {
-    return buildSlotsSameDayRange(now, snapMinutesToQuarterUp(nowMin), 24 * 60, count)
+    return buildSlotsSameDayRange(now, snapMinutesToQuarterUp(nowMin), 24 * 60, staffSlotCap)
   }
 
   if (!orariOggi.aperto) return []
@@ -156,9 +164,19 @@ export function buildSlotsInOpeningHours(orariOggi, count = 24, options = {}) {
   const endMin = timeToMinutes(orariOggi.chiusura)
   const lastStart = lastSlotStartInclusive(endMin, grid)
 
-  // Cassa: oltre l’orario di chiusura configurato → estendi fino a fine giornata (stesso giorno solare)
-  if (staffOverrideClosing && nowMin >= endMin) {
-    return buildSlotsSameDayRange(now, snapMinutesToQuarterUp(nowMin), 24 * 60, count)
+  // Cassa/operativi: sempre l’intera fascia apertura→chiusura (come buildSlotsFullDay);
+  // se già oltre la chiusura configurata, tutta la giornata fino a 23:45 per ordini operativi.
+  if (staffOverrideClosing && orariOggi.aperto) {
+    const endMd = endMinutesForDay(orariOggi.chiusura)
+    const overnight = endMd <= startMin
+    if (overnight) {
+      return buildSlotsFullDay(orariOggi)
+    }
+    const pastClosing = endMin !== 0 && nowMin >= endMin
+    if (!pastClosing) {
+      return buildSlotsFullDay(orariOggi)
+    }
+    return buildSlotsSameDayRange(now, snapMinutesToQuarterUp(startMin), 24 * 60, staffSlotCap)
   }
 
   if (nowMin >= endMin) return [] // oltre chiusura: nessuna disponibilità (cliente / flusso standard)
@@ -273,6 +291,22 @@ export function filterSlotsWebDeliveryVetrinaQuarter(slots, nowDate, parametri) 
     const dt = s.date instanceof Date ? s.date : new Date(s.date)
     return dt.getMinutes() === minute
   })
+}
+
+/**
+ * Checkout consegna **pubblico** (vetrina): solo slot prenotabili — griglia giornata + lead-time web +
+ * regola quarti vetrina. Non usa la logica cassa ({@link buildSlotsInOpeningHours} con `staffOverrideClosing`).
+ *
+ * @param {{ aperto: boolean, apertura?: string, chiusura?: string }} orariOggi — da {@link getTodayOrari}
+ * @param {Date} [nowDate] — default `new Date()`; per test o tick minuto
+ */
+export function buildPublicCheckoutDeliverySlots(orariOggi, nowDate, parametri) {
+  if (!orariOggi?.aperto) return []
+  const now = nowDate instanceof Date ? nowDate : new Date(nowDate)
+  const po = parametri && typeof parametri === "object" ? parametri : {}
+  const all = buildSlotsFullDay(orariOggi)
+  const afterLead = filterSlotsWebDeliveryLeadTime(all, now)
+  return filterSlotsWebDeliveryVetrinaQuarter(afterLead, now, po)
 }
 
 /** @deprecated Usare {@link filterSlotsWebDeliveryVetrinaQuarter} con parametri tenant. */
