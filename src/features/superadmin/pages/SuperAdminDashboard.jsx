@@ -56,7 +56,7 @@ export default function SuperAdminDashboard() {
         </p>
       </header>
 
-      <div className="sa-callout-muted" style={{ marginBottom: 20, maxWidth: 720 }}>
+      <div className="sa-callout-muted" style={{ marginBottom: 20, maxWidth: "100%" }}>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
           <strong>Registratore cassa (standalone):</strong> POS + fatture + DDT, isolato dai tenant; stato sincronizzato su
           Supabase (dopo migrazione) con cache locale — <Link to="/superadmin/registratore-cassa">apri la console</Link>.

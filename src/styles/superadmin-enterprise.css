@@ -133,6 +133,30 @@
   background: #f8f6f3 !important;
 }
 
+/* Contenuto a tutta larghezza: solo header + nav orizzontale (nessuna sidebar laterale). */
+.dashboard-wrap.theme-superadmin.sa-enterprise-body .dashboard-main,
+.dashboard-wrap.theme-superadmin.sa-enterprise-body .dashboard-content {
+  width: 100%;
+  max-width: none;
+}
+
+.dashboard-wrap.theme-superadmin.sa-enterprise-body .dashboard-content {
+  padding-left: clamp(16px, 2.5vw, 32px);
+  padding-right: clamp(16px, 2.5vw, 32px);
+  box-sizing: border-box;
+}
+
+.dashboard-wrap.theme-superadmin.sa-enterprise-body .dashboard-settings-page {
+  max-width: none !important;
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-wrap.theme-superadmin.sa-enterprise-body .sa-page-header {
+  max-width: none;
+}
+
 /* Intestazioni pagina */
 .sa-page-header {
   margin-bottom: 20px;
@@ -499,7 +523,8 @@
 }
 
 .sa-reg-conflict {
-  max-width: min(1100px, 100%);
+  max-width: none;
+  width: 100%;
   margin-bottom: 16px;
   padding: 16px 18px;
   background: #fff7ed;
@@ -513,7 +538,8 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
-  max-width: min(1100px, 100%);
+  max-width: none;
+  width: 100%;
   padding: 12px 14px;
   background: #fff;
   border: 1px solid #e8d5c4;
@@ -554,7 +580,8 @@
 }
 
 .sa-reg-audit-block {
-  max-width: min(1100px, 100%);
+  max-width: none;
+  width: 100%;
   margin-bottom: 20px;
   border: 1px solid #e8d5c4;
   border-radius: 10px;
@@ -603,7 +630,8 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
-  max-width: min(1100px, 100%);
+  max-width: none;
+  width: 100%;
 }
 
 .sa-reg-toolbar-actions {
@@ -647,7 +675,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  max-width: min(1100px, 100%);
+  max-width: none;
+  width: 100%;
   align-items: start;
 }
 

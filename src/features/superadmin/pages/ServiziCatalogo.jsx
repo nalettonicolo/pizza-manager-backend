@@ -146,7 +146,7 @@ export default function ServiziCatalogo() {
       <div className="dashboard-page-header" style={{ alignItems: "flex-start", gap: 12 }}>
         <div style={{ flex: 1 }}>
           <h1 className="dashboard-page-title">Catalogo servizi</h1>
-          <p style={{ margin: "8px 0 0", fontSize: 14, color: "#64748b", maxWidth: 720, lineHeight: 1.55 }}>
+          <p style={{ margin: "8px 0 0", fontSize: 14, color: "#64748b", maxWidth: "100%", lineHeight: 1.55 }}>
             Elenco completo dei moduli vendibili: per ogni servizio indica le <strong>funzioni</strong> incluse e il{" "}
             <strong>prezzo base mensile</strong>. In <Link to="/superadmin/piani">Piani</Link> il canone del piano può essere
             calcolato automaticamente come somma dei servizi selezionati. L&apos;avanzamento di sviluppo (0–100%) si usa in{" "}

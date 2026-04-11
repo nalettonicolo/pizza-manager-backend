@@ -148,7 +148,7 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
 
   return (
     <div className="dashboard-settings-page">
-      <p style={{ maxWidth: 900, fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 14 }}>
+      <p style={{ maxWidth: "100%", fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 14 }}>
         Sul <strong>dominio del cliente</strong> viene servito lo stesso <strong>frontend</strong> della webapp (build
         unica su Firebase): a runtime, le <strong>impostazioni del tenant</strong> (menu, layout, orari, dati pizzeria) si
         applicano in base all&apos;hostname. Qui registri dominio e stato operativo; DNS e SSL si configurano in Firebase

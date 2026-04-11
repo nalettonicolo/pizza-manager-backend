@@ -143,7 +143,7 @@ export default function DeployClientiPage() {
     <div className="dashboard-settings-page superadmin-deploy-page">
       <h1 className="dashboard-page-title">Deploy siti clienti</h1>
 
-      <p style={{ maxWidth: 1100, fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 24 }}>
+      <p style={{ maxWidth: "100%", fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 24 }}>
         Da questa area gestisci la pubblicazione del sistema/menu sul dominio del cliente. La pipeline completamente
         automatica tenant-by-tenant e in evoluzione; oggi la procedura operativa resta guidata (checklist + deploy
         piattaforma).
@@ -188,7 +188,7 @@ export default function DeployClientiPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cerca per nome, slug o URL sito web..."
-            style={{ width: "100%", maxWidth: 420, padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1" }}
+            style={{ width: "100%", maxWidth: "min(560px, 100%)", padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1" }}
           />
         </div>
 
@@ -200,7 +200,7 @@ export default function DeployClientiPage() {
           <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>Nessun cliente trovato.</p>
         ) : (
           <div className="dashboard-table-wrap" style={{ overflowX: "auto", borderRadius: 10 }}>
-            <table style={{ minWidth: 1280 }}>
+            <table style={{ width: "100%", minWidth: 0 }}>
               <thead>
                 <tr>
                   <th>Cliente</th>

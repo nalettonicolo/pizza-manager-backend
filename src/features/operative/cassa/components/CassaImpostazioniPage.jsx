@@ -627,7 +627,7 @@ export default function CassaImpostazioniPage({ onBack }) {
 }
 
 const styles = {
-  wrapper: { padding: 20, maxWidth: 1120, margin: "0 auto", boxSizing: "border-box" },
+  wrapper: { padding: 20, maxWidth: "none", width: "100%", margin: 0, boxSizing: "border-box" },
   header: { marginBottom: 20 },
   backBtn: { padding: "8px 14px", marginBottom: 12, background: "#f0f0f0", border: "1px solid #ccc", borderRadius: 8, cursor: "pointer", fontSize: 14 },
   title: { margin: 0, fontSize: 20, fontWeight: 600 },

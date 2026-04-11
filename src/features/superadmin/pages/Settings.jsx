@@ -17,11 +17,11 @@ export default function Settings() {
   return (
     <>
       <h1 className="dashboard-page-title">Impostazioni</h1>
-      <p style={{ margin: "0 0 24px 0", fontSize: 15, color: "#555", maxWidth: 640 }}>
+      <p style={{ margin: "0 0 24px 0", fontSize: 15, color: "#555", maxWidth: "100%" }}>
         Configura i parametri globali della piattaforma PizzaManager. Le modifiche si applicano a tutti i clienti (pizzerie) che usano il servizio.
       </p>
 
-      <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
+      <div className="dashboard-box" style={{ marginBottom: 24 }}>
         <h2 style={{ marginBottom: 4 }}>Configurazione generale</h2>
         <p style={{ margin: "0 0 20px 0", fontSize: 14, color: "#666" }}>
           Nome dell’applicazione mostrato ai clienti e nei messaggi di sistema.
@@ -36,7 +36,7 @@ export default function Settings() {
         {saved && <span style={{ marginLeft: 12, fontSize: 14, color: "#2e7d32" }}>Salvato (simulato).</span>}
       </div>
 
-      <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
+      <div className="dashboard-box" style={{ marginBottom: 24 }}>
         <h2 style={{ marginBottom: 4 }}>Supporto</h2>
         <p style={{ margin: "0 0 20px 0", fontSize: 14, color: "#666" }}>
           Contatti e link mostrati ai clienti per assistenza (help, email supporto).
@@ -53,7 +53,7 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
+      <div className="dashboard-box" style={{ marginBottom: 24 }}>
         <h2 style={{ marginBottom: 4 }}>Piani di abbonamento</h2>
         <p style={{ margin: "0 0 12px 0", fontSize: 14, color: "#666" }}>
           Da <strong>Piani</strong> apri una finestra per ogni piano: nome, canone mensile (somma servizi),{" "}
@@ -68,7 +68,7 @@ export default function Settings() {
         </Link>
       </div>
 
-      <div className="dashboard-box" style={{ maxWidth: 640, marginBottom: 24 }}>
+      <div className="dashboard-box" style={{ marginBottom: 24 }}>
         <h2 style={{ marginBottom: 4 }}>Navigazione</h2>
         <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.65 }}>
           Le altre aree della console (clienti, piani, abbonamenti, documentazione, ecc.) sono raggiungibili dalla{" "}

@@ -219,7 +219,7 @@ export default function Piani() {
         </Link>
       </header>
 
-      <div className="dashboard-box" style={{ marginBottom: 24, maxWidth: 800 }}>
+      <div className="dashboard-box" style={{ marginBottom: 24 }}>
         <h2 style={{ marginTop: 0, fontSize: 16 }}>Come funziona</h2>
         <p style={{ margin: "0 0 8px", fontSize: 14, color: "#555", lineHeight: 1.55 }}>
           Il <Link to="/superadmin/servizi">catalogo servizi</Link> definisce ogni modulo, le funzioni incluse e il{" "}

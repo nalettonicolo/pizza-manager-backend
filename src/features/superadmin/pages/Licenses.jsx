@@ -77,7 +77,7 @@ export default function Licenses() {
         </div>
       )}
 
-      <p style={{ margin: "0 0 16px", fontSize: 14, color: "#555", maxWidth: 720 }}>
+      <p style={{ margin: "0 0 16px", fontSize: 14, color: "#555", maxWidth: "100%" }}>
         Ogni cliente ha una riga di abbonamento collegata al tenant. <strong>Ciclo mensile (30 giorni)</strong> o{" "}
         <strong>annuale (12 mesi di calendario)</strong> e eventuale <strong>sconto sull&apos;unica rata annuale</strong> si
         impostano in <Link to="/superadmin/tenants">Clienti</Link> (modifica cliente → Abbonamento). Il{" "}
