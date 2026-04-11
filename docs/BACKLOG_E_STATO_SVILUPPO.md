@@ -22,6 +22,12 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 - **Registratore Super Admin**: fix hooks React (#310) su `SuperadminRegistratoreCassaPage` (`useMemo` prima di `if (!ready)`).
 - **DB edge cases**: FK `punti_vendita` solo se tabella base; `sql_upgrade` allineato.
 - **Cassa enterprise (realizzabile)**: tabella `cassa_ordine_audit` + RPC `cassa_audit_log`; in app: log su checkout ok/errore/fuori area; pagamento misto a righe illimitate (max 15 UI); parametro `cassa_arrotonda_5_cent`; sconto globale a cassa con riga in nota `[Sconto cassa €…]`; telemetria console + hook opzionale `window.__CASSA_TELEMETRY_HOOK__`.
+- **Super Admin — navigazione**: barra orizzontale compatta (voci top: Accesso, Commercio, Go Live, Piattaforma, Anteprima sito); sottovoci in **dropdown al passaggio del mouse** su desktop e elenco nel drawer mobile (`SuperAdminLayout.jsx`, `superadmin-enterprise.css`).
+- **Layout larghezza**: allineamento a contenuto a tutta larghezza su Super Admin, admin, operativo e layout pubblico dove previsto (CSS condivisi + pagine puntuali).
+- **Performance bundle frontend**: `vite.config.js` con `manualChunks` granulari; route pubbliche lazy in `AppRouter.jsx`; Sentry inizializzato in idle (`main.jsx`); `npm run build:analyze` + `rollup-plugin-visualizer`; dipendenze tipiche del server Nest rimosse dalla root `package.json` per alleggerire l’installazione front-only.
+- **Perimetro fiscale (ingegneria)**: modulo SQL `sql/modules/12_fiscal_outbox_payment_links.sql` (e inclusione in `sql/sql_upgrade.sql`) — `fiscal_outbox`, `payment_link_intents`, RLS/trigger; FK su **`core.tenants`** e **`core.ordini`**. Lato app: cartella `src/integrations/fiscal/` e hook post-checkout in cassa (nessuna emissione RT/SDI reale senza vendor).
+- **Vetrina / ordini online**: con ordini online disattivati — CTA hero coerenti; esperienza menù pubblico più vicina alla cassa (ricerca, tab categorie, griglia) dove implementato (`PublicStore`, componenti collegati).
+- **Qualità frontend**: ESLint 9 + Prettier + Vitest; script `ci:frontend` (lint + test + build).
 
 ---
 
@@ -49,6 +55,7 @@ Questi restano **backlog prodotto** con owner business + engineering, non task �
 | **Consegne** | Todo | Stati rider, SLA, app rider — grande incremento. |
 | **Multi‑PV / report gruppo** | Parziale | PV su ordine; report consolidato e permessi gruppo — backlog dedicato. |
 | **Magazzino / contabilità** | Parziale | Migrazione dati localStorage → Supabase dove previsto. |
+| **Fiscale IT (outbox / pay-by-link)** | Parziale | DB + client/hook in cassa; **emissione** e SDI restano legati a vendor e consulenza. |
 | **API pubbliche** | Todo | OpenAPI, OAuth, rate limit — piattaforma dedicata. |
 
 Dettaglio testuale per servizio: `resto` in `serviziRoadmapSteps.js`.
@@ -60,13 +67,14 @@ Dettaglio testuale per servizio: `resto` in `serviziRoadmapSteps.js`.
 1. **Fase 0**: applicare tutte le migration Supabase necessarie all’ambiente usato dall’app.
 2. **Blocco A (cassa)**: chiudere sotto‑epic misurabili (audit, osservabilità minima, poi pagamenti misti avanzati).
 3. **Blocco B (offline)**: dopo metriche e stabilità RPC.
-4. **Blocco C (fiscale IT)**: modello dati + audit + integrazione vendor quando scelto.
+4. **Blocco C (fiscale IT)**: applicare migration su Supabase; completare flussi outbox/link in staging; integrazione vendor RT/SDI quando scelto.
 
 ---
 
 ## 6. Cose da fare / follow-up (prodotto & architettura)
 
 - **Flussi “tutto nell’app” vs siti clienti su GitHub**: decidere se mantenere vetrina/ordini nel motore unico (Supabase + SPA) o quando proporre siti/landing per cliente su repo separati; trade-off branding, sync menu, costi operativi e supporto (discussione dedicata, non bloccante per lo sviluppo corrente).
+- **Deploy DB**: eseguire `sql/sql_upgrade.sql` (o modulo 12) sugli ambienti Supabase usati dall’app prima di validare fiscal outbox in produzione.
 
 ---
 
@@ -81,4 +89,4 @@ Dettaglio testuale per servizio: `resto` in `serviziRoadmapSteps.js`.
 
 ---
 
-*Ultima revisione: 2026-04-05*
+*Ultima revisione: 2026-04-10*

@@ -35,6 +35,7 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 
 - Turni cassa (RPC/tabelle), ordine legato al turno, parametri obbligatorietà turno.
 - **Audit cassa** (`cassa_ordine_audit`, logging checkout), pagamento misto esteso, arrotondamenti, sconti, telemetria opzionale.
+- **Allineamento perimetro fiscale (ingegneria)**: tabelle `fiscal_outbox` / `payment_link_intents` e integrazione client in cassa (`src/integrations/fiscal/`); **nessuna** sostituzione di RT/SDI certificati senza fornitore.
 
 ### Ordini online / pagamenti
 
@@ -46,6 +47,10 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 
 ### UX e stabilità (recenti)
 
+- **Super Admin**: menu orizzontale **compatto** con dropdown al hover per le sottovoci; stesso modello nel menu hamburger su mobile (`SuperAdminLayout`, `superadmin-enterprise.css`).
+- **Layout**: aree principali sfruttano **larghezza piena** del viewport (Super Admin, admin, operativo, pubblico dove applicato).
+- **Performance**: chunk Vite separati (React, markdown, Stripe, Sentry, ecc.), lazy load di route pubbliche, analisi bundle con `npm run build:analyze`.
+- Vetrina: con **ordini online disattivati**, hero e percorsi CTA coerenti; menù pubblico con ricerca / tab categorie / griglia prodotti allineata alla cassa dove implementato.
 - Vetrina: nav su `/negozio` e `/preview`, tenant da query string (`getPublicTenantInfo({ search })`).
 - Account test **4 reparti** (`pizzaioli@pizzamanager.it`): dopo login **`/operative/pizzaiolo-ingresso`** con due pulsanti (schermata Pizzaiolo full / Test 4 pannelli); griglia **senza iframe** (`MemoryRouter`); permessi/servizi; `getOperativeHomePathForStaff` punta all’ingresso.
 - **Google Maps**: caricamento singleton (niente script API duplicati in Area consegna).
@@ -70,6 +75,9 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 | Maps una tantum | `lib/googleMapsLoader.js` |
 | Policy anon prodotti | `sql/schema_completo_pizzamanager.sql` (blocco policy anon); patch in `sql/sql_upgrade.sql` |
 | Risoluzione tenant SaaS | `resolveSaaSPublicTenant` in `publicService.js` (try/catch sulla query menu) |
+| Nav Super Admin compatta | `SuperAdminLayout.jsx`, `superadmin-enterprise.css` (dropdown desktop, drawer mobile) |
+| Fiscal outbox / link | `sql/modules/12_fiscal_outbox_payment_links.sql`, `sql/sql_upgrade.sql`, `src/integrations/fiscal/` |
+| Chunk / lazy / analyze | `vite.config.js`, `AppRouter.jsx`, `main.jsx`, script `build:analyze` |
 
 ---
 
@@ -95,7 +103,7 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 |--------|----------------|
 | **A – Cassa** | Avanzato; osservabilità (Sentry/OTel), hardening RLS, accessibilità, multi-PV/report gruppo |
 | **B – Offline** | Non iniziato |
-| **C – Fiscale IT** | Quadro in doc; serve fornitore e consulenza |
+| **C – Fiscale IT** | Scheletro DB + hook client in cassa; emissione reale e SDI → fornitore + consulenza |
 
 ### Dipendenze esterne
 
@@ -109,7 +117,7 @@ Obiettivo implicito: **non** siti clienti scollegati dal gestionale, ma un perim
 
 ## 4. In una frase
 
-Webapp **ampia e coerente** (tenant, operativo, pubblico, superadmin, traccia enterprise nel repo), con perimetro enterprise **ancora in evoluzione** (offline, fiscale, persistenza admin, billing pieno, DB produzione allineato) e gap di prodotto su KPI/ordini admin e magazzino-contabilità su DB.
+Webapp **ampia e coerente** (tenant, operativo, pubblico, superadmin, traccia enterprise nel repo), con UX piattaforma e bundle **in miglioramento attivo**, perimetro fiscale **avviato a livello dati e client**, e ancora da chiudere: **offline**, **emissione fiscale con vendor**, persistenza admin, billing pieno, DB produzione allineato alle migration; gap prodotto su KPI/ordini admin e magazzino-contabilità su DB.
 
 ---
 
@@ -125,4 +133,4 @@ Webapp **ampia e coerente** (tenant, operativo, pubblico, superadmin, traccia en
 
 ---
 
-*Ultima revisione: 2026-04-05 — checklist implementazione §2.1*
+*Ultima revisione: 2026-04-10 — checklist implementazione §2.1*

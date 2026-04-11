@@ -1,6 +1,6 @@
 # PizzaManager – Punto della situazione (enterprise)
 
-**Ultimo aggiornamento:** stato di sviluppo dell’applicazione rispetto a quanto richiesto.
+**Ultimo aggiornamento:** 2026-04-10 — stato di sviluppo dell’applicazione rispetto a quanto richiesto.
 
 ---
 
@@ -32,6 +32,9 @@ Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chi
 
 ### Frontend
 - App React con contesti (Auth, Tenant, User, Operative). Aree: public, admin, operative (cassa, cucina, bancone, delivery, pizzaiolo, pony), superadmin.
+- **Super Admin:** navigazione orizzontale compatta con **dropdown** al passaggio del mouse sulle macro-voci (desktop); drawer mobile per le stesse gerarchie. Layout console a **larghezza piena** (nessuna sidebar aggiuntiva sotto la barra principale).
+- **Performance:** build Vite con **chunk manuali** (React, Stripe, markdown, Sentry, ecc.); alcune route pubbliche in **lazy import**; `npm run build:analyze` per il report dimensioni bundle.
+- **Qualità:** ESLint, Prettier, Vitest; `npm run ci:frontend` esegue lint, test e build.
 - **Routing (AppRouter):** dominio SaaS = `pizzamanager.it` oppure `app.*` oppure localhost. Su SaaS: `/` = Landing, `/home` = Home pizzeria, `/negozio` = PublicStore (menu pubblico), `/login`, `/contatti`, `/select-pv`, `/preview`. Su altri domini (es. storefront dedicato): `/` = PublicStore.
 - Variabili build: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_MAPS_API_KEY`. Build con `npm run build`, deploy con `firebase deploy --only hosting`.
 - **Menu pubblico:** lettura da vista `prodotti_menu_pubblico` (servizio `publicService.getPublicMenu()`). Info tenant pubblico con `getPublicTenantInfo()` (id, nome, logo_url, indirizzo, orari_settimana).
@@ -42,7 +45,7 @@ Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chi
 ### Database (Supabase)
 - **Schema completo:** `sql/schema_completo_pizzamanager.sql` (compattato). Include: core + public, vista `Prodotto` con `visibile_online`, vista **`prodotti_menu_pubblico`** per menu anonimo, **GRANT anon** su schema public e su tenants, Prodotto, punti_vendita, prodotti_menu_pubblico.
 - **Colonna:** `core.prodotti.visibile_online` (BOOLEAN DEFAULT true).
-- **Baseline SQL unico:** `sql/schema_completo_pizzamanager.sql` (include ex snapshot + migration consolidate). Delta dopo il baseline: `sql/sql_upgrade.sql`. Integrazioni backend in `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
+- **Baseline SQL unico:** `sql/schema_completo_pizzamanager.sql` (include ex snapshot + migration consolidate). Delta dopo il baseline: `sql/sql_upgrade.sql` (include modulo **fiscale outbox / payment link intents** in `sql/modules/12_fiscal_outbox_payment_links.sql`, con FK su `core.tenants` e `core.ordini`). Integrazioni backend in `server/pizzeria-backend/prisma/schema_integrazioni.sql`.
 - Supabase: core + public (utenti_ruoli, clienti, anagrafica_clienti, viste, trigger, RPC `create_order_with_items`, ruoli_pizzeria, tenant_admins, chiusure_giornata).
 
 ### Deploy e documentazione
@@ -67,12 +70,13 @@ Un solo backend in uso: **NestJS** in `server/pizzeria-backend`. Il frontend chi
 
 ## Cosa fare dopo (ordine suggerito)
 
-1. **Tenant e route:** applicare TenantGuard e `@TenantId()` a tutte le route protette; filtrare sempre per `tenantId` nelle query.
-2. **Audit:** chiamare AuditService in create/update/delete sensibili (ordini, utenti, prodotti).
-3. **Soft delete:** usare `deletedAt` nelle query di lettura dove previsto.
-4. **RLS Supabase:** verificare policy su tabelle core/public e allineare a `app.current_tenant_id` se si usa RLS lato DB.
-5. **Billing Stripe:** integrazione subscription, webhook, blocco accesso se scaduta/sospesa.
-6. **Sicurezza chiave Google Maps:** in Google Cloud Console restringere la chiave a referrer (es. https://pizzamanager.it/*) e alle sole API necessarie (Maps, Places).
+1. **Supabase:** applicare su staging/prod le patch in `sql/sql_upgrade.sql` (incluso modulo fiscale 12) e verificare RLS/privilegi coerenti con l’ambiente.
+2. **Tenant e route:** applicare TenantGuard e `@TenantId()` a tutte le route protette; filtrare sempre per `tenantId` nelle query.
+3. **Audit:** chiamare AuditService in create/update/delete sensibili (ordini, utenti, prodotti).
+4. **Soft delete:** usare `deletedAt` nelle query di lettura dove previsto.
+5. **RLS Supabase:** verificare policy su tabelle core/public e allineare a `app.current_tenant_id` se si usa RLS lato DB.
+6. **Billing Stripe:** integrazione subscription, webhook, blocco accesso se scaduta/sospesa.
+7. **Sicurezza chiave Google Maps:** in Google Cloud Console restringere la chiave a referrer (es. https://pizzamanager.it/*) e alle sole API necessarie (Maps, Places).
 
 ---
 

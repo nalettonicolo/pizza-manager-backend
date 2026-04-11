@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 
@@ -7,19 +8,76 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Chunk npm: React + tutte le altre dipendenze (tranne router e supabase) nello stesso `react-vendor`.
- * Separare micromark/mdast/hast/… in un chunk "vendor" generico crea import circolari
- * vendor ↔ react-vendor e in produzione: "Cannot access '…' before initialization" (TDZ).
+ * Split vendor per cache HTTP parallela e lazy route.
+ * `vendor-react` = solo runtime React (no altre lib) per evitare TDZ rispetto a stack markdown/stripe.
+ * Ordine controlli: prima pacchetti "parasite" che contengono la stringa "react" nel nome.
  */
 function manualChunks(id) {
   if (!id.includes("node_modules")) return;
   if (id.includes("node_modules/react-router")) return "router";
   if (id.includes("@supabase")) return "supabase";
-  return "react-vendor";
+
+  if (id.includes("@sentry")) return "vendor-sentry";
+
+  if (id.includes("@stripe/") || id.includes("stripe-js")) return "vendor-stripe";
+
+  if (
+    id.includes("react-markdown") ||
+    id.includes("/micromark") ||
+    id.includes("\\micromark") ||
+    id.includes("/mdast") ||
+    id.includes("\\mdast") ||
+    id.includes("/hast") ||
+    id.includes("\\hast") ||
+    id.includes("/unist") ||
+    id.includes("\\unist") ||
+    id.includes("/remark-") ||
+    id.includes("\\remark-") ||
+    id.includes("/unified") ||
+    id.includes("\\unified") ||
+    id.includes("decode-named-character-reference") ||
+    id.includes("character-entities") ||
+    id.includes("property-information") ||
+    id.includes("comma-separated-tokens") ||
+    id.includes("space-separated-tokens") ||
+    id.includes("html-url-attributes") ||
+    id.includes("estree-util") ||
+    id.includes("devlop")
+  ) {
+    return "vendor-markdown";
+  }
+
+  if (id.includes("lucide-react")) return "vendor-icons";
+
+  if (id.includes("qrcode.react")) return "vendor-qrcode";
+
+  if (id.includes("/react-dom/") || id.includes("\\react-dom\\") || id.includes("node_modules/scheduler")) {
+    return "vendor-react";
+  }
+  if (
+    id.includes("/node_modules/react/") ||
+    id.includes("\\node_modules\\react\\") ||
+    id.endsWith("node_modules/react/index.js") ||
+    id.endsWith("node_modules/react/jsx-runtime.js") ||
+    id.endsWith("node_modules/react/jsx-dev-runtime.js")
+  ) {
+    return "vendor-react";
+  }
+
+  return "vendor";
 }
 
-export default defineConfig(({ command }) => ({
-  plugins: [react()],
+export default defineConfig(({ command, mode }) => ({
+  plugins: [
+    react(),
+    mode === "analyze" &&
+      visualizer({
+        filename: "dist/stats.html",
+        gzipSize: true,
+        brotliSize: true,
+        template: "treemap",
+      }),
+  ].filter(Boolean),
 
   build: {
     outDir: "dist",

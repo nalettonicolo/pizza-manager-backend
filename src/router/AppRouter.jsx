@@ -16,21 +16,21 @@ import ClienteRoute from "@/components/ClienteRoute";
 import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
 import RoleLayout from "@/layouts/RoleLayout";
 
-/* ================= PUBLIC (SaaS) ================= */
-import Landing from "@/features/public/pages/Landing";
-import PublicStore from "@/features/public/pages/PublicStore";
-import Home from "@/features/public/pages/Home";
-import Contatti from "@/features/public/pages/Contatti";
-import PrivacyPolicy from "@/features/public/pages/PrivacyPolicy";
-import CookiePolicy from "@/features/public/pages/CookiePolicy";
-import TerminiCondizioni from "@/features/public/pages/TerminiCondizioni";
-import Support from "@/features/public/pages/Support";
-import SelectPuntoVendita from "@/features/public/pages/SelectPuntoVendita";
-import WebAppPreview from "@/features/public/pages/WebAppPreview";
-import OrdinePage from "@/pages/OrdinePage";
-import OrdineConfermato from "@/pages/OrdineConfermato";
-
+/* ================= PUBLIC (SaaS) — lazy per ridurre JS iniziale (landing / vetrina / legal) ================= */
 const lazy = createLazyWithChunkReload(reactLazy);
+
+const Landing = lazy(() => import("@/features/public/pages/Landing"));
+const PublicStore = lazy(() => import("@/features/public/pages/PublicStore"));
+const Home = lazy(() => import("@/features/public/pages/Home"));
+const Contatti = lazy(() => import("@/features/public/pages/Contatti"));
+const PrivacyPolicy = lazy(() => import("@/features/public/pages/PrivacyPolicy"));
+const CookiePolicy = lazy(() => import("@/features/public/pages/CookiePolicy"));
+const TerminiCondizioni = lazy(() => import("@/features/public/pages/TerminiCondizioni"));
+const Support = lazy(() => import("@/features/public/pages/Support"));
+const SelectPuntoVendita = lazy(() => import("@/features/public/pages/SelectPuntoVendita"));
+const WebAppPreview = lazy(() => import("@/features/public/pages/WebAppPreview"));
+const OrdinePage = lazy(() => import("@/pages/OrdinePage"));
+const OrdineConfermato = lazy(() => import("@/pages/OrdineConfermato"));
 
 /* ================= SUPERADMIN (lazy) ================= */
 const Login = lazy(() => import("@/features/public/pages/Login"));
@@ -157,14 +157,11 @@ const showPublicClientAuthRoutes = !isSaaS || isLocal;
 ========================================================= */
 
 function RootResolver() {
-  if (isSupportHost) {
-    return <Support />;
-  }
-  if (isSaaS) {
-    return <Landing />;
-  }
-
-  return <PublicStore />;
+  return (
+    <Suspense fallback={<PageFallback />}>
+      {isSupportHost ? <Support /> : isSaaS ? <Landing /> : <PublicStore />}
+    </Suspense>
+  );
 }
 
 /* =========================================================
@@ -264,18 +261,74 @@ export default function AppRouter() {
           </Route>
         </Route>
 
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/cookie" element={<CookiePolicy />} />
-        <Route path="/termini" element={<TerminiCondizioni />} />
+        <Route
+          path="/privacy"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <PrivacyPolicy />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/cookie"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <CookiePolicy />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/termini"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <TerminiCondizioni />
+            </Suspense>
+          }
+        />
 
         {/* Queste route esistono SOLO nel SaaS */}
         {isSaaS && (
           <>
-            <Route path="/negozio" element={<PublicStore />} />
-            <Route path="/contatti" element={<Contatti />} />
-            <Route path="/support" element={<Support />} />
-            <Route path="/select-pv" element={<SelectPuntoVendita />} />
-            <Route path="/preview" element={<WebAppPreview />} />
+            <Route
+              path="/negozio"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <PublicStore />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/contatti"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <Contatti />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/support"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <Support />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/select-pv"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SelectPuntoVendita />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/preview"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <WebAppPreview />
+                </Suspense>
+              }
+            />
           </>
         )}
       </Route>
@@ -319,7 +372,14 @@ export default function AppRouter() {
                 </Suspense>
               }
             />
-            <Route path="/superadmin/home-pizzeria" element={<Suspense fallback={<PageFallback />}><Home /></Suspense>} />
+            <Route
+              path="/superadmin/home-pizzeria"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <Home />
+                </Suspense>
+              }
+            />
           </Route>
         </Route>
       )}
@@ -435,10 +495,21 @@ export default function AppRouter() {
 
       {!isSaaS && (
         <>
-          <Route path="/ordine" element={<OrdinePage />} />
+          <Route
+            path="/ordine"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <OrdinePage />
+              </Suspense>
+            }
+          />
           <Route
             path="/ordine-confermato"
-            element={<OrdineConfermato />}
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <OrdineConfermato />
+              </Suspense>
+            }
           />
         </>
       )}

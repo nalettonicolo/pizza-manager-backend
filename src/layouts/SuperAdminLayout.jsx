@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Outlet, NavLink, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import "@/styles/superadmin-enterprise.css";
 
-const NAV_GROUPS = [
+/** Menu compatto desktop: solo queste voci in barra; sottovoci in dropdown al passaggio del mouse. */
+const NAV_DROPDOWNS = [
   {
     label: "Accesso",
     items: [{ to: "/superadmin/ingresso", label: "Ingresso" }],
@@ -20,7 +21,7 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: "Go-live",
+    label: "Go Live",
     items: [
       { to: "/superadmin/deploy-clienti", label: "Deploy siti" },
       { to: "/superadmin/pubblicazione-sito", label: "Pubblicazione dominio" },
@@ -32,11 +33,22 @@ const NAV_GROUPS = [
       { to: "/superadmin/guide", label: "Documentazione" },
       { to: "/superadmin/sviluppo", label: "Roadmap" },
       { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
-      { to: "/superadmin/home-pizzeria", label: "Anteprima sito" },
       { to: "/superadmin/settings", label: "Sistema" },
     ],
   },
 ];
+
+const NAV_ANTEPRIMA = { to: "/superadmin/home-pizzeria", label: "Anteprima sito" };
+
+function pathMatchesItem(pathname, to) {
+  if (pathname === to) return true;
+  if (to.length > 1 && pathname.startsWith(`${to}/`)) return true;
+  return false;
+}
+
+function dropdownGroupActive(items, pathname) {
+  return items.some((item) => pathMatchesItem(pathname, item.to));
+}
 
 const MOBILE_NAV_MQ = "(max-width: 768px)";
 
@@ -45,6 +57,11 @@ export default function SuperAdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const anteprimaActive = useMemo(
+    () => pathMatchesItem(location.pathname, NAV_ANTEPRIMA.to),
+    [location.pathname],
+  );
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -151,26 +168,47 @@ export default function SuperAdminLayout() {
         ) : null}
         <nav
           id="sa-nav-primary"
-          className={`sa-nav-clustered${mobileNavOpen ? " sa-nav-clustered--open" : ""}`}
+          className={`sa-nav-clustered sa-nav-compact${mobileNavOpen ? " sa-nav-clustered--open" : ""}`}
           aria-label="Navigazione Super Admin"
         >
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="sa-nav-cluster">
-              <span className="sa-nav-cluster-label">{group.label}</span>
-              <div className="sa-nav-cluster-links">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) => (isActive ? "active" : "")}
-                    onClick={() => setMobileNavOpen(false)}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          ))}
+          <ul className="sa-nav-compact-list">
+            {NAV_DROPDOWNS.map((group) => {
+              const groupActive = dropdownGroupActive(group.items, location.pathname);
+              return (
+                <li
+                  key={group.label}
+                  className={`sa-nav-dropdown${groupActive ? " sa-nav-dropdown--active" : ""}`}
+                >
+                  <button type="button" className="sa-nav-dropdown-trigger" aria-haspopup="true">
+                    {group.label}
+                  </button>
+                  <div className="sa-nav-dropdown-panel" role="group" aria-label={group.label}>
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        className={({ isActive }) => (isActive ? "active" : "")}
+                        onClick={() => setMobileNavOpen(false)}
+                      >
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+            <li className={`sa-nav-dropdown sa-nav-dropdown--flat${anteprimaActive ? " sa-nav-dropdown--active" : ""}`}>
+              <NavLink
+                to={NAV_ANTEPRIMA.to}
+                className={({ isActive }) =>
+                  `sa-nav-dropdown-trigger sa-nav-anteprima-link${isActive ? " active" : ""}`
+                }
+                onClick={() => setMobileNavOpen(false)}
+              >
+                {NAV_ANTEPRIMA.label}
+              </NavLink>
+            </li>
+          </ul>
         </nav>
       </header>
 
