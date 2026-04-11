@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -26,7 +26,7 @@ export default function CategoriePage() {
   const [editOrdine, setEditOrdine] = useState(0);
   const [editAttivo, setEditAttivo] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
@@ -38,11 +38,11 @@ export default function CategoriePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId]);
 
   useEffect(() => {
-    load();
-  }, [tenantId]);
+    void load();
+  }, [load]);
 
   const filteredCategories = useMemo(() => {
     const fixedMenuSlugs = ["fritti", "bibite", "dolci"];

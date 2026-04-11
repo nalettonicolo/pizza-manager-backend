@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -59,7 +59,7 @@ export default function IngredientiPage() {
   const [csvModalOpen, setCsvModalOpen] = useState(false);
   const [csvImporting, setCsvImporting] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
@@ -77,11 +77,11 @@ export default function IngredientiPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId]);
 
   useEffect(() => {
-    load();
-  }, [tenantId]);
+    void load();
+  }, [load]);
 
   const filteredIngredients = useMemo(() => {
     const list = !searchTerm.trim()
@@ -92,13 +92,6 @@ export default function IngredientiPage() {
 
   if (loading) return <Loader />;
   if (error) return <ErrorState message={error} />;
-
-  const getAllergeniNames = (ingredienteId) => {
-    const ids = allergeniMap[ingredienteId] || [];
-    return ids
-      .map((id) => allergeni.find((a) => a.id === id)?.nome)
-      .filter(Boolean);
-  };
 
   /** Allergeni dell'ingrediente con icona (per mostrare icone a dx del nome) */
   const getAllergeniConIcona = (ingredienteId) => {
@@ -387,7 +380,7 @@ export default function IngredientiPage() {
             await updateIngredient(existing.id, updates);
             try {
               await setIngredienteAllergeni(tenantId, existing.id, allergeneIds);
-            } catch (_) {
+            } catch {
               console.warn("Allergeni non aggiornati per", nome);
             }
             updated++;
@@ -403,7 +396,7 @@ export default function IngredientiPage() {
           if (createdIng?.id && allergeneIds.length > 0) {
             try {
               await setIngredienteAllergeni(tenantId, createdIng.id, allergeneIds);
-            } catch (_) {
+            } catch {
               console.warn("Allergeni non salvati per", nome);
             }
           }

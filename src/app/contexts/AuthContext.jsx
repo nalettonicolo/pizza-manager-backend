@@ -1,6 +1,6 @@
 // 📍 src/contexts/AuthContext.jsx
 
-import { createContext, useContext, useEffect, useState, useRef } from "react"
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { devLog, devWarn } from "@/lib/devLog"
 import {
@@ -42,22 +42,22 @@ export function AuthProvider({ children }) {
   const latestUserIdRef = useRef(null)
   const retryTimeoutIdRef = useRef(null)
 
-  const setLoadingSafe = (value) => {
+  const setLoadingSafe = useCallback((value) => {
     if (value === false && retryPendingRef.current) return
     setLoading(value)
-  }
+  }, [])
 
   /** Sblocca sempre il loading (init, logout, failsafe) senza essere bloccato da retryPending */
-  const forceLoadingFalse = () => {
+  const forceLoadingFalse = useCallback(() => {
     retryPendingRef.current = false
     setLoading(false)
-  }
+  }, [])
 
   // ===============================
   // LOAD USER DATA
   // ===============================
 
-  const loadUserData = async (userId, isRetry = false) => {
+  const loadUserData = useCallback(async (userId, isRetry = false) => {
     if (loadUserDataInProgressRef.current && !isRetry) return
     loadUserDataInProgressRef.current = true
     devLog("Auth", "loadUserData inizio", { userId, isRetry })
@@ -182,7 +182,7 @@ export function AuthProvider({ children }) {
       retryPendingRef.current = false
     }
     setLoadingSafe(false)
-  }
+  }, [setLoadingSafe])
 
   // ===============================
   // INIT SESSION
@@ -304,7 +304,7 @@ export function AuthProvider({ children }) {
       }
       listener?.subscription?.unsubscribe?.()
     }
-  }, [])
+  }, [forceLoadingFalse, loadUserData])
 
   // ===============================
   // AUTH ACTIONS

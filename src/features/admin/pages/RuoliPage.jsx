@@ -115,7 +115,7 @@ export default function RuoliPage() {
     return () => window.clearTimeout(id);
   }, [archivioUnlockUntil, chiudiArchivio]);
 
-  async function loadRuoli() {
+  const loadRuoli = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
@@ -128,11 +128,11 @@ export default function RuoliPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId]);
 
   useEffect(() => {
-    loadRuoli();
-  }, [tenantId]);
+    void loadRuoli();
+  }, [loadRuoli]);
 
   async function handleToggleParametri(ruoloRecord) {
     if (!tenantId || !ruoloRecord?.user_id) return;

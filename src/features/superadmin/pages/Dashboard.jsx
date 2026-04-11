@@ -4,20 +4,20 @@ import { getDashboardStats } from "@/features/admin/services/adminService"
 import { formatPrice } from "@/utils/format"
 
 export default function Dashboard() {
-  const { tenant } = useTenant()
+  const { tenantId } = useTenant()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    if (!tenant?.id) return
+    if (!tenantId) return
 
     async function loadStats() {
       try {
         setLoading(true)
-        const data = await getDashboardStats(tenant.id)
+        const data = await getDashboardStats(tenantId)
         setStats(data)
-      } catch (err) {
+      } catch {
         setError("Errore nel caricamento dashboard")
       } finally {
         setLoading(false)
@@ -25,7 +25,7 @@ export default function Dashboard() {
     }
 
     loadStats()
-  }, [tenant])
+  }, [tenantId])
 
   if (loading) return <div className="p-6">Caricamento...</div>
   if (error) return <div className="p-6 text-red-500">{error}</div>

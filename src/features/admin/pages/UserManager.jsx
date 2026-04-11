@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import Loader from "@/components/feedback/Loader"
@@ -37,7 +37,7 @@ export default function UserManager() {
   const [filter, setFilter] = useState("")
   const [busyId, setBusyId] = useState(null)
 
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -49,7 +49,7 @@ export default function UserManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenantId])
 
   useEffect(() => {
     if (tenantId) {
@@ -58,7 +58,7 @@ export default function UserManager() {
       setLoading(false)
       setUsers([])
     }
-  }, [tenantId])
+  }, [tenantId, loadUsers])
 
   const filteredUsers = useMemo(() => {
     const q = filter.trim().toLowerCase()

@@ -51,7 +51,6 @@ function normalizeService(s) {
  * Mantiene anche servizi aggiunti dall’utente che non sono nel default.
  */
 export function mergeCatalogWithDefaults(storedList) {
-  const defaultById = Object.fromEntries(DEFAULT_SERVICES_CATALOG.map((d) => [d.id, { ...d }]));
   const storedById = {};
   for (const raw of storedList || []) {
     const n = normalizeService(raw);

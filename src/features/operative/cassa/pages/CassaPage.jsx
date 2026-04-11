@@ -44,6 +44,7 @@ import {
 import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson"
 import { roundTotalToFiveCents } from "@/utils/cassaArrotondamento"
 import { readFiscalConfigFromParametri, enqueueCorrispettivoAfterCheckoutIfConfigured } from "@/integrations/fiscal"
+import { runUnifiedPayByLinkSetup } from "@/integrations/payments"
 import { markCheckoutStart, markCheckoutEnd } from "@/utils/cassaTelemetry"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
@@ -59,7 +60,6 @@ import {
   getTodayOrari,
   groupOrdersBySlotOrarioRitiro,
   groupOrdiniBySlotOrarioRitiro,
-  groupPizzeBySlot,
   groupPizzeBySlotOrarioRitiro,
   slotColor,
 } from "@/features/operative/cassa/utils/planningUtils"
@@ -89,6 +89,7 @@ import {
 } from "@/features/operative/cassa/cassaToolbarButtonStyles"
 import { readFidelityModalitaAccredito } from "@/utils/fidelityProgramConfig"
 import { applyPromoCalendarioToProducts, fidelitySkippedByPromoCalendario } from "@/utils/promozioniCalendario"
+import { normalizeRuoloOperativo } from "@/utils/operativeAreaAccess"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
@@ -106,6 +107,10 @@ function ordineIsDelivery(o) {
 
 function ordineNomeCliente(o) {
   return String(o?.nome_cliente ?? o?.nomeCliente ?? o?.nome ?? "").trim()
+}
+
+function ordineTelefonoRitiro(o) {
+  return String(o?.telefono_ritiro ?? o?.telefonoRitiro ?? "").trim()
 }
 
 function ordineIndirizzoConsegna(o) {
@@ -280,7 +285,8 @@ export default function CassaPage() {
   const activePvId = pvCtx?.activePv ?? null
   const pvLoading = pvCtx?.loading ?? false
   const pvList = pvCtx?.pvList ?? []
-  const { user, logout } = useAuth()
+  const { user, ruolo } = useAuth()
+  const canAnnullaOrdineCassa = useMemo(() => normalizeRuoloOperativo(ruolo) === "cassa", [ruolo])
   const { hasServizio, enforcementActive } = useTenantServizi()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
   const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
@@ -310,6 +316,7 @@ export default function CassaPage() {
   const [mistoRighe, setMistoRighe] = useState([])
   const [checkoutScontoGlobale, setCheckoutScontoGlobale] = useState("")
   const [checkoutNomeCliente, setCheckoutNomeCliente] = useState("")
+  const [checkoutTelefonoCliente, setCheckoutTelefonoCliente] = useState("")
   const [checkoutSelectedSlot, setCheckoutSelectedSlot] = useState(null)
   const [checkoutError, setCheckoutError] = useState(null)
   /** Dopo conferma ordine, se non stampa automatica: payload per ristampare comanda. */
@@ -334,9 +341,17 @@ export default function CassaPage() {
   const [ordineDetailLoading, setOrdineDetailLoading] = useState(false)
   const [segnaPagatoModal, setSegnaPagatoModal] = useState(null)
   const [modificaOrdineModal, setModificaOrdineModal] = useState(null) // ordineDetail when in edit mode
-  const [modificaForm, setModificaForm] = useState({ nome_cliente: "", orario_ritiro: "", note: "", tipo_pagamento: "Da pagare", indirizzo_consegna: "" })
+  const [modificaForm, setModificaForm] = useState({
+    nome_cliente: "",
+    telefono_ritiro: "",
+    orario_ritiro: "",
+    note: "",
+    tipo_pagamento: "Da pagare",
+    indirizzo_consegna: "",
+  })
   const [modificaOrdineSaving, setModificaOrdineSaving] = useState(false)
   const [chiudiGiornataLoading, setChiudiGiornataLoading] = useState(false)
+  const [chiudiGiornataConfirmOpen, setChiudiGiornataConfirmOpen] = useState(false)
   const [lastOrderModalDetail, setLastOrderModalDetail] = useState(null)
   const [lastOrderLoading, setLastOrderLoading] = useState(false)
   const [lastOrderDetailLoading, setLastOrderDetailLoading] = useState(false)
@@ -356,6 +371,11 @@ export default function CassaPage() {
   const seenOrderIdsForToastRef = useRef(new Set())
   /** Dopo ripristino bozza locale (stesso giorno / tenant / PV): abilita salvataggio automatico */
   const [cassaDraftReady, setCassaDraftReady] = useState(false)
+  /** Pay-by-link (percorso B): ultimo ordine confermato, se abilitato in impostazioni cassa */
+  const [postCheckoutPayLink, setPostCheckoutPayLink] = useState(null)
+  const [payLinkPhone, setPayLinkPhone] = useState("")
+  const [payLinkBusy, setPayLinkBusy] = useState(false)
+  const [payLinkMessage, setPayLinkMessage] = useState("")
 
   /////////////////////////////////////////////////////////
   // RESET ON TENANT CHANGE
@@ -391,6 +411,7 @@ export default function CassaPage() {
       if (Array.isArray(draft.mistoRighe)) setMistoRighe(draft.mistoRighe)
       if (typeof draft.checkoutScontoGlobale === "string") setCheckoutScontoGlobale(draft.checkoutScontoGlobale)
       if (typeof draft.checkoutNomeCliente === "string") setCheckoutNomeCliente(draft.checkoutNomeCliente)
+      if (typeof draft.checkoutTelefonoCliente === "string") setCheckoutTelefonoCliente(draft.checkoutTelefonoCliente)
       if (draft.checkoutSelectedSlot) setCheckoutSelectedSlot(draft.checkoutSelectedSlot)
       if (typeof draft.showRiepilogo === "boolean") setShowRiepilogo(draft.showRiepilogo)
       if (typeof draft.fidelityQuery === "string") setFidelityQuery(draft.fidelityQuery)
@@ -416,6 +437,7 @@ export default function CassaPage() {
         mistoRighe,
         checkoutScontoGlobale,
         checkoutNomeCliente,
+        checkoutTelefonoCliente,
         checkoutSelectedSlot,
         showRiepilogo,
         fidelityQuery,
@@ -438,6 +460,7 @@ export default function CassaPage() {
     mistoRighe,
     checkoutScontoGlobale,
     checkoutNomeCliente,
+    checkoutTelefonoCliente,
     checkoutSelectedSlot,
     showRiepilogo,
     fidelityQuery,
@@ -704,6 +727,9 @@ export default function CassaPage() {
     try {
       await updateOrder(modificaOrdineModal.id, {
         nome_cliente: modificaForm.nome_cliente || null,
+        telefono_ritiro: ordineIsDelivery(modificaOrdineModal)
+          ? undefined
+          : modificaForm.telefono_ritiro?.trim() || null,
         orario_ritiro: modificaForm.orario_ritiro || null,
         note: modificaForm.note || null,
         tipo_pagamento: modificaForm.tipo_pagamento || null,
@@ -725,7 +751,7 @@ export default function CassaPage() {
     } finally {
       setModificaOrdineSaving(false)
     }
-  }, [modificaOrdineModal?.id, modificaForm, ordineDetail?.id, loadOrdini, tenantId])
+  }, [modificaOrdineModal, modificaForm, ordineDetail?.id, loadOrdini, tenantId])
 
   const handleSpostaOrdinePlanning = useCallback(async (ordineId, nuovoOrarioRitiro) => {
     setPlanningSpostaLoading(ordineId)
@@ -763,6 +789,7 @@ export default function CassaPage() {
   }, [])
 
   const deliveryAttenzioneInfo = useMemo(() => {
+    void deliveryAlertTick
     const po = tenantData?.parametri_operativi || {}
     const partenza = Number(po.pizzaiolo_partenza_consegne_minuti) || 30
     const list = (ordiniOggiAttivi || []).filter((o) => ordineDeliveryRichiedeAttenzione(o, po, partenza))
@@ -796,19 +823,9 @@ export default function CassaPage() {
     }
   }, [todayStr, tenantId, ordiniOggiAttivi, pizzePerOrdine])
 
-  const handleSalvaContabilita = useCallback(() => {
-    const payload = buildPayloadContabilita()
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
-    const a = document.createElement("a")
-    a.href = URL.createObjectURL(blob)
-    a.download = `contabilita_${todayStr}.json`
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }, [buildPayloadContabilita, todayStr])
-
-  const handleChiudiGiornata = useCallback(async () => {
+  const handleChiudiGiornataConfirmed = useCallback(async () => {
     if (!tenantId) return
-    if (!window.confirm("Chiudi la giornata? Verrà creato il salvataggio per contabilità e si resetta lo storico giornaliero.")) return
+    setChiudiGiornataConfirmOpen(false)
     setChiudiGiornataLoading(true)
     try {
       const payload = buildPayloadContabilita()
@@ -855,6 +872,10 @@ export default function CassaPage() {
   const handleAnnullaOrdine = useCallback(
     async (ordineId) => {
       if (!ordineId) return
+      if (normalizeRuoloOperativo(ruolo) !== "cassa") {
+        alert("Solo gli utenti con ruolo Cassa possono annullare un ordine.")
+        return
+      }
       if (
         !window.confirm(
           "Annullare questo ordine? Non comparirà più nel planning né nei totali giornata; resterà in elenco come annullato.",
@@ -873,7 +894,7 @@ export default function CassaPage() {
         alert("Errore annullamento ordine. " + (e?.message || ""))
       }
     },
-    [loadOrdini],
+    [loadOrdini, ruolo],
   )
 
   // Ricerca clienti delivery (solo se c'è testo cercato e nessun cliente già selezionato con stesso testo)
@@ -941,11 +962,11 @@ export default function CassaPage() {
   }, [fidelityQuery, showRiepilogo, tenantId, tipoOrdine, fidelityServizioOk])
 
   const displayCliente = (c) => (c ? [c.nome, c.indirizzo].filter(Boolean).join(" – ") : "")
-  const handleSelectCliente = (c) => {
+  const handleSelectCliente = useCallback((c) => {
     setSelectedCliente(c)
     setDeliverySearch(displayCliente(c))
     setDeliverySearchResults([])
-  }
+  }, [])
   const handleNuovoClienteSuccess = (cliente) => {
     setSelectedCliente(cliente)
     setDeliverySearch(displayCliente(cliente))
@@ -1210,6 +1231,8 @@ export default function CassaPage() {
     lastOrderLoading,
     fidelityServizioOk,
     navigate,
+    handleSelectCliente,
+    openUltimoOrdineCliente,
   ])
 
   /////////////////////////////////////////////////////////
@@ -1315,16 +1338,6 @@ export default function CassaPage() {
     },
     [productToAdd, addToCartWithIngredienti]
   )
-
-  const removeFromCart = useCallback((productId) => {
-    setCart((prev) =>
-      prev
-        .map((p) =>
-          p.id === productId ? { ...p, qty: p.qty - 1 } : p
-        )
-        .filter((p) => p.qty > 0)
-    )
-  }, [])
 
   const increaseQty = useCallback((item) => {
     setCart((prev) =>
@@ -1470,6 +1483,8 @@ export default function CassaPage() {
 
       const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
+      const telefonoRitiroNegozio =
+        tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutTelefonoCliente || "").trim() : ""
       const orarioRitiro = orarioRitiroFromSelectedSlot(checkoutSelectedSlot)
 
       let consegnaLng
@@ -1525,6 +1540,7 @@ export default function CassaPage() {
         consegnaLng,
         consegnaLat,
         pagamentoDettaglio,
+        telefonoRitiro: telefonoRitiroNegozio || undefined,
       })
 
       if (fidelityServizioOk && fidelitySaldoSnap?.anagrafica_cliente_id) {
@@ -1577,6 +1593,22 @@ export default function CassaPage() {
         if (error) console.warn("[Cassa] fiscal_outbox enqueue:", error)
       })
 
+      if (fiscalCfg.paymentLinkEnabled && fiscalCfg.paymentLinkProviderKey) {
+        setPostCheckoutPayLink({
+          orderId,
+          importoCent: Math.round(totalCheckout * 100),
+          providerKey: fiscalCfg.paymentLinkProviderKey,
+        })
+        setPayLinkPhone(
+          tipoOrdine === TIPO_ORDINE.NEGOZIO
+            ? telefonoRitiroNegozio
+            : (selectedCliente?.telefono || "").trim(),
+        )
+        setPayLinkMessage("")
+      } else {
+        setPostCheckoutPayLink(null)
+      }
+
       markCheckoutEnd(telemetryCtx, { ok: true, tenantId, ordineId: orderId })
 
       clearCassaDraft(tenantId, activePvId ?? "nopv")
@@ -1586,6 +1618,7 @@ export default function CassaPage() {
       setMistoRighe([])
       setCheckoutScontoGlobale("")
       setCheckoutNomeCliente("")
+      setCheckoutTelefonoCliente("")
       setCheckoutSelectedSlot(null)
       setDeliverySearch("")
       setSelectedCliente(null)
@@ -1875,6 +1908,8 @@ export default function CassaPage() {
           cassaArrotonda5Cent={cassaArrotonda5CentFlag}
           checkoutNomeCliente={checkoutNomeCliente}
           onCheckoutNomeClienteChange={setCheckoutNomeCliente}
+          checkoutTelefonoCliente={checkoutTelefonoCliente}
+          onCheckoutTelefonoClienteChange={setCheckoutTelefonoCliente}
           selectedSlot={checkoutSelectedSlot}
           onSlotSelect={setCheckoutSelectedSlot}
           tipiPagamento={TIPI_PAGAMENTO}
@@ -1958,6 +1993,122 @@ export default function CassaPage() {
           >
             Vai ai turni
           </button>
+        </div>
+      ) : null}
+      {postCheckoutPayLink ? (
+        <div
+          role="region"
+          aria-label="Pagamento con link"
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: 12,
+            zIndex: 10030,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "#e8f5e9",
+            border: "1px solid #66bb6a",
+            boxShadow: "0 6px 20px rgba(0,0,0,0.12)",
+            fontSize: 13,
+            lineHeight: 1.45,
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
+            <strong>Pay-by-link</strong>
+            <button
+              type="button"
+              className="cassa-toolbar-compact-btn"
+              onClick={() => {
+                setPostCheckoutPayLink(null)
+                setPayLinkMessage("")
+              }}
+              style={{ fontWeight: 600 }}
+            >
+              Chiudi
+            </button>
+          </div>
+          <p style={{ margin: "8px 0", color: "#1b5e20" }}>
+            Ordine <code style={{ fontSize: 12 }}>{postCheckoutPayLink.orderId}</code> — importo €
+            {(postCheckoutPayLink.importoCent / 100).toFixed(2)} · provider{" "}
+            <strong>{postCheckoutPayLink.providerKey}</strong>
+          </p>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            <span style={{ fontWeight: 600 }}>Telefono destinatario (opzionale, per traccia SMS futura)</span>
+            <input
+              type="tel"
+              value={payLinkPhone}
+              onChange={(e) => setPayLinkPhone(e.target.value)}
+              placeholder="+39…"
+              style={{ display: "block", marginTop: 6, padding: "8px 10px", width: "100%", maxWidth: 280, boxSizing: "border-box" }}
+            />
+          </label>
+          <button
+            type="button"
+            className="cassa-toolbar-compact-btn"
+            disabled={payLinkBusy}
+            onClick={() => {
+              if (!tenantId || !postCheckoutPayLink) return
+              setPayLinkBusy(true)
+              setPayLinkMessage("")
+              void runUnifiedPayByLinkSetup({
+                tenantId,
+                ordineId: postCheckoutPayLink.orderId,
+                importoCent: postCheckoutPayLink.importoCent,
+                paymentLinkProviderKey: postCheckoutPayLink.providerKey,
+                destinatarioTelefono: payLinkPhone.trim() || null,
+              })
+                .then((r) => {
+                  setPayLinkMessage(r.ok ? r.message || "OK" : r.error || "Errore")
+                })
+                .finally(() => setPayLinkBusy(false))
+            }}
+            style={{ fontWeight: 700, background: "#2e7d32", color: "#fff" }}
+          >
+            {payLinkBusy ? "Registrazione…" : "Registra richiesta pay-by-link"}
+          </button>
+          {payLinkMessage ? (
+            <p style={{ margin: "10px 0 0", fontSize: 12, color: "#33691e" }}>
+              {payLinkMessage}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {chiudiGiornataConfirmOpen ? (
+        <div
+          style={styles.modalOverlay}
+          onClick={() => !chiudiGiornataLoading && setChiudiGiornataConfirmOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chiudi-giornata-title"
+        >
+          <div style={styles.detailModal} onClick={(e) => e.stopPropagation()}>
+            <h3 id="chiudi-giornata-title" style={{ margin: "0 0 12px", fontSize: 17 }}>
+              Confermi chiusura giornata?
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: "#444", lineHeight: 1.5 }}>
+              Verrà creato il salvataggio per contabilità e lo storico giornaliero si resetta. L&apos;operazione non è
+              annullabile da qui.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                style={styles.planningBarToggle}
+                disabled={chiudiGiornataLoading}
+                onClick={() => setChiudiGiornataConfirmOpen(false)}
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.chiudiGiornataBtn, cursor: chiudiGiornataLoading ? "default" : "pointer", opacity: chiudiGiornataLoading ? 0.7 : 1 }}
+                disabled={chiudiGiornataLoading}
+                onClick={() => void handleChiudiGiornataConfirmed()}
+              >
+                {chiudiGiornataLoading ? "…" : "Sì, chiudi giornata"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       <div
@@ -2234,13 +2385,10 @@ export default function CassaPage() {
                 ))}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" style={styles.contabilitaBtn} onClick={handleSalvaContabilita}>
-                Scarica JSON giornata
-              </button>
               <button
                 type="button"
                 style={styles.chiudiGiornataBtn}
-                onClick={handleChiudiGiornata}
+                onClick={() => setChiudiGiornataConfirmOpen(true)}
                 disabled={chiudiGiornataLoading}
               >
                 {chiudiGiornataLoading ? "…" : "Chiudi giornata"}
@@ -2278,11 +2426,13 @@ export default function CassaPage() {
             const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
             const ann = ordineIsAnnullato(o)
             return (
-              <li key={o.id}>
+              <li key={o.id} style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
                 <button
                   type="button"
                   style={{
                     ...styles.ordiniItem,
+                    flex: 1,
+                    minWidth: 0,
                     ...(ann ? { opacity: 0.72, borderLeft: "3px solid #b71c1c" } : {}),
                   }}
                   onClick={() => openOrdineDetail(o.id)}
@@ -2305,6 +2455,31 @@ export default function CassaPage() {
                     <span style={{ fontSize: 12, marginLeft: 4 }} title={labelPagamento}>{iconPagamento}</span>
                   </div>
                 </button>
+                {canAnnullaOrdineCassa && !ann ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void handleAnnullaOrdine(o.id)
+                    }}
+                    style={{
+                      alignSelf: "center",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1px solid #b71c1c",
+                      background: "#fff",
+                      color: "#b71c1c",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                    title="Annulla ordine (solo ruolo Cassa)"
+                  >
+                    Annulla ordine
+                  </button>
+                ) : null}
               </li>
             )
           })}
@@ -2653,6 +2828,9 @@ export default function CassaPage() {
                 {ordineNomeCliente(ordineDetail) && (
                   <p style={{ margin: "0 0 4px", fontWeight: 500 }}>Cliente: <strong>{ordineNomeCliente(ordineDetail)}</strong></p>
                 )}
+                {ordineTelefonoRitiro(ordineDetail) ? (
+                  <p style={{ margin: "0 0 4px", color: "#555" }}>Tel. (ritiro): <strong>{ordineTelefonoRitiro(ordineDetail)}</strong></p>
+                ) : null}
                 {ordineOrarioRitiro(ordineDetail) && (
                   <p style={{ margin: "0 0 12px", color: "#555" }}>Orario ritiro: {ordineOrarioRitiro(ordineDetail)}</p>
                 )}
@@ -2754,6 +2932,7 @@ export default function CassaPage() {
                     setModificaOrdineModal(ordineDetail)
                     setModificaForm({
                       nome_cliente: ordineNomeCliente(ordineDetail),
+                      telefono_ritiro: ordineTelefonoRitiro(ordineDetail),
                       orario_ritiro: ordineOrarioRitiro(ordineDetail),
                       note: ordineDetail.note ?? "",
                       tipo_pagamento: ordineDetail.tipo_pagamento ?? "Da pagare",
@@ -2764,7 +2943,7 @@ export default function CassaPage() {
                   Modifica
                 </button>
               ) : null}
-              {!ordineIsAnnullato(ordineDetail) ? (
+              {canAnnullaOrdineCassa && !ordineIsAnnullato(ordineDetail) ? (
                 <button
                   type="button"
                   style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#b71c1c", color: "#fff" }}
@@ -2845,6 +3024,18 @@ export default function CassaPage() {
                   style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
                 />
               </label>
+              {!ordineIsDelivery(modificaOrdineModal) && (
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontWeight: 500 }}>Telefono (ritiro, opzionale)</span>
+                  <input
+                    type="tel"
+                    value={modificaForm.telefono_ritiro}
+                    onChange={(e) => setModificaForm((f) => ({ ...f, telefono_ritiro: e.target.value }))}
+                    placeholder="+39…"
+                    style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
+                  />
+                </label>
+              )}
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontWeight: 500 }}>Orario ritiro / consegna</span>
                 <input
@@ -3312,16 +3503,6 @@ const styles = {
     fontSize: 12,
     marginTop: 4,
     color: "#333",
-  },
-  contabilitaBtn: {
-    padding: "10px 16px",
-    background: "#2e7d32",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: 500,
   },
   chiudiGiornataBtn: {
     padding: "10px 16px",

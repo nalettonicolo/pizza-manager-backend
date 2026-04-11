@@ -118,6 +118,7 @@ export default function PublicOrdineCheckoutPage() {
   const quarterFilterUi = useMemo(() => getWebVetrinaSlotQuarterFilter(parametri), [parametri])
 
   const slots = useMemo(() => {
+    void slotTick
     const now = new Date()
     if (!calendarClosed) {
       return buildPublicCheckoutDeliverySlots(orariOggi, now, parametri)

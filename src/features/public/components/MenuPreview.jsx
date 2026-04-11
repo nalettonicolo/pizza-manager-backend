@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/utils/format";
 
@@ -6,11 +6,7 @@ export default function MenuPreview({ branding }) {
   const [prodotti, setProdotti] = useState([]);
   const safe = branding ?? {};
 
-  useEffect(() => {
-    if (safe.id) loadMenu();
-  }, [safe.id]);
-
-  async function loadMenu() {
+  const loadMenu = useCallback(async () => {
     if (!safe.id) return;
     const { data } = await supabase
       .from("Prodotto")
@@ -19,7 +15,11 @@ export default function MenuPreview({ branding }) {
       .eq("attivo", true);
 
     setProdotti(data || []);
-  }
+  }, [safe.id]);
+
+  useEffect(() => {
+    if (safe.id) void loadMenu();
+  }, [safe.id, loadMenu]);
 
   return (
     <section style={{ padding: "80px 20px", maxWidth: 1000, margin: "auto" }}>

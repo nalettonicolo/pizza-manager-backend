@@ -8,6 +8,8 @@ import { FISCAL_MODES, FISCAL_PARAM_KEYS } from "./fiscalConstants"
  *   fiscalProviderKey: string | null,
  *   paymentLinkEnabled: boolean,
  *   paymentLinkProviderKey: string | null,
+ *   posManualExportEnabled: boolean,
+ *   posTerminalProviderKey: string | null,
  * }}
  */
 export function readFiscalConfigFromParametri(parametriOperativi) {
@@ -21,10 +23,16 @@ export function readFiscalConfigFromParametri(parametriOperativi) {
   const paymentLinkEnabled = ple === true || ple === "true"
   const plpk = po[FISCAL_PARAM_KEYS.payment_link_provider_key]
   const paymentLinkProviderKey = typeof plpk === "string" && plpk.trim() ? plpk.trim() : null
+  const pme = po[FISCAL_PARAM_KEYS.pos_manual_export_enabled]
+  const posManualExportEnabled = pme === true || pme === "true"
+  const ptpk = po[FISCAL_PARAM_KEYS.pos_terminal_provider_key]
+  const posTerminalProviderKey = typeof ptpk === "string" && ptpk.trim() ? ptpk.trim() : null
   return {
     fiscalMode,
     fiscalProviderKey,
     paymentLinkEnabled,
     paymentLinkProviderKey,
+    posManualExportEnabled,
+    posTerminalProviderKey,
   }
 }

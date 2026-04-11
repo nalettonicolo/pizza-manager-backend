@@ -24,3 +24,12 @@ export async function createPaymentLinkIntent(p) {
   }
   return supabase.from("payment_link_intents").insert(row).select("id").maybeSingle()
 }
+
+/**
+ * @param {string} intentId
+ * @param {Record<string, unknown>} patch
+ */
+export async function updatePaymentLinkIntent(intentId, patch) {
+  if (!intentId) return { data: null, error: new Error("intentId mancante") }
+  return supabase.from("payment_link_intents").update(patch).eq("id", intentId).select("id").maybeSingle()
+}

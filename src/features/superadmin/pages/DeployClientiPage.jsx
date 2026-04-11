@@ -85,7 +85,7 @@ export default function DeployClientiPage() {
         const data = await getTenants();
         if (!cancelled) {
           setTenants(data || []);
-          if (!selectedTenantId && data?.length) setSelectedTenantId(data[0].id);
+          setSelectedTenantId((prev) => prev ?? (data?.length ? data[0].id : null));
         }
       } catch (err) {
         if (!cancelled) setError(err?.message || "Errore caricamento clienti.");

@@ -9,8 +9,14 @@ export const FISCAL_PARAM_KEYS = Object.freeze({
   fiscal_provider_key: "fiscal_provider_key",
   /** abilita creazione intent pay-by-link in cassa */
   payment_link_enabled: "payment_link_enabled",
-  /** provider PSP per link (es. stripe, nexi — da cablare) */
+  /** provider PSP per link (es. stripe, sumup, nexi) */
   payment_link_provider_key: "payment_link_provider_key",
+  /** abilita suggerimenti export riconciliazione POS manuale (percorso A) */
+  pos_manual_export_enabled: "pos_manual_export_enabled",
+  /** JSON: predisposizioni/attivazioni per catalogo POS (vedi posIntegrationsRegistry.js) */
+  pos_payment_predispositions: "pos_payment_predispositions",
+  /** adapter terminale fisico/cloud (percorso C) — es. stripe_terminal, sumup_reader */
+  pos_terminal_provider_key: "pos_terminal_provider_key",
 })
 
 /** Valori ammessi per fiscal_mode (allineati a implementazioni future). */

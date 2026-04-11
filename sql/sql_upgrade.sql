@@ -8,6 +8,8 @@
 --
 -- Questo file è il punto unico per le nuove DDL/DML incrementali: preferire
 -- blocchi idempotenti (IF NOT EXISTS, DO $$ … $$, DROP … IF EXISTS dove sicuro).
+-- Le patch che toccano Ordine / create_order_with_items vanno incluse qui (non solo
+-- nei moduli sotto sql/modules/), così un’unica esecuzione di sql_upgrade.sql basta.
 --
 -- =============================================================================
 
@@ -144,3 +146,369 @@ DROP TRIGGER IF EXISTS tr_payment_link_intents_updated ON public.payment_link_in
 CREATE TRIGGER tr_payment_link_intents_updated
   BEFORE UPDATE ON public.payment_link_intents
   FOR EACH ROW EXECUTE FUNCTION public.pm_touch_updated_at();
+
+-- -----------------------------------------------------------------------------
+-- telefono_ritiro + vista public."Ordine" + RPC create_order_with_items
+-- (allineato a sql/modules/04_ordine_view_trigger.sql e 05_pm_point_create_order.sql)
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS telefono_ritiro TEXT;
+COMMENT ON COLUMN core.ordini.telefono_ritiro IS 'Telefono contatto per ritiro in negozio (opzionale).';
+
+CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core
+AS $tr$
+BEGIN
+  UPDATE core.ordini
+  SET
+    stato              = COALESCE(NEW.stato, OLD.stato),
+    totale             = COALESCE(NEW.totale, OLD.totale),
+    note               = COALESCE(NEW.note, OLD.note),
+    tipo_pagamento     = COALESCE(NEW.tipo_pagamento, OLD.tipo_pagamento),
+    tipo_ordine        = COALESCE(NEW.tipo_ordine, OLD.tipo_ordine),
+    nome_cliente       = NEW.nome_cliente,
+    telefono_ritiro    = NEW.telefono_ritiro,
+    orario_ritiro      = NEW.orario_ritiro,
+    indirizzo_consegna = NEW.indirizzo_consegna,
+    consegna_lng       = COALESCE(NEW.consegna_lng, OLD.consegna_lng),
+    consegna_lat       = COALESCE(NEW.consegna_lat, OLD.consegna_lat),
+    pagamento_dettaglio = COALESCE(NEW.pagamento_dettaglio, OLD.pagamento_dettaglio),
+    stato_consegna     = COALESCE(NEW.stato_consegna, OLD.stato_consegna),
+    punto_vendita_id   = COALESCE(NEW.punto_vendita_id, OLD.punto_vendita_id),
+    turno_operatori_id = COALESCE(NEW.turno_operatori_id, OLD.turno_operatori_id),
+    rider_id           = COALESCE(NEW.rider_id, OLD.rider_id),
+    turno_rider_id     = COALESCE(NEW.turno_rider_id, OLD.turno_rider_id),
+    percorso_attivo_id = COALESCE(NEW.percorso_attivo_id, OLD.percorso_attivo_id),
+    stato_delivery     = COALESCE(NEW.stato_delivery, OLD.stato_delivery),
+    assegnato_rider_at = COALESCE(NEW.assegnato_rider_at, OLD.assegnato_rider_at),
+    ritiro_bancone_rider_at = COALESCE(NEW.ritiro_bancone_rider_at, OLD.ritiro_bancone_rider_at),
+    consegna_effettiva_at = COALESCE(NEW.consegna_effettiva_at, OLD.consegna_effettiva_at),
+    updated_at         = now()
+  WHERE id = OLD.id
+    AND tenant_id IN (
+      SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+      UNION
+      SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+    );
+  RETURN NEW;
+END;
+$tr$;
+
+DROP VIEW IF EXISTS public."Ordine" CASCADE;
+
+CREATE VIEW public."Ordine" AS
+  SELECT
+    id,
+    numero,
+    stato,
+    totale,
+    note,
+    tipo_pagamento,
+    tipo_ordine,
+    nome_cliente,
+    telefono_ritiro,
+    orario_ritiro,
+    indirizzo_consegna,
+    consegna_lng,
+    consegna_lat,
+    pagamento_dettaglio,
+    stato_consegna,
+    punto_vendita_id,
+    turno_operatori_id,
+    rider_id,
+    turno_rider_id,
+    percorso_attivo_id,
+    stato_delivery,
+    assegnato_rider_at,
+    ritiro_bancone_rider_at,
+    consegna_effettiva_at,
+    tenant_id AS "tenantId",
+    created_at AS "createdAt",
+    updated_at AS "updatedAt",
+    deleted_at AS "deletedAt"
+  FROM core.ordini
+  WHERE tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."Ordine" TO authenticated;
+
+DROP TRIGGER IF EXISTS ordine_instead_of_update_trigger ON public."Ordine";
+CREATE TRIGGER ordine_instead_of_update_trigger
+  INSTEAD OF UPDATE ON public."Ordine"
+  FOR EACH ROW
+  EXECUTE FUNCTION public.ordine_instead_of_update();
+
+CREATE OR REPLACE FUNCTION public.pm_point_in_ring(
+  p_lng double precision,
+  p_lat double precision,
+  p_ring jsonb
+)
+RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE
+AS $ring$
+DECLARE
+  n int;
+  i int;
+  j int;
+  xi double precision;
+  yi double precision;
+  xj double precision;
+  yj double precision;
+  inside boolean := false;
+BEGIN
+  IF p_ring IS NULL OR jsonb_typeof(p_ring) <> 'array' THEN
+    RETURN NULL;
+  END IF;
+
+  n := jsonb_array_length(p_ring);
+  IF n < 4 THEN
+    RETURN NULL;
+  END IF;
+
+  IF (p_ring->0->>0)::double precision = (p_ring->(n - 1)->>0)::double precision
+     AND (p_ring->0->>1)::double precision = (p_ring->(n - 1)->>1)::double precision THEN
+    n := n - 1;
+  END IF;
+
+  IF n < 3 THEN
+    RETURN NULL;
+  END IF;
+
+  FOR i IN 0..(n - 1) LOOP
+    j := (i + 1) % n;
+    xi := (p_ring->i->>0)::double precision;
+    yi := (p_ring->i->>1)::double precision;
+    xj := (p_ring->j->>0)::double precision;
+    yj := (p_ring->j->>1)::double precision;
+    IF (yi > p_lat) <> (yj > p_lat) THEN
+      IF p_lng < (xj - xi) * (p_lat - yi) / NULLIF(yj - yi, 0) + xi THEN
+        inside := NOT inside;
+      END IF;
+    END IF;
+  END LOOP;
+
+  RETURN inside;
+END;
+$ring$;
+
+COMMENT ON FUNCTION public.pm_point_in_ring(double precision, double precision, jsonb) IS
+  'Ray casting: punto [lng,lat] dentro anello poligonale GeoJSON (primo anello).';
+
+DO $drop$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT format(
+      '%I.%I(%s)',
+      ns.nspname,
+      p.proname,
+      pg_catalog.pg_get_function_identity_arguments(p.oid)
+    ) AS sig
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace ns ON ns.oid = p.pronamespace
+    WHERE p.proname = 'create_order_with_items'
+      AND ns.nspname IN ('public', 'core')
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || r.sig || ' CASCADE';
+  END LOOP;
+END
+$drop$;
+
+CREATE OR REPLACE FUNCTION public.create_order_with_items(
+  p_tenant_id UUID,
+  p_totale NUMERIC,
+  p_stato TEXT DEFAULT 'IN_PREPARAZIONE',
+  p_items JSONB DEFAULT '[]'::JSONB,
+  p_note TEXT DEFAULT NULL,
+  p_tipo_pagamento TEXT DEFAULT NULL,
+  p_tipo_ordine TEXT DEFAULT NULL,
+  p_nome_cliente TEXT DEFAULT NULL,
+  p_orario_ritiro TEXT DEFAULT NULL,
+  p_indirizzo_consegna TEXT DEFAULT NULL,
+  p_consegna_lng DOUBLE PRECISION DEFAULT NULL,
+  p_consegna_lat DOUBLE PRECISION DEFAULT NULL,
+  p_pagamento_dettaglio JSONB DEFAULT NULL,
+  p_punto_vendita_id UUID DEFAULT NULL,
+  p_turno_operatori_id INTEGER DEFAULT NULL,
+  p_telefono_ritiro TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin
+AS $fn$
+DECLARE
+  v_ordine_id UUID;
+  v_numero INTEGER;
+  v_item JSONB;
+  v_stato core.stato_ordine;
+  v_po jsonb;
+  v_ring jsonb;
+  v_inside boolean;
+  v_is_staff_cassa boolean;
+  v_turno_pv uuid;
+BEGIN
+  SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero
+  FROM core.ordini
+  WHERE tenant_id = p_tenant_id;
+
+  BEGIN
+    v_stato := COALESCE(NULLIF(trim(p_stato), ''), 'IN_PREPARAZIONE')::core.stato_ordine;
+  EXCEPTION
+    WHEN invalid_text_representation THEN
+      v_stato := 'IN_PREPARAZIONE'::core.stato_ordine;
+  END;
+
+  v_po := NULL;
+  IF to_regclass('admin.tenants') IS NOT NULL THEN
+    SELECT t.parametri_operativi INTO v_po
+    FROM admin.tenants t
+    WHERE t.id = p_tenant_id
+    LIMIT 1;
+  END IF;
+  IF v_po IS NULL AND to_regclass('core.tenants') IS NOT NULL THEN
+    SELECT t.parametri_operativi INTO v_po
+    FROM core.tenants t
+    WHERE t.id = p_tenant_id
+    LIMIT 1;
+  END IF;
+
+  v_ring := NULL;
+  IF v_po IS NOT NULL
+     AND (v_po->'consegna_area_poligono'->>'type') = 'Polygon'
+     AND jsonb_typeof(v_po->'consegna_area_poligono'->'coordinates') = 'array'
+     AND jsonb_array_length(v_po->'consegna_area_poligono'->'coordinates') >= 1
+  THEN
+    v_ring := v_po->'consegna_area_poligono'->'coordinates'->0;
+  END IF;
+
+  IF lower(trim(COALESCE(p_tipo_ordine, ''))) = 'delivery'
+     AND v_ring IS NOT NULL
+     AND jsonb_typeof(v_ring) = 'array'
+     AND jsonb_array_length(v_ring) >= 4
+  THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.utenti_ruoli ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.tenant_id = p_tenant_id
+        AND COALESCE(ur.attivo, true) = true
+        AND (
+          lower(trim(COALESCE(ur.ruolo, ''))) = 'cassa'
+          OR COALESCE(ur.accesso_cassa, false) = true
+        )
+    ) INTO v_is_staff_cassa;
+
+    IF NOT v_is_staff_cassa THEN
+      IF p_consegna_lng IS NULL OR p_consegna_lat IS NULL THEN
+        RAISE EXCEPTION 'Per la consegna a domicilio servono coordinate valide dell''indirizzo (verifica su mappa).';
+      END IF;
+
+      v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
+      IF v_inside IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
+      END IF;
+    END IF;
+  END IF;
+
+  IF p_turno_operatori_id IS NOT NULL THEN
+    IF to_regclass('public.turni_operatori') IS NULL THEN
+      RAISE EXCEPTION 'turni_operatori non disponibile sul database';
+    END IF;
+    SELECT t.punto_vendita_id INTO v_turno_pv
+    FROM public.turni_operatori t
+    WHERE t.id = p_turno_operatori_id
+      AND t.tenant_id = p_tenant_id
+      AND t.user_id = auth.uid()
+      AND t.stato = 'aperto'
+      AND t.chiuso_il IS NULL;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'turno_non_valido';
+    END IF;
+    IF p_punto_vendita_id IS NOT NULL AND v_turno_pv IS DISTINCT FROM p_punto_vendita_id THEN
+      RAISE EXCEPTION 'turno_punto_vendita_mismatch';
+    END IF;
+  END IF;
+
+  INSERT INTO core.ordini (
+    tenant_id,
+    numero,
+    stato,
+    totale,
+    note,
+    tipo_pagamento,
+    tipo_ordine,
+    nome_cliente,
+    telefono_ritiro,
+    orario_ritiro,
+    indirizzo_consegna,
+    consegna_lng,
+    consegna_lat,
+    pagamento_dettaglio,
+    punto_vendita_id,
+    turno_operatori_id
+  )
+  VALUES (
+    p_tenant_id,
+    v_numero,
+    v_stato,
+    p_totale,
+    NULLIF(trim(COALESCE(p_note, '')), ''),
+    NULLIF(trim(COALESCE(p_tipo_pagamento, '')), ''),
+    NULLIF(trim(COALESCE(p_tipo_ordine, '')), ''),
+    NULLIF(trim(COALESCE(p_nome_cliente, '')), ''),
+    NULLIF(trim(COALESCE(p_telefono_ritiro, '')), ''),
+    NULLIF(trim(COALESCE(p_orario_ritiro, '')), ''),
+    NULLIF(trim(COALESCE(p_indirizzo_consegna, '')), ''),
+    p_consegna_lng,
+    p_consegna_lat,
+    p_pagamento_dettaglio,
+    p_punto_vendita_id,
+    p_turno_operatori_id
+  )
+  RETURNING id INTO v_ordine_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB))
+  LOOP
+    INSERT INTO core.riga_ordine (
+      tenant_id,
+      ordine_id,
+      prodotto_id,
+      quantita,
+      prezzo,
+      formato_nome,
+      ingredienti_cottura_summary
+    )
+    VALUES (
+      p_tenant_id,
+      v_ordine_id,
+      (v_item->>'prodotto_id')::UUID,
+      GREATEST(1, COALESCE((v_item->>'quantita')::INTEGER, 1)),
+      COALESCE((v_item->>'prezzo')::NUMERIC, 0),
+      NULLIF(trim(COALESCE(v_item->>'formato_nome', '')), ''),
+      NULLIF(trim(COALESCE(v_item->>'ingredienti_cottura_summary', '')), '')
+    );
+  END LOOP;
+
+  RETURN v_ordine_id;
+END;
+$fn$;
+
+GRANT EXECUTE ON FUNCTION public.create_order_with_items(
+  UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
+  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT
+) TO authenticated;
+
+COMMENT ON FUNCTION public.create_order_with_items(
+  UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
+  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT
+) IS
+  'Crea ordine + righe. Delivery+poligono: clienti con lng/lat in area; staff cassa esentato. telefono_ritiro opzionale (ritiro negozio).';

@@ -34,7 +34,7 @@ export function useLegalEntity() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [saas]);
 
   const isSaaS = getIsSaaSClient();
   return {

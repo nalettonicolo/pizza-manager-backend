@@ -141,7 +141,7 @@ export default function DatiPizzeriaSection() {
       placeAcCleanupRef.current?.();
       placeAcCleanupRef.current = () => {};
     };
-  }, [GOOGLE_API_KEY, geoResetKey, setSettings]);
+  }, [geoResetKey, indirizzo, setSettings]);
 
   useEffect(() => {
     const host = placeAcContainerRef.current?.firstElementChild;
@@ -173,7 +173,7 @@ export default function DatiPizzeriaSection() {
             lng: longitude,
           }));
           setGeoResetKey((k) => k + 1);
-        } catch (e) {
+        } catch {
           setGeoError("Impossibile ottenere l'indirizzo dalla posizione.");
           setSettings((s) => ({
             ...s,

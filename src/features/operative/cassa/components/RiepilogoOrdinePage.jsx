@@ -42,6 +42,8 @@ export default function RiepilogoOrdinePage({
   cassaArrotonda5Cent = false,
   checkoutNomeCliente = "",
   onCheckoutNomeClienteChange,
+  checkoutTelefonoCliente = "",
+  onCheckoutTelefonoClienteChange,
   selectedSlot = null,
   onSlotSelect,
   tipiPagamento = TIPI_PAGAMENTO_ORDINE,
@@ -180,6 +182,16 @@ export default function RiepilogoOrdinePage({
             value={checkoutNomeCliente}
             onChange={(e) => onCheckoutNomeClienteChange?.(e.target.value)}
             placeholder="Nome del cliente che ritira"
+            style={styles.input}
+          />
+          <label style={{ ...styles.label, marginTop: 14 }}>
+            Telefono (opzionale, per contatto / pay-by-link)
+          </label>
+          <input
+            type="tel"
+            value={checkoutTelefonoCliente}
+            onChange={(e) => onCheckoutTelefonoClienteChange?.(e.target.value)}
+            placeholder="es. +39… — non obbligatorio"
             style={styles.input}
           />
         </div>

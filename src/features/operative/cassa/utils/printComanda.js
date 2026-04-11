@@ -492,14 +492,14 @@ export function printComandaKitchen(payload) {
       setTimeout(() => {
         try {
           iframe.remove();
-        } catch (_) {
+        } catch {
           /* ignore */
         }
       }, 90_000);
       return true;
     }
     iframe.remove();
-  } catch (_) {
+  } catch {
     /* fallback sotto */
   }
 
@@ -513,7 +513,7 @@ export function printComandaKitchen(payload) {
   if (!runPrintInWindow(w)) {
     try {
       w.close();
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     return false;

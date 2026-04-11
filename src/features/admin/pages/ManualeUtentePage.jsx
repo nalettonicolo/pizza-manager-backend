@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import manualeUtenteMd from "@/content/manualeUtente.md?raw"
 import { buildGuidaToc } from "@/utils/guidaMarkdownToc"
-import { getManualeRoadmapNav, getManualeMacroCards, anchorId } from "@/content/manualeRoadmap"
+import { getManualeRoadmapNav, getManualeMacroCards } from "@/content/manualeRoadmap"
 
 function scrollToId(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })

@@ -96,7 +96,8 @@ CREATE OR REPLACE FUNCTION public.create_order_with_items(
   p_consegna_lat DOUBLE PRECISION DEFAULT NULL,
   p_pagamento_dettaglio JSONB DEFAULT NULL,
   p_punto_vendita_id UUID DEFAULT NULL,
-  p_turno_operatori_id INTEGER DEFAULT NULL
+  p_turno_operatori_id INTEGER DEFAULT NULL,
+  p_telefono_ritiro TEXT DEFAULT NULL
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -172,7 +173,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -205,6 +206,7 @@ BEGIN
     tipo_pagamento,
     tipo_ordine,
     nome_cliente,
+    telefono_ritiro,
     orario_ritiro,
     indirizzo_consegna,
     consegna_lng,
@@ -222,6 +224,7 @@ BEGIN
     NULLIF(trim(COALESCE(p_tipo_pagamento, '')), ''),
     NULLIF(trim(COALESCE(p_tipo_ordine, '')), ''),
     NULLIF(trim(COALESCE(p_nome_cliente, '')), ''),
+    NULLIF(trim(COALESCE(p_telefono_ritiro, '')), ''),
     NULLIF(trim(COALESCE(p_orario_ritiro, '')), ''),
     NULLIF(trim(COALESCE(p_indirizzo_consegna, '')), ''),
     p_consegna_lng,
@@ -260,12 +263,12 @@ $fn$;
 
 GRANT EXECUTE ON FUNCTION public.create_order_with_items(
   UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
-  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER
+  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT
 ) TO authenticated;
 
 COMMENT ON FUNCTION public.create_order_with_items(
   UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
-  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER
+  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT
 ) IS
   'Crea ordine + righe. Delivery+poligono: clienti con lng/lat in area; staff cassa esentato. Opzionale pagamento_dettaglio JSONB, punto_vendita_id, turno_operatori_id (turno aperto cassa).';
 

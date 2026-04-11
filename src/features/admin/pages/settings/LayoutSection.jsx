@@ -32,7 +32,7 @@ export default function LayoutSection() {
   useEffect(() => {
     const next = resolveMenuTheme(settings?.parametri_operativi) ?? { ...DEFAULT_MENU_THEME };
     setThemeColors(next);
-  }, [settings?.parametri_operativi?.menuTheme]);
+  }, [settings?.parametri_operativi]);
 
   function handleLogoChange(e) {
     const file = e.target?.files?.[0];

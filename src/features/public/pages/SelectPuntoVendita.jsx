@@ -22,7 +22,6 @@ export default function SelectPuntoVendita() {
   const { pvList, selectPv, loading: pvLoading } = usePv();
 
   const staff = tipoUtente === "staff";
-  const loading = authLoading || (staff && !!tenantId && pvLoading);
 
   useEffect(() => {
     if (authLoading || pvLoading || !user || !staff || !tenantId || autoSinglePvRef.current) return;

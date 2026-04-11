@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { serviziIdsIncludedForPiano } from "@/app/hooks/useTenantServizi";
 import TenantServiziPlanFields from "@/features/superadmin/components/TenantServiziPlanFields";
 import { defaultInclusioni, loadPlansResolved } from "@/features/superadmin/catalog/plansStorage";
@@ -214,6 +213,7 @@ export default function Tenants() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `modal` cambia a ogni campo del form; serve solo tenant/mode
   }, [modal?.mode, modal?.id]);
 
   const saveArchivioNote = async (userId, text) => {

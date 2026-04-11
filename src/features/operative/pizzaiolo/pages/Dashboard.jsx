@@ -47,7 +47,6 @@ export default function PizzaioloDashboard() {
   const parametri = tenantData?.parametri_operativi || {}
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
-  const tempoViaggioMinuti = Number(parametri.pizzaiolo_tempo_viaggio_minuti) || partenzaConsegneMinuti
   const loadOrders = useCallback(async (opts = {}) => {
     const silent = opts.silent === true
     if (!tenantId) return

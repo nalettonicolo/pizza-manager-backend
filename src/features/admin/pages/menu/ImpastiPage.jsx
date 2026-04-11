@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -28,14 +28,14 @@ export default function ImpastiPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
-  async function loadConfig() {
+  const loadConfig = useCallback(async () => {
     if (!tenantId) return;
     const data = await getConfigurazioneCosti(tenantId);
     setConfig(data);
     if (data?.costo_impasto != null) setCostoBase(String(data.costo_impasto));
-  }
+  }, [tenantId]);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
@@ -49,11 +49,11 @@ export default function ImpastiPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId, loadConfig]);
 
   useEffect(() => {
-    load();
-  }, [tenantId]);
+    void load();
+  }, [load]);
 
   const filteredImpasti = useMemo(() => {
     if (!searchTerm.trim()) return sortByOrdine(impasti);

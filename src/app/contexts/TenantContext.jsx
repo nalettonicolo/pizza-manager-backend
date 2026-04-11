@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { logSupabaseError } from "@/utils/logSupabaseError"
 import { useAuth } from "./AuthContext"
@@ -34,7 +34,7 @@ export function TenantProvider({ children }) {
   // CARICA DATI TENANT
   // ====================================
 
-  const loadTenantData = async () => {
+  const loadTenantData = useCallback(async () => {
     if (!tenantId) {
       setTenantData(null)
       tenantDataIdRef.current = null
@@ -80,7 +80,7 @@ export function TenantProvider({ children }) {
       setLoading(false)
       loadInFlightRef.current = false
     }
-  }
+  }, [tenantId])
 
   // ====================================
   // REAGISCE A CAMBIO AUTH
@@ -99,7 +99,7 @@ export function TenantProvider({ children }) {
       loadInFlightRef.current = false
       setLoading(false)
     }
-  }, [tenantId, authLoading, isAuthenticated])
+  }, [authLoading, isAuthenticated, loadTenantData])
 
   const refreshTenant = async () => {
     tenantDataIdRef.current = null

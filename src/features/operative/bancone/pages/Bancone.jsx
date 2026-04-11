@@ -12,7 +12,6 @@ import {
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
 import {
   filterOrdiniVisibili,
-  sortOrdiniByOrario,
   getRitardoMinuti,
   slotPizzeCount,
   sortedSlotLabels,
@@ -41,8 +40,6 @@ export default function Bancone() {
   const parametri = tenantData?.parametri_operativi || {}
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
-  const tempoViaggioMinuti = Number(parametri.pizzaiolo_tempo_viaggio_minuti) || partenzaConsegneMinuti
-  const slotMinutes = Number(parametri.ritiro_ogni_min) || Number(parametri.consegne_ogni_min) || 15
 
   const loadOrders = useCallback(async (opts = {}) => {
     const silent = opts.silent === true

@@ -176,7 +176,7 @@ export async function getTenantVenditeInsights(tenantId, opts = {}) {
 
 /**
  * Crea un ordine con righe (cassa / cliente).
- * Richiede RPC create_order_with_items e colonne su core.ordini (incl. `turno_operatori_id` opzionale).
+ * Richiede RPC create_order_with_items e colonne su core.ordini (incl. `turno_operatori_id`, `telefono_ritiro` opz.).
  * @returns {Promise<string>} ID ordine creato
  */
 export async function createOrder(tenantId, payload) {
@@ -195,6 +195,7 @@ export async function createOrder(tenantId, payload) {
     pagamentoDettaglio = null,
     puntoVenditaId = null,
     turnoOperatoriId = null,
+    telefonoRitiro = "",
   } = payload
 
   const rpcArgs = {
@@ -227,6 +228,8 @@ export async function createOrder(tenantId, payload) {
     turnoOperatoriId != null && turnoOperatoriId !== "" && Number.isFinite(Number(turnoOperatoriId))
       ? Number(turnoOperatoriId)
       : null
+  rpcArgs.p_telefono_ritiro =
+    typeof telefonoRitiro === "string" && telefonoRitiro.trim() ? telefonoRitiro.trim() : null
 
   const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
 
@@ -256,6 +259,7 @@ export async function updateOrderTipoPagamento(ordineId, tipoPagamento) {
 export async function updateOrder(ordineId, updates) {
   const row = {}
   if (updates.nome_cliente !== undefined) row.nome_cliente = updates.nome_cliente
+  if (updates.telefono_ritiro !== undefined) row.telefono_ritiro = updates.telefono_ritiro
   if (updates.orario_ritiro !== undefined) row.orario_ritiro = updates.orario_ritiro
   if (updates.note !== undefined) row.note = updates.note
   if (updates.tipo_pagamento !== undefined) row.tipo_pagamento = updates.tipo_pagamento
@@ -569,7 +573,7 @@ export async function searchFidelityCassa(tenantId, rawQuery) {
         for (const r of byAnag) merged.set(r.id, r)
       }
     }
-  } catch (_) {
+  } catch {
     /* anagrafica / fidelity opzionali */
   }
 
@@ -1730,11 +1734,10 @@ function toNum(v) {
 export async function recalculateAllPizzaPrices(tenantId) {
   if (!tenantId) return
   const excludeSlugs = new Set(["fritti", "dolci", "bibite"])
-  const [categories, products, config, allIngredients] = await Promise.all([
+  const [categories, products, config] = await Promise.all([
     getCategories(tenantId),
     getProducts(tenantId),
     getConfigurazioneCosti(tenantId),
-    getIngredients(tenantId),
   ])
   const allowedCategoryIds = new Set(
     (categories || []).filter((c) => !excludeSlugs.has((c.slug || "").toLowerCase())).map((c) => c.id)
@@ -1744,7 +1747,6 @@ export async function recalculateAllPizzaPrices(tenantId) {
     return !cid || allowedCategoryIds.has(cid)
   })
   const costoBase = toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
-  const ingMap = new Map((allIngredients || []).map((i) => [i.id, i]))
 
   for (const product of pizze) {
     const ings = await getProductIngredienti(tenantId, product.id)
@@ -1809,7 +1811,7 @@ async function computeTopProdottiVenduti(tenantId, ordineIds, topN = 5) {
     righe = await getRigheByOrdineIds(ordineIds, {
       select: "prodottoId, prodotto_id, quantita, formatoNome, formato_nome",
     })
-  } catch (e) {
+  } catch {
     try {
       righe = await getRigheByOrdineIds(ordineIds)
     } catch (e2) {

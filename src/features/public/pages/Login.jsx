@@ -11,13 +11,6 @@ import { getIsSaaSClient } from "@/utils/saasHost"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
 import "@/styles/login.css"
 
-function safeInternalPath(p) {
-  if (!p || typeof p !== "string") return null
-  if (!p.startsWith("/") || p.startsWith("//")) return null
-  if (p.includes("..")) return null
-  return p
-}
-
 export default function Login() {
   const { login, ruolo, tipoUtente, user, loading } = useAuth()
   const navigate = useNavigate()
@@ -94,7 +87,7 @@ export default function Login() {
           }
           sessionStorage.setItem("pm_staff_session_uid", uid)
         }
-      } catch (_) {
+      } catch {
         /* ignore */
       }
     }

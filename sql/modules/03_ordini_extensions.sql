@@ -17,6 +17,9 @@ BEGIN
   ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS stato_consegna TEXT;
   ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS punto_vendita_id UUID;
   ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS turno_operatori_id INTEGER;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS telefono_ritiro TEXT;
+
+  COMMENT ON COLUMN core.ordini.telefono_ritiro IS 'Telefono contatto per ritiro in negozio (opzionale, es. ordine telefonico).';
 
   COMMENT ON COLUMN core.ordini.consegna_lng IS 'Longitudine indirizzo consegna (verifica area / tracciamento).';
   COMMENT ON COLUMN core.ordini.consegna_lat IS 'Latitudine indirizzo consegna.';

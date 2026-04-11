@@ -273,14 +273,14 @@ export function printRicevuta(payload) {
       setTimeout(() => {
         try {
           iframe.remove()
-        } catch (_) {
+        } catch {
           /* ignore */
         }
       }, 90_000)
       return true
     }
     iframe.remove()
-  } catch (_) {
+  } catch {
     /* fallback */
   }
 
@@ -294,7 +294,7 @@ export function printRicevuta(payload) {
   if (!runPrintInWindow(w)) {
     try {
       w.close()
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     return false

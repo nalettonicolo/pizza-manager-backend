@@ -8,6 +8,7 @@ import {
   normalizeComandaDettagliOrdine,
   buildComandaKitchenHtmlDocument,
 } from "@/features/operative/cassa/utils/printComanda"
+import PosPaymentIntegrationsPanel from "@/features/operative/cassa/components/PosPaymentIntegrationsPanel"
 
 function FieldHint({ children, style }) {
   return (
@@ -344,6 +345,7 @@ export default function CassaImpostazioniPage({ onBack }) {
         </div>
       </section>
       </div>
+      <PosPaymentIntegrationsPanel p={p} setParam={setParam} />
       <section style={styles.section}>
         <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Comanda — stampa</h3>
         <p style={{ margin: "0 0 16px", fontSize: 13, color: "#555", lineHeight: 1.45 }}>

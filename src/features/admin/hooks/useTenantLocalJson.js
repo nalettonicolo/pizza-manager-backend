@@ -36,7 +36,7 @@ export function useTenantLocalJson(keySuffix, initialValue) {
       setDataState(initialValue);
     }
     setReady(true);
-  }, [storageKey]);
+  }, [storageKey, initialValue]);
 
   const setData = useCallback(
     (updater) => {

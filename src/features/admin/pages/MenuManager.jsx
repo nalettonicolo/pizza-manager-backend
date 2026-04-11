@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
@@ -18,7 +18,7 @@ export default function MenuManager() {
   const [newName, setNewName] = useState("")
   const [newPrice, setNewPrice] = useState("")
 
-  async function loadProducts() {
+  const loadProducts = useCallback(async () => {
     try {
       setLoading(true)
       const data = await getProducts(tenantId)
@@ -29,11 +29,11 @@ export default function MenuManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenantId])
 
   useEffect(() => {
-    if (tenantId) loadProducts()
-  }, [tenantId])
+    if (tenantId) void loadProducts()
+  }, [tenantId, loadProducts])
 
   async function handleCreate() {
     if (!newName || !newPrice) return

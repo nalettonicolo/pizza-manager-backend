@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
@@ -20,7 +20,7 @@ export function PvProvider({ children }) {
   // CARICA PUNTI VENDITA
   // ======================================
 
-  const loadPv = async () => {
+  const loadPv = useCallback(async () => {
     if (!tenantId) {
       setLoading(false)
       return
@@ -81,7 +81,7 @@ export function PvProvider({ children }) {
       pvLoadInFlightRef.current = false
       setLoading(false)
     }
-  }
+  }, [tenantId, ruolo])
 
   // ======================================
   // SET DB CONTEXT (RLS)
@@ -102,7 +102,7 @@ export function PvProvider({ children }) {
       }
     }
     void setDbContext().catch(() => {})
-  }, [tenantId, activePv, rpcContextAvailable])
+  }, [tenantId, activePv, rpcContextAvailable, useSetAppContext])
 
   // ======================================
   // INIT
@@ -121,7 +121,7 @@ export function PvProvider({ children }) {
       pvLoadInFlightRef.current = false
       setLoading(false)
     }
-  }, [tenantId, tenantData, authLoading, isAuthenticated, ruolo])
+  }, [tenantId, tenantData, authLoading, isAuthenticated, loadPv])
 
   const selectPv = (pvId) => {
     if (pvId == null || pvId === "") return

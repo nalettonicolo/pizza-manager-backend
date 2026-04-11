@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -80,17 +80,17 @@ export default function PizzePage() {
   const [editIngredientSearch, setEditIngredientSearch] = useState("");
   const [editCustomizingIngredient, setEditCustomizingIngredient] = useState(null);
 
-  async function loadCategories() {
+  const loadCategories = useCallback(async () => {
     if (!tenantId) return [];
     try {
       const data = await getCategories(tenantId);
       return data || [];
-    } catch (_) {
+    } catch {
       return [];
     }
-  }
+  }, [tenantId]);
 
-  async function loadPizze() {
+  const loadPizze = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
@@ -131,11 +131,11 @@ export default function PizzePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId, selectedCategoryId, loadCategories]);
 
   useEffect(() => {
-    loadPizze();
-  }, [tenantId, selectedCategoryId]);
+    void loadPizze();
+  }, [loadPizze]);
 
   const filteredPizze = useMemo(() => {
     if (!searchTerm.trim()) return pizze;
@@ -149,7 +149,7 @@ export default function PizzePage() {
     return categories.filter((c) => !exclude.has((c.slug || "").toLowerCase()));
   }, [categories]);
 
-  async function loadModalData() {
+  const loadModalData = useCallback(async () => {
     if (!tenantId) return;
     setModalDataLoading(true);
     try {
@@ -175,11 +175,11 @@ export default function PizzePage() {
     } finally {
       setModalDataLoading(false);
     }
-  }
+  }, [tenantId, newCategoryId]);
 
   useEffect(() => {
-    if (modalOpen) loadModalData();
-  }, [modalOpen]);
+    if (modalOpen) void loadModalData();
+  }, [modalOpen, loadModalData]);
 
   const VARIANTS = [
     { id: "normale", label: "Normale" },

@@ -38,7 +38,7 @@ export default function AreaConsegnaSection() {
     } else {
       setConsegnaAreaPoligono(null)
     }
-  }, [savedPolygonKey])
+  }, [savedPolygonKey, settings?.parametri_operativi])
 
   const tenantCenter = useMemo(
     () => ({

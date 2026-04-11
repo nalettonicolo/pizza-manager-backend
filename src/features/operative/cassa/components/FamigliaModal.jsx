@@ -144,8 +144,8 @@ const styles = {
 export default function FamigliaModal({
   open,
   onClose,
-  product: initialProduct,
-  tenantId,
+  product: _initialProduct,
+  tenantId: _tenantId,
   parametri,
   productsList = [],
   onConfirm,

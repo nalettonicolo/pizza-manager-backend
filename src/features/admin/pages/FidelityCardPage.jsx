@@ -302,7 +302,7 @@ export default function FidelityCardPage() {
       return
     }
     setNomeNegozioDraft(String(detailRow.nome_negozio || ""))
-  }, [detailRow?.id, detailRow?.nome_negozio])
+  }, [detailRow])
 
   const premiCorrenti = useMemo(
     () => parseFidelityPremi(premiRows.map((r) => ({ soglia: r.soglia, descrizione: r.descrizione }))),

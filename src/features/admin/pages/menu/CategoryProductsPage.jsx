@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -6,7 +6,6 @@ import Modal from "@/components/dashboard/Modal";
 import SearchBar from "@/components/dashboard/SearchBar";
 import {
   getCategoryBySlug,
-  getCategories,
   createCategory,
   updateCategory,
   getProductsByCategoryId,
@@ -33,7 +32,7 @@ export default function CategoryProductsPage({ slug, title }) {
   const [editPrice, setEditPrice] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
 
-  async function ensureCategory() {
+  const ensureCategory = useCallback(async () => {
     if (!tenantId) return null;
     let cat = await getCategoryBySlug(tenantId, slug);
     if (!cat) {
@@ -55,9 +54,9 @@ export default function CategoryProductsPage({ slug, title }) {
       }
     }
     return cat;
-  }
+  }, [tenantId, slug, title]);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
@@ -75,11 +74,11 @@ export default function CategoryProductsPage({ slug, title }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId, ensureCategory]);
 
   useEffect(() => {
-    load();
-  }, [tenantId, slug]);
+    void load();
+  }, [load]);
 
   const filteredProducts = useMemo(() => {
     if (!searchTerm.trim()) return products;

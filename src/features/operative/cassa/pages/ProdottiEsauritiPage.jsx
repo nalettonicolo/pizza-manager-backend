@@ -28,7 +28,6 @@ export default function ProdottiEsauritiPage() {
   const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
   const [ingredients, setIngredients] = useState([])
   const [impastiList, setImpastiList] = useState([])
-  const [categories, setCategories] = useState([])
   const [sectionsProducts, setSectionsProducts] = useState({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -61,7 +60,6 @@ export default function ProdottiEsauritiPage() {
       setIngredients(Array.isArray(ingData) ? ingData : [])
       setImpastiList(Array.isArray(impastiData) ? impastiData : [])
       const cats = Array.isArray(catData) ? catData : []
-      setCategories(cats)
 
       const key = (n) => (n || "").toLowerCase().trim()
       const byName = {}

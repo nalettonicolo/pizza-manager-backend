@@ -5,7 +5,6 @@ import {
   buildDefaultPlans,
   defaultInclusioni,
   displayPrezzoForPlan,
-  inclusioniFromIds,
   inclusioniIncluded,
   formatValiditaMesiLabel,
   loadPlansFromStorage,
