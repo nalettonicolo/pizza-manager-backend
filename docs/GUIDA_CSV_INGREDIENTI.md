@@ -60,6 +60,7 @@ Se un ingrediente contiene uno di questi allergeni, indicarlo nel file (nella co
 | **senza**           | No  | Sconto in euro per variante “senza” (solitamente valore negativo). | `-0,80` |
 | **poco**            | No  | Sconto in euro per variante “poco” (solitamente negativo). | `-0,15` |
 | **va_in_cottura**   | No  | Se l’ingrediente va in cottura: `1` o `si`; altrimenti `0` o vuoto. | `1` oppure `0` |
+| **prep_cucina**     | No  | Se l’ingrediente richiede preparazione in cucina (es. scongelare), visibile in schermata Cucina: `1` o `si`; altrimenti `0` o vuoto. Colonna opzionale: se manca, vale no. | `1` oppure `0` |
 | **allergeni**       | No  | Nomi degli allergeni associati, separati da **virgola** `,` nella stessa cella. Usare solo i nomi della tabella §2. | `Latte` oppure `Latte,Glutine` |
 
 - **Obbligatorie:** `nome_ingrediente` e `costo_eur`.
@@ -68,8 +69,10 @@ Se un ingrediente contiene uno di questi allergeni, indicarlo nel file (nella co
 ### Intestazione (prima riga)
 
 ```text
-nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni
+nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni
 ```
+
+(Senza colonna **prep_cucina** il file resta valido: usare `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni` come prima.)
 
 ---
 
@@ -82,23 +85,28 @@ Questo formato è **ideale da dare al cliente**: una riga per ingrediente e **un
 La **prima riga** del foglio deve contenere, in ordine e separati da **punto e virgola** `;`:
 
 1. **nome_ingrediente**
-2. **costo_eur**
-3. **abbondante**
-4. **senza**
-5. **poco**
-6. **va_in_cottura**
-7. Poi **tutte le colonne allergeni**, una per allergene, con il **nome esatto** come in tabella §2:
+2. **ordine** (se usi l’export dal portale; altrimenti vedi template)
+3. **costo_eur**
+4. **abbondante**
+5. **senza**
+6. **poco**
+7. **va_in_cottura**
+8. **prep_cucina** (opzionale ma consigliato: `1`/`0` o `si`/vuoto; preparazione in cucina)
+9. Poi **tutte le colonne allergeni**, una per allergene, con il **nome esatto** come in tabella §2:
 
 ```text
-nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi
+nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi
 ```
+
+File **senza** colonna `prep_cucina` (subito prima degli allergeni) sono ancora supportati: la settima colonna dopo `va_in_cottura` può essere direttamente **Glutine**.
 
 Puoi copiare la riga qui sopra e incollarla nella prima riga del foglio Excel/Google Fogli. Nel pacchetto è disponibile anche un **file template** già pronto: `docs/template_ingredienti_formato_b.csv` (puoi aprirlo con Excel o Google Fogli e compilare le righe dati; dalla pagina Ingredienti → CSV puoi anche **Scarica template** per ottenere lo stesso file).
 
 ### Come compilare le righe dati (da riga 2 in poi)
 
-- **Colonne 1–6:** come nel Formato A (nome, costi con 2 decimali, va_in_cottura con `1` o `0`).
-- **Colonne 7 in poi (allergeni):** per ogni allergene presente nell’ingrediente metti nella cella uno dei seguenti valori (tutti equivalenti a “sì”):
+- **Colonne fino a va_in_cottura:** nome, ordine (se presente), costi con 2 decimali, va_in_cottura con `1` o `0`.
+- **Colonna prep_cucina (dopo va_in_cottura, prima degli allergeni):** `1`, `si`, `x`, ecc. se serve preparazione in cucina; `0` o vuoto se no. Se ometti l’intera colonna (file legacy), gli allergeni iniziano subito dopo `va_in_cottura`.
+- **Colonne allergeni:** per ogni allergene presente nell’ingrediente metti nella cella uno dei seguenti valori (tutti equivalenti a “sì”):
   - `1`
   - `x` o `X`
   - `sì` o `si`
@@ -109,19 +117,18 @@ Puoi copiare la riga qui sopra e incollarla nella prima riga del foglio Excel/Go
 
 ### Esempio foglio con spunte (anteprima)
 
-| nome_ingrediente | costo_eur | abbondante | senza | poco | va_in_cottura | Glutine | Crostacei | Uova | Pesce | … |
-|------------------|-----------|------------|-------|------|---------------|---------|-----------|------|-------|---|
-| Pomodoro         | 0,40      | 0,20       | -0,40 | -0,15| 1             |         |           |      |       |   |
-| Mozzarella       | 0,80      | 0,25       | -0,80 | -0,20| 0             |         |           |      |       | 1 (Latte) |
-| Tonno            | 0,65      | 0,35       | -0,65 | -0,25| 0             |         |           |      | 1     |   |
-| Wurstel          | 0,40      | 0,25       | -0,40 | -0,15| 0             | 1       |           |      |       | 1 (Latte) |
+| nome_ingrediente | ordine | costo_eur | abbondante | senza | poco | va_in_cottura | prep_cucina | Glutine | … |
+|------------------|--------|-----------|------------|-------|------|---------------|-------------|---------|---|
+| Pomodoro         | 0      | 0,40      | 0,20       | -0,40 | -0,15| 1             | 0           |         |   |
+| Mozzarella       | 0      | 0,80      | 0,25       | -0,80 | -0,20| 0             | 0           |         | … Latte |
+| Spinaci surg.    | 0      | 0,50      | …          | …     | …    | 0             | **1**       |         |   |
 
 In CSV (prima riga + 2 dati) risulterà ad esempio:
 
 ```text
-nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi
-Pomodoro;0,40;0,20;-0,40;-0,15;1;;;;;;;;;
-Mozzarella;0,80;0,25;-0,80;-0,20;0;;;;;;1;;;
+nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi
+Pomodoro;0;0,40;0,20;-0,40;-0,15;1;0;;;;;;;;;;;;;;
+Mozzarella;0;0,80;0,25;-0,80;-0,20;0;0;;;;;;1;;;;;;
 ```
 
 ### Vantaggi del formato a spunte
@@ -167,10 +174,10 @@ Wurstel;0,40;0,25;-0,40;-0,15;;Glutine,Latte
 **File completo di esempio (3 righe + intestazione):**
 
 ```text
-nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni
-Pomodoro;0,40;0,20;-0,40;-0,15;1;
-Mozzarella;0,80;0,25;-0,80;-0,20;0;Latte
-Tonno;0,65;0,35;-0,65;-0,25;0;Pesce
+nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni
+Pomodoro;0,40;0,20;-0,40;-0,15;1;0;
+Mozzarella;0,80;0,25;-0,80;-0,20;0;0;Latte
+Tonno;0,65;0,35;-0,65;-0,25;0;0;Pesce
 ```
 
 ---
@@ -183,7 +190,8 @@ Tonno;0,65;0,35;-0,65;-0,25;0;Pesce
 4. **Virgola o punto decimale:** in Italia spesso si usa la virgola (0,80). Se il programma che genera il CSV usa il punto (0.80), va bene ugualmente.
 5. **Allergeni:** scrivere **esattamente** i nomi degli allergeni già presenti nel sistema. Nella **stessa cella** separare più allergeni con **virgola** (es. `Latte,Glutine`). Eventuali nomi sconosciuti vengono ignorati.
 6. **Va in cottura:** nella colonna `va_in_cottura` usare `1` o `si`/`sì` per sì, `0` o vuoto per no.
-7. **Righe vuote:** le righe completamente vuote vengono ignorate.
+7. **Prep. cucina:** nella colonna `prep_cucina` (se presente) stessi valori di `va_in_cottura` per sì/no; serve alla schermata Cucina per ingredienti da preparare prima (es. scongelati).
+8. **Righe vuote:** le righe completamente vuote vengono ignorate.
 
 ---
 
@@ -191,13 +199,13 @@ Tonno;0,65;0,35;-0,65;-0,25;0;Pesce
 
 ### Excel (Windows / Mac)
 
-1. Compila le colonne come in tabella. Per il **Formato A:** A = nome_ingrediente, B = costo_eur, C = abbondante, D = senza, E = poco, F = va_in_cottura, G = allergeni. Per il **Formato B (spunte):** prima riga con tutti i nomi di colonna incluso ogni allergene (vedi §5); dalla riga 2 in poi metti 1/x/sì nelle celle degli allergeni.
+1. Compila le colonne come in tabella. Per il **Formato A:** A = nome_ingrediente, B = costo_eur, …, F = va_in_cottura, G = prep_cucina (opzionale), H = allergeni. Per il **Formato B (spunte):** prima riga con `prep_cucina` prima delle colonne allergeni (vedi §5); dalla riga 2 in poi metti 1/x/sì nelle celle degli allergeni.
 2. **File** → **Salva con nome**.
 3. Scegli **CSV UTF-8 (delimitato da virgola)** oppure **CSV (delimitato da punto e virgola)**.
 4. Se Excel salva con **virgola** come separatore, apri il file con un editor di testo (Blocco note, Notepad++) e:
    - sostituisci tutte le virgole tra colonne con **punto e virgola** `;`;
    - oppure in Excel usa **Impostazioni regionali** con separatore elenco = `;` e poi salva di nuovo come CSV.
-5. Controlla che la **prima riga** sia l’intestazione corretta: per Formato A `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni`; per Formato B la riga con tutti gli allergeni (vedi §5).
+5. Controlla che la **prima riga** sia l’intestazione corretta: per Formato A includere `prep_cucina` prima di `allergeni` se la usi; per Formato B la riga con `prep_cucina` e tutti gli allergeni (vedi §5).
 
 ### Google Fogli
 
@@ -233,7 +241,7 @@ Tonno;0,65;0,35;-0,65;-0,25;0;Pesce
 |----------|--------|-----------|
 | File non riconosciuto / nessun ingrediente importato | Separatore sbagliato (virgola invece di `;`) | Aprire il CSV in un editor e sostituire il separatore tra colonne con `;`. |
 | Caratteri strani (Ã², Ã¨) | File non salvato in UTF-8 | Salvare il file con codifica **UTF-8** (o “UTF-8 con BOM” in Excel). |
-| “Colonna non trovata” o righe lette male | Intestazione mancante o diversa | Usare come prima riga l'intestazione corretta: Formato A `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni` oppure Formato B con tutte le colonne allergeni (vedi §5). |
+| “Colonna non trovata” o righe lette male | Intestazione mancante o diversa | Usare come prima riga l'intestazione corretta: Formato A (eventuale `prep_cucina` prima di `allergeni`) oppure Formato B con `prep_cucina` opzionale prima delle colonne allergeni (vedi §5). |
 | Costi a zero per tutti | Colonna costo vuota o con formato errato | Controllare che la seconda colonna contenga numeri (es. 0,80 o 0.80). |
 | Allergeni non associati | Nome allergene diverso da quello nel sistema | Usare i nomi esatti degli allergeni (es. “Latte”, “Glutine”) e separarli con **virgola** nella colonna allergeni; nel Formato B usare le colonne a spunta. |
 
@@ -241,16 +249,17 @@ Tonno;0,65;0,35;-0,65;-0,25;0;Pesce
 
 ## 11. Riepilogo template
 
-- **Intestazione Formato A (prima riga):**  
-  `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni`
+- **Intestazione Formato A (prima riga, con prep opzionale):**  
+  `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni`
 
-- **Intestazione Formato B (foglio con spunte, prima riga):**  
-  `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi`
+- **Intestazione Formato B (foglio con spunte, prima riga — come export portale):**  
+  `nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi`  
+  (Senza `prep_cucina`: dopo `va_in_cottura` segue subito **Glutine**.)
 
 - **Riga tipo (Formato A):**  
-  `NomeIngrediente;0,00;0,00;-0,00;-0,00;0;Allergene1,Allergene2`
+  `NomeIngrediente;0,00;0,00;-0,00;-0,00;0;0;Allergene1,Allergene2`
 
-- **Riga tipo (Formato B):** stessi campi nelle prime 6 colonne; dalla 7ª in poi mettere `1`/`x`/`sì` nelle colonne degli allergeni presenti, vuoto altrimenti.
+- **Riga tipo (Formato B):** campi base + `prep_cucina` + colonne allergeni con `1`/`x`/`sì` o vuoto.
 
 - **Separatore colonne:** `;`  
 - **Separatore allergeni (nella stessa cella):** `,`  
@@ -267,7 +276,8 @@ Se segui questa guida, il file sarà compilato in modo corretto e il caricamento
 | Data | Nota |
 |------|------|
 | 2026-04-03 | Allineamento con set guide progetto (nessuna modifica alle regole Formato A/B). |
+| 2026-04-10 | Colonna opzionale **prep_cucina** (schermata Cucina); export e template Formato B aggiornati; compatibilità file senza colonna. |
 
 ---
 
-*Ultima revisione: 2026-04-03*
+*Ultima revisione: 2026-04-10*
