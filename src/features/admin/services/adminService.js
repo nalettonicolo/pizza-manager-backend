@@ -977,6 +977,46 @@ export async function getCategoryBySlug(tenantId, slug) {
 // ===================== INGREDIENTI =====================
 ///////////////////////////////////////////////////////////
 
+/**
+ * Catena di SELECT su Ingrediente: PostgREST risponde spesso con 400 se una colonna non è nello schema
+ * esposto; il codice non riceve sempre PGRST204, quindi si provano varianti sempre più minimali.
+ * Ordine: prima tabella "Ingrediente", poi "ingredienti"; con e senza filtro tenant_id (RLS resta attiva).
+ */
+const INGREDIENTI_SELECT_FALLBACK_CHAIN = [
+  "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco, categoria, colore",
+  "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco",
+  "id, nome, va_in_cottura, prep_cucina, costo_unitario",
+  "id, nome, va_in_cottura, costo_unitario",
+  "id, nome, va_in_cottura",
+  "id, nome, costo_unitario",
+  "id, nome",
+]
+
+async function selectIngredientiRowsByIds(tenantId, ingredienteIds) {
+  const ids = [...new Set((ingredienteIds || []).filter(Boolean))]
+  if (!tenantId || !ids.length) return []
+
+  const tables = ["Ingrediente", "ingredienti"]
+
+  const attempt = async (table, cols, withTenantEq) => {
+    let q = supabase.from(table).select(cols).in("id", ids)
+    if (withTenantEq) q = q.eq("tenant_id", tenantId)
+    const { data, error } = await q
+    if (error || !data?.length) return null
+    return data
+  }
+
+  for (const cols of INGREDIENTI_SELECT_FALLBACK_CHAIN) {
+    for (const table of tables) {
+      const a = await attempt(table, cols, true)
+      if (a) return a
+      const b = await attempt(table, cols, false)
+      if (b) return b
+    }
+  }
+  return []
+}
+
 export async function getIngredients(tenantId) {
   const { data, error } = await supabase
     .from("Ingrediente")
@@ -1329,12 +1369,12 @@ export async function getProducts(tenantId) {
   return sortByOrdine(data || [])
 }
 
-/** Prodotti per lista di id (es. per dettaglio ordine). Include categoria_id se disponibile (Bancone bibite). */
+/** Prodotti per lista di id (es. dettaglio ordine, Cucina, Bancone). Include categoria_id e prep_cucina se presenti in vista. */
 export async function getProdottiByIds(tenantId, ids) {
   if (!ids?.length) return []
   let { data, error } = await supabase
     .from("Prodotto")
-    .select("id, nome, categoria_id")
+    .select("id, nome, categoria_id, prep_cucina")
     .eq("tenant_id", tenantId)
     .in("id", ids)
   if (
@@ -1343,9 +1383,23 @@ export async function getProdottiByIds(tenantId, ids) {
       /column|does not exist/i.test(String(error.message || "")) ||
       String(error.code || "") === "42703")
   ) {
-    const fb = await supabase.from("Prodotto").select("id, nome").eq("tenant_id", tenantId).in("id", ids)
+    const fb = await supabase
+      .from("Prodotto")
+      .select("id, nome, categoria_id")
+      .eq("tenant_id", tenantId)
+      .in("id", ids)
     data = fb.data
     error = fb.error
+  }
+  if (
+    error &&
+    (error.code === "PGRST204" ||
+      /column|does not exist/i.test(String(error.message || "")) ||
+      String(error.code || "") === "42703")
+  ) {
+    const fb2 = await supabase.from("Prodotto").select("id, nome").eq("tenant_id", tenantId).in("id", ids)
+    data = fb2.data
+    error = fb2.error
   }
   if (error) throw error
   return data || []
@@ -1498,29 +1552,8 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
     const allIngIds = [...new Set(rows.map((r) => r.ingrediente_id).filter(Boolean))]
     if (!allIngIds.length) return emptyMap()
 
-    /* Solo nomi colonna reali in DB (snake_case). vaInCottura è solo convenzione JS lato client. */
-    const fullCols =
-      "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco, categoria, colore"
-    let { data: ingredients, error: err2 } = await supabase
-      .from("Ingrediente")
-      .select(fullCols)
-      .eq("tenant_id", tenantId)
-      .in("id", allIngIds)
-    const colErr =
-      err2 &&
-      (err2.code === "PGRST204" ||
-        /column|does not exist/i.test(String(err2.message || "")) ||
-        String(err2.code || "") === "42703")
-    if (colErr) {
-      const fallback = await supabase
-        .from("Ingrediente")
-        .select("id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco")
-        .eq("tenant_id", tenantId)
-        .in("id", allIngIds)
-      ingredients = fallback.data
-      err2 = fallback.error
-    }
-    if (err2 || !ingredients?.length) return emptyMap()
+    const ingredients = await selectIngredientiRowsByIds(tenantId, allIngIds)
+    if (!ingredients?.length) return emptyMap()
     const byId = new Map(ingredients.map((ing) => [ing.id, ing]))
 
     const out = {}
@@ -1584,28 +1617,8 @@ export async function getProductIngredienti(tenantId, productId) {
     }
     const ids = rows.map((r) => r.ingrediente_id).filter(Boolean)
     if (!ids.length) return []
-    const fullCols =
-      "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco"
-    let { data: ingredients, error: err2 } = await supabase
-      .from("Ingrediente")
-      .select(fullCols)
-      .eq("tenant_id", tenantId)
-      .in("id", ids)
-    const colErr2 =
-      err2 &&
-      (err2.code === "PGRST204" ||
-        /column|does not exist/i.test(String(err2.message || "")) ||
-        String(err2.code || "") === "42703")
-    if (colErr2) {
-      const fallback = await supabase
-        .from("Ingrediente")
-        .select("id, nome, va_in_cottura, costo_unitario")
-        .eq("tenant_id", tenantId)
-        .in("id", ids)
-      ingredients = fallback.data
-      err2 = fallback.error
-    }
-    if (err2 || !ingredients?.length) return []
+    const ingredients = await selectIngredientiRowsByIds(tenantId, ids)
+    if (!ingredients?.length) return []
     const byId = new Map(ingredients.map((ing) => [ing.id, ing]))
     let ordered = ids.map((id) => byId.get(id)).filter(Boolean)
     if (rows[0] && rows[0].ordine === undefined) ordered = ordered.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""))
@@ -1733,6 +1746,9 @@ export async function createProduct(product) {
     delete payload.imageUrl
   }
   if (payload.attivo !== undefined) delete payload.attivo
+  if (payload.prepCucina === true || payload.prep_cucina === true) payload.prep_cucina = true
+  else if (payload.prepCucina === false || payload.prep_cucina === false) payload.prep_cucina = false
+  delete payload.prepCucina
   // Per categorie senza ordine (bibite, dolci, fritti) default ordine 0
   if (payload.ordine === undefined) payload.ordine = 0
 
@@ -1748,6 +1764,10 @@ export async function updateProduct(productId, updates) {
     payload.categoria_id = payload.categoria_id ?? payload.categoriaId;
   }
   delete payload.categoriaId;
+  if (payload.prepCucina !== undefined) {
+    payload.prep_cucina = payload.prepCucina === true
+  }
+  delete payload.prepCucina
   const { error } = await supabase
     .from("Prodotto")
     .update(payload)

@@ -8,8 +8,6 @@ import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMen
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 
-const HEADER_HEIGHT = 56;
-
 /**
  * Voci allineate alle route reali (vedi docs/ARCHITETTURA_E_STATO.md).
  * `servizioId` → opzionale filtro voci nav; nessun redirect forzato per piano (servizi non bloccanti).
@@ -193,7 +191,10 @@ export default function AdminLayout() {
         </div>
       </header>
 
-      <div className={`dashboard-wrap theme-admin${tenantThemeClass}`} style={{ paddingTop: HEADER_HEIGHT, ...adminThemeStyle }}>
+      <div
+        className={`dashboard-wrap theme-admin admin-below-fixed-bar${tenantThemeClass}`}
+        style={{ ...adminThemeStyle }}
+      >
         {showSectionSidebar ? (
           <aside className="dashboard-sidebar" style={{ flexShrink: 0 }}>
             <h2 className="dashboard-sidebar-title">{sidebarTitle}</h2>

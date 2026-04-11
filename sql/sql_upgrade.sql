@@ -616,3 +616,39 @@ CREATE TRIGGER ordine_instead_of_update_trigger
   INSTEAD OF UPDATE ON public."Ordine"
   FOR EACH ROW
   EXECUTE FUNCTION public.ordine_instead_of_update();
+
+-- -----------------------------------------------------------------------------
+-- Prodotti: prep_cucina (task in Cucina per fritti, bibite, dolci, ecc.)
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE core.prodotti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+COMMENT ON COLUMN core.prodotti.prep_cucina IS
+  'Se true, la schermata Cucina mostra un task di preparazione per ogni riga ordine (fritti, bibite, dolci, ecc.).';
+
+DROP VIEW IF EXISTS public."Prodotto" CASCADE;
+
+CREATE VIEW public."Prodotto" AS
+  SELECT
+    id,
+    nome,
+    descrizione,
+    prezzo,
+    attivo,
+    ordine,
+    immagine_url,
+    visibile_online,
+    prep_cucina,
+    tenant_id,
+    categoria_id,
+    created_at AS "createdAt",
+    updated_at AS "updatedAt",
+    deleted_at AS "deletedAt"
+  FROM core.prodotti
+  WHERE tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."Prodotto" TO authenticated;
+GRANT SELECT ON public."Prodotto" TO anon;

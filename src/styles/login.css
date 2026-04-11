@@ -7,11 +7,11 @@
   --login-text: #0f172a;
   --login-muted: #64748b;
   --login-border: rgba(15, 23, 42, 0.1);
-  min-height: calc(100vh - 140px);
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px 40px;
+  padding: max(24px, env(safe-area-inset-top, 0px)) 16px max(40px, env(safe-area-inset-bottom, 0px));
   position: relative;
   overflow: hidden;
 }

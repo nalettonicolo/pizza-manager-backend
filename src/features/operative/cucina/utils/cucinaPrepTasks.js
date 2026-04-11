@@ -57,6 +57,8 @@ export function sortedCucinaSlotTabs(tasksBySlot) {
  * @param {object[]} righeList — righe da getRigheByOrdineIds
  * @param {Record<string,string>} productNames
  * @param {Record<string, Array<{ id?: string, nome: string, prepCucina?: boolean }>>} ingredientsByProduct
+ * @param {number} slotMinutes
+ * @param {Record<string, boolean>} productPrepCucinaById — da Prodotto.prep_cucina (fritti, bibite, dolci, …)
  */
 export function buildCucinaPrepTasks(
   orders,
@@ -64,6 +66,7 @@ export function buildCucinaPrepTasks(
   productNames,
   ingredientsByProduct,
   slotMinutes = PLANNING_GRID_SLOT_MINUTES,
+  productPrepCucinaById = {},
 ) {
   const righeByOrd = {}
   for (const r of righeList || []) {
@@ -100,11 +103,31 @@ export function buildCucinaPrepTasks(
         if (!ingId) continue
         const done = (stato.doneByRiga[String(rigaId)] || []).includes(String(ingId))
         tasksBySlot[slot].push({
+          kind: "ingrediente",
           ordineId: ord.id,
           ordineNumero: ord.numero,
           rigaId: String(rigaId),
           ingredienteId: String(ingId),
           ingredienteNome: ing.nome || "—",
+          prodottoNome,
+          formatoNome: formato,
+          qty,
+          done,
+          nomeCliente: ord.nome_cliente ?? ord.nomeCliente ?? "",
+        })
+      }
+
+      const prepProdotto = productPrepCucinaById[pid] === true
+      if (prepProdotto) {
+        const prepKey = `prodotto_prep:${pid}`
+        const done = (stato.doneByRiga[String(rigaId)] || []).includes(prepKey)
+        tasksBySlot[slot].push({
+          kind: "prodotto",
+          ordineId: ord.id,
+          ordineNumero: ord.numero,
+          rigaId: String(rigaId),
+          ingredienteId: prepKey,
+          ingredienteNome: prodottoNome,
           prodottoNome,
           formatoNome: formato,
           qty,

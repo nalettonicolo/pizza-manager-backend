@@ -386,7 +386,7 @@ export default function Bancone() {
   }
 
   return (
-    <div style={styles.wrapper}>
+    <div style={styles.wrapper} className="operative-mobile-pad">
       <h1 style={styles.title}>Bancone</h1>
       <p style={styles.subtitle}>Ordini pronti per il ritiro</p>
 
@@ -408,8 +408,12 @@ export default function Bancone() {
       ) : ordiniVisibili.length === 0 ? (
         <p style={styles.muted}>Nessun ordine pronto.</p>
       ) : (
-        <div style={styles.mainRow}>
-          <aside style={styles.leftPickColumn} aria-label="Check ingredienti per fascia oraria">
+        <div style={styles.mainRow} className="bancone-layout-main">
+          <aside
+            className="bancone-layout-aside"
+            style={styles.leftPickColumn}
+            aria-label="Check ingredienti per fascia oraria"
+          >
             <h2 style={styles.pickColumnTitle}>Ingredienti per orario</h2>
             <p style={styles.pickHint}>
               Grigio = da prendere per la busta · tocca quando l&apos;hai messo (inverso alla cucina).
@@ -506,7 +510,7 @@ export default function Bancone() {
 }
 
 const styles = {
-  wrapper: { padding: 16 },
+  wrapper: { padding: "clamp(12px, 3vw, 16px)", boxSizing: "border-box", maxWidth: "100%" },
   title: { fontSize: 22, marginBottom: 4 },
   subtitle: { color: "#666", marginBottom: 16 },
   error: { padding: 12, background: "#ffebee", color: "#c62828", borderRadius: 8, marginBottom: 16 },

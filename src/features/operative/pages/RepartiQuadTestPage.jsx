@@ -106,6 +106,7 @@ export default function RepartiQuadTestPage() {
       </div>
 
       <div
+        className="reparti-quad-grid"
         style={{
           flex: 1,
           minHeight: 0,

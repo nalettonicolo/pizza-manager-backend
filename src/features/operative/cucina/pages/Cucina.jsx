@@ -104,6 +104,8 @@ export default function Cucina() {
   const [orders, setOrders] = useState([])
   const [righeAll, setRigheAll] = useState([])
   const [productNames, setProductNames] = useState({})
+  /** Prodotto.prep_cucina (fritti, bibite, dolci con task in cucina). */
+  const [productPrepCucinaById, setProductPrepCucinaById] = useState({})
   const [ingredientsByProduct, setIngredientsByProduct] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -141,6 +143,12 @@ export default function Cucina() {
         setOrders(data || [])
         setRigheAll(righe || [])
         setProductNames((prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {}))
+        setProductPrepCucinaById(
+          (prodotti || []).reduce(
+            (acc, p) => ({ ...acc, [p.id]: p.prep_cucina === true || p.prepCucina === true }),
+            {},
+          ),
+        )
         setIngredientsByProduct(ingBatch || {})
         setError(null)
       } catch (err) {
@@ -173,8 +181,16 @@ export default function Cucina() {
   }, [righeAll])
 
   const tasksBySlot = useMemo(
-    () => buildCucinaPrepTasks(orders, righeAll, productNames, ingredientsByProduct, PLANNING_GRID_SLOT_MINUTES),
-    [orders, righeAll, productNames, ingredientsByProduct],
+    () =>
+      buildCucinaPrepTasks(
+        orders,
+        righeAll,
+        productNames,
+        ingredientsByProduct,
+        PLANNING_GRID_SLOT_MINUTES,
+        productPrepCucinaById,
+      ),
+    [orders, righeAll, productNames, ingredientsByProduct, productPrepCucinaById],
   )
 
   const ordersBySlot = useMemo(
@@ -262,9 +278,12 @@ export default function Cucina() {
   )
 
   return (
-    <div style={styles.wrapper}>
+    <div style={styles.wrapper} className="operative-mobile-pad">
       <h1 style={styles.title}>Cucina</h1>
-      <p style={styles.subtitle}>Ingredienti da preparare e composizione di ciò che è in forno — per fascia oraria. Senza numero ordine o prezzi.</p>
+      <p style={styles.subtitle}>
+        Preparazioni (ingredienti e voci fritti/bibite/dolci se flaggate) e composizione in forno — per fascia oraria. Senza numero ordine o
+        prezzi.
+      </p>
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -301,20 +320,22 @@ export default function Cucina() {
             })}
           </div>
 
-          <section style={styles.prepSection} aria-label="Preparazioni ingredienti">
-            <h2 style={styles.sectionTitle}>Da preparare (ingredienti)</h2>
+          <section style={styles.prepSection} aria-label="Preparazioni cucina">
+            <h2 style={styles.sectionTitle}>Da preparare (cucina)</h2>
             <p style={styles.prepHint}>
-              Flag &quot;Prep. cucina&quot; in Admin → Ingredienti. Tocca quando l&apos;ingrediente è pronto per il passaggio in forno.
+              Ingredienti: flag &quot;Prep. cucina&quot; in Admin → Ingredienti. Fritti, bibite e dolci: stesso flag sul prodotto in Admin →
+              Fritti / Bibite / Dolci. Tocca quando la preparazione è pronta.
               {totalPrepPending > 0 ? ` · ${totalPrepPending} totali da fare` : ""}
             </p>
             <div style={styles.taskList}>
               {pendingInTab.length === 0 && doneInTab.length === 0 ? (
-                <p style={styles.mutedSmall}>Nessuna preparazione ingredienti per questa fascia.</p>
+                <p style={styles.mutedSmall}>Nessuna preparazione per questa fascia.</p>
               ) : null}
               {pendingInTab.map((t) => {
                 const key = `${t.ordineId}:${t.rigaId}:${t.ingredienteId}`
                 const busy = prepActionId === key
                 const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
+                const isVoceProdotto = t.kind === "prodotto"
                 return (
                   <button
                     key={key}
@@ -327,23 +348,28 @@ export default function Cucina() {
                       <strong>{t.ingredienteNome}</strong>
                       {t.qty > 1 ? <span style={styles.qtyBadge}>×{t.qty}</span> : null}
                     </span>
-                    <span style={styles.taskSub}>Per: {titoloProdotto}</span>
+                    <span style={styles.taskSub}>
+                      {isVoceProdotto ? "Voce da preparare (fritto / bibita / dolce)" : `Per: ${titoloProdotto}`}
+                    </span>
                     <span style={styles.taskAction}>{busy ? "Salvo…" : "Tocca quando pronto"}</span>
                   </button>
                 )
               })}
               {doneInTab.length > 0 ? (
                 <div style={styles.doneBlock}>
-                  <span style={styles.doneLabel}>Ingredienti pronti (questa fascia)</span>
+                  <span style={styles.doneLabel}>Preparazioni completate (questa fascia)</span>
                   {doneInTab.map((t) => {
                     const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
+                    const isVoceProdotto = t.kind === "prodotto"
                     return (
                       <div key={`d-${t.ordineId}:${t.rigaId}:${t.ingredienteId}`} style={styles.doneRow}>
                         <span style={styles.doneStrike}>
                           {t.ingredienteNome}
                           {t.qty > 1 ? ` ×${t.qty}` : ""}
                         </span>
-                        <span style={styles.doneMeta}>{titoloProdotto}</span>
+                        <span style={styles.doneMeta}>
+                          {isVoceProdotto ? "Voce prodotto" : titoloProdotto}
+                        </span>
                       </div>
                     )
                   })}
@@ -434,7 +460,7 @@ export default function Cucina() {
 }
 
 const styles = {
-  wrapper: { padding: 24 },
+  wrapper: { padding: "clamp(12px, 3vw, 24px)", boxSizing: "border-box", maxWidth: "100%" },
   title: { fontSize: 22, marginBottom: 4 },
   subtitle: { color: "#666", marginBottom: 16, lineHeight: 1.45, fontSize: 14 },
   sectionTitle: { margin: "0 0 8px", fontSize: 17 },

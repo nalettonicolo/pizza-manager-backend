@@ -7370,6 +7370,9 @@ END $$;
 -- 1) core.prodotti — visibilità menu online
 -- -----------------------------------------------------------------------------
 ALTER TABLE core.prodotti ADD COLUMN IF NOT EXISTS visibile_online BOOLEAN DEFAULT true;
+ALTER TABLE core.prodotti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+COMMENT ON COLUMN core.prodotti.prep_cucina IS
+  'Se true, la schermata Cucina mostra un task di preparazione per ogni riga ordine (fritti, bibite, dolci, ecc.).';
 
 
 -- -----------------------------------------------------------------------------
@@ -7386,6 +7389,7 @@ CREATE VIEW public."Prodotto" AS
     ordine,
     immagine_url,
     visibile_online,
+    prep_cucina,
     tenant_id,
     categoria_id,
     created_at AS "createdAt",

@@ -11,9 +11,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 12px;
-  padding: 16px clamp(16px, 3vw, 40px);
+  padding: max(12px, env(safe-area-inset-top, 0px)) clamp(16px, 3vw, 40px) 12px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);

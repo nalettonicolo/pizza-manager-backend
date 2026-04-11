@@ -16,7 +16,7 @@ import {
 import { formatPrice } from "@/utils/format";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 
-export default function CategoryProductsPage({ slug, title }) {
+export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckbox = false }) {
   const { tenantId } = useTenant();
   const [category, setCategory] = useState(null);
   const [products, setProducts] = useState([]);
@@ -25,12 +25,14 @@ export default function CategoryProductsPage({ slug, title }) {
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [newPrepCucina, setNewPrepCucina] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [editName, setEditName] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
+  const [editPrepCucina, setEditPrepCucina] = useState(false);
 
   const ensureCategory = useCallback(async () => {
     if (!tenantId) return null;
@@ -107,10 +109,12 @@ export default function CategoryProductsPage({ slug, title }) {
         prezzo: Number(newPrice) || 0,
         immagine_url: newImageUrl.trim() || null,
         attivo: true,
+        ...(showPrepCucinaCheckbox ? { prepCucina: newPrepCucina } : {}),
       });
       setNewName("");
       setNewPrice("");
       setNewImageUrl("");
+      setNewPrepCucina(false);
       setModalOpen(false);
       load();
     } catch (err) {
@@ -134,6 +138,7 @@ export default function CategoryProductsPage({ slug, title }) {
     setEditName(p.nome ?? "");
     setEditPrice(String(p.prezzo ?? ""));
     setEditImageUrl(p.immagine_url ?? p.imageUrl ?? "");
+    setEditPrepCucina(p.prep_cucina === true || p.prepCucina === true);
   }
 
   async function handleSaveEdit() {
@@ -143,6 +148,7 @@ export default function CategoryProductsPage({ slug, title }) {
         nome: editName.trim(),
         prezzo: Number(editPrice) || 0,
         immagine_url: editImageUrl.trim() || null,
+        ...(showPrepCucinaCheckbox ? { prepCucina: editPrepCucina } : {}),
       });
       setEditProduct(null);
       load();
@@ -166,6 +172,13 @@ export default function CategoryProductsPage({ slug, title }) {
       </div>
       <p className="dashboard-menu-intro">
         Nome, prezzo e immagine. Interruttore per attivare/disattivare la categoria o il singolo prodotto.
+        {showPrepCucinaCheckbox ? (
+          <>
+            {" "}
+            Opzione &quot;Prep. cucina&quot;: se attiva, ogni riga ordine con quel prodotto genera un task nella schermata Cucina (stessa logica
+            degli ingredienti).
+          </>
+        ) : null}
       </p>
 
       {category && (
@@ -204,6 +217,16 @@ export default function CategoryProductsPage({ slug, title }) {
             onChange={(e) => setNewImageUrl(e.target.value)}
             style={{ minWidth: 180 }}
           />
+          {showPrepCucinaCheckbox ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+              <input
+                type="checkbox"
+                checked={newPrepCucina}
+                onChange={(e) => setNewPrepCucina(e.target.checked)}
+              />
+              Prep. cucina (slot in Cucina)
+            </label>
+          ) : null}
           <button type="button" className="btn-primary-dashboard" onClick={handleAdd}>
             Aggiungi
           </button>
@@ -233,6 +256,16 @@ export default function CategoryProductsPage({ slug, title }) {
             onChange={(e) => setEditImageUrl(e.target.value)}
             style={{ minWidth: 180 }}
           />
+          {showPrepCucinaCheckbox ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+              <input
+                type="checkbox"
+                checked={editPrepCucina}
+                onChange={(e) => setEditPrepCucina(e.target.checked)}
+              />
+              Prep. cucina (slot in Cucina)
+            </label>
+          ) : null}
           <button type="button" className="btn-primary-dashboard" onClick={handleSaveEdit}>
             Salva modifiche
           </button>
@@ -248,7 +281,12 @@ export default function CategoryProductsPage({ slug, title }) {
               <span className="dashboard-list-item-img-placeholder">—</span>
             )}
             <span className="dashboard-list-item-name">{p.nome}</span>
-            <span className="dashboard-list-item-meta">€ {formatPrice(p.prezzo)}</span>
+            <span className="dashboard-list-item-meta">
+              € {formatPrice(p.prezzo)}
+              {showPrepCucinaCheckbox && (p.prep_cucina === true || p.prepCucina === true) ? (
+                <span style={{ marginLeft: 8, fontSize: 11, color: "#2e7d32", fontWeight: 600 }}>· Prep cucina</span>
+              ) : null}
+            </span>
             <button type="button" className="btn-primary-dashboard" onClick={() => openEdit(p)} style={{ marginRight: 8 }}>
               Modifica
             </button>
