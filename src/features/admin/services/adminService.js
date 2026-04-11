@@ -1329,14 +1329,37 @@ export async function getProducts(tenantId) {
   return sortByOrdine(data || [])
 }
 
-/** Prodotti per lista di id (es. per dettaglio ordine). */
+/** Prodotti per lista di id (es. per dettaglio ordine). Include categoria_id se disponibile (Bancone bibite). */
 export async function getProdottiByIds(tenantId, ids) {
   if (!ids?.length) return []
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("Prodotto")
-    .select("id, nome")
+    .select("id, nome, categoria_id")
     .eq("tenant_id", tenantId)
     .in("id", ids)
+  if (
+    error &&
+    (error.code === "PGRST204" ||
+      /column|does not exist/i.test(String(error.message || "")) ||
+      String(error.code || "") === "42703")
+  ) {
+    const fb = await supabase.from("Prodotto").select("id, nome").eq("tenant_id", tenantId).in("id", ids)
+    data = fb.data
+    error = fb.error
+  }
+  if (error) throw error
+  return data || []
+}
+
+/** Categorie per id (slug bibite, ecc.). */
+export async function getCategorieByIds(tenantId, ids) {
+  const unique = [...new Set((ids || []).filter(Boolean))]
+  if (!unique.length) return []
+  const { data, error } = await supabase
+    .from("categorie")
+    .select("id, slug, nome")
+    .eq("tenant_id", tenantId)
+    .in("id", unique)
   if (error) throw error
   return data || []
 }
@@ -1437,7 +1460,7 @@ export async function getProductIngredientiMap(tenantId, productIds) {
 
 /**
  * Stesso output di {@link getProductIngredienti} ma in 2–3 round-trip (schermate operative con molte pizze).
- * @returns {Promise<Record<string, Array<{ nome: string, vaInCottura: boolean }>>>}
+ * @returns {Promise<Record<string, Array<{ id: string, nome: string, vaInCottura: boolean, prepCucina?: boolean, categoria?: string, colore?: string }>>>}
  */
 export async function getProductIngredientiBatch(tenantId, productIds) {
   if (!tenantId || !productIds?.length) return {}
@@ -1477,7 +1500,7 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
 
     /* Solo nomi colonna reali in DB (snake_case). vaInCottura è solo convenzione JS lato client. */
     const fullCols =
-      "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco"
+      "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco, categoria, colore"
     let { data: ingredients, error: err2 } = await supabase
       .from("Ingrediente")
       .select(fullCols)
@@ -1491,7 +1514,7 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
     if (colErr) {
       const fallback = await supabase
         .from("Ingrediente")
-        .select("id, nome, va_in_cottura, costo_unitario")
+        .select("id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco")
         .eq("tenant_id", tenantId)
         .in("id", allIngIds)
       ingredients = fallback.data
@@ -1519,6 +1542,8 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
           nome: ing.nome ?? "",
           vaInCottura: ing.va_in_cottura === true,
           prepCucina: ing.prep_cucina === true,
+          categoria: ing.categoria ?? ing.Categoria ?? undefined,
+          colore: ing.colore ?? undefined,
           costo_unitario: ing.costo_unitario,
           costoUnitario: ing.costo_unitario,
           costo: cu,

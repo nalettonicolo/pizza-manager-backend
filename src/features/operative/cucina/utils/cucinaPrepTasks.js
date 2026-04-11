@@ -3,7 +3,7 @@
  * stato completamento per riga ordine (indipendente tra ordini e tra righe).
  */
 
-import { orarioToSlotLabel } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
+import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 
 export const CUCINA_SLOT_SENZA_ORARIO = "__senza_orario__"
@@ -116,4 +116,34 @@ export function buildCucinaPrepTasks(
   }
 
   return tasksBySlot
+}
+
+/** Ordini IN_PREPARAZIONE raggruppati per fascia orario (stessa griglia slot della cassa). */
+export function groupOrdersBySlot(orders, slotMinutes = PLANNING_GRID_SLOT_MINUTES) {
+  const map = {}
+  for (const o of orders || []) {
+    const slot =
+      orarioToSlotLabel(o.orario_ritiro ?? o.orarioRitiro, slotMinutes) || CUCINA_SLOT_SENZA_ORARIO
+    if (!map[slot]) map[slot] = []
+    map[slot].push(o)
+  }
+  for (const k of Object.keys(map)) {
+    map[k].sort((a, b) => {
+      const ma = orarioToMinutes(a.orario_ritiro ?? a.orarioRitiro) ?? 99999
+      const mb = orarioToMinutes(b.orario_ritiro ?? b.orarioRitiro) ?? 99999
+      if (ma !== mb) return ma - mb
+      return (Number(a.numero) || 0) - (Number(b.numero) || 0)
+    })
+  }
+  return map
+}
+
+/** Tab orari: unione slot con task prep e slot con ordini in forno. */
+export function mergeCucinaSlotKeys(tasksBySlot, ordersBySlot) {
+  const keys = new Set([
+    ...Object.keys(tasksBySlot || {}),
+    ...Object.keys(ordersBySlot || {}),
+  ])
+  const dummy = Object.fromEntries([...keys].map((k) => [k, []]))
+  return sortedCucinaSlotTabs(dummy)
 }

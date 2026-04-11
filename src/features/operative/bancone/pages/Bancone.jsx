@@ -7,8 +7,16 @@ import {
   getRigheAggregateByOrdineIds,
   getRigheByOrdineIds,
   getProductIngredientiBatch,
+  getCategorieByIds,
   updateOrderStato,
 } from "@/features/admin/services/adminService"
+import {
+  aggregateBanconeBibiteBySlot,
+  aggregateBanconeIngredientsBySlot,
+  banconeIngredientPickedColor,
+  banconeSlotsFromOrders,
+  BANCONE_BIBITE_PICKED_BG,
+} from "@/features/operative/bancone/utils/banconeSlotPick"
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
 import {
   filterOrdiniVisibili,
@@ -35,7 +43,11 @@ export default function Bancone() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [bibiteProductIds, setBibiteProductIds] = useState(() => new Set())
+  /** Chiave ingrediente/bibita/summary preso in busta (inverso cucina: parte grigio, tap = colore). */
+  const [pickedBanconeKeys, setPickedBanconeKeys] = useState(() => new Set())
   const loadSeqRef = useRef(0)
+  const prevOrderIdsKeyRef = useRef("")
 
   const parametri = tenantData?.parametri_operativi || {}
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
@@ -78,11 +90,33 @@ export default function Bancone() {
       ])
       if (seq !== loadSeqRef.current) return
       setProductNames((prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {}))
+
+      const catIds = [...new Set((prodotti || []).map((p) => p.categoria_id ?? p.categoriaId).filter(Boolean))]
+      let bibitePids = new Set()
+      if (catIds.length) {
+        try {
+          const cats = await getCategorieByIds(tenantId, catIds)
+          const bibiteCatIds = new Set(
+            (cats || []).filter((c) => (c.slug || "").toLowerCase() === "bibite").map((c) => c.id)
+          )
+          bibitePids = new Set(
+            (prodotti || []).filter((p) => bibiteCatIds.has(p.categoria_id ?? p.categoriaId)).map((p) => p.id)
+          )
+        } catch (e) {
+          console.warn("Bancone categorie bibite:", e)
+        }
+      }
+      if (seq !== loadSeqRef.current) return
+      setBibiteProductIds(bibitePids)
+
       const ingMap = {}
       for (const pid of pIds) {
         ingMap[pid] = (ingBatch[pid] || []).map((ing) => ({
+          id: ing.id,
           nome: ing.nome,
           vaInCottura: ing.vaInCottura === true,
+          categoria: ing.categoria,
+          colore: ing.colore,
         }))
       }
       setIngredientsByProduct(ingMap)
@@ -120,6 +154,60 @@ export default function Bancone() {
     () => sortedSlotLabels(slotPizze).filter((label) => (slotPizze[label] || 0) > 0),
     [slotPizze]
   )
+
+  const orderIdsKey = useMemo(
+    () =>
+      ordiniVisibili
+        .map((o) => o.id)
+        .filter(Boolean)
+        .sort()
+        .join(","),
+    [ordiniVisibili]
+  )
+
+  useEffect(() => {
+    if (prevOrderIdsKeyRef.current === orderIdsKey) return
+    prevOrderIdsKeyRef.current = orderIdsKey
+    setPickedBanconeKeys(new Set())
+  }, [orderIdsKey])
+
+  const banconeSlotOrder = useMemo(
+    () => banconeSlotsFromOrders(ordiniVisibili, PLANNING_GRID_SLOT_MINUTES),
+    [ordiniVisibili]
+  )
+
+  const ingredientsBySlot = useMemo(
+    () =>
+      aggregateBanconeIngredientsBySlot(
+        ordiniVisibili,
+        righePerOrdine,
+        ingredientsByProduct,
+        PLANNING_GRID_SLOT_MINUTES
+      ),
+    [ordiniVisibili, righePerOrdine, ingredientsByProduct]
+  )
+
+  const bibiteBySlot = useMemo(
+    () =>
+      aggregateBanconeBibiteBySlot(
+        ordiniVisibili,
+        righePerOrdine,
+        productNames,
+        bibiteProductIds,
+        PLANNING_GRID_SLOT_MINUTES
+      ),
+    [ordiniVisibili, righePerOrdine, productNames, bibiteProductIds]
+  )
+
+  const togglePickedBancone = useCallback((pickKey) => {
+    if (!pickKey) return
+    setPickedBanconeKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(pickKey)) next.delete(pickKey)
+      else next.add(pickKey)
+      return next
+    })
+  }, [])
 
   const openDetail = useCallback(
     async (ordineId) => {
@@ -320,10 +408,85 @@ export default function Bancone() {
       ) : ordiniVisibili.length === 0 ? (
         <p style={styles.muted}>Nessun ordine pronto.</p>
       ) : (
-        <div style={styles.singleColumn}>
-          {ordiniVisibili.map((ord) =>
-            renderCard(ord, (ord.tipo_ordine || "").toLowerCase() === "delivery")
-          )}
+        <div style={styles.mainRow}>
+          <aside style={styles.leftPickColumn} aria-label="Check ingredienti per fascia oraria">
+            <h2 style={styles.pickColumnTitle}>Ingredienti per orario</h2>
+            <p style={styles.pickHint}>
+              Grigio = da prendere per la busta · tocca quando l&apos;hai messo (inverso alla cucina).
+            </p>
+            {banconeSlotOrder.map((slot) => {
+              const ingList = ingredientsBySlot[slot] || []
+              const bibList = bibiteBySlot[slot] || []
+              return (
+                <div key={slot} style={styles.slotPickBox}>
+                  <div style={styles.slotPickTime}>{slot}</div>
+                  {ingList.length === 0 && bibList.length === 0 ? (
+                    <p style={styles.slotPickEmpty}>Nessun ingrediente in elenco per questa fascia.</p>
+                  ) : null}
+                  {ingList.length > 0 ? (
+                    <div style={styles.pickChipWrap}>
+                      {ingList.map((item) => {
+                        const picked = pickedBanconeKeys.has(item.pickKey)
+                        const fullBg = banconeIngredientPickedColor(item)
+                        return (
+                          <button
+                            key={item.pickKey}
+                            type="button"
+                            style={{
+                              ...styles.pickChip,
+                              ...(picked
+                                ? { background: fullBg, color: "#1a1a1a", borderColor: "#9e9e9e", fontWeight: 600 }
+                                : styles.pickChipTodo),
+                            }}
+                            onClick={() => togglePickedBancone(item.pickKey)}
+                          >
+                            {item.count > 1 ? `${item.count}× ` : ""}
+                            {item.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                  {bibList.length > 0 ? (
+                    <>
+                      <div style={styles.bibiteSubheading}>Bibite</div>
+                      <div style={styles.pickChipWrap}>
+                        {bibList.map((item) => {
+                          const picked = pickedBanconeKeys.has(item.pickKey)
+                          return (
+                            <button
+                              key={item.pickKey}
+                              type="button"
+                              style={{
+                                ...styles.pickChip,
+                                ...(picked
+                                  ? {
+                                      background: BANCONE_BIBITE_PICKED_BG,
+                                      color: "#01579b",
+                                      borderColor: "#4fc3f7",
+                                      fontWeight: 600,
+                                    }
+                                  : styles.pickChipTodo),
+                              }}
+                              onClick={() => togglePickedBancone(item.pickKey)}
+                            >
+                              {item.count > 1 ? `${item.count}× ` : ""}
+                              {item.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              )
+            })}
+          </aside>
+          <div style={styles.rightOrdersColumn}>
+            {ordiniVisibili.map((ord) =>
+              renderCard(ord, (ord.tipo_ordine || "").toLowerCase() === "delivery")
+            )}
+          </div>
         </div>
       )}
 
@@ -358,7 +521,61 @@ const styles = {
   },
   slotTime: { display: "block", fontWeight: 600, fontSize: 11 },
   slotCount: { display: "block", fontSize: 13, fontWeight: 700, color: "#2e7d32" },
-  singleColumn: { marginTop: 8, display: "flex", flexDirection: "column", gap: 10 },
+  mainRow: {
+    marginTop: 8,
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    alignItems: "flex-start",
+  },
+  leftPickColumn: {
+    flex: "0 1 300px",
+    minWidth: 260,
+    maxWidth: 420,
+    padding: 12,
+    background: "#fafafa",
+    border: "1px solid #e0e0e0",
+    borderRadius: 10,
+    alignSelf: "stretch",
+  },
+  pickColumnTitle: { fontSize: 16, margin: "0 0 6px 0", fontWeight: 700 },
+  pickHint: { fontSize: 11, color: "#666", margin: "0 0 12px 0", lineHeight: 1.35 },
+  slotPickBox: {
+    marginBottom: 14,
+    padding: 10,
+    background: "#fff",
+    border: "1px solid #eee",
+    borderRadius: 8,
+  },
+  slotPickTime: { fontWeight: 800, fontSize: 14, marginBottom: 8, color: "#1b5e20" },
+  slotPickEmpty: { fontSize: 12, color: "#9e9e9e", margin: 0 },
+  pickChipWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
+  pickChip: {
+    fontSize: 12,
+    padding: "6px 10px",
+    borderRadius: 6,
+    border: "1px solid #bdbdbd",
+    cursor: "pointer",
+    textAlign: "left",
+    lineHeight: 1.25,
+  },
+  pickChipTodo: {
+    background: "#e8e8e8",
+    color: "#616161",
+    fontWeight: 500,
+    borderColor: "#bdbdbd",
+  },
+  bibiteSubheading: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#0277bd",
+    marginTop: 10,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  },
+  rightOrdersColumn: { flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 10 },
   muted: { color: "#888", marginTop: 8 },
   card: { border: "1px solid #e0e0e0", borderRadius: 8, padding: 12, marginBottom: 10, background: "#fff" },
   cardRow: { display: "flex", alignItems: "stretch", gap: 10 },
