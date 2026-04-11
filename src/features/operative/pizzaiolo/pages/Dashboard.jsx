@@ -16,6 +16,7 @@ import {
   getRitardoMinuti,
   slotPizzeCount,
   sortedSlotLabels,
+  orarioToMinutes,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
@@ -87,8 +88,10 @@ export default function PizzaioloDashboard() {
       const ingMap = {}
       for (const pid of pIds) {
         ingMap[pid] = (ingBatch[pid] || []).map((ing) => ({
+          id: ing.id,
           nome: ing.nome,
           vaInCottura: ing.vaInCottura === true,
+          prepCucina: ing.prepCucina === true,
         }))
       }
       setIngredientsByProduct(ingMap)
@@ -122,14 +125,22 @@ export default function PizzaioloDashboard() {
     [ordiniVisibili]
   )
 
+  /* Riepilogo pizze per slot: tutti gli ordini in cottura del giorno (come carico API), non solo la finestra oraria delle colonne. */
   const slotPizze = useMemo(
-    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES),
-    [ordiniVisibili, pizzePerOrdine]
+    () => slotPizzeCount(orders, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES),
+    [orders, pizzePerOrdine],
   )
   const slotLabels = useMemo(
     () => sortedSlotLabels(slotPizze).filter((label) => (slotPizze[label] || 0) > 0),
-    [slotPizze]
+    [slotPizze],
   )
+  const pizzeSenzaOrarioSlot = useMemo(() => {
+    let n = 0
+    for (const o of orders || []) {
+      if (orarioToMinutes(o.orario_ritiro ?? o.orarioRitiro) == null) n += pizzePerOrdine[o.id] ?? 0
+    }
+    return n
+  }, [orders, pizzePerOrdine])
 
   const openDetail = useCallback(
     async (ordineId) => {
@@ -323,15 +334,23 @@ export default function PizzaioloDashboard() {
 
       {error && <div style={styles.error}>{error}</div>}
 
-      {/* Riquadri orari con numero pizze */}
-      {slotLabels.length > 0 && (
+      {/* Riquadri orari con numero pizze (tutti gli ordini IN_PREPARAZIONE caricati) */}
+      {(slotLabels.length > 0 || pizzeSenzaOrarioSlot > 0) && (
         <div style={styles.slotsWrap}>
           {slotLabels.map((label) => (
             <div key={label} style={styles.slotBox}>
               <span style={styles.slotTime}>{label}</span>
               <span style={styles.slotCount}>{slotPizze[label]}</span>
+              <span style={styles.slotUnit}>pizze</span>
             </div>
           ))}
+          {pizzeSenzaOrarioSlot > 0 ? (
+            <div key="no-time" style={{ ...styles.slotBox, background: "#fff3e0", borderColor: "#ffcc80" }}>
+              <span style={styles.slotTime}>Senza orario</span>
+              <span style={{ ...styles.slotCount, color: "#e65100" }}>{pizzeSenzaOrarioSlot}</span>
+              <span style={styles.slotUnit}>pizze</span>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -387,7 +406,8 @@ const styles = {
     textAlign: "center",
   },
   slotTime: { display: "block", fontWeight: 600, fontSize: 11 },
-  slotCount: { display: "block", fontSize: 13, fontWeight: 700, color: "#2e7d32" },
+  slotCount: { display: "block", fontSize: 16, fontWeight: 700, color: "#2e7d32", lineHeight: 1.2 },
+  slotUnit: { display: "block", fontSize: 9, color: "#558b2f", fontWeight: 500 },
   column: { minWidth: 0 },
   columnTitle: { margin: "0 0 12px", fontSize: 16 },
   muted: { color: "#888", marginTop: 8 },

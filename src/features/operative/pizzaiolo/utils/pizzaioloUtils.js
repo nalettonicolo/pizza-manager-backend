@@ -81,3 +81,12 @@ export function sortedSlotLabels(slotPizzeMap) {
     return (ha || 0) * 60 + (ma || 0) - (hb || 0) * 60 - (mb || 0)
   })
 }
+
+/** Etichetta slot (es. 15 min) da stringa orario HH:mm. */
+export function orarioToSlotLabel(orarioStr, slotMinutes = 15) {
+  if (!orarioStr || typeof orarioStr !== "string") return null
+  const [h, m] = orarioStr.trim().split(":").map(Number)
+  if (h == null || Number.isNaN(h)) return null
+  const slotM = Math.floor(((h || 0) * 60 + (m || 0)) / slotMinutes) * slotMinutes
+  return `${String(Math.floor(slotM / 60)).padStart(2, "0")}:${String(slotM % 60).padStart(2, "0")}`
+}

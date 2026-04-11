@@ -1,3 +1,5 @@
+import { printHtmlDocument } from "@/utils/printHtmlDocument"
+
 /**
  * Apre una finestra di stampa con il listino (categorie + prodotti + prezzi) per salvare in PDF dal browser.
  * @param {{ localeNome?: string, righe: Array<{ categoria: string, nome: string, prezzo: string }> }} opts
@@ -28,17 +30,12 @@ export function openListinoPdfPrint(opts) {
     <thead><tr><th>Categoria</th><th>Prodotto</th><th>Prezzo</th></tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>
-  <script>window.onload=function(){window.print();}</script>
 </body></html>`
 
-  const w = window.open("", "_blank", "noopener,noreferrer")
-  if (!w) {
-    window.alert("Abilita i popup per stampare il PDF del listino.")
-    return
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
+  printHtmlDocument(html, {
+    title: localeNome,
+    alertPopupBlocked: "Abilita i popup per stampare il PDF del listino.",
+  })
 }
 
 function escapeHtml(s) {

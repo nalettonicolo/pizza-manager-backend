@@ -246,6 +246,15 @@ export async function updateOrderStato(ordineId, stato) {
   if (error) throw error
 }
 
+/** Aggiorna solo lo stato preparazione cucina (JSON: { doneByRiga: { [rigaId]: [ingredienteId] } }). */
+export async function updateOrderCucinaPrepStato(ordineId, cucinaPrepStato) {
+  const { error } = await supabase
+    .from("Ordine")
+    .update({ cucina_prep_stato: cucinaPrepStato })
+    .eq("id", ordineId)
+  if (error) throw error
+}
+
 /** Aggiorna il tipo pagamento (es. "Da pagare" → "Contanti" alla riscossione). */
 export async function updateOrderTipoPagamento(ordineId, tipoPagamento) {
   const { error } = await supabase
@@ -990,6 +999,7 @@ export async function createIngredient(payload) {
   if (payload.costoPoco !== undefined) row.costo_poco = payload.costoPoco
   // vaInCottura: invia solo dopo aver eseguito add_va_in_cottura_ingrediente.sql (altrimenti PGRST204)
   if (payload.vaInCottura === true) row.va_in_cottura = true
+  if (payload.prepCucina === true || payload.prep_cucina === true) row.prep_cucina = true
   if (payload.ordine !== undefined) row.ordine = payload.ordine
 
   const { data, error } = await supabase
@@ -1021,6 +1031,12 @@ export async function createIngredient(payload) {
       if (retry.error) throw retry.error
       return retry.data
     }
+    if (error.code === "PGRST204" && error.message?.includes("prep_cucina")) {
+      delete row.prep_cucina
+      const retry = await supabase.from("Ingrediente").insert(row).select("id").single()
+      if (retry.error) throw retry.error
+      return retry.data
+    }
     throw error
   }
   return data
@@ -1036,6 +1052,8 @@ export async function updateIngredient(ingredienteId, updates) {
   if (updates.costoSenza !== undefined) row.costo_senza = updates.costoSenza
   if (updates.costoPoco !== undefined) row.costo_poco = updates.costoPoco
   if (updates.vaInCottura !== undefined) row.va_in_cottura = updates.vaInCottura
+  if (updates.prepCucina !== undefined) row.prep_cucina = updates.prepCucina
+  if (updates.prep_cucina !== undefined) row.prep_cucina = updates.prep_cucina
   if (updates.ordine !== undefined) row.ordine = updates.ordine
   if (Object.keys(row).length === 0) return
   const { error } = await supabase
@@ -1062,6 +1080,13 @@ export async function updateIngredient(ingredienteId, updates) {
     }
     if (error.code === "PGRST204" && error.message?.includes("ordine")) {
       delete row.ordine
+      if (Object.keys(row).length === 0) return
+      const { error: retryErr } = await supabase.from("Ingrediente").update(row).eq("id", ingredienteId)
+      if (retryErr) throw retryErr
+      return
+    }
+    if (error.code === "PGRST204" && error.message?.includes("prep_cucina")) {
+      delete row.prep_cucina
       if (Object.keys(row).length === 0) return
       const { error: retryErr } = await supabase.from("Ingrediente").update(row).eq("id", ingredienteId)
       if (retryErr) throw retryErr
@@ -1451,7 +1476,8 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
     if (!allIngIds.length) return emptyMap()
 
     /* Solo nomi colonna reali in DB (snake_case). vaInCottura è solo convenzione JS lato client. */
-    const fullCols = "id, nome, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
+    const fullCols =
+      "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco"
     let { data: ingredients, error: err2 } = await supabase
       .from("Ingrediente")
       .select(fullCols)
@@ -1489,8 +1515,10 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
       out[pid] = ordered.map((ing) => {
         const cu = ing.costo_unitario ?? ing.costoUnitario ?? ing.costo
         return {
+          id: ing.id,
           nome: ing.nome ?? "",
           vaInCottura: ing.va_in_cottura === true,
+          prepCucina: ing.prep_cucina === true,
           costo_unitario: ing.costo_unitario,
           costoUnitario: ing.costo_unitario,
           costo: cu,
@@ -1531,7 +1559,8 @@ export async function getProductIngredienti(tenantId, productId) {
     }
     const ids = rows.map((r) => r.ingrediente_id).filter(Boolean)
     if (!ids.length) return []
-    const fullCols = "id, nome, va_in_cottura, costo_unitario, costo_abbondante, costo_senza, costo_poco"
+    const fullCols =
+      "id, nome, va_in_cottura, prep_cucina, costo_unitario, costo_abbondante, costo_senza, costo_poco"
     let { data: ingredients, error: err2 } = await supabase
       .from("Ingrediente")
       .select(fullCols)
@@ -1559,6 +1588,7 @@ export async function getProductIngredienti(tenantId, productId) {
       id: ing.id,
       nome: ing.nome ?? "",
       vaInCottura: ing.va_in_cottura === true,
+      prepCucina: ing.prep_cucina === true,
       costo_unitario: ing.costo_unitario,
       costo_abbondante: ing.costo_abbondante,
       costo_senza: ing.costo_senza,

@@ -28,6 +28,7 @@ import {
   getOrderDetail,
   getProdottiByIds,
   getRigheAggregateByOrdineIds,
+  getProducts,
   updateOrderTipoPagamento,
   updateOrder,
   chiudiGiornata,
@@ -90,9 +91,31 @@ import {
 import { readFidelityModalitaAccredito } from "@/utils/fidelityProgramConfig"
 import { applyPromoCalendarioToProducts, fidelitySkippedByPromoCalendario } from "@/utils/promozioniCalendario"
 import { normalizeRuoloOperativo } from "@/utils/operativeAreaAccess"
+import { computeFidelityRedeemPuntiCost } from "@/utils/fidelityRedeem"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
-const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
+const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Link (carta da casa)", "Altro"]
+
+/** Pagamenti ancora da incassare (in cassa o da remoto). */
+function tipoPagamentoInAttesa(tipoPagamento) {
+  const t = String(tipoPagamento || "").toLowerCase()
+  return t.includes("da pagare") || t.includes("link") || t.includes("carta da casa")
+}
+
+function iconTipoPagamentoLista(tipoPagamento) {
+  const t = String(tipoPagamento || "").toLowerCase()
+  if (t.includes("contanti")) return "💵"
+  if (t.includes("carta") && !t.includes("casa")) return "💳"
+  if (tipoPagamentoInAttesa(tipoPagamento)) return "🔗"
+  return "⏳"
+}
+
+function labelTipoPagamentoLista(tipoPagamento) {
+  const t = String(tipoPagamento || "").toLowerCase()
+  if (t.includes("link") || t.includes("carta da casa")) return "Link"
+  if (t.includes("da pagare")) return "Da pag."
+  return String(tipoPagamento || "—").trim() || "—"
+}
 const MAX_MISTO_RIGHE = 15
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 
@@ -328,6 +351,8 @@ export default function CassaPage() {
   const [fidelityLoading, setFidelityLoading] = useState(false)
   const [fidelitySearchDone, setFidelitySearchDone] = useState(false)
   const [selectedFidelitySaldo, setSelectedFidelitySaldo] = useState(null)
+  const [fidelityPremioActive, setFidelityPremioActive] = useState(false)
+  const [margheritaPremioPrezzo, setMargheritaPremioPrezzo] = useState(0)
   const [nuovoFidelityClienteModalOpen, setNuovoFidelityClienteModalOpen] = useState(false)
   const [showImpostazioniCassa, setShowImpostazioniCassa] = useState(false)
   const [ordiniOggi, setOrdiniOggi] = useState([])
@@ -416,6 +441,7 @@ export default function CassaPage() {
       if (typeof draft.showRiepilogo === "boolean") setShowRiepilogo(draft.showRiepilogo)
       if (typeof draft.fidelityQuery === "string") setFidelityQuery(draft.fidelityQuery)
       if (draft.selectedFidelitySaldo !== undefined) setSelectedFidelitySaldo(draft.selectedFidelitySaldo)
+      if (typeof draft.fidelityPremioActive === "boolean") setFidelityPremioActive(draft.fidelityPremioActive)
       if (typeof draft.searchPizza === "string") setSearchPizza(draft.searchPizza)
     } else {
       setCart([])
@@ -442,6 +468,7 @@ export default function CassaPage() {
         showRiepilogo,
         fidelityQuery,
         selectedFidelitySaldo,
+        fidelityPremioActive,
         searchPizza,
       })
     }, 450)
@@ -465,6 +492,7 @@ export default function CassaPage() {
     showRiepilogo,
     fidelityQuery,
     selectedFidelitySaldo,
+    fidelityPremioActive,
     searchPizza,
   ])
 
@@ -931,6 +959,12 @@ export default function CassaPage() {
     if (!showRiepilogo || !tenantId || !fidelityServizioOk || tipoOrdine !== TIPO_ORDINE.NEGOZIO) {
       return
     }
+    if (selectedFidelitySaldo) {
+      setFidelityHits([])
+      setFidelityLoading(false)
+      setFidelitySearchDone(false)
+      return
+    }
     const q = fidelityQuery.trim()
     if (q.length < 2) {
       setFidelityHits([])
@@ -959,7 +993,25 @@ export default function CassaPage() {
       cancelled = true
       clearTimeout(t)
     }
-  }, [fidelityQuery, showRiepilogo, tenantId, tipoOrdine, fidelityServizioOk])
+  }, [fidelityQuery, showRiepilogo, tenantId, tipoOrdine, fidelityServizioOk, selectedFidelitySaldo])
+
+  useEffect(() => {
+    if (!showRiepilogo || !tenantId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const prods = await getProducts(tenantId)
+        const hit = (prods || []).find((x) => String(x?.nome || "").toLowerCase().includes("margherita"))
+        const prezzo = hit != null ? Number(hit.prezzo) : 0
+        if (!cancelled) setMargheritaPremioPrezzo(Number.isFinite(prezzo) && prezzo > 0 ? prezzo : 0)
+      } catch {
+        if (!cancelled) setMargheritaPremioPrezzo(0)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [showRiepilogo, tenantId])
 
   const displayCliente = (c) => (c ? [c.nome, c.indirizzo].filter(Boolean).join(" – ") : "")
   const handleSelectCliente = useCallback((c) => {
@@ -979,6 +1031,7 @@ export default function CassaPage() {
   }
 
   const handleSelectFidelitySaldo = useCallback((row) => {
+    setFidelityPremioActive(false)
     if (!row) {
       setSelectedFidelitySaldo(null)
       return
@@ -1023,6 +1076,7 @@ export default function CassaPage() {
     setFidelityHits([])
     setSelectedFidelitySaldo(null)
     setFidelitySearchDone(false)
+    setFidelityPremioActive(false)
     setShowRiepilogo(true)
   }, [])
 
@@ -1365,15 +1419,38 @@ export default function CassaPage() {
   }, [cart])
 
   const cassaArrotonda5CentFlag = tenantData?.parametri_operativi?.cassa_arrotonda_5_cent === true
-  const scontoEuroCheckout = useMemo(() => {
+  const scontoManualeEuro = useMemo(() => {
     const raw = parseEuroInput(checkoutScontoGlobale)
     return Math.min(Math.max(0, raw), total)
   }, [checkoutScontoGlobale, total])
+
+  const scontoPremioFidelityEuro = useMemo(() => {
+    if (!fidelityPremioActive || margheritaPremioPrezzo <= 0) return 0
+    const dopoManuale = Math.max(0, total - scontoManualeEuro)
+    return Math.min(margheritaPremioPrezzo, dopoManuale)
+  }, [fidelityPremioActive, margheritaPremioPrezzo, total, scontoManualeEuro])
+
+  const scontoEuroCheckout = useMemo(
+    () => Math.min(scontoManualeEuro + scontoPremioFidelityEuro, total),
+    [scontoManualeEuro, scontoPremioFidelityEuro, total],
+  )
 
   const totalBaseAfterSconto = useMemo(
     () => Math.max(0, total - scontoEuroCheckout),
     [total, scontoEuroCheckout]
   )
+
+  const fidelityRedeemInfo = useMemo(
+    () =>
+      computeFidelityRedeemPuntiCost(tenantData?.parametri_operativi, selectedFidelitySaldo?.punti ?? 0),
+    [tenantData?.parametri_operativi, selectedFidelitySaldo?.punti],
+  )
+
+  useEffect(() => {
+    if (!selectedFidelitySaldo || fidelityRedeemInfo.cost == null || margheritaPremioPrezzo <= 0) {
+      setFidelityPremioActive(false)
+    }
+  }, [selectedFidelitySaldo, fidelityRedeemInfo.cost, margheritaPremioPrezzo])
 
   const totalCheckout = useMemo(() => {
     if (cassaArrotonda5CentFlag) {
@@ -1474,10 +1551,39 @@ export default function CassaPage() {
         tipoPagamentoFinale = "Misto"
       }
 
+      const redeemSnap = computeFidelityRedeemPuntiCost(poGate, fidelitySaldoSnap?.punti ?? 0)
+      if (fidelityPremioActive) {
+        if (!fidelitySaldoSnap?.anagrafica_cliente_id || redeemSnap.cost == null) {
+          setCheckoutError("Premio fedeltà: nessun premio riscattabile con i punti attuali.")
+          setLoading(false)
+          markCheckoutEnd(telemetryCtx, {
+            ok: false,
+            tenantId,
+            errorMessage: "fidelity_premio_invalid",
+          })
+          return
+        }
+        if (scontoPremioFidelityEuro <= 0.001) {
+          setCheckoutError("Premio fedeltà: prezzo margherita non trovato nel listino o sconto non applicabile.")
+          setLoading(false)
+          markCheckoutEnd(telemetryCtx, {
+            ok: false,
+            tenantId,
+            errorMessage: "fidelity_premio_zero",
+          })
+          return
+        }
+      }
+
       const noteParts = []
       if (noteSnap) noteParts.push(noteSnap)
-      if (scontoEuroCheckout > 0) {
-        noteParts.push(`[Sconto cassa €${scontoEuroCheckout.toFixed(2)}]`)
+      if (scontoManualeEuro > 0) {
+        noteParts.push(`[Sconto cassa €${scontoManualeEuro.toFixed(2)}]`)
+      }
+      if (scontoPremioFidelityEuro > 0) {
+        noteParts.push(
+          `[Premio fedeltà (margherita) −€${scontoPremioFidelityEuro.toFixed(2)}; punti scalati: ${redeemSnap.cost}]`,
+        )
       }
       const noteForOrder = noteParts.length ? noteParts.join("\n") : undefined
 
@@ -1542,6 +1648,29 @@ export default function CassaPage() {
         pagamentoDettaglio,
         telefonoRitiro: telefonoRitiroNegozio || undefined,
       })
+
+      if (
+        fidelityPremioActive &&
+        redeemSnap.cost != null &&
+        fidelitySaldoSnap?.anagrafica_cliente_id &&
+        scontoPremioFidelityEuro > 0.001
+      ) {
+        try {
+          await applyFidelityMovimento(
+            tenantId,
+            fidelitySaldoSnap.anagrafica_cliente_id,
+            -redeemSnap.cost,
+            "riscatto_premio",
+            `Sconto margherita €${scontoPremioFidelityEuro.toFixed(2)} ordine ${orderId}`,
+            orderId,
+          )
+        } catch (fe) {
+          console.warn("[Cassa] riscatto premio fidelity:", fe)
+          alert(
+            `Ordine creato ma il riscatto punti non è stato registrato: ${fe?.message || "errore sconosciuto"}`,
+          )
+        }
+      }
 
       if (fidelityServizioOk && fidelitySaldoSnap?.anagrafica_cliente_id) {
         const skipFidelity = fidelitySkippedByPromoCalendario(tenantData?.parametri_operativi, snapshotCart, new Date())
@@ -1619,6 +1748,7 @@ export default function CassaPage() {
       setCheckoutScontoGlobale("")
       setCheckoutNomeCliente("")
       setCheckoutTelefonoCliente("")
+      setFidelityPremioActive(false)
       setCheckoutSelectedSlot(null)
       setDeliverySearch("")
       setSelectedCliente(null)
@@ -1892,6 +2022,8 @@ export default function CassaPage() {
           total={total}
           totalCheckout={totalCheckout}
           scontoEuroApplicato={scontoEuroCheckout}
+          scontoManualeEuro={scontoManualeEuro}
+          scontoPremioFidelityEuro={scontoPremioFidelityEuro}
           checkoutScontoGlobale={checkoutScontoGlobale}
           onCheckoutScontoGlobaleChange={setCheckoutScontoGlobale}
           tipoOrdine={tipoOrdine}
@@ -1922,6 +2054,7 @@ export default function CassaPage() {
             setFidelityHits([])
             setSelectedFidelitySaldo(null)
             setFidelitySearchDone(false)
+            setFidelityPremioActive(false)
           }}
           loading={loading}
           checkoutError={checkoutError}
@@ -1941,6 +2074,11 @@ export default function CassaPage() {
           selectedFidelity={selectedFidelitySaldo}
           onSelectFidelity={handleSelectFidelitySaldo}
           onNuovaFidelityCliente={() => setNuovoFidelityClienteModalOpen(true)}
+          fidelityRedeemPuntiCost={fidelityRedeemInfo.cost}
+          fidelityPremioDescrizione={fidelityRedeemInfo.premioLabel}
+          margheritaPrezzoCatalogo={margheritaPremioPrezzo}
+          fidelityPremioActive={fidelityPremioActive}
+          onFidelityPremioActiveChange={setFidelityPremioActive}
         />
         <ModificaPizzaModal
           open={productModalOpen}
@@ -2293,9 +2431,8 @@ export default function CassaPage() {
                     </div>
                     <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                       {ordini.map((o) => {
-                        const tp = (o.tipo_pagamento || "").toLowerCase()
-                        const iconPagamento = tp.includes("contanti") ? "💵" : tp.includes("carta") ? "💳" : "⏳"
-                        const labelPagamento = tp.includes("da pagare") || tp === "da pagare" ? "Da pag." : (o.tipo_pagamento || "—")
+                        const iconPagamento = iconTipoPagamentoLista(o.tipo_pagamento)
+                        const labelPagamento = labelTipoPagamentoLista(o.tipo_pagamento)
                         const isDelivery = ordineIsDelivery(o)
                         const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
                         const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
@@ -2418,9 +2555,8 @@ export default function CassaPage() {
         ) : null}
         <ul style={styles.ordiniList}>
           {ordiniOggiFiltered.map((o) => {
-            const tp = (o.tipo_pagamento || "").toLowerCase()
-            const iconPagamento = tp.includes("contanti") ? "💵" : tp.includes("carta") ? "💳" : "⏳"
-            const labelPagamento = tp.includes("da pagare") || tp === "da pagare" ? "Da pag." : (o.tipo_pagamento || "—")
+            const iconPagamento = iconTipoPagamentoLista(o.tipo_pagamento)
+            const labelPagamento = labelTipoPagamentoLista(o.tipo_pagamento)
             const isDelivery = ordineIsDelivery(o)
             const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
             const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
@@ -2857,7 +2993,12 @@ export default function CassaPage() {
             </ul>
             <p style={{ fontWeight: 600, marginBottom: 12 }}>Totale: € {typeof ordineDetail.totale === "number" ? ordineDetail.totale.toFixed(2) : ordineDetail.totale ?? "—"}</p>
             <p style={{ marginBottom: 12, fontSize: 13 }}>
-              Pagamento: {(ordineDetail.tipo_pagamento || "—").toLowerCase().includes("da pagare") ? "⏳ Da pagare" : (ordineDetail.tipo_pagamento || "—")}
+              Pagamento:{" "}
+              {tipoPagamentoInAttesa(ordineDetail.tipo_pagamento)
+                ? ordineDetail.tipo_pagamento?.toLowerCase().includes("link")
+                  ? "🔗 Link (carta da casa)"
+                  : "⏳ Da pagare"
+                : ordineDetail.tipo_pagamento || "—"}
             </p>
             {(ordinePuntoVenditaId(ordineDetail) || ordineTurnoOperatoriId(ordineDetail) != null) ? (
               <p style={{ marginBottom: 12, fontSize: 12, color: "#555", lineHeight: 1.45 }}>
@@ -2914,8 +3055,7 @@ export default function CassaPage() {
                   Stampa per reparto
                 </button>
               )}
-              {!ordineIsAnnullato(ordineDetail) &&
-              (ordineDetail.tipo_pagamento || "").toLowerCase().includes("da pagare") ? (
+              {!ordineIsAnnullato(ordineDetail) && tipoPagamentoInAttesa(ordineDetail.tipo_pagamento) ? (
                 <button
                   type="button"
                   style={{ ...styles.impostazioniBtn, marginTop: 8 }}

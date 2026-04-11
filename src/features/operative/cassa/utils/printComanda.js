@@ -6,6 +6,7 @@ import {
   normalizeComandaRepartiStampanti,
   stampantiLabelDaReparti,
 } from "@/utils/comandaRepartiStampanti"
+import { printHtmlDocument } from "@/utils/printHtmlDocument"
 
 function escapeHtml(s) {
   if (s == null || s === "") return "";
@@ -456,69 +457,12 @@ export function buildComandaKitchenHtmlDocument(payload) {
 }
 
 export function printComandaKitchen(payload) {
-  const html = buildComandaKitchenHtmlDocument(payload);
-
-  const runPrintInWindow = (win) => {
-    if (!win?.document) return false;
-    try {
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => {
-        try {
-          win.focus();
-          win.print();
-        } catch (e) {
-          console.warn("[printComandaKitchen]", e);
-        }
-      }, 150);
-      return true;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
-  };
-
-  /* Stampa via iframe: non dipende dai popup del browser (spesso bloccati dopo await / conferma ordine). */
-  try {
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("title", "Stampa comanda");
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText =
-      "position:fixed;width:0;height:0;border:0;left:0;top:0;opacity:0;pointer-events:none;visibility:hidden";
-    document.body.appendChild(iframe);
-    const iw = iframe.contentWindow;
-    if (iw && runPrintInWindow(iw)) {
-      setTimeout(() => {
-        try {
-          iframe.remove();
-        } catch {
-          /* ignore */
-        }
-      }, 90_000);
-      return true;
-    }
-    iframe.remove();
-  } catch {
-    /* fallback sotto */
-  }
-
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (!w) {
-    window.alert(
+  const html = buildComandaKitchenHtmlDocument(payload)
+  return printHtmlDocument(html, {
+    title: "Stampa comanda",
+    alertPopupBlocked:
       "Impossibile stampare (popup bloccato e iframe non disponibile). Consenti i popup per questo sito e riprova «Stampa comanda».",
-    );
-    return false;
-  }
-  if (!runPrintInWindow(w)) {
-    try {
-      w.close();
-    } catch {
-      /* ignore */
-    }
-    return false;
-  }
-  return true;
+  })
 }
 
 /**

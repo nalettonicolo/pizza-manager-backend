@@ -26,6 +26,8 @@ export default function RiepilogoOrdinePage({
   total,
   totalCheckout = total,
   scontoEuroApplicato = 0,
+  scontoManualeEuro = 0,
+  scontoPremioFidelityEuro = 0,
   checkoutScontoGlobale = "",
   onCheckoutScontoGlobaleChange,
   tipoOrdine,
@@ -67,6 +69,11 @@ export default function RiepilogoOrdinePage({
   selectedFidelity = null,
   onSelectFidelity,
   onNuovaFidelityCliente,
+  fidelityRedeemPuntiCost = null,
+  fidelityPremioDescrizione = null,
+  margheritaPrezzoCatalogo = 0,
+  fidelityPremioActive = false,
+  onFidelityPremioActiveChange,
   /** Cassa: consente fasce dopo la chiusura (e in giorno “chiuso” in calendario) per inserimenti operativi */
   staffOverrideClosing = false,
 }) {
@@ -144,6 +151,16 @@ export default function RiepilogoOrdinePage({
           </ul>
         )}
         <p style={styles.totale}>Totale articoli: € {formatPrice(total)}</p>
+        {scontoManualeEuro > 0 ? (
+          <p style={{ ...styles.totale, fontSize: 14, marginTop: 4, color: "#555" }}>
+            Sconto a cassa: −€ {formatPrice(scontoManualeEuro)}
+          </p>
+        ) : null}
+        {scontoPremioFidelityEuro > 0 ? (
+          <p style={{ ...styles.totale, fontSize: 14, marginTop: 4, color: "#2e7d32", fontWeight: 600 }}>
+            Premio fedeltà (margherita): −€ {formatPrice(scontoPremioFidelityEuro)}
+          </p>
+        ) : null}
         {(scontoEuroApplicato > 0 || Math.abs(tc - total) > 0.001) && (
           <p style={{ ...styles.totale, fontSize: 15, marginTop: 6, color: "#333" }}>
             Totale da incassare: € {formatPrice(tc)}
@@ -166,10 +183,15 @@ export default function RiepilogoOrdinePage({
           placeholder="0 — massimo pari al totale articoli"
           style={styles.input}
         />
-        {scontoEuroApplicato > 0 ? (
+        {scontoManualeEuro > 0 ? (
           <p style={{ fontSize: 12, color: "#555", marginTop: 6, lineHeight: 1.4 }}>
-            Verrà registrato in nota ordine come{" "}
-            <strong>[Sconto cassa €{scontoEuroApplicato.toFixed(2)}]</strong>.
+            In nota ordine: <strong>[Sconto cassa €{scontoManualeEuro.toFixed(2)}]</strong>
+            {scontoPremioFidelityEuro > 0 ? (
+              <>
+                {" "}
+                e premio fedeltà (margherita).
+              </>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -208,6 +230,12 @@ export default function RiepilogoOrdinePage({
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
+        {String(checkoutTipoPagamento || "").toLowerCase().includes("link") ? (
+          <p style={{ fontSize: 13, color: "#1565c0", marginTop: 10, lineHeight: 1.45 }}>
+            Dopo la conferma potrai inviare o registrare il <strong>link di pagamento</strong> (carta da casa), se
+            abilitato nelle impostazioni cassa / pay-by-link.
+          </p>
+        ) : null}
         {isMisto ? (
           <div style={{ marginTop: 14 }}>
             <p style={{ fontSize: 13, color: "#555", margin: "0 0 10px", lineHeight: 1.45 }}>
@@ -293,32 +321,39 @@ export default function RiepilogoOrdinePage({
       {fidelityAbilitato && tipoOrdine === "negozio" && (
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Riepilogo fedeltà</h3>
-          <p style={styles.fidelityHint}>
-            Cerca con telefono, codice carta, testo letto da QR, nome o email.
-          </p>
-          <div style={styles.fidelityRow}>
-            <input
-              type="text"
-              value={fidelityQuery}
-              onChange={(e) => onFidelityQueryChange?.(e.target.value)}
-              placeholder="Telefono, codice tessera, QR, nome o email…"
-              style={styles.fidelityInput}
-              autoComplete="off"
-            />
-            {fidelitySearchDone &&
-              !fidelityLoading &&
-              (fidelityQuery || "").trim().length >= 2 &&
-              (fidelityHits || []).length === 0 &&
-              !selectedFidelity && (
-                <button
-                  type="button"
-                  style={styles.fidelityNuovaBtn}
-                  onClick={() => onNuovaFidelityCliente?.()}
-                >
-                  Nuova
-                </button>
-              )}
-          </div>
+          {!selectedFidelity ? (
+            <>
+              <p style={styles.fidelityHint}>
+                Cerca con telefono, codice carta, testo letto da QR, nome o email. Una sola tessera per ordine.
+              </p>
+              <div style={styles.fidelityRow}>
+                <input
+                  type="text"
+                  value={fidelityQuery}
+                  onChange={(e) => onFidelityQueryChange?.(e.target.value)}
+                  placeholder="Telefono, codice tessera, QR, nome o email…"
+                  style={styles.fidelityInput}
+                  autoComplete="off"
+                />
+                {fidelitySearchDone &&
+                  !fidelityLoading &&
+                  (fidelityQuery || "").trim().length >= 2 &&
+                  (fidelityHits || []).length === 0 && (
+                    <button
+                      type="button"
+                      style={styles.fidelityNuovaBtn}
+                      onClick={() => onNuovaFidelityCliente?.()}
+                    >
+                      Nuova
+                    </button>
+                  )}
+              </div>
+            </>
+          ) : (
+            <p style={{ ...styles.fidelityHint, marginBottom: 10 }}>
+              Cliente fedeltà collegato. Rimuovi il collegamento per cercare un altro nominativo.
+            </p>
+          )}
           {fidelityLoading && (
             <p style={styles.fidelityMeta}>Ricerca in corso…</p>
           )}
@@ -358,6 +393,49 @@ export default function RiepilogoOrdinePage({
                   {selectedFidelity.punti ?? 0} punti
                   {a?.email ? ` · ${a.email}` : ""}
                 </div>
+                {fidelityRedeemPuntiCost != null &&
+                margheritaPrezzoCatalogo > 0 &&
+                (selectedFidelity.punti ?? 0) >= fidelityRedeemPuntiCost ? (
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      marginTop: 12,
+                      padding: "10px 12px",
+                      background: "#e8f5e9",
+                      borderRadius: 8,
+                      border: "1px solid #a5d6a7",
+                      cursor: "pointer",
+                      fontSize: 14,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={fidelityPremioActive}
+                      onChange={(e) => onFidelityPremioActiveChange?.(e.target.checked)}
+                      style={{ marginTop: 3 }}
+                    />
+                    <span>
+                      <strong>Usa premio fedeltà</strong>
+                      {fidelityPremioDescrizione ? (
+                        <span style={{ display: "block", fontWeight: 500, marginTop: 4 }}>
+                          {fidelityPremioDescrizione}
+                        </span>
+                      ) : null}
+                      <span style={{ display: "block", fontSize: 13, color: "#2e7d32", marginTop: 6 }}>
+                        Sconto sul totale pari al prezzo listino margherita (€ {formatPrice(margheritaPrezzoCatalogo)});
+                        verranno scalati <strong>{fidelityRedeemPuntiCost}</strong> punti alla conferma.
+                      </span>
+                    </span>
+                  </label>
+                ) : margheritaPrezzoCatalogo <= 0 && fidelityRedeemPuntiCost != null ? (
+                  <p style={{ ...styles.fidelityMeta, color: "#b71c1c", marginTop: 8 }}>
+                    Premio disponibile in punti, ma nel listino non risulta un prodotto con nome «margherita» per calcolare
+                    lo sconto.
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   style={styles.fidelityClearBtn}

@@ -2,6 +2,8 @@
  * Ricevuta cliente (stampa browser / PDF) — indipendente dalla comanda cucina.
  */
 
+import { printHtmlDocument } from "@/utils/printHtmlDocument"
+
 function escapeHtml(s) {
   if (s == null || s === "") return ""
   return String(s)
@@ -239,65 +241,9 @@ export function buildRicevutaHtmlDocument(payload) {
 
 export function printRicevuta(payload) {
   const html = buildRicevutaHtmlDocument(payload)
-
-  const runPrintInWindow = (win) => {
-    if (!win?.document) return false
-    try {
-      win.document.open()
-      win.document.write(html)
-      win.document.close()
-      setTimeout(() => {
-        try {
-          win.focus()
-          win.print()
-        } catch (e) {
-          console.warn("[printRicevuta]", e)
-        }
-      }, 150)
-      return true
-    } catch (e) {
-      console.error(e)
-      return false
-    }
-  }
-
-  try {
-    const iframe = document.createElement("iframe")
-    iframe.setAttribute("title", "Stampa ricevuta")
-    iframe.setAttribute("aria-hidden", "true")
-    iframe.style.cssText =
-      "position:fixed;width:0;height:0;border:0;left:0;top:0;opacity:0;pointer-events:none;visibility:hidden"
-    document.body.appendChild(iframe)
-    const iw = iframe.contentWindow
-    if (iw && runPrintInWindow(iw)) {
-      setTimeout(() => {
-        try {
-          iframe.remove()
-        } catch {
-          /* ignore */
-        }
-      }, 90_000)
-      return true
-    }
-    iframe.remove()
-  } catch {
-    /* fallback */
-  }
-
-  const w = window.open("", "_blank", "noopener,noreferrer")
-  if (!w) {
-    window.alert(
+  return printHtmlDocument(html, {
+    title: "Stampa ricevuta",
+    alertPopupBlocked:
       "Impossibile stampare la ricevuta (popup bloccato). Consenti i popup per questo sito e riprova.",
-    )
-    return false
-  }
-  if (!runPrintInWindow(w)) {
-    try {
-      w.close()
-    } catch {
-      /* ignore */
-    }
-    return false
-  }
-  return true
+  })
 }

@@ -15,11 +15,16 @@ const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"))
 const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"))
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"))
 
+/** Nel test 4 reparti: tutte le delivery di oggi per fascia oraria; la route full screen resta sul flusso PRONTO. */
+function DeliveryQuadTestPane() {
+  return <DeliveryDashboard mode="quadTestBySlot" />
+}
+
 const PANES = [
   { path: "/operative/pizzaioli", label: "Pizzaioli", position: "In alto a sinistra", El: PizzaioloDashboard },
   { path: "/operative/bancone", label: "Bancone", position: "In alto a destra", El: Bancone },
   { path: "/operative/cucina", label: "Cucina", position: "In basso a sinistra", El: Cucina },
-  { path: "/operative/delivery", label: "Delivery / pony", position: "In basso a destra", El: DeliveryDashboard },
+  { path: "/operative/delivery", label: "Delivery / pony", position: "In basso a destra", El: DeliveryQuadTestPane },
 ]
 
 function PanelFallback() {

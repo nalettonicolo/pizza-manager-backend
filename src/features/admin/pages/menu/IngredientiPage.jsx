@@ -29,6 +29,11 @@ function isAllergenChecked(val) {
   return v === "1" || v === "x" || v === "sì" || v === "si" || v === "yes" || v === "s" || v === "✓" || v === "✔" || v === "true";
 }
 
+/** 1 / si / sì / true / x → true (come va_in_cottura e celle allergeni). */
+function parsePrepCucinaCell(val) {
+  return isAllergenChecked(val);
+}
+
 export default function IngredientiPage() {
   const { tenantId } = useTenant();
   const [ingredients, setIngredients] = useState([]);
@@ -44,6 +49,7 @@ export default function IngredientiPage() {
   const [newCostoSenza, setNewCostoSenza] = useState("");
   const [newCostoPoco, setNewCostoPoco] = useState("");
   const [newVaInCottura, setNewVaInCottura] = useState(false);
+  const [newPrepCucina, setNewPrepCucina] = useState(false);
   const [newOrdine, setNewOrdine] = useState("");
   const [newAllergeni, setNewAllergeni] = useState([]);
   const [editIngredient, setEditIngredient] = useState(null);
@@ -53,6 +59,7 @@ export default function IngredientiPage() {
   const [editCostoSenza, setEditCostoSenza] = useState("");
   const [editCostoPoco, setEditCostoPoco] = useState("");
   const [editVaInCottura, setEditVaInCottura] = useState(false);
+  const [editPrepCucina, setEditPrepCucina] = useState(false);
   const [editOrdine, setEditOrdine] = useState("");
   const [editAllergeni, setEditAllergeni] = useState([]);
   const [editAttivo, setEditAttivo] = useState(true);
@@ -113,6 +120,7 @@ export default function IngredientiPage() {
     if (newCostoSenza !== "") payload.costoSenza = Number(newCostoSenza);
     if (newCostoPoco !== "") payload.costoPoco = Number(newCostoPoco);
     if (newVaInCottura) payload.vaInCottura = true;
+    if (newPrepCucina) payload.prepCucina = true;
     if (newOrdine !== "" && !Number.isNaN(Number(newOrdine))) payload.ordine = Number(newOrdine);
     try {
       const created = await createIngredient(payload);
@@ -130,6 +138,7 @@ export default function IngredientiPage() {
       setNewCostoSenza("");
       setNewCostoPoco("");
       setNewVaInCottura(false);
+      setNewPrepCucina(false);
       setNewOrdine("");
       setNewAllergeni([]);
       setModalOpen(false);
@@ -182,6 +191,7 @@ export default function IngredientiPage() {
     setEditCostoSenza(String(ing.costoSenza ?? ing.costo_senza ?? ""));
     setEditCostoPoco(String(ing.costoPoco ?? ing.costo_poco ?? ""));
     setEditVaInCottura(ing.vaInCottura === true || ing.va_in_cottura === true);
+    setEditPrepCucina(ing.prepCucina === true || ing.prep_cucina === true);
     setEditOrdine(ing.ordine !== undefined && ing.ordine !== null ? String(ing.ordine) : "");
     setEditAllergeni(allergeniMap[ing.id] ? [...allergeniMap[ing.id]] : []);
     setEditAttivo(ing.attivo !== false);
@@ -200,6 +210,7 @@ export default function IngredientiPage() {
         nome: editNome.trim(),
         costo: Number(editPrezzo) || 0,
         attivo: editAttivo,
+        prepCucina: editPrepCucina,
       };
       if (editOrdine !== "" && !Number.isNaN(Number(editOrdine))) updates.ordine = Number(editOrdine);
       let ok = false;
@@ -234,12 +245,28 @@ export default function IngredientiPage() {
     }
   }
 
-  /** Rileva Formato B: intestazione con colonne allergeni (8+ colonne: nome, ordine, costo, abbondante, senza, poco, va_in_cottura, poi allergeni). */
+  /**
+   * Formato B: dopo i campi fissi ci sono colonne allergeni (nome = Glutine, …).
+   * Con prep_cucina: …;va_in_cottura;prep_cucina;Glutine;…
+   * Legacy senza prep: …;va_in_cottura;Glutine;…
+   */
   function isFormatoB(headerParts) {
     if (!headerParts || headerParts.length < 8) return false;
     const allergeniNames = new Set(allergeni.map((a) => (a.nome || "").trim()));
+    const h7 = (headerParts[7] || "").trim().toLowerCase();
+    if (h7 === "prep_cucina") {
+      if (headerParts.length < 9) return false;
+      const h8 = (headerParts[8] || "").trim();
+      return allergeniNames.has(h8) || ALLERGENE_COLUMN_NAMES.includes(h8);
+    }
     const eighth = (headerParts[7] || "").trim();
     return allergeniNames.has(eighth) || ALLERGENE_COLUMN_NAMES.includes(eighth);
+  }
+
+  /** Indice colonna prep_cucina nell’intestazione, o -1 se assente (file legacy). */
+  function prepCucinaHeaderIndex(headerParts) {
+    const i = headerParts.findIndex((h) => String(h ?? "").trim().toLowerCase() === "prep_cucina");
+    return i;
   }
 
   function handleExportCsv() {
@@ -255,7 +282,7 @@ export default function IngredientiPage() {
         })
       : ALLERGENE_COLUMN_NAMES.map((nome) => ({ id: null, nome }));
     const allergenCols = allergeniOrder.map((a) => (a.nome || "").trim()).filter(Boolean);
-    const header = ["nome_ingrediente", "ordine", "costo_eur", "abbondante", "senza", "poco", "va_in_cottura", ...allergenCols].join(sep);
+    const header = ["nome_ingrediente", "ordine", "costo_eur", "abbondante", "senza", "poco", "va_in_cottura", "prep_cucina", ...allergenCols].join(sep);
     const rows = ingredients.map((ing) => {
       const nome = (ing.nome ?? "").replace(/"/g, '""');
       const ordine = String(ing.ordine ?? 0);
@@ -264,12 +291,13 @@ export default function IngredientiPage() {
       const senza = formatPrice(ing.costoSenza ?? ing.costo_senza, "");
       const poco = formatPrice(ing.costoPoco ?? ing.costo_poco, "");
       const vaInCottura = ing.vaInCottura === true || ing.va_in_cottura === true ? "1" : "0";
+      const prepCucina = ing.prepCucina === true || ing.prep_cucina === true ? "1" : "0";
       const ids = allergeniMap[ing.id] || [];
       const allergenCells = allergenCols.map((colNome) => {
         const a = allergeni.find((x) => (x.nome || "").trim() === colNome && ids.includes(x.id));
         return a ? "1" : "";
       });
-      return [nome, ordine, costo, abb, senza, poco, vaInCottura, ...allergenCells].join(sep);
+      return [nome, ordine, costo, abb, senza, poco, vaInCottura, prepCucina, ...allergenCells].join(sep);
     });
     const csv = [header, ...rows].join("\r\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -309,6 +337,7 @@ export default function IngredientiPage() {
         return;
       }
       const formatoB = isFormatoB(headerParts);
+      const prepIdx = prepCucinaHeaderIndex(headerParts);
       const allergenNameToId = {};
       allergeni.forEach((a) => {
         const n = (a.nome || "").trim();
@@ -340,22 +369,26 @@ export default function IngredientiPage() {
         const poco = row[5] !== "" && row[5] !== undefined ? Number(String(row[5]).replace(",", ".")) : undefined;
         const vaInCotturaRaw = (row[6] ?? "").toString().trim().toLowerCase();
         const vaInCottura = vaInCotturaRaw === "1" || vaInCotturaRaw === "si" || vaInCotturaRaw === "sì" || vaInCotturaRaw === "true" || vaInCotturaRaw === "yes";
+        const prepCucina = prepIdx >= 0 ? parsePrepCucinaCell(row[prepIdx]) : false;
         const payload = { nome, costoUnitario: costo, attivo: true };
         if (abbondante !== undefined) payload.costoAbbondante = abbondante;
         if (senza !== undefined) payload.costoSenza = senza;
         if (poco !== undefined) payload.costoPoco = poco;
         if (vaInCottura) payload.vaInCottura = true;
+        if (prepCucina) payload.prepCucina = true;
         if (ordineVal !== undefined && !Number.isNaN(ordineVal)) payload.ordine = ordineVal;
 
         let allergeneIds = [];
         if (formatoB && headerParts.length > 7) {
-          for (let j = 7; j < Math.min(headerParts.length, row.length); j++) {
+          const startJ = prepIdx >= 0 ? prepIdx + 1 : 7;
+          for (let j = startJ; j < Math.min(headerParts.length, row.length); j++) {
             const colName = (headerParts[j] || "").trim();
             const id = allergenNameToId[colName.toLowerCase()] || allergeni.find((a) => (a.nome || "").trim().toLowerCase() === colName.toLowerCase())?.id;
             if (id && isAllergenChecked(row[j])) allergeneIds.push(id);
           }
         } else {
-          const allergeniStr = row[7] ?? "";
+          const allergCol = prepIdx >= 0 ? prepIdx + 1 : 7;
+          const allergeniStr = row[allergCol] ?? "";
           if (allergeniStr.trim()) {
             const names = allergeniStr.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
             allergeneIds = names
@@ -376,6 +409,7 @@ export default function IngredientiPage() {
             if (senza !== undefined) updates.costoSenza = senza;
             if (poco !== undefined) updates.costoPoco = poco;
             updates.vaInCottura = vaInCottura;
+            updates.prepCucina = prepCucina;
             if (ordineVal !== undefined && !Number.isNaN(ordineVal)) updates.ordine = ordineVal;
             await updateIngredient(existing.id, updates);
             try {
@@ -439,7 +473,7 @@ export default function IngredientiPage() {
         </button>
       </div>
       <p className="dashboard-menu-intro">
-        Nome, prezzo unitario, costi variante (abbondante / senza / poco) e se l’ingrediente va in cottura. Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura; stesso ordine = stessi passaggi.
+        Nome, prezzo unitario, costi variante (abbondante / senza / poco), va in cottura e opzionalmente &quot;Prep. cucina&quot; (scongelare, ecc.) per la schermata Cucina. Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.
       </p>
 
       <Modal open={!!editIngredient} onClose={() => setEditIngredient(null)} title="Modifica ingrediente">
@@ -507,6 +541,14 @@ export default function IngredientiPage() {
             <label className="dashboard-checkbox-label" style={{ marginLeft: 16 }}>
               <input
                 type="checkbox"
+                checked={editPrepCucina}
+                onChange={(e) => setEditPrepCucina(e.target.checked)}
+              />
+              Prep. cucina
+            </label>
+            <label className="dashboard-checkbox-label" style={{ marginLeft: 16 }}>
+              <input
+                type="checkbox"
                 checked={editAttivo}
                 onChange={(e) => setEditAttivo(e.target.checked)}
               />
@@ -556,7 +598,8 @@ export default function IngredientiPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontWeight: 600 }}>Inserisci CSV</span>
             <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
-              Carica un file CSV in <strong>Formato B (foglio con spunte)</strong>: prima riga con nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura e una colonna per ogni allergene (Glutine, Crostacei, …). Nelle celle allergeni usa 1, x o sì per indicare presenza. <strong>Ordine</strong>: 0–99 = in cottura, da 100 in poi = a fine cottura; più ingredienti possono avere lo stesso ordine. Prezzi con 2 decimali.
+              Carica un file CSV in <strong>Formato B (foglio con spunte)</strong>: prima riga con nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina e una colonna per ogni allergene (Glutine, Crostacei, …).{" "}
+              <strong>prep_cucina</strong> (1/sì = preparazione in cucina, es. scongelare) è opzionale: i file senza quella colonna restano validi. Nelle celle allergeni usa 1, x o sì. <strong>Ordine</strong>: 0–99 = in cottura, 100+ = a fine cottura. Prezzi con 2 decimali.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -583,11 +626,11 @@ export default function IngredientiPage() {
                 className="btn-primary-dashboard"
                 style={{ background: "#555" }}
                 onClick={() => {
-                  const header = ["nome_ingrediente", "ordine", "costo_eur", "abbondante", "senza", "poco", "va_in_cottura", ...ALLERGENE_COLUMN_NAMES].join(";");
+                  const header = ["nome_ingrediente", "ordine", "costo_eur", "abbondante", "senza", "poco", "va_in_cottura", "prep_cucina", ...ALLERGENE_COLUMN_NAMES].join(";");
                   const n = ALLERGENE_COLUMN_NAMES.length;
                   const examples = [
-                    "Pomodoro;0;0,40;0,20;-0,40;-0,15;1" + ";".repeat(n),
-                    "Mozzarella;0;0,80;0,25;-0,80;-0,20;0" + ";".repeat(5) + "1" + ";".repeat(n - 6),
+                    "Pomodoro;0;0,40;0,20;-0,40;-0,15;1;0" + ";".repeat(n),
+                    "Mozzarella;0;0,80;0,25;-0,80;-0,20;0;0" + ";".repeat(5) + "1" + ";".repeat(n - 6),
                   ];
                   const csv = [header, ...examples].join("\r\n");
                   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -606,7 +649,7 @@ export default function IngredientiPage() {
           <div style={{ borderTop: "1px solid #eee", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontWeight: 600 }}>Esporta CSV</span>
             <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
-              Scarica la lista ingredienti in CSV Formato B (nome, ordine, costi, va in cottura, una colonna per allergene con 1/vuoto). Ordine: 0–99 in cottura, 100+ a fine cottura. Prezzi con 2 decimali.
+              Scarica la lista ingredienti in CSV Formato B (nome, ordine, costi, va in cottura, prep_cucina, colonne allergeni). Ordine: 0–99 in cottura, 100+ a fine cottura. Prezzi con 2 decimali.
             </p>
             <button type="button" className="btn-primary-dashboard" onClick={handleExportCsv}>
               Esporta CSV
@@ -677,6 +720,14 @@ export default function IngredientiPage() {
             />
             Va in cottura
           </label>
+          <label className="dashboard-checkbox-label" style={{ marginLeft: 16 }}>
+            <input
+              type="checkbox"
+              checked={newPrepCucina}
+              onChange={(e) => setNewPrepCucina(e.target.checked)}
+            />
+            Prep. cucina
+          </label>
           <label style={{ marginLeft: 16, display: "flex", alignItems: "center", gap: 6 }}>
             <span>Ordine di uscita</span>
             <input
@@ -736,6 +787,7 @@ export default function IngredientiPage() {
               <span className="dashboard-list-item-meta">
                 € {formatPrice(ing.costoUnitario ?? ing.costo_unitario ?? ing.costo)}
                 {ing.vaInCottura === true || ing.va_in_cottura === true ? " · Cottura" : ""}
+                {ing.prepCucina === true || ing.prep_cucina === true ? " · Prep cucina" : ""}
               </span>
               <button type="button" className="btn-primary-dashboard" onClick={() => openEdit(ing)} style={{ marginRight: 8 }}>
                 Modifica

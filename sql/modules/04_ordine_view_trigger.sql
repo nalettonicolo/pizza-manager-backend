@@ -2,6 +2,11 @@
 -- =============================================================================
 -- 4) Vista public."Ordine" + INSTEAD OF UPDATE
 -- =============================================================================
+-- Nota: anche sql/sql_upgrade.sql contiene queste patch; per cucina_prep_stato
+-- servono le colonne su core (vedi fine sql_upgrade se usi solo moduli).
+
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS cucina_prep_stato JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()
 RETURNS TRIGGER
@@ -17,10 +22,10 @@ BEGIN
     note               = COALESCE(NEW.note, OLD.note),
     tipo_pagamento     = COALESCE(NEW.tipo_pagamento, OLD.tipo_pagamento),
     tipo_ordine        = COALESCE(NEW.tipo_ordine, OLD.tipo_ordine),
-    nome_cliente       = NEW.nome_cliente,
-    telefono_ritiro    = NEW.telefono_ritiro,
-    orario_ritiro      = NEW.orario_ritiro,
-    indirizzo_consegna = NEW.indirizzo_consegna,
+    nome_cliente       = COALESCE(NEW.nome_cliente, OLD.nome_cliente),
+    telefono_ritiro    = COALESCE(NEW.telefono_ritiro, OLD.telefono_ritiro),
+    orario_ritiro      = COALESCE(NEW.orario_ritiro, OLD.orario_ritiro),
+    indirizzo_consegna = COALESCE(NEW.indirizzo_consegna, OLD.indirizzo_consegna),
     consegna_lng       = COALESCE(NEW.consegna_lng, OLD.consegna_lng),
     consegna_lat       = COALESCE(NEW.consegna_lat, OLD.consegna_lat),
     pagamento_dettaglio = COALESCE(NEW.pagamento_dettaglio, OLD.pagamento_dettaglio),
@@ -34,6 +39,7 @@ BEGIN
     assegnato_rider_at = COALESCE(NEW.assegnato_rider_at, OLD.assegnato_rider_at),
     ritiro_bancone_rider_at = COALESCE(NEW.ritiro_bancone_rider_at, OLD.ritiro_bancone_rider_at),
     consegna_effettiva_at = COALESCE(NEW.consegna_effettiva_at, OLD.consegna_effettiva_at),
+    cucina_prep_stato  = COALESCE(NEW.cucina_prep_stato, OLD.cucina_prep_stato),
     updated_at         = now()
   WHERE id = OLD.id
     AND tenant_id IN (
@@ -73,6 +79,7 @@ CREATE VIEW public."Ordine" AS
     assegnato_rider_at,
     ritiro_bancone_rider_at,
     consegna_effettiva_at,
+    cucina_prep_stato,
     tenant_id AS "tenantId",
     created_at AS "createdAt",
     updated_at AS "updatedAt",
