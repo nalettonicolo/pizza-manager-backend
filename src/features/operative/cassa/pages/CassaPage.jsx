@@ -43,6 +43,7 @@ import {
 } from "@/features/admin/services/adminService"
 import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson"
 import { roundTotalToFiveCents } from "@/utils/cassaArrotondamento"
+import { readFiscalConfigFromParametri, enqueueCorrispettivoAfterCheckoutIfConfigured } from "@/integrations/fiscal"
 import { markCheckoutStart, markCheckoutEnd } from "@/utils/cassaTelemetry"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { aggregateIncassiDaOrdini, ordineIsAnnullato } from "@/utils/incassiFromOrdini"
@@ -1559,6 +1560,23 @@ export default function CassaPage() {
           pagamento_dettaglio: pagamentoDettaglio,
         },
       })
+
+      const fiscalCfg = readFiscalConfigFromParametri(tenantData?.parametri_operativi)
+      void enqueueCorrispettivoAfterCheckoutIfConfigured({
+        tenantId,
+        ordineId: orderId,
+        puntoVenditaId: activePvId ?? null,
+        fiscalMode: fiscalCfg.fiscalMode,
+        fiscalProviderKey: fiscalCfg.fiscalProviderKey,
+        checkoutSnapshot: {
+          totale_incasso: totalCheckout,
+          tipo_pagamento: tipoPagamentoFinale,
+          pagamento_dettaglio: pagamentoDettaglio,
+        },
+      }).then(({ error }) => {
+        if (error) console.warn("[Cassa] fiscal_outbox enqueue:", error)
+      })
+
       markCheckoutEnd(telemetryCtx, { ok: true, tenantId, ordineId: orderId })
 
       clearCassaDraft(tenantId, activePvId ?? "nopv")

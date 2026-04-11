@@ -1,20 +1,10 @@
 -- =============================================================================
--- PizzaManager — SQL UPGRADE (modifiche successive al baseline)
+-- 12) Fiscal outbox + payment link intents (Italia: RT / SDI / PSP — scheletro)
 -- =============================================================================
---
--- Baseline completo (nuovo DB o allineamento totale): eseguire per primo
---   sql/schema_completo_pizzamanager.sql
---   (include ex snapshot remoto + tutte le patch che erano in supabase/migrations/).
---
--- Questo file è il punto unico per le nuove DDL/DML incrementali: preferire
--- blocchi idempotenti (IF NOT EXISTS, DO $$ … $$, DROP … IF EXISTS dove sicuro).
---
+-- Coda invii verso registratore telematico, intermediari SDI o export file.
+-- Tabella separata per richieste "paga con link" (SMS / hosted page) con webhook.
+-- tenant_id / ordine_id allineati a core (vista public."Ordine" → core.ordini).
 -- =============================================================================
-
--- -----------------------------------------------------------------------------
--- Patch: fiscal_outbox + payment_link_intents (modulo 12 — stesso contenuto di
--- sql/modules/12_fiscal_outbox_payment_links.sql)
--- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS public.fiscal_outbox (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -66,6 +56,9 @@ COMMENT ON COLUMN public.fiscal_outbox.payload_canonical IS
 COMMENT ON COLUMN public.fiscal_outbox.provider_key IS
   'Identificativo implementazione: es. rtmiddleware_acme, export_xml_v1, noop.';
 
+-- -----------------------------------------------------------------------------
+-- Richieste pagamento remoto (link su smartphone / ordine telefonico)
+-- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.payment_link_intents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
@@ -99,6 +92,9 @@ CREATE INDEX IF NOT EXISTS idx_payment_link_intents_ordine
 COMMENT ON TABLE public.payment_link_intents IS
   'Intent pay-by-link: generazione URL, invio SMS, stato da webhook PSP.';
 
+-- -----------------------------------------------------------------------------
+-- RLS (staff tenant via utenti_ruoli, come contabilita_movimenti)
+-- -----------------------------------------------------------------------------
 ALTER TABLE public.fiscal_outbox ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_link_intents ENABLE ROW LEVEL SECURITY;
 
@@ -125,6 +121,7 @@ CREATE POLICY "payment_link_intents_staff_all" ON public.payment_link_intents
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.fiscal_outbox TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.payment_link_intents TO authenticated;
 
+-- Trigger updated_at
 CREATE OR REPLACE FUNCTION public.pm_touch_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
