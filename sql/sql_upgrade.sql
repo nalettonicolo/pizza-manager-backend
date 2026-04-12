@@ -8,8 +8,13 @@
 --
 -- Questo file è il punto unico per le nuove DDL/DML incrementali: preferire
 -- blocchi idempotenti (IF NOT EXISTS, DO $$ … $$, DROP … IF EXISTS dove sicuro).
--- Le patch che toccano Ordine / create_order_with_items vanno incluse qui (non solo
--- nei moduli sotto sql/modules/), così un’unica esecuzione di sql_upgrade.sql basta.
+-- Le patch che toccano Ordine / create_order_with_items / replace_order_items vanno
+-- incluse qui (non solo nei moduli sotto sql/modules/), così un’unica esecuzione basta.
+--
+-- Changelog (estratto):
+--   2026-04-11 — public.replace_order_items: modifica righe ordine dalla cassa
+--     (sostituisce righe, totale, azzera cucina_prep_stato; staff cassa / accesso_cassa).
+--   2026-04 — public.utenti_ruoli.nome_visualizzato + vista ruoli_pizzeria aggiornata.
 --
 -- =============================================================================
 
@@ -514,6 +519,140 @@ COMMENT ON FUNCTION public.create_order_with_items(
   'Crea ordine + righe. Delivery+poligono: clienti con lng/lat in area; staff cassa esentato. telefono_ritiro opzionale (ritiro negozio).';
 
 -- -----------------------------------------------------------------------------
+-- Sostituisce tutte le righe di un ordine (modifica cassa). Transazionale.
+-- Richiede utente con ruolo cassa o accesso_cassa sul tenant dell’ordine.
+-- -----------------------------------------------------------------------------
+
+DROP FUNCTION IF EXISTS public.replace_order_items(UUID, NUMERIC, JSONB);
+
+CREATE OR REPLACE FUNCTION public.replace_order_items(
+  p_ordine_id UUID,
+  p_totale NUMERIC,
+  p_items JSONB DEFAULT '[]'::JSONB
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin
+AS $rep$
+DECLARE
+  v_tenant_id UUID;
+  v_stato core.stato_ordine;
+  v_item JSONB;
+  v_is_staff_cassa BOOLEAN;
+  v_pid UUID;
+BEGIN
+  IF p_ordine_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_id_obbligatorio';
+  END IF;
+
+  SELECT o.tenant_id, o.stato INTO v_tenant_id, v_stato
+  FROM core.ordini o
+  WHERE o.id = p_ordine_id;
+
+  IF v_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_non_trovato';
+  END IF;
+
+  IF v_stato = 'ANNULLATO'::core.stato_ordine THEN
+    RAISE EXCEPTION 'ordine_annullato_non_modificabile';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid()
+      AND ur.tenant_id = v_tenant_id
+      AND COALESCE(ur.attivo, true) = true
+      AND (
+        lower(trim(COALESCE(ur.ruolo, ''))) = 'cassa'
+        OR COALESCE(ur.accesso_cassa, false) = true
+      )
+  ) INTO v_is_staff_cassa;
+
+  IF NOT v_is_staff_cassa THEN
+    RAISE EXCEPTION 'non_autorizzato';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'almeno_una_riga';
+  END IF;
+
+  DELETE FROM core.riga_ordine
+  WHERE ordine_id = p_ordine_id
+    AND tenant_id = v_tenant_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_pid := NULL;
+    BEGIN
+      v_pid := (v_item->>'prodotto_id')::UUID;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        RAISE EXCEPTION 'prodotto_id_non_valido';
+    END;
+
+    IF v_pid IS NULL THEN
+      RAISE EXCEPTION 'prodotto_id_obbligatorio';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM core.prodotti p
+      WHERE p.id = v_pid
+        AND p.tenant_id = v_tenant_id
+    ) THEN
+      RAISE EXCEPTION 'prodotto_non_valido';
+    END IF;
+
+    INSERT INTO core.riga_ordine (
+      tenant_id,
+      ordine_id,
+      prodotto_id,
+      quantita,
+      prezzo,
+      formato_nome,
+      ingredienti_cottura_summary
+    )
+    VALUES (
+      v_tenant_id,
+      p_ordine_id,
+      v_pid,
+      GREATEST(1, COALESCE((v_item->>'quantita')::INTEGER, 1)),
+      COALESCE((v_item->>'prezzo')::NUMERIC, 0),
+      NULLIF(
+        trim(COALESCE(v_item->>'formato_nome', v_item->>'formatoNome', '')),
+        ''
+      ),
+      NULLIF(
+        trim(
+          COALESCE(
+            v_item->>'ingredienti_cottura_summary',
+            v_item->>'ingredientiCotturaSummary',
+            ''
+          )
+        ),
+        ''
+      )
+    );
+  END LOOP;
+
+  UPDATE core.ordini
+  SET
+    totale = p_totale,
+    updated_at = now(),
+    cucina_prep_stato = '{}'::jsonb
+  WHERE id = p_ordine_id
+    AND tenant_id = v_tenant_id;
+END;
+$rep$;
+
+GRANT EXECUTE ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) TO authenticated;
+
+COMMENT ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) IS
+  'Cassa: sostituisce righe ordine, ricalcola totale, azzera cucina_prep_stato (nuovi id riga).';
+
+-- -----------------------------------------------------------------------------
 -- Ingredienti: prep_cucina (lista lavorazioni in schermata Cucina)
 -- Ordini: cucina_prep_stato JSONB { "doneByRiga": { "riga_uuid": ["ing_uuid"] } }
 -- -----------------------------------------------------------------------------
@@ -652,3 +791,46 @@ CREATE VIEW public."Prodotto" AS
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."Prodotto" TO authenticated;
 GRANT SELECT ON public."Prodotto" TO anon;
+
+-- -----------------------------------------------------------------------------
+-- Dipendenti: nome in sede (es. «Anna» alla cassa) per turni / riferimento umano
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE public.utenti_ruoli
+  ADD COLUMN IF NOT EXISTS nome_visualizzato TEXT;
+
+COMMENT ON COLUMN public.utenti_ruoli.nome_visualizzato IS
+  'Nome o etichetta del dipendente in sede (es. Anna), distinto dall’account email; usabile per turni e report.';
+
+DROP VIEW IF EXISTS public.ruoli_pizzeria CASCADE;
+
+CREATE VIEW public.ruoli_pizzeria AS
+SELECT
+  ur.user_id,
+  ur.ruolo,
+  ur.tenant_id,
+  ur.puo_modificare_parametri,
+  ur.attivo,
+  ur.accesso_riepilogo,
+  ur.accesso_cassa,
+  ur.accesso_cucina,
+  ur.accesso_bancone,
+  ur.accesso_pizzaiolo,
+  ur.accesso_delivery,
+  ur.accesso_pony,
+  ur.nome_visualizzato,
+  u.email
+FROM public.utenti_ruoli ur
+JOIN auth.users u ON u.id = ur.user_id
+WHERE ur.tenant_id IN (
+  SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+)
+OR EXISTS (
+  SELECT 1
+  FROM public.utenti_ruoli ur_sa
+  WHERE ur_sa.user_id = auth.uid()
+    AND COALESCE(ur_sa.attivo, true) IS DISTINCT FROM false
+    AND lower(trim(ur_sa.ruolo)) = 'superadmin'
+);
+
+GRANT SELECT ON public.ruoli_pizzeria TO authenticated;

@@ -272,3 +272,136 @@ COMMENT ON FUNCTION public.create_order_with_items(
 ) IS
   'Crea ordine + righe. Delivery+poligono: clienti con lng/lat in area; staff cassa esentato. Opzionale pagamento_dettaglio JSONB, punto_vendita_id, turno_operatori_id (turno aperto cassa).';
 
+-- =============================================================================
+-- replace_order_items — modifica righe ordine (cassa), stesso contratto di sql_upgrade.sql
+-- =============================================================================
+
+DROP FUNCTION IF EXISTS public.replace_order_items(UUID, NUMERIC, JSONB);
+
+CREATE OR REPLACE FUNCTION public.replace_order_items(
+  p_ordine_id UUID,
+  p_totale NUMERIC,
+  p_items JSONB DEFAULT '[]'::JSONB
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin
+AS $rep$
+DECLARE
+  v_tenant_id UUID;
+  v_stato core.stato_ordine;
+  v_item JSONB;
+  v_is_staff_cassa BOOLEAN;
+  v_pid UUID;
+BEGIN
+  IF p_ordine_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_id_obbligatorio';
+  END IF;
+
+  SELECT o.tenant_id, o.stato INTO v_tenant_id, v_stato
+  FROM core.ordini o
+  WHERE o.id = p_ordine_id;
+
+  IF v_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_non_trovato';
+  END IF;
+
+  IF v_stato = 'ANNULLATO'::core.stato_ordine THEN
+    RAISE EXCEPTION 'ordine_annullato_non_modificabile';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid()
+      AND ur.tenant_id = v_tenant_id
+      AND COALESCE(ur.attivo, true) = true
+      AND (
+        lower(trim(COALESCE(ur.ruolo, ''))) = 'cassa'
+        OR COALESCE(ur.accesso_cassa, false) = true
+      )
+  ) INTO v_is_staff_cassa;
+
+  IF NOT v_is_staff_cassa THEN
+    RAISE EXCEPTION 'non_autorizzato';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'almeno_una_riga';
+  END IF;
+
+  DELETE FROM core.riga_ordine
+  WHERE ordine_id = p_ordine_id
+    AND tenant_id = v_tenant_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_pid := NULL;
+    BEGIN
+      v_pid := (v_item->>'prodotto_id')::UUID;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        RAISE EXCEPTION 'prodotto_id_non_valido';
+    END;
+
+    IF v_pid IS NULL THEN
+      RAISE EXCEPTION 'prodotto_id_obbligatorio';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM core.prodotti p
+      WHERE p.id = v_pid
+        AND p.tenant_id = v_tenant_id
+    ) THEN
+      RAISE EXCEPTION 'prodotto_non_valido';
+    END IF;
+
+    INSERT INTO core.riga_ordine (
+      tenant_id,
+      ordine_id,
+      prodotto_id,
+      quantita,
+      prezzo,
+      formato_nome,
+      ingredienti_cottura_summary
+    )
+    VALUES (
+      v_tenant_id,
+      p_ordine_id,
+      v_pid,
+      GREATEST(1, COALESCE((v_item->>'quantita')::INTEGER, 1)),
+      COALESCE((v_item->>'prezzo')::NUMERIC, 0),
+      NULLIF(
+        trim(COALESCE(v_item->>'formato_nome', v_item->>'formatoNome', '')),
+        ''
+      ),
+      NULLIF(
+        trim(
+          COALESCE(
+            v_item->>'ingredienti_cottura_summary',
+            v_item->>'ingredientiCotturaSummary',
+            ''
+          )
+        ),
+        ''
+      )
+    );
+  END LOOP;
+
+  UPDATE core.ordini
+  SET
+    totale = p_totale,
+    updated_at = now(),
+    cucina_prep_stato = '{}'::jsonb
+  WHERE id = p_ordine_id
+    AND tenant_id = v_tenant_id;
+END;
+$rep$;
+
+GRANT EXECUTE ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) TO authenticated;
+
+COMMENT ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) IS
+  'Cassa: sostituisce righe ordine, ricalcola totale, azzera cucina_prep_stato (nuovi id riga).';
+

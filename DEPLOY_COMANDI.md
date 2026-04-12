@@ -20,6 +20,20 @@ Solo frontend (nessun push, nessun Koyeb):
 npm run deploy:hosting
 ```
 
+**Deploy senza prompt** (CI / script: niente `Read-Host`, Firebase `--non-interactive`; serve già `firebase login` o `FIREBASE_TOKEN`):
+
+```powershell
+npm run deploy:hosting:ci
+```
+
+Push GitHub + hosting senza prompt intermedio (il push può comunque chiedere credenziali Git se non configurate):
+
+```powershell
+npm run deploy:full:ci
+```
+
+PowerShell: `.\deploy-firebase.ps1 -NonInteractive`
+
 ---
 
 ## Prima volta o commit manuale

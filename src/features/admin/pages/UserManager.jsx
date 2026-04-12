@@ -7,6 +7,7 @@ import {
   getTenantUsers,
   updateUserRole,
   toggleUserActive,
+  updateStaffNomeVisualizzato,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
 
@@ -36,6 +37,8 @@ export default function UserManager() {
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState("")
   const [busyId, setBusyId] = useState(null)
+  /** Bozze nome in sede (allineate al server dopo ogni load). */
+  const [nomeDraft, setNomeDraft] = useState({})
 
   const loadUsers = useCallback(async () => {
     try {
@@ -43,6 +46,7 @@ export default function UserManager() {
       setError(null)
       const data = await getTenantUsers(tenantId)
       setUsers(data)
+      setNomeDraft(Object.fromEntries(data.map((u) => [u.id, u.nomeVisualizzato ?? ""])))
     } catch (err) {
       console.error(err)
       setError(err?.message ? `Errore nel caricamento utenti: ${err.message}` : "Errore nel caricamento utenti.")
@@ -66,7 +70,8 @@ export default function UserManager() {
     return users.filter((u) => {
       const email = (u.email || "").toLowerCase()
       const nome = (u.nome || "").toLowerCase()
-      return email.includes(q) || nome.includes(q)
+      const nv = (u.nomeVisualizzato || "").toLowerCase()
+      return email.includes(q) || nome.includes(q) || nv.includes(q)
     })
   }, [users, filter])
 
@@ -104,6 +109,24 @@ export default function UserManager() {
     }
   }
 
+  async function handleNomeSedeBlur(userId) {
+    if (!tenantId) return
+    const draft = (nomeDraft[userId] ?? "").trim()
+    const prev = (users.find((u) => u.id === userId)?.nomeVisualizzato ?? "").trim()
+    if (draft === prev) return
+    setBusyId(userId)
+    try {
+      await updateStaffNomeVisualizzato(tenantId, userId, draft)
+      await loadUsers()
+    } catch (err) {
+      console.error(err)
+      alert(err?.message || "Salvataggio nome in sede non riuscito.")
+      setNomeDraft((m) => ({ ...m, [userId]: prev }))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   if (loading) return <Loader />
   if (error) return <ErrorState message={error} />
 
@@ -131,7 +154,8 @@ export default function UserManager() {
             Elenco dipendenti
           </h2>
           <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Tabella riepilogativa: cerca per nome o email, modifica ruolo o sospendi l’accesso senza uscire dalla pagina.
+            Tabella riepilogativa: cerca per nome, nome in sede o email; imposta il <strong>nome in sede</strong> per sapere chi
+            usa ogni account (utile per turni e riepiloghi). Modifica ruolo o sospendi l’accesso senza uscire dalla pagina.
           </p>
         </div>
 
@@ -143,7 +167,7 @@ export default function UserManager() {
             id="dipendenti-filter"
             type="search"
             className="dipendenti-search-input"
-            placeholder="Nome o email…"
+            placeholder="Nome, nome in sede o email…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             autoComplete="off"
@@ -174,20 +198,35 @@ export default function UserManager() {
               <table className="dipendenti-table">
                 <thead>
                   <tr>
-                    <th scope="col">Dipendente</th>
+                    <th scope="col">Account</th>
+                    <th scope="col">Nome in sede</th>
                     <th scope="col">Ruolo base</th>
                     <th scope="col">Accesso</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUsers.map((user) => {
-                    const displayName = labelFromEmailPrefix(user.email) || user.nome || "—"
+                    const accountLabel = labelFromEmailPrefix(user.email) || user.nome || "—"
                     const rowBusy = busyId === user.id
                     return (
                       <tr key={user.id}>
                         <td>
-                          <strong style={{ color: "#0f172a" }}>{displayName}</strong>
+                          <strong style={{ color: "#0f172a" }}>{accountLabel}</strong>
                           <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2, wordBreak: "break-all" }}>{user.email}</div>
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            className="dipendenti-nome-sede-input"
+                            placeholder="es. Anna"
+                            maxLength={120}
+                            value={nomeDraft[user.id] ?? ""}
+                            disabled={rowBusy}
+                            onChange={(e) => setNomeDraft((m) => ({ ...m, [user.id]: e.target.value }))}
+                            onBlur={() => void handleNomeSedeBlur(user.id)}
+                            aria-label={`Nome in sede per ${user.email}`}
+                          />
+                          <div className="dipendenti-role-hint">Chi usa questo login in negozio (turni, note).</div>
                         </td>
                         <td>
                           <select
@@ -195,7 +234,7 @@ export default function UserManager() {
                             value={user.ruolo}
                             disabled={rowBusy}
                             onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                            aria-label={`Ruolo per ${displayName}`}
+                            aria-label={`Ruolo per ${accountLabel}`}
                           >
                             {RUOLO_OPTIONS.map((o) => (
                               <option key={o.value} value={o.value}>

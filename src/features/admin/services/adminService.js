@@ -286,6 +286,26 @@ export async function updateOrder(ordineId, updates) {
   if (error) throw error
 }
 
+/**
+ * Sostituisce tutte le righe di un ordine (RPC replace_order_items).
+ * Richiede sql_upgrade con la funzione; azzera cucina_prep_stato lato server.
+ */
+export async function replaceOrderItems(ordineId, totale, items) {
+  const payload = (items || []).map((it) => ({
+    prodotto_id: it.prodotto_id ?? it.prodottoId ?? it.id,
+    quantita: Math.max(1, Number(it.quantita ?? it.qty ?? 1) || 1),
+    prezzo: Number(it.prezzo ?? 0),
+    formato_nome: it.formatoNome ?? it.formato_nome ?? "",
+    ingredienti_cottura_summary: it.ingredientiCotturaSummary ?? it.ingredienti_cottura_summary ?? "",
+  }))
+  const { error } = await supabase.rpc("replace_order_items", {
+    p_ordine_id: ordineId,
+    p_totale: Number(totale),
+    p_items: payload,
+  })
+  if (error) throw error
+}
+
 /** True se la tabella contabilita_movimenti è esposta e leggibile (dopo sql_upgrade.sql). */
 export async function contabilitaMovimentiTableReachable(tenantId) {
   if (!tenantId) return false
@@ -730,6 +750,7 @@ export async function getTenantUsers(tenantId) {
     id: r.user_id,
     email: r.email || "",
     nome: labelFromEmailPrefix(r.email) || (r.email && r.email.includes("@") ? r.email.split("@")[0] : "—"),
+    nomeVisualizzato: r.nome_visualizzato != null && String(r.nome_visualizzato).trim() !== "" ? String(r.nome_visualizzato).trim() : null,
     ruolo: r.ruolo,
     attivo: r.attivo !== false,
   }))
@@ -766,17 +787,44 @@ export async function toggleUserActive(tenantId, userId, attivo) {
   if (error) throw mapSupabaseRuoliError(error)
 }
 
+/** Nome in sede (non è l’account): es. «Anna» per chi usa login cassa generico. Max 120 caratteri. */
+export async function updateStaffNomeVisualizzato(tenantId, userId, nomeVisualizzato) {
+  if (!tenantId || !userId) throw new Error("Tenant o utente mancante.")
+  const raw = typeof nomeVisualizzato === "string" ? nomeVisualizzato.trim().slice(0, 120) : ""
+  const { error } = await supabase
+    .from("utenti_ruoli")
+    .update({ nome_visualizzato: raw === "" ? null : raw })
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+
+  if (error) throw mapSupabaseRuoliError(error)
+}
+
 const AREA_COLUMNS = "accesso_riepilogo, accesso_cassa, accesso_cucina, accesso_bancone, accesso_pizzaiolo, accesso_delivery, accesso_pony"
 
 // Ruoli pizzeria (vista ruoli_pizzeria + RPC)
 export async function getRuoliPizzeria(tenantId) {
-  let query = supabase
-    .from("ruoli_pizzeria")
-    .select("user_id, email, ruolo, tenant_id, puo_modificare_parametri, attivo, " + AREA_COLUMNS)
-    .eq("tenant_id", tenantId)
-    .order("ruolo", { ascending: true })
+  const selectWithNome =
+    "user_id, email, ruolo, tenant_id, puo_modificare_parametri, attivo, nome_visualizzato, " + AREA_COLUMNS
+  const selectWithoutNome = "user_id, email, ruolo, tenant_id, puo_modificare_parametri, attivo, " + AREA_COLUMNS
+
+  let query = supabase.from("ruoli_pizzeria").select(selectWithNome).eq("tenant_id", tenantId).order("ruolo", { ascending: true })
 
   let { data, error } = await query
+  if (error && error.code === "42703") {
+    const retryNome = await supabase
+      .from("ruoli_pizzeria")
+      .select(selectWithoutNome)
+      .eq("tenant_id", tenantId)
+      .order("ruolo", { ascending: true })
+    if (!retryNome.error) {
+      data = retryNome.data
+      error = null
+    } else {
+      data = null
+      error = retryNome.error
+    }
+  }
   if (error && error.code === "42703") {
     const fallback = await supabase
       .from("ruoli_pizzeria")
@@ -792,6 +840,7 @@ export async function getRuoliPizzeria(tenantId) {
       if (minimal.error) throw minimal.error
       return (minimal.data || []).map((row) => ({
         ...row,
+        nome_visualizzato: row.nome_visualizzato ?? null,
         puo_modificare_parametri: false,
         attivo: true,
         accesso_riepilogo: true,
@@ -806,6 +855,7 @@ export async function getRuoliPizzeria(tenantId) {
     if (fallback.error) throw fallback.error
     return (fallback.data || []).map((row) => ({
       ...row,
+      nome_visualizzato: row.nome_visualizzato ?? null,
       puo_modificare_parametri: row.puo_modificare_parametri ?? false,
       attivo: row.attivo !== false,
       accesso_riepilogo: true,
@@ -819,6 +869,7 @@ export async function getRuoliPizzeria(tenantId) {
   if (error) throw error
   return (data || []).map((row) => ({
     ...row,
+    nome_visualizzato: row.nome_visualizzato ?? null,
     accesso_riepilogo: row.accesso_riepilogo !== false,
     accesso_cassa: row.accesso_cassa !== false,
     accesso_cucina: row.accesso_cucina !== false,

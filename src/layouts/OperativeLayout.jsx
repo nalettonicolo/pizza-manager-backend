@@ -18,6 +18,7 @@ import { findOperativeNavItemForPath, resolveFirstOperativePath } from "@/utils/
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -102,6 +103,9 @@ export default function OperativeLayout() {
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const narrowViewport = useMediaQuery("(max-width: 900px)");
+  const useDrawerSidebar = narrowViewport && !operativeFullBleed;
   const matchedNavItem = [...ROLE_NAV]
     .sort((a, b) => b.to.length - a.to.length)
     .find(
@@ -110,6 +114,7 @@ export default function OperativeLayout() {
     );
   const headerSubtitle = matchedNavItem?.label ?? "";
   const headerTitle = headerSubtitle ? `Area operativa — ${headerSubtitle}` : `Area operativa${operatoreLabel ? ` — ${operatoreLabel}` : ""}`;
+  const headerTitleCompact = headerSubtitle || (operatoreLabel ? operatoreLabel : "Area operativa");
 
   useAutoFullscreenOnTablet(isPizzaioloPage);
 
@@ -126,6 +131,14 @@ export default function OperativeLayout() {
       setCassaSidebar(null);
     }
   }, [isCassaPage]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!useDrawerSidebar) setMobileSidebarOpen(false);
+  }, [useDrawerSidebar]);
 
   const handleLogout = async () => {
     await logout();
@@ -168,12 +181,38 @@ export default function OperativeLayout() {
   if (!canAccessCurrent && firstAllowedPath) {
     return <Navigate to={firstAllowedPath} replace />;
   }
-  const wrapClass = `dashboard-wrap theme-admin${tenantThemeClass}${operativeFullBleed ? " pizzaiolo-fullscreen" : ""}`;
+  const wrapClass = [
+    "dashboard-wrap",
+    "theme-admin",
+    tenantThemeClass.trim(),
+    operativeFullBleed ? "pizzaiolo-fullscreen" : "",
+    useDrawerSidebar ? "dashboard-wrap--drawer-sidebar" : "",
+    isCassaPage && narrowViewport ? "dashboard-wrap--cassa-mobile" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={wrapClass} style={themeStyle}>
+      {useDrawerSidebar && mobileSidebarOpen ? (
+        <button
+          type="button"
+          className="operative-drawer-backdrop"
+          aria-label="Chiudi menu"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      ) : null}
       {!operativeFullBleed && (
-        <aside className="dashboard-sidebar">
+        <aside
+          className={`dashboard-sidebar${useDrawerSidebar ? " dashboard-sidebar--drawer" : ""}${mobileSidebarOpen ? " is-open" : ""}`}
+        >
+          {useDrawerSidebar ? (
+            <div className="operative-sidebar-drawer-close">
+              <button type="button" onClick={() => setMobileSidebarOpen(false)} aria-label="Chiudi menu">
+                ✕
+              </button>
+            </div>
+          ) : null}
           {logoUrl && (
             <div style={{ marginBottom: 16, textAlign: "center" }}>
               <img src={logoUrl} alt={brandName} style={{ maxWidth: "100%", maxHeight: 48, objectFit: "contain" }} />
@@ -185,7 +224,7 @@ export default function OperativeLayout() {
               {cassaSidebar}
             </div>
           ) : null}
-          <nav>
+          <nav id="operative-sidebar-nav">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
@@ -228,11 +267,24 @@ export default function OperativeLayout() {
           )}
           {!operativeFullBleed && (
             <header className="dashboard-header">
-              <h1 className="dashboard-header-title">
-                {headerTitle}
-              </h1>
+              {useDrawerSidebar ? (
+                <button
+                  type="button"
+                  className="operative-mobile-menu-btn"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  aria-expanded={mobileSidebarOpen}
+                  aria-controls="operative-sidebar-nav"
+                  aria-label="Apri menu di navigazione"
+                >
+                  ☰
+                </button>
+              ) : null}
+              <h1 className="dashboard-header-title">{useDrawerSidebar ? headerTitleCompact : headerTitle}</h1>
               {isCassaPage && (
-                <div className="dashboard-header-toolbar" style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, margin: "0 16px", justifyContent: "flex-start" }}>
+                <div
+                  className={`dashboard-header-toolbar${useDrawerSidebar ? " cassa-header-toolbar-scroll" : ""}`}
+                  style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, margin: "0 16px", justifyContent: "flex-start" }}
+                >
                   {cassaToolbar}
                 </div>
               )}

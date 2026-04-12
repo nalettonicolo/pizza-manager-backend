@@ -7454,6 +7454,11 @@ COMMENT ON COLUMN public.utenti_ruoli.accesso_pizzaiolo IS 'Area Pizzaioli';
 COMMENT ON COLUMN public.utenti_ruoli.accesso_delivery IS 'Area Delivery';
 COMMENT ON COLUMN public.utenti_ruoli.accesso_pony IS 'Area Pony (stesso reparto Delivery)';
 
+ALTER TABLE public.utenti_ruoli
+  ADD COLUMN IF NOT EXISTS nome_visualizzato TEXT;
+
+COMMENT ON COLUMN public.utenti_ruoli.nome_visualizzato IS
+  'Nome o etichetta del dipendente in sede (es. Anna), distinto dall’account email; usabile per turni e report.';
 
 -- -----------------------------------------------------------------------------
 -- 5) Vista ruoli_pizzeria
@@ -7474,6 +7479,7 @@ SELECT
   ur.accesso_pizzaiolo,
   ur.accesso_delivery,
   ur.accesso_pony,
+  ur.nome_visualizzato,
   u.email
 FROM public.utenti_ruoli ur
 JOIN auth.users u ON u.id = ur.user_id
@@ -7668,6 +7674,7 @@ SELECT
   ur.accesso_pizzaiolo,
   ur.accesso_delivery,
   ur.accesso_pony,
+  ur.nome_visualizzato,
   u.email
 FROM public.utenti_ruoli ur
 JOIN auth.users u ON u.id = ur.user_id
@@ -7730,7 +7737,7 @@ COMMENT ON TABLE public.staff_password_note IS 'Nota password accesso staff (arc
 -- >>> BEGIN: sql/PM_LATEST_IMPLEMENTATIONS.sql
 -- =============================================================================
 -- PizzaManager — Ultime implementazioni SQL (consolidato)
--- Data riferimento: 2026-04
+-- Data riferimento: 2026-04 (agg. replace_order_items + note dipendenti 2026-04-11)
 --
 -- Contenuto (idempotente dove possibile):
 --   1) public.staff_password_note — archivio note password staff (Admin Ruoli)
@@ -7740,6 +7747,7 @@ COMMENT ON TABLE public.staff_password_note IS 'Nota password accesso staff (arc
 --   5) core.ordini — colonne cassa / ordine cliente (note, pagamento, tipo, ritiro…)
 --   6) core.riga_ordine — formato_nome, ingredienti_cottura_summary (comanda / cassa)
 --   7) public.create_order_with_items — RPC allineata a adminService (Supabase JS)
+--   8) public.replace_order_items — sostituisce righe ordine (modifica cassa; adminService.replaceOrderItems)
 --
 -- App (senza DDL qui): Admin Magazzino/Contabilità usa ancora localStorage per tenant;
 --   parametri_operativi (JSON su tenants) — comanda / cassa (CassaImpostazioniPage + printComanda.js):
@@ -7828,6 +7836,7 @@ SELECT
   ur.accesso_pizzaiolo,
   ur.accesso_delivery,
   ur.accesso_pony,
+  ur.nome_visualizzato,
   u.email
 FROM public.utenti_ruoli ur
 JOIN auth.users u ON u.id = ur.user_id
@@ -8014,6 +8023,139 @@ COMMENT ON FUNCTION public.create_order_with_items(
   UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT
 ) IS
   'Crea ordine + righe (cassa). p_items: prodotto_id, quantita, prezzo, formato_nome, ingredienti_cottura_summary.';
+
+-- -----------------------------------------------------------------------------
+-- 7b) public.replace_order_items — modifica righe ordine dalla cassa
+--     Allineata a sql/sql_upgrade.sql e src/features/admin/services/adminService.js (replaceOrderItems).
+-- -----------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.replace_order_items(UUID, NUMERIC, JSONB);
+
+CREATE OR REPLACE FUNCTION public.replace_order_items(
+  p_ordine_id UUID,
+  p_totale NUMERIC,
+  p_items JSONB DEFAULT '[]'::JSONB
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin
+AS $rep$
+DECLARE
+  v_tenant_id UUID;
+  v_stato core.stato_ordine;
+  v_item JSONB;
+  v_is_staff_cassa BOOLEAN;
+  v_pid UUID;
+BEGIN
+  IF p_ordine_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_id_obbligatorio';
+  END IF;
+
+  SELECT o.tenant_id, o.stato INTO v_tenant_id, v_stato
+  FROM core.ordini o
+  WHERE o.id = p_ordine_id;
+
+  IF v_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_non_trovato';
+  END IF;
+
+  IF v_stato = 'ANNULLATO'::core.stato_ordine THEN
+    RAISE EXCEPTION 'ordine_annullato_non_modificabile';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid()
+      AND ur.tenant_id = v_tenant_id
+      AND COALESCE(ur.attivo, true) = true
+      AND (
+        lower(trim(COALESCE(ur.ruolo, ''))) = 'cassa'
+        OR COALESCE(ur.accesso_cassa, false) = true
+      )
+  ) INTO v_is_staff_cassa;
+
+  IF NOT v_is_staff_cassa THEN
+    RAISE EXCEPTION 'non_autorizzato';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'almeno_una_riga';
+  END IF;
+
+  DELETE FROM core.riga_ordine
+  WHERE ordine_id = p_ordine_id
+    AND tenant_id = v_tenant_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_pid := NULL;
+    BEGIN
+      v_pid := (v_item->>'prodotto_id')::UUID;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        RAISE EXCEPTION 'prodotto_id_non_valido';
+    END;
+
+    IF v_pid IS NULL THEN
+      RAISE EXCEPTION 'prodotto_id_obbligatorio';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM core.prodotti p
+      WHERE p.id = v_pid
+        AND p.tenant_id = v_tenant_id
+    ) THEN
+      RAISE EXCEPTION 'prodotto_non_valido';
+    END IF;
+
+    INSERT INTO core.riga_ordine (
+      tenant_id,
+      ordine_id,
+      prodotto_id,
+      quantita,
+      prezzo,
+      formato_nome,
+      ingredienti_cottura_summary
+    )
+    VALUES (
+      v_tenant_id,
+      p_ordine_id,
+      v_pid,
+      GREATEST(1, COALESCE((v_item->>'quantita')::INTEGER, 1)),
+      COALESCE((v_item->>'prezzo')::NUMERIC, 0),
+      NULLIF(
+        trim(COALESCE(v_item->>'formato_nome', v_item->>'formatoNome', '')),
+        ''
+      ),
+      NULLIF(
+        trim(
+          COALESCE(
+            v_item->>'ingredienti_cottura_summary',
+            v_item->>'ingredientiCotturaSummary',
+            ''
+          )
+        ),
+        ''
+      )
+    );
+  END LOOP;
+
+  UPDATE core.ordini
+  SET
+    totale = p_totale,
+    updated_at = now(),
+    cucina_prep_stato = '{}'::jsonb
+  WHERE id = p_ordine_id
+    AND tenant_id = v_tenant_id;
+END;
+$rep$;
+
+GRANT EXECUTE ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) TO authenticated;
+
+COMMENT ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) IS
+  'Cassa: sostituisce righe ordine, ricalcola totale, azzera cucina_prep_stato (nuovi id riga).';
 
 -- <<< END: sql/PM_LATEST_IMPLEMENTATIONS.sql
 

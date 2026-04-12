@@ -36,6 +36,12 @@ const ACCESS_TO_AREA_KEY = {
   accesso_pony: "pony",
 };
 
+function nomeInSedeOEmail(r) {
+  const nv = r.nome_visualizzato != null && String(r.nome_visualizzato).trim() !== "" ? String(r.nome_visualizzato).trim() : ""
+  if (nv) return nv
+  return labelFromEmailPrefix(r.email) || r.email || "—"
+}
+
 function getCosaPuoFare(ruolo, puoModificareParametri) {
   const list = [];
   switch (ruolo) {
@@ -261,8 +267,8 @@ export default function RuoliPage() {
       <section className="dashboard-box dashboard-settings-section">
         <h2 className="dashboard-settings-section-title">Elenco ruoli</h2>
         <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
-          In elenco l’etichetta principale è il <strong>nome tratto dall’email</strong> (parte prima di @); sotto compaiono
-          email e ruolo tecnico. Clicca per aprire il dettaglio e le aree consentite.
+          In elenco il titolo è il <strong>nome in sede</strong> se l’hai impostato in Dipendenti (es. Anna), altrimenti
+          l’etichetta dall’email; sotto compaiono email e ruolo tecnico. Clicca per aprire il dettaglio e le aree consentite.
         </p>
         <p style={{ color: "#64748b", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
           <strong>Password (archivio titolare):</strong> non è la password tecnica in Supabase Auth, ma una{" "}
@@ -315,11 +321,12 @@ export default function RuoliPage() {
                       width: "100%",
                     }}
                   >
-                    <strong style={{ display: "block", textDecoration: "underline" }}>
-                      {labelFromEmailPrefix(r.email) || r.email}
-                    </strong>
-                    {labelFromEmailPrefix(r.email) ? (
-                      <span style={{ display: "block", fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{r.email}</span>
+                    <strong style={{ display: "block", textDecoration: "underline" }}>{nomeInSedeOEmail(r)}</strong>
+                    <span style={{ display: "block", fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{r.email}</span>
+                    {r.nome_visualizzato && String(r.nome_visualizzato).trim() ? (
+                      <span style={{ display: "block", fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                        Account: {labelFromEmailPrefix(r.email) || r.email}
+                      </span>
                     ) : null}
                   </button>
                     <span style={{ fontSize: 13, color: "#64748b" }}>Ruolo: {r.ruolo}</span>
@@ -376,18 +383,17 @@ export default function RuoliPage() {
       <Modal
         open={!!detailUser}
         onClose={() => setDetailUser(null)}
-        title={
-          detailUser
-            ? `Cosa può fare – ${labelFromEmailPrefix(detailUser.email) || detailUser.email}`
-            : ""
-        }
+        title={detailUser ? `Cosa può fare – ${nomeInSedeOEmail(detailUser)}` : ""}
       >
         {detailUser && (
           <div style={{ padding: "8px 0" }}>
-            <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-              {labelFromEmailPrefix(detailUser.email) || "—"}
-            </p>
+            <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>{nomeInSedeOEmail(detailUser)}</p>
             <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b" }}>{detailUser.email}</p>
+            {detailUser.nome_visualizzato && String(detailUser.nome_visualizzato).trim() ? (
+              <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8" }}>
+                Etichetta account: {labelFromEmailPrefix(detailUser.email) || "—"}
+              </p>
+            ) : null}
             <p style={{ marginBottom: 12, color: "#64748b", fontSize: 14 }}>
               Ruolo assegnato: <strong style={{ color: "#334155" }}>{detailUser.ruolo}</strong>
             </p>

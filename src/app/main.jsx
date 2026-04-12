@@ -23,6 +23,7 @@ import { PvProvider } from "@/app/contexts/PvContext"
 import { ThemeProvider } from "@/app/contexts/ThemeContext"
 
 import "@/style.css"
+import "@/styles/cassa-mobile.css"
 
 const routerFuture = {
   v7_startTransition: true,

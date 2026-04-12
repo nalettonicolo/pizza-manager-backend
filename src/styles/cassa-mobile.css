@@ -1,0 +1,250 @@
+/**
+ * Cassa + area operativa su viewport stretti (tablet/telefono).
+ * Companiona OperativeLayout (drawer) e CassaPage (tab bar + pannelli).
+ */
+
+/* ——— Area operativa: sidebar come drawer ——— */
+@media (max-width: 900px) {
+  .dashboard-wrap.dashboard-wrap--drawer-sidebar:not(.pizzaiolo-fullscreen) {
+    flex-direction: row !important;
+    align-items: stretch !important;
+    position: relative;
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+
+  .dashboard-wrap.dashboard-wrap--drawer-sidebar:not(.pizzaiolo-fullscreen) .dashboard-sidebar--drawer {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 88vw) !important;
+    max-width: min(300px, 88vw) !important;
+    flex-shrink: 0 !important;
+    z-index: 2200;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: none !important;
+    box-shadow: none;
+    padding-top: max(12px, env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+  }
+
+  .dashboard-wrap.dashboard-wrap--drawer-sidebar:not(.pizzaiolo-fullscreen) .dashboard-sidebar--drawer.is-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18);
+  }
+
+  .dashboard-wrap.dashboard-wrap--drawer-sidebar:not(.pizzaiolo-fullscreen) .dashboard-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .operative-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 2150;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .operative-mobile-menu-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-right: 4px;
+    margin-left: -8px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.06);
+    color: #1e293b;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .operative-mobile-menu-btn:active {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  .operative-sidebar-drawer-close {
+    display: flex;
+    justify-content: flex-end;
+    margin: -4px -4px 8px 0;
+  }
+
+  .operative-sidebar-drawer-close button {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .dashboard-wrap.theme-admin .operative-sidebar-drawer-close button {
+    background: rgba(0, 0, 0, 0.08);
+    color: #333;
+  }
+
+  /* Header: titolo compatto + toolbar cassa a colonna */
+  .dashboard-wrap.dashboard-wrap--drawer-sidebar:not(.pizzaiolo-fullscreen) .dashboard-header {
+    padding-left: max(12px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(12px, env(safe-area-inset-right, 0px)) !important;
+    padding-top: max(8px, env(safe-area-inset-top, 0px)) !important;
+  }
+
+  .cassa-header-toolbar-scroll {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .cassa-header-toolbar-scroll > * {
+    min-width: min-content;
+  }
+
+  /* Contenuto cassa: colonna flex, niente doppio scroll esterno */
+  .dashboard-wrap--cassa-mobile .dashboard-content {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-wrap--cassa-mobile .dashboard-main {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Tab bar cassa (fissa in basso) */
+.cassa-mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Sotto drawer navigazione (2200), sopra contenuto; modali cassa usano z-index 2300+ */
+  z-index: 1250;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  list-style: none;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  box-shadow: 0 -6px 24px rgba(15, 23, 42, 0.08);
+}
+
+.cassa-mobile-tabbar button {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px 6px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cassa-mobile-tabbar button[aria-current="true"] {
+  color: #0f766e;
+  background: #f0fdfa;
+}
+
+.cassa-mobile-tabbar .cassa-mobile-tabbar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #0d9488;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Righe prodotto: pulsanti impilati, area touch più grande */
+@media (max-width: 900px) {
+  .cassa-product-grid .cassa-product-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 14px !important;
+  }
+
+  .cassa-product-grid .cassa-product-row-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    width: 100% !important;
+    justify-content: stretch !important;
+    align-items: center !important;
+  }
+
+  .cassa-product-grid .cassa-product-row-actions > button {
+    flex: 1 1 auto !important;
+    min-height: 44px !important;
+    font-size: 15px !important;
+  }
+
+  .cassa-product-grid .cassa-product-name {
+    font-size: 17px !important;
+  }
+
+  .cassa-product-grid .cassa-product-desc {
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+  }
+
+  .cassa-product-grid .cassa-product-price {
+    font-size: 17px !important;
+  }
+
+  .cassa-main-columns .planningMergedTable {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cassa-main-columns .planningMergedHeader,
+  .cassa-main-columns .planningMergedRow {
+    min-width: min(100%, 360px);
+  }
+}

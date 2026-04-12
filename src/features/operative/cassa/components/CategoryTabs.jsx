@@ -21,6 +21,7 @@ export default function CategoryTabs({
   activeCategory,
   onSelect,
   accentColor = "#e65100",
+  compact = false,
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -48,8 +49,8 @@ export default function CategoryTabs({
   return (
     <div style={styles.section}>
       <div style={styles.menuTitle}>
-        <UtensilsCrossed size={20} style={{ color: accentColor, flexShrink: 0 }} />
-        <span style={{ ...styles.menuTitleText, color: accentColor }}>Menù</span>
+        <UtensilsCrossed size={compact ? 22 : 20} style={{ color: accentColor, flexShrink: 0 }} />
+        <span style={{ ...styles.menuTitleText, color: accentColor, fontSize: compact ? 17 : 18 }}>Menù</span>
       </div>
       <div style={styles.wrapper}>
         {/* Tasto Categorie: apre elenco categorie esistenti */}
@@ -59,7 +60,9 @@ export default function CategoryTabs({
             style={{
               ...styles.tab,
               ...(activeCategory ? {} : styles.tabActiveCategorie),
-              minWidth: 140,
+              minWidth: compact ? 0 : 140,
+              minHeight: compact ? 46 : undefined,
+              flex: compact ? "1 1 auto" : undefined,
             }}
             onClick={() => setDropdownOpen((v) => !v)}
             aria-expanded={dropdownOpen}
@@ -111,6 +114,7 @@ export default function CategoryTabs({
               type="button"
               style={{
                 ...styles.tab,
+                minHeight: compact ? 46 : undefined,
                 ...(isActive ? { ...styles.tabActive, borderColor: color, background: color } : {}),
               }}
               onClick={() => onSelect(cat.id)}
