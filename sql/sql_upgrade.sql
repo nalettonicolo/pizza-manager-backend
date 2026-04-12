@@ -15,6 +15,9 @@
 -- incluse qui (non solo nei moduli sotto sql/modules/), così un'unica esecuzione basta.
 --
 -- Changelog (estratto):
+--   2026-04-11 — RLS su core.* tenant-sensitive: funzione pm_core_tenant_access + policy
+--     authenticated (superadmin, staff/clienti, rider auth_user_id); menu pubblico su
+--     core.prodotti invariato (anon_select_*); revoche backup/_prisma; RLS ingrediente_allergeni.
 --   2026-04-11 — Moduli sql/modules/ 01–11 inclusi all'inizio del file (ordine esecuzione).
 --   2026-04-11 — public.replace_order_items: modifica righe ordine dalla cassa
 --     (sostituisce righe, totale, azzera cucina_prep_stato; staff cassa / accesso_cassa).
@@ -983,6 +986,11 @@ BEGIN
       SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
       UNION
       SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+      UNION
+      SELECT rr.tenant_id FROM core.rider rr
+      WHERE rr.auth_user_id = auth.uid()
+        AND COALESCE(rr.attivo, true) IS NOT FALSE
+        AND rr.deleted_at IS NULL
     );
   RETURN NEW;
 END;
@@ -1025,6 +1033,11 @@ CREATE VIEW public."Ordine" AS
     SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
     UNION
     SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+    UNION
+    SELECT rr.tenant_id FROM core.rider rr
+    WHERE rr.auth_user_id = auth.uid()
+      AND COALESCE(rr.attivo, true) IS NOT FALSE
+      AND rr.deleted_at IS NULL
   );
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."Ordine" TO authenticated;
@@ -1489,6 +1502,11 @@ BEGIN
       SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
       UNION
       SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+      UNION
+      SELECT rr.tenant_id FROM core.rider rr
+      WHERE rr.auth_user_id = auth.uid()
+        AND COALESCE(rr.attivo, true) IS NOT FALSE
+        AND rr.deleted_at IS NULL
     );
   RETURN NEW;
 END;
@@ -1532,6 +1550,11 @@ CREATE VIEW public."Ordine" AS
     SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
     UNION
     SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+    UNION
+    SELECT rr.tenant_id FROM core.rider rr
+    WHERE rr.auth_user_id = auth.uid()
+      AND COALESCE(rr.attivo, true) IS NOT FALSE
+      AND rr.deleted_at IS NULL
   );
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."Ordine" TO authenticated;
@@ -1573,6 +1596,11 @@ CREATE VIEW public."Prodotto" AS
     SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
     UNION
     SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+    UNION
+    SELECT rr.tenant_id FROM core.rider rr
+    WHERE rr.auth_user_id = auth.uid()
+      AND COALESCE(rr.attivo, true) IS NOT FALSE
+      AND rr.deleted_at IS NULL
   );
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."Prodotto" TO authenticated;
@@ -1620,3 +1648,306 @@ OR EXISTS (
 );
 
 GRANT SELECT ON public.ruoli_pizzeria TO authenticated;
+
+-- =============================================================================
+-- RLS core + public hardening (difesa in profondità; auth.uid + tenant)
+-- =============================================================================
+-- Dipendenze: public.utenti_ruoli, public.clienti, core.tenants; opzionale core.rider.
+-- Rimuove policy legacy isolate_by_tenant (current_setting) dove presente.
+-- Dopo deploy: rieseguire verify_database_inventory_readonly.sql (sez. 6–8) + smoke cross-tenant.
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.pm_core_tenant_access(p_tenant uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SET search_path = public, core
+AS $fn$
+BEGIN
+  IF p_tenant IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur_sa
+    WHERE ur_sa.user_id = auth.uid()
+      AND COALESCE(ur_sa.attivo, true) IS NOT FALSE
+      AND lower(trim(COALESCE(ur_sa.ruolo, ''))) = 'superadmin'
+  ) THEN
+    RETURN true;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid()
+      AND COALESCE(ur.attivo, true) IS NOT FALSE
+      AND ur.tenant_id = p_tenant
+  ) THEN
+    RETURN true;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.clienti c
+    WHERE c.id = auth.uid()
+      AND c.tenant_id = p_tenant
+  ) THEN
+    RETURN true;
+  END IF;
+
+  IF to_regclass('core.rider') IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1
+      FROM core.rider rr
+      WHERE rr.auth_user_id = auth.uid()
+        AND COALESCE(rr.attivo, true) IS NOT FALSE
+        AND rr.deleted_at IS NULL
+        AND rr.tenant_id = p_tenant
+    ) THEN
+      RETURN true;
+    END IF;
+  END IF;
+
+  RETURN false;
+END;
+$fn$;
+
+COMMENT ON FUNCTION public.pm_core_tenant_access(uuid) IS
+  'RLS core: true se auth.uid() è superadmin, staff/cliente del tenant, o rider (core.rider.auth_user_id).';
+
+REVOKE ALL ON FUNCTION public.pm_core_tenant_access(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.pm_core_tenant_access(uuid) TO authenticated;
+
+-- --- core.tenants (chiave = id) ------------------------------------------------
+ALTER TABLE core.tenants ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS isolate_by_tenant ON core.tenants;
+
+DROP POLICY IF EXISTS pm_core_tenants_auth_tenant ON core.tenants;
+CREATE POLICY pm_core_tenants_auth_tenant ON core.tenants
+  FOR ALL
+  TO authenticated
+  USING (public.pm_core_tenant_access(id))
+  WITH CHECK (public.pm_core_tenant_access(id));
+
+-- --- core.prodotti: staff tenant + lettura anon menu (vista pubblica) ---------
+ALTER TABLE core.prodotti ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS isolate_by_tenant ON core.prodotti;
+
+DROP POLICY IF EXISTS pm_core_prodotti_auth_tenant ON core.prodotti;
+CREATE POLICY pm_core_prodotti_auth_tenant ON core.prodotti
+  FOR ALL
+  TO authenticated
+  USING (public.pm_core_tenant_access(tenant_id))
+  WITH CHECK (public.pm_core_tenant_access(tenant_id));
+
+DROP POLICY IF EXISTS anon_select_prodotti_menu_pubblico ON core.prodotti;
+CREATE POLICY anon_select_prodotti_menu_pubblico ON core.prodotti
+  FOR SELECT
+  TO anon
+  USING (
+    deleted_at IS NULL
+    AND (attivo = true OR attivo IS NULL)
+    AND (visibile_online = true OR visibile_online IS NULL)
+  );
+
+-- --- Tutte le altre tabelle core con colonna tenant_id (idempotente) ----------
+DO $$
+DECLARE
+  r record;
+  pol text;
+BEGIN
+  FOR r IN
+    SELECT c.oid, c.relname AS tname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'core'
+      AND c.relkind = 'r'
+      AND EXISTS (
+        SELECT 1
+        FROM information_schema.columns col
+        WHERE col.table_schema = 'core'
+          AND col.table_name = c.relname
+          AND col.column_name = 'tenant_id'
+      )
+      AND c.relname <> 'prodotti'
+    ORDER BY c.relname
+  LOOP
+    pol := 'pm_core_' || replace(r.tname, '-', '_') || '_auth_tenant';
+
+    EXECUTE format('ALTER TABLE core.%I ENABLE ROW LEVEL SECURITY', r.tname);
+    EXECUTE format('DROP POLICY IF EXISTS isolate_by_tenant ON core.%I', r.tname);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON core.%I', pol, r.tname);
+    EXECUTE format(
+      'CREATE POLICY %I ON core.%I FOR ALL TO authenticated USING (public.pm_core_tenant_access(tenant_id)) WITH CHECK (public.pm_core_tenant_access(tenant_id))',
+      pol,
+      r.tname
+    );
+  END LOOP;
+END $$;
+
+-- --- core.consegna_percorso_ordine (tenant via percorso) -----------------------
+DO $$
+BEGIN
+  IF to_regclass('core.consegna_percorso_ordine') IS NULL
+     OR to_regclass('core.consegna_percorso') IS NULL THEN
+    RETURN;
+  END IF;
+
+  ALTER TABLE core.consegna_percorso_ordine ENABLE ROW LEVEL SECURITY;
+
+  DROP POLICY IF EXISTS pm_core_consegna_percorso_ordine_auth ON core.consegna_percorso_ordine;
+  CREATE POLICY pm_core_consegna_percorso_ordine_auth ON core.consegna_percorso_ordine
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1
+        FROM core.consegna_percorso cp
+        WHERE cp.id = consegna_percorso_ordine.percorso_id
+          AND public.pm_core_tenant_access(cp.tenant_id)
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1
+        FROM core.consegna_percorso cp
+        WHERE cp.id = consegna_percorso_ordine.percorso_id
+          AND public.pm_core_tenant_access(cp.tenant_id)
+      )
+    );
+END $$;
+
+-- --- core.rider_posizione (tenant via rider) ----------------------------------
+DO $$
+BEGIN
+  IF to_regclass('core.rider_posizione') IS NULL OR to_regclass('core.rider') IS NULL THEN
+    RETURN;
+  END IF;
+
+  ALTER TABLE core.rider_posizione ENABLE ROW LEVEL SECURITY;
+
+  DROP POLICY IF EXISTS pm_core_rider_posizione_auth ON core.rider_posizione;
+  CREATE POLICY pm_core_rider_posizione_auth ON core.rider_posizione
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1
+        FROM core.rider rr
+        WHERE rr.id = rider_posizione.rider_id
+          AND public.pm_core_tenant_access(rr.tenant_id)
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1
+        FROM core.rider rr
+        WHERE rr.id = rider_posizione.rider_id
+          AND public.pm_core_tenant_access(rr.tenant_id)
+      )
+    );
+END $$;
+
+-- --- public: tabelle legacy backup / migrazioni Prisma (no accesso client) ----
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+      AND (
+        tablename = '_prisma_migrations'
+        OR tablename LIKE '%\_backup' ESCAPE '\'
+        OR tablename LIKE '%\_backup\_%' ESCAPE '\'
+      )
+  LOOP
+    EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', r.tablename);
+  END LOOP;
+END $$;
+
+-- --- public.ingrediente_allergeni ---------------------------------------------
+DO $$
+BEGIN
+  IF to_regclass('public.ingrediente_allergeni') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'ingrediente_allergeni'
+      AND column_name = 'tenant_id'
+  ) THEN
+    RAISE NOTICE 'public.ingrediente_allergeni senza tenant_id: salto RLS pm_public_ingrediente_allergeni_tenant.';
+    RETURN;
+  END IF;
+
+  ALTER TABLE public.ingrediente_allergeni ENABLE ROW LEVEL SECURITY;
+
+  DROP POLICY IF EXISTS pm_public_ingrediente_allergeni_tenant ON public.ingrediente_allergeni;
+  CREATE POLICY pm_public_ingrediente_allergeni_tenant ON public.ingrediente_allergeni
+    FOR ALL
+    TO authenticated
+    USING (public.pm_core_tenant_access(tenant_id))
+    WITH CHECK (public.pm_core_tenant_access(tenant_id));
+END $$;
+
+-- --- admin.* : policy esplicite se RLS attivo senza righe in pg_policies --------
+-- Nota: in Dashboard Supabase non esporre lo schema admin a PostgREST. Se fosse esposto,
+-- senza policy il ruolo authenticated non vedrebbe righe (comportamento sicuro ma opaco).
+DO $$
+DECLARE
+  r record;
+  pol text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'admin') THEN
+    RETURN;
+  END IF;
+
+  FOR r IN
+    SELECT c.relname AS tname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'admin'
+      AND c.relkind = 'r'
+      AND c.relrowsecurity
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname = 'admin' AND tablename = r.tname
+    ) THEN
+      CONTINUE;
+    END IF;
+
+    pol := 'pm_admin_' || replace(r.tname, '-', '_') || '_superadmin';
+
+    EXECUTE format($f$
+      CREATE POLICY %I ON admin.%I
+      FOR ALL
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM public.utenti_ruoli ur_sa
+          WHERE ur_sa.user_id = auth.uid()
+            AND COALESCE(ur_sa.attivo, true) IS NOT FALSE
+            AND lower(trim(COALESCE(ur_sa.ruolo, ''))) = 'superadmin'
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM public.utenti_ruoli ur_sa
+          WHERE ur_sa.user_id = auth.uid()
+            AND COALESCE(ur_sa.attivo, true) IS NOT FALSE
+            AND lower(trim(COALESCE(ur_sa.ruolo, ''))) = 'superadmin'
+        )
+      )
+    $f$, pol, r.tname);
+  END LOOP;
+END $$;

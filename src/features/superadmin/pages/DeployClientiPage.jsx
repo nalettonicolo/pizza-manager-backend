@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getTenants } from "@/features/superadmin/services/superadminService";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
 import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
 
 const DEPLOY_CHECKLIST_STORAGE_KEY = "pizzamanager_deploy_checklist_v1";
@@ -182,13 +183,14 @@ export default function DeployClientiPage() {
         <p style={{ margin: "0 0 10px", fontSize: 14, color: "#475569" }}>
           Questa pagina ora usa i dati reali dei clienti registrati (tenant) per preparare e tracciare il go-live.
         </p>
-        <div style={{ marginBottom: 12 }}>
-          <input
-            type="text"
+        <div style={{ marginBottom: 12, maxWidth: "min(480px, 100%)" }}>
+          <SaListSearchField
+            id="sa-deploy-tenants-search"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Cerca per nome, slug o URL sito web..."
-            style={{ width: "100%", maxWidth: "min(560px, 100%)", padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1" }}
+            onChange={setQuery}
+            placeholder="Cerca per nome, slug o URL sito web…"
+            resultsCount={filteredTenants.length}
+            totalCount={tenants.length}
           />
         </div>
 

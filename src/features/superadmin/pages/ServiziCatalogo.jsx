@@ -10,6 +10,8 @@ import {
 } from "@/features/superadmin/catalog/servicesStorage";
 import { exportServiziCatalogCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
 import { applyServiziCsvToCatalog, parseServiziCsv } from "@/features/superadmin/utils/parseServiziCsv";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
 
 const btnSecondary = {
   padding: "8px 16px",
@@ -46,20 +48,36 @@ export default function ServiziCatalogo() {
   const [services, setServices] = useState(() => loadServicesCatalog());
   const [modal, setModal] = useState(null);
   const importCsvRef = useRef(null);
+  const [listQuery, setListQuery] = useState("");
 
   useEffect(() => {
     saveServicesCatalog(services);
   }, [services]);
 
+  const servicesFiltered = useMemo(() => {
+    const q = normalizeListSearchQuery(listQuery);
+    if (!q) return services;
+    return services.filter((s) =>
+      rowMatchesListSearch(q, [
+        s.nome,
+        s.categoria,
+        s.id,
+        ...(Array.isArray(s.funzioni) ? s.funzioni : []),
+        String(s.prezzoMensile ?? ""),
+        s.attivo === false ? "disattivato" : "",
+      ]),
+    );
+  }, [services, listQuery]);
+
   const byCategory = useMemo(() => {
     const m = new Map();
-    for (const s of services) {
+    for (const s of servicesFiltered) {
       const c = s.categoria || "Altro";
       if (!m.has(c)) m.set(c, []);
       m.get(c).push(s);
     }
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b, "it"));
-  }, [services]);
+  }, [servicesFiltered]);
 
   const openAdd = () => {
     setModal({ mode: "add", ...createEmptyService(), funzioniText: "", avanzamentoPercentuale: 0 });
@@ -177,8 +195,16 @@ export default function ServiziCatalogo() {
         </ul>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="sa-page-toolbar" style={{ marginBottom: 16 }}>
+        <SaListSearchField
+          id="sa-servizi-search"
+          value={listQuery}
+          onChange={setListQuery}
+          placeholder="Cerca servizio, categoria, id, funzione…"
+          resultsCount={servicesFiltered.length}
+          totalCount={services.length}
+        />
+        <div className="sa-page-toolbar-actions">
           <input ref={importCsvRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onImportCsv} />
           <button type="button" className="btn-primary-dashboard" onClick={openAdd}>
             + Nuovo servizio
@@ -194,15 +220,19 @@ export default function ServiziCatalogo() {
           >
             Esporta CSV
           </button>
+          <button type="button" onClick={resetCatalog} style={{ ...btnSecondary, fontSize: 13 }}>
+            Ripristina catalogo predefinito
+          </button>
         </div>
-        <button type="button" onClick={resetCatalog} style={{ ...btnSecondary, fontSize: 13 }}>
-          Ripristina catalogo predefinito
-        </button>
       </div>
 
       <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
         Dati salvati in questo browser (localStorage). Totale voci: <strong>{services.length}</strong>.
       </p>
+
+      {services.length > 0 && servicesFiltered.length === 0 ? (
+        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748b" }}>Nessun servizio corrisponde alla ricerca.</p>
+      ) : null}
 
       {byCategory.map(([categoria, items]) => (
         <div key={categoria} className="dashboard-box" style={{ marginBottom: 24 }}>

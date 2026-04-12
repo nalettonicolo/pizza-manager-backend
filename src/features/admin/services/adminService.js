@@ -1927,6 +1927,28 @@ function isIngredientCategoryForReport(cat) {
 }
 
 /**
+ * Macro-categoria vendite da slug/nome categoria listino (allineato alle sezioni menu: pizze, fritti, dolci, bibite).
+ * @param {{ slug?: string, nome?: string } | null | undefined} cat
+ * @returns {"pizze"|"fritti"|"dolci"|"bibite"|"altro"}
+ */
+export function macroCategoriaVenditaFromCat(cat) {
+  if (!cat) return "altro"
+  const slug = String(cat.slug || "")
+    .toLowerCase()
+    .trim()
+  const nome = String(cat.nome || "")
+    .toLowerCase()
+    .trim()
+  const hay = `${slug} ${nome}`.trim()
+  if (!hay) return "altro"
+  if (/\bpizza\b|pizze|pizza/.test(hay)) return "pizze"
+  if (hay.includes("fritt")) return "fritti"
+  if (hay.includes("dolc")) return "dolci"
+  if (hay.includes("bibit") || hay.includes("bevan")) return "bibite"
+  return "altro"
+}
+
+/**
  * Top N prodotti venduti (per nome prodotto + formato), esclude righe la cui categoria è “ingredienti”.
  */
 async function computeTopProdottiVenduti(tenantId, ordineIds, topN = 5) {
@@ -2002,6 +2024,88 @@ async function computeTopProdottiVenduti(tenantId, ordineIds, topN = 5) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
     .map(([nome, quantita]) => ({ nome, quantita }))
+}
+
+/**
+ * Somma quantità vendute per macro-categoria (pizze / fritti / dolci / bibite / altro) su ordini non annullati nel periodo.
+ * Esclude categorie “ingredienti” come in {@link computeTopProdottiVenduti}.
+ */
+export async function getVenditeMacroCategorieInPeriod(tenantId, startDate, endDate) {
+  const orders = await getOrdersByDateRange(tenantId, startDate, endDate)
+  const ordineIds = orders.map((o) => o.id).filter(Boolean)
+  const macro = { pizze: 0, fritti: 0, dolci: 0, bibite: 0, altro: 0 }
+  if (!tenantId || !ordineIds.length) {
+    return { ...macro, totalePezzi: 0, ordiniNelPeriodo: orders.length }
+  }
+
+  let righe
+  try {
+    righe = await getRigheByOrdineIds(ordineIds, {
+      select: "prodottoId, prodotto_id, quantita, formatoNome, formato_nome",
+    })
+  } catch {
+    try {
+      righe = await getRigheByOrdineIds(ordineIds)
+    } catch (e2) {
+      console.warn("getVenditeMacroCategorieInPeriod righe:", e2)
+      return { ...macro, totalePezzi: 0, ordiniNelPeriodo: orders.length }
+    }
+  }
+  if (!righe?.length) {
+    return { ...macro, totalePezzi: 0, ordiniNelPeriodo: orders.length }
+  }
+
+  const productIds = [...new Set(righe.map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean))]
+  if (!productIds.length) {
+    return { ...macro, totalePezzi: 0, ordiniNelPeriodo: orders.length }
+  }
+
+  let prodottiRows = []
+  try {
+    const { data, error } = await supabase
+      .from("Prodotto")
+      .select("id, nome, categoria_id")
+      .eq("tenant_id", tenantId)
+      .in("id", productIds)
+    if (error) throw error
+    prodottiRows = data || []
+  } catch (e) {
+    console.warn("getVenditeMacroCategorieInPeriod prodotti:", e)
+    return { ...macro, totalePezzi: 0, ordiniNelPeriodo: orders.length }
+  }
+
+  let categorie = []
+  try {
+    categorie = await getCategories(tenantId)
+  } catch {
+    categorie = []
+  }
+  const catById = {}
+  for (const c of categorie) {
+    catById[c.id] = c
+  }
+
+  const byId = {}
+  for (const p of prodottiRows) {
+    byId[p.id] = p
+  }
+
+  for (const r of righe) {
+    const pid = r.prodottoId ?? r.prodotto_id
+    if (!pid) continue
+    const p = byId[pid]
+    if (!p) continue
+    const cid = p.categoria_id ?? p.categoriaId
+    const cat = cid ? catById[cid] : null
+    if (isIngredientCategoryForReport(cat)) continue
+
+    const q = Number(r.quantita) || 0
+    const key = macroCategoriaVenditaFromCat(cat)
+    macro[key] += q
+  }
+
+  const totalePezzi = macro.pizze + macro.fritti + macro.dolci + macro.bibite + macro.altro
+  return { ...macro, totalePezzi, ordiniNelPeriodo: orders.length }
 }
 
 export async function getReportData(

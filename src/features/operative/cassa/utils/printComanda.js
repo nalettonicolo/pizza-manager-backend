@@ -7,6 +7,7 @@ import {
   stampantiLabelDaReparti,
 } from "@/utils/comandaRepartiStampanti"
 import { printHtmlDocument } from "@/utils/printHtmlDocument"
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 function escapeHtml(s) {
   if (s == null || s === "") return "";
@@ -271,9 +272,9 @@ export function buildComandaHeaderHtmlOrdered(data, parametri) {
         break;
       case "indirizzo":
         if (indirizzoConsegna && showIndirizzo) {
-          parts.push(
-            `<div>${escapeHtml(labels.indirizzo)}: ${escapeHtml(indirizzoConsegna)}</div>`,
-          );
+          const raw = String(indirizzoConsegna);
+          const indFmt = formatIndirizzoDisplayItaliano(raw) || raw;
+          parts.push(`<div>${escapeHtml(labels.indirizzo)}: ${escapeHtml(indFmt)}</div>`);
         }
         break;
       case "pagamento":

@@ -20,6 +20,7 @@ import {
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -243,7 +244,9 @@ export default function PizzaioloDashboard() {
                     ) : null}
                   </div>
                   <br />
-                  <span style={styles.indirizzo}>{ord.indirizzo_consegna || "—"}</span>
+                  <span style={styles.indirizzo}>
+                    {ord.indirizzo_consegna ? formatIndirizzoDisplayItaliano(ord.indirizzo_consegna) : "—"}
+                  </span>
                 </a>
               </>
             ) : (

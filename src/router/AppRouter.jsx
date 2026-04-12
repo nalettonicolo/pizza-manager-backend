@@ -12,6 +12,7 @@ import OperativeLayout from "@/layouts/OperativeLayout";
 
 /* ================= GUARDS ================= */
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ContabilitaFullRoutesGate from "@/features/admin/components/ContabilitaFullRoutesGate";
 import ClienteRoute from "@/components/ClienteRoute";
 import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
 import RoleLayout from "@/layouts/RoleLayout";
@@ -435,12 +436,66 @@ export default function AppRouter() {
           <Route path="/admin/magazzino/ordini-fornitori" element={<Suspense fallback={<PageFallback />}><OrdiniFornitoriPage /></Suspense>} />
           <Route path="/admin/magazzino/ddt" element={<Suspense fallback={<PageFallback />}><DdtPage /></Suspense>} />
           <Route path="/admin/magazzino/movimenti-db" element={<Suspense fallback={<PageFallback />}><MagazzinoMovimentiDbPage /></Suspense>} />
-          <Route path="/admin/contabilita" element={<Suspense fallback={<PageFallback />}><ContabilitaHubPage /></Suspense>} />
-          <Route path="/admin/contabilita/fatture" element={<Suspense fallback={<PageFallback />}><FatturePage /></Suspense>} />
-          <Route path="/admin/contabilita/pagamenti-fatture" element={<Suspense fallback={<PageFallback />}><PagamentiFatturePage /></Suspense>} />
-          <Route path="/admin/contabilita/food-cost" element={<Suspense fallback={<PageFallback />}><FoodCostPage /></Suspense>} />
-          <Route path="/admin/contabilita/spese-locale" element={<Suspense fallback={<PageFallback />}><SpeseLocalePage /></Suspense>} />
-          <Route path="/admin/contabilita/spese-personale" element={<Suspense fallback={<PageFallback />}><SpesePersonalePage /></Suspense>} />
+          <Route
+            path="/admin/contabilita"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <ContabilitaHubPage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/contabilita/fatture"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <FatturePage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/contabilita/pagamenti-fatture"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <PagamentiFatturePage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/contabilita/food-cost"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <FoodCostPage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/contabilita/spese-locale"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <SpeseLocalePage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/contabilita/spese-personale"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <SpesePersonalePage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
           <Route path="/admin/contabilita/incassi" element={<Suspense fallback={<PageFallback />}><GestioneIncassiPage /></Suspense>} />
           <Route path="/admin/manuale" element={<Suspense fallback={<PageFallback />}><ManualeUtentePage /></Suspense>} />
           <Route path="/admin/guida" element={<Navigate to="/admin/manuale" replace />} />

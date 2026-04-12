@@ -105,6 +105,17 @@ export const SCHEDE_SERVIZI_IMPLEMENTAZIONE = {
     moduli: [{ label: "Contabilità", paths: ["/admin/contabilita"], note: "Hub e sotto-pagine" }],
     riferimentiCodice: ["src/features/admin/pages/contabilita/*", "useTenantLocalJson"],
   },
+  contabilita_semplice: {
+    sintesi: "Incassi manuali + riepilogo quantità vendute per macro-categoria menu (pizze, fritti, dolci, bibite).",
+    moduli: [
+      { label: "Gestione incassi", paths: ["/admin/contabilita/incassi"], note: "Unica voce menu; hub reindirizza qui" },
+    ],
+    riferimentiCodice: [
+      "GestioneIncassiPage.jsx",
+      "useTenantServizi (contabilitaMode)",
+      "adminService.getVenditeMacroCategorieInPeriod",
+    ],
+  },
   fidelity_card: {
     sintesi: "Carta fedeltà: punti per clienti anagrafica cassa, codice carta e movimenti.",
     moduli: [{ label: "Fidelity Card", paths: ["/admin/fidelity", "/operative/cassa/fidelity"] }],

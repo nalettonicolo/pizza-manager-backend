@@ -3,6 +3,7 @@
  */
 
 import { printHtmlDocument } from "@/utils/printHtmlDocument"
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 function escapeHtml(s) {
   if (s == null || s === "") return ""
@@ -163,7 +164,11 @@ export function buildRicevutaHtmlDocument(payload) {
   headerParts.push(`<div><strong>${escapeHtml(tipoLabel)}</strong></div>`)
   if (nomeCliente) headerParts.push(`<div>Cliente: ${escapeHtml(String(nomeCliente))}</div>`)
   if (orarioRitiro) headerParts.push(`<div>Orario: ${escapeHtml(String(orarioRitiro))}</div>`)
-  if (indirizzoConsegna) headerParts.push(`<div>Indirizzo: ${escapeHtml(String(indirizzoConsegna))}</div>`)
+  if (indirizzoConsegna) {
+    const raw = String(indirizzoConsegna)
+    const indFmt = formatIndirizzoDisplayItaliano(raw) || raw
+    headerParts.push(`<div>Indirizzo: ${escapeHtml(indFmt)}</div>`)
+  }
   if (tipoPagamento) headerParts.push(`<div>Pagamento: ${escapeHtml(String(tipoPagamento))}</div>`)
   if (note) headerParts.push(`<div class="note">Note: ${escapeHtml(String(note))}</div>`)
 

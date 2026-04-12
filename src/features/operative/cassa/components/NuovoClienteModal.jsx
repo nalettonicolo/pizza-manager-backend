@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import Modal from "@/components/dashboard/Modal"
 import { createAnagraficaCliente, updateAnagraficaCliente } from "@/features/admin/services/adminService"
 import { getDeliveryPolygonOuterRing } from "@/utils/deliveryArea"
-import { formatIndirizzoFromNominatim } from "@/utils/formatIndirizzoItaliano"
+import { formatIndirizzoFromNominatim, formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 const inputStyle = {
@@ -208,9 +208,10 @@ export default function NuovoClienteModal({
     setError(null)
     setLoading(true)
     try {
+      const indTrim = indirizzo?.trim() || ""
       const payload = {
         nome: nomeTrim,
-        indirizzo: indirizzo?.trim() || null,
+        indirizzo: indTrim ? formatIndirizzoDisplayItaliano(indTrim) : null,
         telefono: telefonoTrim,
         email: email?.trim() || null,
       }

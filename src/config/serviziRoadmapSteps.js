@@ -121,6 +121,15 @@ export const SERVIZI_ROADMAP_STEPS = [
     nota: "Incassi manuali su DB + hint ordini; spese/fatture ancora da consolidare su DB.",
   },
   {
+    id: "contabilita_semplice",
+    titolo: "Contabilità semplificata",
+    stato: "todo",
+    percentuale: 72,
+    resto:
+      "Estendere mapping categorie custom per listini non standard.\nExport CSV periodo; confronto con report cassa.\nOpzionale: alert se incassi manuali vs somma ordini fuori soglia.",
+    nota: "Solo /admin/contabilita/incassi + conteggi macro (pizze/fritti/dolci/bibite) da righe ordine; gate contabilitaMode in AdminLayout.",
+  },
+  {
     id: "fidelity_card",
     titolo: "Fidelity Card",
     stato: "todo",

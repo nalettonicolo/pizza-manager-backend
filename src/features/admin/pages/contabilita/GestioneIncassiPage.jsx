@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
 import { useTenant } from "@/app/contexts/TenantContext";
+import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import {
   getOrders,
   contabilitaMovimentiTableReachable,
   listContabilitaMovimenti,
   insertContabilitaMovimento,
   deleteContabilitaMovimento,
+  getVenditeMacroCategorieInPeriod,
 } from "@/features/admin/services/adminService";
 import { aggregateIncassiDaOrdini, aggregateIncassiContantiElettronicoDaOrdini } from "@/utils/incassiFromOrdini";
 
@@ -22,8 +24,19 @@ function mapDbRowToUi(row) {
   };
 }
 
+function defaultMacroDateRange() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  return {
+    da: start.toISOString().slice(0, 10),
+    a: end.toISOString().slice(0, 10),
+  };
+}
+
 export default function GestioneIncassiPage() {
   const { tenantId } = useTenant();
+  const { contabilitaMode } = useTenantServizi();
   const { data, setData, ready: localReady, storageKey } = useTenantLocalJson("contabilita_incassi", { movimenti: [] });
   const [dataMov, setDataMov] = useState(() => new Date().toISOString().slice(0, 10));
   const [descrizione, setDescrizione] = useState("");
@@ -39,6 +52,12 @@ export default function GestioneIncassiPage() {
   const [storageLoadErr, setStorageLoadErr] = useState(null);
   const [autoSyncBusy, setAutoSyncBusy] = useState(false);
   const probedRef = useRef(false);
+
+  const [macroDa, setMacroDa] = useState(() => defaultMacroDateRange().da);
+  const [macroA, setMacroA] = useState(() => defaultMacroDateRange().a);
+  const [macroStats, setMacroStats] = useState(null);
+  const [macroLoading, setMacroLoading] = useState(false);
+  const [macroErr, setMacroErr] = useState(null);
 
   useEffect(() => {
     probedRef.current = false;
@@ -107,6 +126,27 @@ export default function GestioneIncassiPage() {
       cancelled = true;
     };
   }, [tenantId]);
+
+  const loadMacroVendite = useCallback(async () => {
+    if (!tenantId) return;
+    const startIso = `${macroDa}T00:00:00.000`;
+    const endIso = `${macroA}T23:59:59.999`;
+    setMacroLoading(true);
+    setMacroErr(null);
+    try {
+      const data = await getVenditeMacroCategorieInPeriod(tenantId, startIso, endIso);
+      setMacroStats(data);
+    } catch (e) {
+      setMacroErr(e?.message || "Errore caricamento vendite per categoria");
+      setMacroStats(null);
+    } finally {
+      setMacroLoading(false);
+    }
+  }, [tenantId, macroDa, macroA]);
+
+  useEffect(() => {
+    void loadMacroVendite();
+  }, [loadMacroVendite]);
 
   const totali = useMemo(() => {
     let contanti = 0;
@@ -211,10 +251,15 @@ export default function GestioneIncassiPage() {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
   }
 
+  const leadIncassi =
+    contabilitaMode === "semplice"
+      ? "Contabilità semplificata: registro incassi e conteggio pezzi venduti (pizze, fritti, dolci, bibite) dagli ordini nel periodo scelto. I totali usano le categorie del menu listino."
+      : "Registro manuale degli incassi (contanti ed elettronico). Con il database aggiornato (sql_upgrade.sql) i movimenti si salvano su Supabase; altrimenti restano nel browser (localStorage).";
+
   return (
     <AdminModuleShell
-      title="Gestione incassi"
-      lead="Registro manuale degli incassi (contanti ed elettronico). Con il database aggiornato (sql_upgrade.sql) i movimenti si salvano su Supabase; altrimenti restano nel browser (localStorage)."
+      title={contabilitaMode === "semplice" ? "Incassi e vendite (semplificato)" : "Gestione incassi"}
+      lead={leadIncassi}
       specTitle="Ambito"
       specChildren={
         <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -249,6 +294,91 @@ export default function GestioneIncassiPage() {
         ) : (
           <strong>Persistenza: solo questo browser (localStorage). Esegui sql/sql_upgrade.sql su Supabase per attivare il DB.</strong>
         )}
+      </div>
+
+      <div
+        style={{
+          marginBottom: 20,
+          padding: 14,
+          borderRadius: 8,
+          border: "1px solid #d8b4fe",
+          background: "#faf5ff",
+          fontSize: 14,
+          color: "#4c1d95",
+        }}
+      >
+        <strong style={{ display: "block", marginBottom: 8 }}>Pezzi venduti per categoria (da righe ordine)</strong>
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#6b21a8", lineHeight: 1.5 }}>
+          Classificazione da <strong>slug/nome categoria</strong> prodotto: pizze, fritti, dolci, bibite; il resto va in
+          «altro». Le categorie ingredienti sono escluse. Allinea i nomi in{" "}
+          <Link to="/admin/menu/categorie">Menu → Categorie</Link> per risultati coerenti.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 12 }}>
+          <div>
+            <label style={{ fontSize: 12, color: "#64748b", display: "block" }}>Dal</label>
+            <input
+              type="date"
+              value={macroDa}
+              onChange={(e) => setMacroDa(e.target.value)}
+              style={{ marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "#64748b", display: "block" }}>Al</label>
+            <input
+              type="date"
+              value={macroA}
+              onChange={(e) => setMacroA(e.target.value)}
+              style={{ marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
+            />
+          </div>
+          <button type="button" className="btn-primary" disabled={macroLoading} onClick={() => void loadMacroVendite()}>
+            {macroLoading ? "Aggiornamento…" : "Aggiorna"}
+          </button>
+        </div>
+        {macroErr ? (
+          <p style={{ margin: 0, fontSize: 13, color: "#b91c1c" }}>{macroErr}</p>
+        ) : macroStats ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
+            {[
+              ["Pizze", macroStats.pizze],
+              ["Fritti", macroStats.fritti],
+              ["Dolci", macroStats.dolci],
+              ["Bibite", macroStats.bibite],
+              ["Altro", macroStats.altro],
+            ].map(([label, n]) => (
+              <div
+                key={label}
+                style={{
+                  padding: 10,
+                  borderRadius: 8,
+                  background: "#fff",
+                  border: "1px solid #e9d5ff",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 12, color: "#64748b" }}>{label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#1e1b4b" }}>{n}</div>
+              </div>
+            ))}
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                background: "#ede9fe",
+                border: "1px solid #c4b5fd",
+                textAlign: "center",
+                gridColumn: "1 / -1",
+              }}
+            >
+              <div style={{ fontSize: 12, color: "#5b21b6" }}>Totale pezzi (nel periodo)</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{macroStats.totalePezzi}</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                {macroStats.ordiniNelPeriodo} ordini non annullati considerati
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div

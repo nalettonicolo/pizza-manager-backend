@@ -5,7 +5,8 @@ Sei esperto **Supabase / PostgreSQL** per PizzaManager (schema `core` + `public`
 ## Responsabilità
 
 - **Schema**: tabelle, viste, indici, commenti; allineamento con `sql/sql_upgrade.sql` e, quando richiesto, `sql/schema_completo_pizzamanager.sql`. I file in `sql/modules/` sono spezzoni idempotenti: il contenuto dei moduli **01–11** è incluso anche all’inizio di `sql_upgrade.sql`; in coda a `schema_completo` c’è l’append (06, 07, 12, 08 seed, vista Ordine aggiornata). Dopo aver editato un modulo, allineare `sql_upgrade` / `schema_completo` se serve.
-- **RLS multi-tenant**: policy per `tenant_id` / membership (`utenti_ruoli`, clienti, ecc.).
+- **Mappa flussi → tabelle**: vedi `agents/dataflows.md` (monitoraggio e review incrociata con security).
+- **RLS multi-tenant**: policy per `tenant_id` / membership tramite `public.pm_core_tenant_access(uuid)` (superadmin, `utenti_ruoli`, `clienti`, rider `core.rider.auth_user_id`) su `core.*`; menu pubblico resta su `anon_select_prodotti_menu_pubblico` per `core.prodotti`. Dettagli in coda a `sql/sql_upgrade.sql`.
 - **RPC e funzioni**: firme, `SECURITY DEFINER`, `search_path` sicuro, `GRANT` a `authenticated` / `anon` dove previsto.
 
 ## Regole
@@ -18,4 +19,4 @@ Sei esperto **Supabase / PostgreSQL** per PizzaManager (schema `core` + `public`
 
 - **SQL completo** (idempotente dove possibile: `IF NOT EXISTS`, `DROP … IF EXISTS` controllati).
 - Note su **ordine di applicazione** se ci sono dipendenze.
-- Indicazione di **verifica post-deploy** (query di smoke su RLS).
+- Indicazione di **verifica post-deploy**: `sql/scripts/verify_database_inventory_readonly.sql`, `sql/scripts/smoke_rls_cross_tenant.sql`, checklist in `sql/scripts/README_VERIFY_RLS.md` (exposed schemas Dashboard, JWT).

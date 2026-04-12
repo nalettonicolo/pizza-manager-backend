@@ -4,6 +4,7 @@ import { useTenant } from "@/app/contexts/TenantContext"
 import { getOrders, updateOrder, updateOrderStato } from "@/features/admin/services/adminService"
 import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
@@ -233,7 +234,9 @@ export default function DeliveryDashboard(props) {
         </div>
         {nome ? <p style={{ fontSize: fs, margin: "0 0 4px", fontWeight: 600 }}>{nome}</p> : null}
         {ind ? (
-          <p style={{ fontSize: compact ? 12 : 13, color: "#444", margin: "0 0 6px", lineHeight: 1.4 }}>{ind}</p>
+          <p style={{ fontSize: compact ? 12 : 13, color: "#444", margin: "0 0 6px", lineHeight: 1.4 }}>
+            {formatIndirizzoDisplayItaliano(ind)}
+          </p>
         ) : null}
         {mapsUrl ? (
           <p style={{ margin: "0 0 6px" }}>

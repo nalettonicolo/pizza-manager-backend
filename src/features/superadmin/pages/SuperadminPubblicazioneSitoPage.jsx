@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import PubblicazioneSitoWorkspace from "@/features/pubblicazione/PubblicazioneSitoWorkspace";
 import { getTenants } from "@/features/superadmin/services/superadminService";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
 
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6, color: "#475569" };
 const inputStyle = {
@@ -21,6 +23,19 @@ export default function SuperadminPubblicazioneSitoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tenantId, setTenantId] = useState("");
+  const [tenantSearch, setTenantSearch] = useState("");
+
+  const tenantsForSelect = useMemo(() => {
+    const q = normalizeListSearchQuery(tenantSearch);
+    const base = !q
+      ? tenants
+      : tenants.filter((t) => rowMatchesListSearch(q, [t.nome, t.slug, t.id]));
+    const selected = tenants.find((t) => t.id === tenantId);
+    if (selected && tenantId && !base.some((t) => t.id === tenantId)) {
+      return [selected, ...base];
+    }
+    return base;
+  }, [tenants, tenantSearch, tenantId]);
 
   const loadTenants = useCallback(async () => {
     try {
@@ -83,19 +98,33 @@ export default function SuperadminPubblicazioneSitoPage() {
         ) : error ? (
           <p style={{ margin: 0, fontSize: 14, color: "#b91c1c" }}>{error}</p>
         ) : (
-          <select
-            id="sa-pubblicazione-tenant"
-            value={tenantId}
-            onChange={(e) => onSelectTenant(e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">— Seleziona un cliente —</option>
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nome || t.slug || t.id}
-              </option>
-            ))}
-          </select>
+          <>
+            {tenants.length > 3 ? (
+              <div style={{ marginBottom: 12, maxWidth: 420 }}>
+                <SaListSearchField
+                  id="sa-pubblicazione-tenant-filter"
+                  value={tenantSearch}
+                  onChange={setTenantSearch}
+                  placeholder="Filtra elenco clienti…"
+                  resultsCount={tenantsForSelect.length}
+                  totalCount={tenants.length}
+                />
+              </div>
+            ) : null}
+            <select
+              id="sa-pubblicazione-tenant"
+              value={tenantId}
+              onChange={(e) => onSelectTenant(e.target.value)}
+              style={inputStyle}
+            >
+              <option value="">— Seleziona un cliente —</option>
+              {tenantsForSelect.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome || t.slug || t.id}
+                </option>
+              ))}
+            </select>
+          </>
         )}
         <p style={{ margin: "10px 0 0", fontSize: 13, color: "#64748b" }}>
           Collegata a{" "}

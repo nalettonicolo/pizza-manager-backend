@@ -70,5 +70,8 @@ dist/
 .env.local
 .env.production
 
+# Cursor MCP locale (può contenere URL con token / ref sensibili)
+.cursor/mcp.json
+
 # dataconnect generated files
 .dataconnect

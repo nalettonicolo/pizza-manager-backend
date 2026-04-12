@@ -631,10 +631,12 @@ body {
   }
 }
 
-/* ===== Home admin tenant (/admin/home): compatto ===== */
+/* ===== Home admin tenant (/admin/home): larghezza area principale (come le altre pagine admin) ===== */
 .admin-tenant-home {
-  max-width: 720px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .admin-tenant-home-title {
@@ -764,8 +766,15 @@ body {
 
 .admin-home-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
   gap: 20px;
+}
+
+@media (min-width: 900px) {
+  .admin-home-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 32px;
+  }
 }
 
 .admin-home-stats-subtitle {

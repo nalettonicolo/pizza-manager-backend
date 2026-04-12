@@ -178,6 +178,18 @@ export const SERVIZI_APP = [
     codiceRiferimento: "admin/contabilita/*, useTenantLocalJson",
   },
   {
+    id: "contabilita_semplice",
+    nome: "Contabilità semplificata",
+    categoria: "Amministrazione",
+    funzioni: [
+      "Solo gestione incassi (contanti / elettronico) con persistenza DB se disponibile",
+      "Conteggio pezzi venduti per macro-categoria: pizze, fritti, dolci e bibite (da ordini nel periodo)",
+    ],
+    prezzoDefaultEuro: 5,
+    avanzamentoDefaultPercentuale: 72,
+    codiceRiferimento: "admin/contabilita/incassi, getVenditeMacroCategorieInPeriod (adminService)",
+  },
+  {
     id: "supporto_prioritario",
     nome: "Supporto prioritario",
     categoria: "Assistenza",

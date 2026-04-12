@@ -1,4 +1,7 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
 
 const DOCS = [
   {
@@ -72,7 +75,21 @@ const DOCS_SVILUPPO = [
   },
 ];
 
+function docMatches(qNorm, d) {
+  return rowMatchesListSearch(qNorm, [d.title, d.description, d.slug]);
+}
+
 export default function SuperadminGuideHub() {
+  const [listQuery, setListQuery] = useState("");
+  const qNorm = normalizeListSearchQuery(listQuery);
+  const devDocsFiltered = useMemo(
+    () => (qNorm ? DOCS_SVILUPPO.filter((d) => docMatches(qNorm, d)) : DOCS_SVILUPPO),
+    [qNorm],
+  );
+  const docsFiltered = useMemo(() => (qNorm ? DOCS.filter((d) => docMatches(qNorm, d)) : DOCS), [qNorm]);
+  const totalDocs = DOCS_SVILUPPO.length + DOCS.length;
+  const shownDocs = devDocsFiltered.length + docsFiltered.length;
+
   return (
     <>
       <header className="sa-page-header">
@@ -84,6 +101,22 @@ export default function SuperadminGuideHub() {
           e ridistribuisci il build.
         </p>
       </header>
+
+      <div className="sa-page-toolbar" style={{ marginBottom: 20 }}>
+        <SaListSearchField
+          id="sa-guide-search"
+          value={listQuery}
+          onChange={setListQuery}
+          placeholder="Cerca per titolo, descrizione o slug…"
+          resultsCount={shownDocs}
+          totalCount={totalDocs}
+        />
+      </div>
+
+      {qNorm && shownDocs === 0 ? (
+        <p style={{ margin: "0 0 24px", fontSize: 14, color: "#64748b" }}>Nessuna guida corrisponde alla ricerca.</p>
+      ) : null}
+
       <h2 className="sa-section-title" style={{ marginBottom: 16, fontSize: 18, color: "#0f172a" }}>
         Documenti di sviluppo e roadmap product
       </h2>
@@ -91,7 +124,7 @@ export default function SuperadminGuideHub() {
         Stessi file in <code>docs/</code>; accessibili anche da <Link to="/superadmin/sviluppo">Super Admin → Roadmap</Link>.
       </p>
       <div className="nav-cards cols-3" style={{ marginBottom: 36 }}>
-        {DOCS_SVILUPPO.map((d) => (
+        {devDocsFiltered.map((d) => (
           <Link key={d.slug} to={`/superadmin/guide/${d.slug}`} className="nav-card">
             <h3>{d.title}</h3>
             <p>{d.description}</p>
@@ -103,7 +136,7 @@ export default function SuperadminGuideHub() {
         Guide operative e tecniche
       </h2>
       <div className="nav-cards cols-3" style={{ marginBottom: 32 }}>
-        {DOCS.map((d) => (
+        {docsFiltered.map((d) => (
           <Link key={d.slug} to={`/superadmin/guide/${d.slug}`} className="nav-card">
             <h3>{d.title}</h3>
             <p>{d.description}</p>

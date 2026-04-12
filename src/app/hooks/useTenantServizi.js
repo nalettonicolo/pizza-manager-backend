@@ -73,6 +73,15 @@ export function useTenantServizi() {
 
   const serviziIds = useMemo(() => resolveServiziIdsForTenant(tenantData), [tenantData]);
 
+  /** Bundle tenant senza guard enforcement (per UI contabilità semplice vs completa). */
+  const contabilitaMode = useMemo(() => {
+    const full = serviziIds.has("contabilita_locale");
+    const semplice = serviziIds.has("contabilita_semplice");
+    if (full) return "full";
+    if (semplice) return "semplice";
+    return "none";
+  }, [serviziIds]);
+
   const hasServizio = useCallback(
     (id) => {
       if (!enforcementActive) return true;
@@ -85,5 +94,5 @@ export function useTenantServizi() {
     [enforcementActive, serviziIds],
   );
 
-  return { hasServizio, serviziIds, enforcementActive, piano };
+  return { hasServizio, serviziIds, enforcementActive, piano, contabilitaMode };
 }

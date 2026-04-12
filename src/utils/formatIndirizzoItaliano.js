@@ -3,6 +3,115 @@
  * Esempio: "Via Fondà 19a/1, Padova 35124"
  */
 
+/** Regioni IT (token tra comune e CAP in molti display_name Nominatim/OSM). */
+const IT_REGIONI = new Set(
+  [
+    "abruzzo",
+    "basilicata",
+    "calabria",
+    "campania",
+    "emilia-romagna",
+    "emilia romagna",
+    "friuli-venezia giulia",
+    "friuli venezia giulia",
+    "lazio",
+    "liguria",
+    "lombardia",
+    "marche",
+    "molise",
+    "piemonte",
+    "puglia",
+    "sardegna",
+    "sicilia",
+    "sicily",
+    "toscana",
+    "trentino-alto adige",
+    "trentino alto adige",
+    "trentino-south tyrol",
+    "umbria",
+    "valle d'aosta",
+    "valle daosta",
+    "aosta valley",
+    "veneto",
+  ].map((s) => s.toLowerCase()),
+)
+
+function isRegioneItalianaToken(token) {
+  const x = String(token || "")
+    .trim()
+    .toLowerCase()
+  return IT_REGIONI.has(x)
+}
+
+const VIA_LIKE =
+  /^(via|viale|piazza|largo|corso|vicolo|str\.?|strada|p\.?\s*z\.?|contrada|località|loc\.|c\.?\s*so\.?|borgo)/i
+
+/**
+ * Normalizza per la UI stringhe tipo display_name Nominatim/Google:
+ * "12, Via Guasti, …, Padova, Veneto, 35124, Italia" → "Via Guasti 12, Padova 35124".
+ * Se non riconosce un CAP italiano a 5 cifre o la struttura non è quella attesa, restituisce la stringa originale.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+export function formatIndirizzoDisplayItaliano(raw) {
+  const s0 = String(raw || "").trim()
+  if (!s0) return ""
+  if (!s0.includes(",")) return s0
+
+  let parts = s0
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+  if (parts.length < 2) return s0
+
+  while (parts.length && /^(italia|italy)$/i.test(parts[parts.length - 1])) {
+    parts.pop()
+  }
+  if (parts.length < 2) return s0
+
+  const capIndex = parts.findIndex((p) => /^\d{5}$/.test(p))
+  if (capIndex < 0) return s0
+
+  const postcode = parts[capIndex]
+  let idx = capIndex - 1
+  if (idx < 0) return s0
+  let city = parts[idx]
+  if (isRegioneItalianaToken(city) && idx > 0) {
+    idx -= 1
+    city = parts[idx]
+  }
+  if (/^[A-Z]{2}$/i.test(city) && idx > 0) {
+    idx -= 1
+    city = parts[idx]
+  }
+
+  const streetParts = parts.slice(0, idx)
+  if (streetParts.length === 0) {
+    return formatIndirizzoLineaItaliana({ city, postcode })
+  }
+
+  let house = ""
+  let roadTokens = []
+  if (streetParts.length && /^\d+[a-zA-Z]*(?:\/\d+[a-zA-Z]*)?$/i.test(streetParts[0])) {
+    house = streetParts[0]
+    roadTokens = streetParts.slice(1)
+  } else {
+    roadTokens = streetParts
+  }
+
+  const roadIdx = roadTokens.findIndex((t) => VIA_LIKE.test(t))
+  const road = roadIdx >= 0 ? roadTokens[roadIdx] : roadTokens.length ? roadTokens[0] : ""
+
+  const line = formatIndirizzoLineaItaliana({
+    road,
+    houseNumber: house,
+    city,
+    postcode,
+  })
+  return line || s0
+}
+
 /**
  * @param {{ road?: string, houseNumber?: string, city?: string, postcode?: string }} p
  * @returns {string}
@@ -89,5 +198,10 @@ export function formatIndirizzoFromNominatim(item) {
     postcode,
   })
   if (line) return line
-  return String(item.display_name || "").trim()
+  const dn = String(item.display_name || "").trim()
+  if (dn && (/\b\d{5}\b/.test(dn) || /,\s*(Italia|Italy)\s*$/i.test(dn))) {
+    const normalized = formatIndirizzoDisplayItaliano(dn)
+    if (normalized && normalized !== dn) return normalized
+  }
+  return dn
 }

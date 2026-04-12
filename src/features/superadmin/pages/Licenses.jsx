@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSubscriptions } from "@/features/superadmin/services/superadminService";
 import { pianoDisplayLabel } from "@/features/superadmin/utils/pianoLabels";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
 
 const STATO_LABEL = {
   ATTIVA: "Attiva",
@@ -21,6 +23,25 @@ export default function Licenses() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [listQuery, setListQuery] = useState("");
+
+  const filteredList = useMemo(() => {
+    const q = normalizeListSearchQuery(listQuery);
+    if (!q) return list;
+    return list.filter((s) =>
+      rowMatchesListSearch(q, [
+        s.tenant_nome,
+        s.tenant_slug,
+        s.piano,
+        pianoDisplayLabel(s.piano),
+        s.stato,
+        STATO_LABEL[s.stato],
+        s.ciclo_fatturazione_giorni,
+        s.rinnovo_il,
+        s.rinnovo_automatico ? "automatico" : "",
+      ]),
+    );
+  }, [list, listQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +107,17 @@ export default function Licenses() {
         righe mancanti in base ai clienti già presenti.
       </p>
 
+      <div className="sa-page-toolbar" style={{ marginBottom: 16 }}>
+        <SaListSearchField
+          id="sa-licenses-search"
+          value={listQuery}
+          onChange={setListQuery}
+          placeholder="Cerca per cliente, slug, piano, stato…"
+          resultsCount={filteredList.length}
+          totalCount={list.length}
+        />
+      </div>
+
       <div className="dashboard-table-wrap" style={{ overflowX: "auto" }}>
         <table style={{ minWidth: 900 }}>
           <thead>
@@ -110,8 +142,14 @@ export default function Licenses() {
                   accessibile (vedi anche Clienti dopo un salvataggio).
                 </td>
               </tr>
+            ) : filteredList.length === 0 ? (
+              <tr>
+                <td colSpan={10} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
+                  Nessun risultato per la ricerca.
+                </td>
+              </tr>
             ) : (
-              list.map((s) => (
+              filteredList.map((s) => (
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600 }}>{s.tenant_nome}</td>
                   <td style={{ color: "#666" }}>{s.tenant_slug}</td>

@@ -20,6 +20,8 @@ import {
 } from "@/features/superadmin/catalog/servicesStorage";
 import { exportPianiCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
 import { mergePianiImport, parsePianiCsv } from "@/features/superadmin/utils/parsePianiCsv";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
 
 function uid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -56,6 +58,7 @@ export default function Piani() {
   const [modalError, setModalError] = useState(null);
   const [importPianiError, setImportPianiError] = useState(null);
   const filePianiRef = useRef(null);
+  const [planSearch, setPlanSearch] = useState("");
 
   useEffect(() => {
     savePlansToStorage(piani);
@@ -205,6 +208,20 @@ export default function Piani() {
   const modalTitle = planModalMode === "add" ? "Nuovo piano" : "Modifica piano";
   const noServices = services.length === 0;
 
+  const filteredPiani = useMemo(() => {
+    const q = normalizeListSearchQuery(planSearch);
+    if (!q) return piani;
+    return piani.filter((p) =>
+      rowMatchesListSearch(q, [
+        p.nome,
+        p.descrizione,
+        p.prezzo,
+        p.attivo === false ? "disabilitato" : "",
+        p.id,
+      ]),
+    );
+  }, [piani, planSearch]);
+
   return (
     <>
       <header className="sa-page-header" style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, maxWidth: "100%" }}>
@@ -274,6 +291,17 @@ export default function Piani() {
             Carica il catalogo servizi dalla pagina Catalogo.
           </span>
         )}
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <SaListSearchField
+          id="sa-piani-search"
+          value={planSearch}
+          onChange={setPlanSearch}
+          placeholder="Cerca piano per nome, descrizione, prezzo…"
+          resultsCount={filteredPiani.length}
+          totalCount={piani.length}
+        />
       </div>
 
       <Modal open={planModalOpen && !!draft} onClose={closePlanModal} title={modalTitle} wide closeOnOverlayClick>
@@ -454,8 +482,12 @@ export default function Piani() {
         </div>
       </Modal>
 
+      {piani.length > 0 && filteredPiani.length === 0 ? (
+        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748b" }}>Nessun piano corrisponde alla ricerca.</p>
+      ) : null}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
-        {piani.map((p) => {
+        {filteredPiani.map((p) => {
           const included = inclusioniIncluded(p.inclusioni, services);
           const prezzoCard = displayPrezzoForPlan(p, services);
           return (

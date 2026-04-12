@@ -19,7 +19,7 @@ const topNavItems = [
   { to: "/admin/fidelity", label: "Fidelity", servizioId: "fidelity_card" },
   { to: "/admin/menu", label: "Menu", servizioId: null },
   { to: "/admin/magazzino", label: "Magazzino", servizioId: "magazzino_gestione" },
-  { to: "/admin/contabilita", label: "Contabilità", servizioId: "contabilita_locale" },
+  { to: "/admin/contabilita", label: "Contabilità", servizioId: null },
   { to: "/admin/dipendenti", label: "Dipendenti", servizioId: null },
   { to: "/admin/ruoli", label: "Ruoli", servizioId: "ruoli_avanzati" },
   { to: "/admin/settings", label: "Impostazioni", servizioId: null },
@@ -77,7 +77,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { tenantData } = useTenant();
   const { activePv, pvList, loading: pvLoading } = usePv();
-  const { hasServizio, enforcementActive } = useTenantServizi();
+  const { hasServizio, enforcementActive, contabilitaMode } = useTenantServizi();
   const location = useLocation();
   const adminNavCompact = useMediaQuery("(max-width: 768px)");
   const [adminMobileNavOpen, setAdminMobileNavOpen] = useState(false);
@@ -95,7 +95,9 @@ export default function AdminLayout() {
       : isMagazzinoArea
         ? magazzinoSidebarItems
         : isContabilitaArea
-          ? contabilitaSidebarItems
+          ? contabilitaMode === "semplice"
+            ? [{ to: "/admin/contabilita/incassi", label: "Gestione incassi" }]
+            : contabilitaSidebarItems
           : menuSidebarItems;
   const sidebarTitle = isSettingsArea
     ? "Impostazioni"
@@ -104,13 +106,22 @@ export default function AdminLayout() {
       : isMagazzinoArea
         ? "Magazzino"
         : isContabilitaArea
-          ? "Contabilità"
+          ? contabilitaMode === "semplice"
+            ? "Contabilità semplificata"
+            : "Contabilità"
           : "Menu e listino";
 
-  const visibleTopNav = useMemo(
-    () => topNavItems.filter((item) => !item.servizioId || hasServizio(item.servizioId)),
-    [hasServizio],
-  );
+  const visibleTopNav = useMemo(() => {
+    return topNavItems.filter((item) => {
+      if (item.to === "/admin/contabilita") {
+        if (enforcementActive) {
+          return hasServizio("contabilita_locale") || hasServizio("contabilita_semplice");
+        }
+        return contabilitaMode !== "none";
+      }
+      return !item.servizioId || hasServizio(item.servizioId);
+    });
+  }, [hasServizio, enforcementActive, contabilitaMode]);
 
   const blockedRedirect = useMemo(() => {
     if (!enforcementActive) return null;
@@ -119,7 +130,13 @@ export default function AdminLayout() {
     if (p.startsWith("/admin/fidelity") && !hasServizio("fidelity_card")) return ADMIN_TENANT_HOME;
     if (p === "/admin/ruoli" && !hasServizio("ruoli_avanzati")) return ADMIN_TENANT_HOME;
     if (p.startsWith("/admin/magazzino") && !hasServizio("magazzino_gestione")) return ADMIN_TENANT_HOME;
-    if (p.startsWith("/admin/contabilita") && !hasServizio("contabilita_locale")) return ADMIN_TENANT_HOME;
+    if (
+      p.startsWith("/admin/contabilita") &&
+      !hasServizio("contabilita_locale") &&
+      !hasServizio("contabilita_semplice")
+    ) {
+      return ADMIN_TENANT_HOME;
+    }
     return null;
   }, [enforcementActive, location.pathname, hasServizio]);
 

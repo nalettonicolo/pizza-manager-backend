@@ -17,6 +17,8 @@ import {
 } from "@/features/superadmin/services/superadminService";
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { pianoDisplayLabel, tenantListinoLabel } from "@/features/superadmin/utils/pianoLabels";
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
 
 const PIANO_OPTIONS = [
   { value: "TRIAL", label: "Prova (14 gg) — bundle come Pro" },
@@ -135,6 +137,7 @@ export default function Tenants() {
   const [error, setError] = useState(null);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [listQuery, setListQuery] = useState("");
   /** Modale Modifica cliente: staff + note archivio password (stessa tabella che vede Admin → Ruoli). */
   const [archivio, setArchivio] = useState({
     loading: false,
@@ -149,6 +152,27 @@ export default function Tenants() {
     const { plans } = loadPlansResolved();
     return plans.filter((p) => p.attivo !== false);
   }, []);
+
+  const filteredList = useMemo(() => {
+    const q = normalizeListSearchQuery(listQuery);
+    if (!q) return list;
+    return list.filter((t) =>
+      rowMatchesListSearch(q, [
+        t.nome,
+        t.slug,
+        t.partita_iva,
+        t.email_fatturazione,
+        t.pec,
+        t.codice_univoco_sdi,
+        t.piano,
+        pianoDisplayLabel(t.piano),
+        tenantListinoLabel(t),
+        t.attivo ? "attivo" : "disattivo",
+        t.prova_valida_fino,
+        t.created_at,
+      ]),
+    );
+  }, [list, listQuery]);
 
   const reloadInclusioniFromPiano = useCallback((piano, services) => {
     const set = serviziIdsIncludedForPiano(piano);
@@ -364,9 +388,19 @@ export default function Tenants() {
       </header>
 
       <div className="sa-page-toolbar">
-        <button type="button" className="btn-primary-dashboard" onClick={openCreate}>
-          Nuovo cliente
-        </button>
+        <SaListSearchField
+          id="sa-tenants-search"
+          value={listQuery}
+          onChange={setListQuery}
+          placeholder="Cerca per nome, slug, email, P.IVA, piano, listino…"
+          resultsCount={filteredList.length}
+          totalCount={list.length}
+        />
+        <div className="sa-page-toolbar-actions">
+          <button type="button" className="btn-primary-dashboard" onClick={openCreate}>
+            Nuovo cliente
+          </button>
+        </div>
       </div>
 
       {error && <div className="dashboard-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -398,8 +432,14 @@ export default function Tenants() {
                   Nessun cliente. Clicca &quot;Nuovo cliente&quot; per aggiungerne uno.
                 </td>
               </tr>
+            ) : filteredList.length === 0 ? (
+              <tr>
+                <td colSpan={14} style={{ padding: 32, textAlign: "center", color: "#666", fontSize: 14 }}>
+                  Nessun risultato per la ricerca. Modifica o cancella il filtro nel campo di ricerca sopra.
+                </td>
+              </tr>
             ) : (
-              list.map((t) => (
+              filteredList.map((t) => (
                 <tr key={t.id}>
                   <td style={{ fontWeight: 600, fontSize: 14 }}>{t.nome}</td>
                   <CellEllipsis title={t.slug}>{t.slug || "—"}</CellEllipsis>

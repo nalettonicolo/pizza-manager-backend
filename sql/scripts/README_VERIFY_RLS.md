@@ -24,6 +24,32 @@ Chiamare `replace_order_items` con `p_ordine_id` di un altro tenant senza permes
 
 Verificare che `anon` possa solo leggere ciò che la policy `anon_select_*` consente (es. menu pubblico), e nulla su ordini.
 
+## Inventario completo (sola lettura)
+
+Esegui **`verify_database_inventory_readonly.sql`** (a sezioni) in SQL Editor o via **MCP Supabase in `read_only`**: copre estensioni, tabelle `public`/`core`/`admin`, RLS on/off, elenco policy, viste, funzioni `SECURITY DEFINER`, trigger, grant verso `anon`/`authenticated`, e checklist minima tabelle attese. Nessuna modifica al database.
+
+## Checklist supervisione sicurezza (Supabase)
+
+1. **Exposed schemas**  
+   Dashboard progetto (es. `flfhrwzlrftuhkrfwzse`) → **Settings → API → Exposed schemas**.  
+   Documentare per iscritto o allegato interno: elenco effettivo. Condizione di accettazione per il profilo “sicuro”: **`core` e `admin` non devono comparire** tra gli schemi esposti a PostgREST salvo decisione esplicita con RLS e test JWT completati.
+
+2. **Core raggiungibile dal client**  
+   Con chiave `anon` / sessione `authenticated`, provare le rotte REST su `core.*` se lo schema fosse esposto: senza grant adeguati o con RLS le risposte devono essere vuote o negate. Dopo `sql/sql_upgrade.sql`, le policy `pm_core_*` usano `public.pm_core_tenant_access` (superadmin, `utenti_ruoli`, `clienti`, rider tramite `core.rider.auth_user_id`).
+
+3. **Schema admin e `pg_policies`**  
+   Se RLS è `ON` su `admin.*` ma non compaiono policy, i client anon/auth non vedono righe (effetto “nero”). Lo `sql_upgrade` aggiunge policy **`pm_admin_*_superadmin`** solo dove RLS è attivo e non esiste ancora alcuna policy (accesso `authenticated` riservato a riga `utenti_ruoli` con `ruolo = superadmin`). Verifica:
+
+   ```sql
+   SELECT schemaname, tablename, policyname, roles, cmd
+   FROM pg_policies
+   WHERE schemaname = 'admin'
+   ORDER BY tablename, policyname;
+   ```
+
+4. **Smoke cross-tenant**  
+   In staging, eseguire le verifiche descritte in **`smoke_rls_cross_tenant.sql`** (ideale: due JWT reali, tenant A/B).
+
 ## Automazione futura
 
 - Integrare in CI **non** è banale (serve DB effimero + seed). Priorità: **script in staging** settimanale eseguito da pipeline con credenziali dedicate.

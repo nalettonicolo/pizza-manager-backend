@@ -23,6 +23,7 @@ import {
   ordineIndirizzoConsegna,
   ordineOrarioRitiro,
 } from "@/features/operative/cassa/utils/ordineFieldHelpers"
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 import {
   getCategories,
@@ -238,8 +239,19 @@ function deliveryIndirizzoRiga(o) {
   const ind = ordineIndirizzoConsegna(o)
   if (!ind) return ""
   const sp = splitNomeDaIndirizzoConsegna(ind)
-  if (sp.addrPart) return sp.addrPart
-  return sp.full || ind
+  const line = sp.addrPart || sp.full || ind
+  return formatIndirizzoDisplayItaliano(line) || line
+}
+
+/** Confronto anagrafica ↔ ordine: stesso testo o stessa normalizzazione linea italiana. */
+function indirizzoConsegnaMatchAnagrafica(clienteInd, ordineInd) {
+  const a = String(clienteInd || "").trim()
+  const b = String(ordineInd || "").trim()
+  if (!a || !b) return a === b
+  if (a.toLowerCase() === b.toLowerCase()) return true
+  const af = formatIndirizzoDisplayItaliano(a).trim().toLowerCase()
+  const bf = formatIndirizzoDisplayItaliano(b).trim().toLowerCase()
+  return Boolean(af && bf && af === bf)
 }
 
 /** Riga titolo lista ordini: negozio = nome + orario a destra; delivery = nome grande + orario a destra (fallback da creazione). */
@@ -275,13 +287,13 @@ function OrdineCardTitleRows({ o, isDelivery }) {
 function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
   if (!cliente) return []
   const nomeNorm = (cliente.nome || "").trim().toLowerCase()
-  const indNorm = (cliente.indirizzo || "").trim().toLowerCase()
+  const clienteInd = cliente.indirizzo || ""
   return (ordini || []).filter((o) => {
     const oNome = ordineNomeCliente(o).toLowerCase()
-    const oInd = ordineIndirizzoConsegna(o).toLowerCase()
+    const oInd = ordineIndirizzoConsegna(o)
     const tipo = ordineTipoOrdine(o)
     if (tipo === "delivery") {
-      return oNome === nomeNorm && oInd === indNorm
+      return oNome === nomeNorm && indirizzoConsegnaMatchAnagrafica(clienteInd, oInd)
     }
     return oNome === nomeNorm && nomeNorm.length > 0
   })
@@ -1066,7 +1078,10 @@ export default function CassaPage() {
     }
   }, [showRiepilogo, tenantId])
 
-  const displayCliente = (c) => (c ? [c.nome, c.indirizzo].filter(Boolean).join(" – ") : "")
+  const displayCliente = (c) =>
+    c
+      ? [c.nome, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""].filter(Boolean).join(" – ")
+      : ""
   const handleSelectCliente = useCallback((c) => {
     setSelectedCliente(c)
     setDeliverySearch(displayCliente(c))
@@ -1237,7 +1252,9 @@ export default function CassaPage() {
                       style={styles.dropdownItem}
                     >
                       <strong>{c.nome}</strong>
-                      {c.indirizzo && <span style={{ color: "#555" }}> – {c.indirizzo}</span>}
+                      {c.indirizzo && (
+                        <span style={{ color: "#555" }}> – {formatIndirizzoDisplayItaliano(c.indirizzo)}</span>
+                      )}
                       {c.telefono && <span style={{ fontSize: 12, color: "#666" }}> · {c.telefono}</span>}
                     </li>
                   ))}
@@ -1759,7 +1776,11 @@ export default function CassaPage() {
       }
       const noteForOrder = noteParts.length ? noteParts.join("\n") : undefined
 
-      const indirizzoConsegna = tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "") : ""
+      const rawConsegna =
+        tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "").trim() : ""
+      const indirizzoConsegna = rawConsegna
+        ? formatIndirizzoDisplayItaliano(rawConsegna) || rawConsegna
+        : ""
       const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
       const telefonoRitiroNegozio =
         tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutTelefonoCliente || "").trim() : ""
@@ -3007,7 +3028,11 @@ export default function CassaPage() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 600 }}>#{numero} · {nome}</div>
-                            {isDelivery && indirizzo && <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{indirizzo}</div>}
+                            {isDelivery && indirizzo && (
+                              <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
+                                {formatIndirizzoDisplayItaliano(indirizzo)}
+                              </div>
+                            )}
                             <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -3150,7 +3175,9 @@ export default function CassaPage() {
             </div>
             <div style={{ fontSize: 14, lineHeight: 1.55, color: "#333" }}>
               <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{selectedCliente.nome || "—"}</p>
-              {selectedCliente.indirizzo ? <p style={{ margin: "0 0 8px" }}>{selectedCliente.indirizzo}</p> : null}
+              {selectedCliente.indirizzo ? (
+                <p style={{ margin: "0 0 8px" }}>{formatIndirizzoDisplayItaliano(selectedCliente.indirizzo)}</p>
+              ) : null}
               {selectedCliente.telefono ? (
                 <p style={{ margin: "0 0 8px" }}>
                   <span style={{ color: "#666" }}>Tel. </span>
@@ -3227,7 +3254,9 @@ export default function CassaPage() {
               {ordineIsDelivery(ordineDetail) ? "Consegna" : "Ritiro in negozio"}
             </p>
             {ordineIsDelivery(ordineDetail) && ordineIndirizzoConsegna(ordineDetail) && (
-              <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Indirizzo: {ordineIndirizzoConsegna(ordineDetail)}</p>
+              <p style={{ margin: "0 0 12px", fontWeight: 500 }}>
+                Indirizzo: {formatIndirizzoDisplayItaliano(ordineIndirizzoConsegna(ordineDetail))}
+              </p>
             )}
             {!ordineIsDelivery(ordineDetail) && (
               <>

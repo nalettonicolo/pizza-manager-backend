@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import {
   getRuoliPizzeria,
@@ -7,6 +7,8 @@ import {
 } from "@/features/admin/services/adminService"
 import { getTenant } from "@/features/superadmin/services/superadminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
+import SaListSearchField from "@/features/superadmin/components/SaListSearchField"
+import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter"
 
 function nomeInSedeOEmail(r) {
   const nv =
@@ -44,6 +46,15 @@ export default function SuperadminTenantArchivioPasswordPage() {
     drafts: {},
     savingUserId: null,
   })
+  const [listQuery, setListQuery] = useState("")
+
+  const ruoliFiltered = useMemo(() => {
+    const q = normalizeListSearchQuery(listQuery)
+    if (!q) return archivio.ruoli
+    return archivio.ruoli.filter((r) =>
+      rowMatchesListSearch(q, [nomeInSedeOEmail(r), r.email, r.ruolo, r.user_id]),
+    )
+  }, [archivio.ruoli, listQuery])
 
   const loadArchivio = useCallback(async () => {
     if (!tenantId) return
@@ -177,8 +188,22 @@ export default function SuperadminTenantArchivioPasswordPage() {
         ) : archivio.ruoli.length === 0 ? (
           <p style={{ color: "#64748b" }}>Nessun account staff collegato a questo tenant.</p>
         ) : (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <SaListSearchField
+                id="sa-archivio-ruoli-search"
+                value={listQuery}
+                onChange={setListQuery}
+                placeholder="Cerca per nome, email o ruolo…"
+                resultsCount={ruoliFiltered.length}
+                totalCount={archivio.ruoli.length}
+              />
+            </div>
+            {ruoliFiltered.length === 0 ? (
+              <p style={{ color: "#64748b" }}>Nessun account corrisponde alla ricerca.</p>
+            ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {archivio.ruoli.map((r) => (
+            {ruoliFiltered.map((r) => (
               <li
                 key={r.user_id}
                 style={{
@@ -221,6 +246,8 @@ export default function SuperadminTenantArchivioPasswordPage() {
               </li>
             ))}
           </ul>
+            )}
+          </>
         )}
       </div>
     </>

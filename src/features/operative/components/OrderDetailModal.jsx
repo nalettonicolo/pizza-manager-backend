@@ -1,3 +1,5 @@
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+
 /**
  * Modale dettaglio ordine (righe, cliente, orario, formato).
  * Usato da Cucina, Bancone, Pizzaiolo.
@@ -32,7 +34,9 @@ export default function OrderDetailModal({ order, onClose, actionLabel, onAction
               {ord.tipo_ordine === "delivery" ? "Consegna" : "Ritiro in negozio"}
             </p>
             {ord.tipo_ordine === "delivery" && ord.indirizzo_consegna && (
-              <p style={styles.indirizzo}>Indirizzo: {ord.indirizzo_consegna}</p>
+              <p style={styles.indirizzo}>
+                Indirizzo: {formatIndirizzoDisplayItaliano(ord.indirizzo_consegna)}
+              </p>
             )}
             {ord.tipo_ordine === "negozio" && (
               <>

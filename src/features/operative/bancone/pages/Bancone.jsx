@@ -26,6 +26,7 @@ import {
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
+import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
@@ -312,7 +313,7 @@ export default function Bancone() {
               </span>
             )}
             {isDelivery && ord.indirizzo_consegna && (
-              <div style={styles.indirizzo}>{ord.indirizzo_consegna}</div>
+              <div style={styles.indirizzo}>{formatIndirizzoDisplayItaliano(ord.indirizzo_consegna)}</div>
             )}
           </div>
         </div>
