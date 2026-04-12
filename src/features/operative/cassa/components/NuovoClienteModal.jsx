@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import Modal from "@/components/dashboard/Modal"
 import { createAnagraficaCliente, updateAnagraficaCliente } from "@/features/admin/services/adminService"
+import { getDeliveryPolygonOuterRing } from "@/utils/deliveryArea"
+import { formatIndirizzoFromNominatim } from "@/utils/formatIndirizzoItaliano"
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 const inputStyle = {
@@ -37,7 +39,45 @@ async function searchAddress(query) {
   return Array.isArray(data) ? data : []
 }
 
-export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, initialData = null }) {
+/** Bbox WGS84 per iframe OSM (minLon, minLat, maxLon, maxLat). */
+function bboxFromPolygonRing(ring, padDeg = 0.002) {
+  if (!Array.isArray(ring) || ring.length < 3) return null
+  let minLng = Infinity
+  let minLat = Infinity
+  let maxLng = -Infinity
+  let maxLat = -Infinity
+  for (const pt of ring) {
+    const ln = Number(pt?.[0])
+    const la = Number(pt?.[1])
+    if (!Number.isFinite(ln) || !Number.isFinite(la)) continue
+    minLng = Math.min(minLng, ln)
+    minLat = Math.min(minLat, la)
+    maxLng = Math.max(maxLng, ln)
+    maxLat = Math.max(maxLat, la)
+  }
+  if (!Number.isFinite(minLng)) return null
+  return {
+    minLng: minLng - padDeg,
+    minLat: minLat - padDeg,
+    maxLng: maxLng + padDeg,
+    maxLat: maxLat + padDeg,
+  }
+}
+
+function deliveryAreaBbox(parametriOperativi) {
+  const ring = getDeliveryPolygonOuterRing(parametriOperativi)
+  return bboxFromPolygonRing(ring)
+}
+
+export default function NuovoClienteModal({
+  open,
+  onClose,
+  tenantId,
+  onSuccess,
+  initialData = null,
+  /** Da `tenantData.parametri_operativi`: mostra subito l’area di consegna sulla mappa (nuovo cliente). */
+  parametriOperativi = null,
+}) {
   const isEdit = Boolean(initialData?.id)
   const [nome, setNome] = useState(initialData?.nome ?? "")
   const [indirizzo, setIndirizzo] = useState(initialData?.indirizzo ?? "")
@@ -61,6 +101,26 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
     setEmail(initialData?.email ?? "")
     setMapCenter(null)
     setError(null)
+    setAddressSuggestions([])
+    setShowSuggestions(false)
+
+    const ind = (initialData?.indirizzo && String(initialData.indirizzo).trim()) || ""
+    if (initialData?.id && ind.length >= 3) {
+      let cancelled = false
+      searchAddress(ind).then((list) => {
+        if (cancelled || !list?.length) return
+        const top = list[0]
+        const lat = parseFloat(top.lat)
+        const lon = parseFloat(top.lon)
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          setMapCenter({ lat, lon })
+        }
+      }).catch(() => {})
+      return () => {
+        cancelled = true
+      }
+    }
+    return undefined
   }, [open, initialData])
 
   useEffect(() => {
@@ -68,15 +128,29 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
     if (!debouncedIndirizzo || debouncedIndirizzo.length < 3) {
       setAddressSuggestions([])
       setShowSuggestions(false)
+      setMapCenter(null)
       return
     }
     searchAddress(debouncedIndirizzo).then((list) => {
       if (!cancelled) {
         setAddressSuggestions(list)
         setShowSuggestions(list.length > 0)
+        if (list.length > 0) {
+          const top = list[0]
+          const lat = parseFloat(top.lat)
+          const lon = parseFloat(top.lon)
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            setMapCenter({ lat, lon })
+          }
+        } else {
+          setMapCenter(null)
+        }
       }
     }).catch(() => {
-      if (!cancelled) setAddressSuggestions([])
+      if (!cancelled) {
+        setAddressSuggestions([])
+        setMapCenter(null)
+      }
     })
     return () => { cancelled = true }
   }, [debouncedIndirizzo])
@@ -113,8 +187,7 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
   }
 
   const handleSelectSuggestion = (item) => {
-    const displayName = item.display_name || ""
-    setIndirizzo(displayName)
+    setIndirizzo(formatIndirizzoFromNominatim(item))
     setMapCenter({ lat: parseFloat(item.lat), lon: parseFloat(item.lon) })
     setShowSuggestions(false)
     setAddressSuggestions([])
@@ -157,13 +230,27 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
     }
   }
 
+  const deliveryBbox = useMemo(() => deliveryAreaBbox(parametriOperativi), [parametriOperativi])
+
   const mapSrc = useMemo(() => {
-    if (!mapCenter) return null
-    const { lat, lon } = mapCenter
-    const delta = 0.008
-    const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
-    return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lon}`
-  }, [mapCenter])
+    if (mapCenter) {
+      const { lat, lon } = mapCenter
+      const delta = 0.008
+      const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
+      return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lon}`
+    }
+    if (deliveryBbox) {
+      const { minLng, minLat, maxLng, maxLat } = deliveryBbox
+      return `https://www.openstreetmap.org/export/embed.html?bbox=${minLng},${minLat},${maxLng},${maxLat}&layer=mapnik`
+    }
+    return null
+  }, [mapCenter, deliveryBbox])
+
+  const mapCaption = useMemo(() => {
+    if (mapCenter) return "Posizione dall’indirizzo (cerca o scegli un suggerimento)."
+    if (deliveryBbox) return "Area di consegna del locale (da Impostazioni). Inserisci l’indirizzo per il punto cliente."
+    return null
+  }, [mapCenter, deliveryBbox])
 
   return (
     <Modal open={open} onClose={handleClose} title={isEdit ? "Profilo cliente" : "Nuovo cliente"}>
@@ -223,8 +310,16 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
                       key={i}
                       role="button"
                       tabIndex={0}
-                      onClick={() => handleSelectSuggestion(item)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSelectSuggestion(item)}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        handleSelectSuggestion(item)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          handleSelectSuggestion(item)
+                        }
+                      }}
                       style={{
                         padding: "10px 12px",
                         cursor: "pointer",
@@ -232,7 +327,7 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
                         fontSize: 13,
                       }}
                     >
-                      {item.display_name}
+                      {formatIndirizzoFromNominatim(item)}
                     </li>
                   ))}
                 </ul>
@@ -261,6 +356,9 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
 
           <div style={{ flex: "1 1 280px", minWidth: 0 }}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Mappa</label>
+            {mapCaption ? (
+              <p style={{ margin: "0 0 6px", fontSize: 11, color: "#64748b", lineHeight: 1.35 }}>{mapCaption}</p>
+            ) : null}
             <div
               style={{
                 width: "100%",
@@ -273,13 +371,15 @@ export default function NuovoClienteModal({ open, onClose, tenantId, onSuccess, 
             >
               {mapSrc ? (
                 <iframe
-                  title="Mappa indirizzo"
+                  title="Mappa indirizzo e area di consegna"
                   src={mapSrc}
                   style={{ width: "100%", height: "100%", border: 0 }}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
                 />
               ) : (
-                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#666", fontSize: 13 }}>
-                  Cerca un indirizzo per vedere la posizione sulla mappa
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#666", fontSize: 13, padding: 12, textAlign: "center" }}>
+                  Configura il poligono area di consegna in Impostazioni oppure cerca un indirizzo per la mappa.
                 </div>
               )}
             </div>

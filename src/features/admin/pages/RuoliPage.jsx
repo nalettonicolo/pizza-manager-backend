@@ -274,7 +274,8 @@ export default function RuoliPage() {
           <strong>Password (archivio titolare):</strong> non è la password tecnica in Supabase Auth, ma una{" "}
           <strong>nota opzionale</strong> che registri tu (es. quella che dai al dipendente). Per leggerla in elenco serve{" "}
           <strong>la tua password di accesso</strong> (account admin del locale). Dopo lo sblocco, la visualizzazione resta
-          attiva circa 10 minuti.
+          attiva circa 10 minuti. Chi gestisce la piattaforma può inserire o aggiornare le stesse note dalla console Super
+          Admin (Clienti → «Archivio password» per quel locale).
         </p>
         {archivioSbloccato ? (
           <p style={{ marginBottom: 12, fontSize: 13 }}>

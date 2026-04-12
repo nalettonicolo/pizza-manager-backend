@@ -14,6 +14,15 @@ import CassaImpostazioniPage from "@/features/operative/cassa/components/CassaIm
 import ModificaPizzaModal from "@/features/operative/cassa/components/ModificaPizzaModal"
 import NuovoClienteModal from "@/features/operative/cassa/components/NuovoClienteModal"
 import Cart from "@/features/operative/cassa/components/Cart"
+import CassaModificaOrdineModal from "@/features/operative/cassa/components/CassaModificaOrdineModal"
+import {
+  ordineTipoOrdine,
+  ordineIsDelivery,
+  ordineNomeCliente,
+  ordineTelefonoRitiro,
+  ordineIndirizzoConsegna,
+  ordineOrarioRitiro,
+} from "@/features/operative/cassa/utils/ordineFieldHelpers"
 
 import {
   getCategories,
@@ -120,31 +129,6 @@ function labelTipoPagamentoLista(tipoPagamento) {
 }
 const MAX_MISTO_RIGHE = 15
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
-
-/** La vista PostgREST `Ordine` può restituire snake_case o camelCase: normalizziamo ovunque in cassa. */
-function ordineTipoOrdine(o) {
-  return String(o?.tipo_ordine ?? o?.tipoOrdine ?? "").trim().toLowerCase()
-}
-
-function ordineIsDelivery(o) {
-  return ordineTipoOrdine(o) === "delivery"
-}
-
-function ordineNomeCliente(o) {
-  return String(o?.nome_cliente ?? o?.nomeCliente ?? o?.nome ?? "").trim()
-}
-
-function ordineTelefonoRitiro(o) {
-  return String(o?.telefono_ritiro ?? o?.telefonoRitiro ?? "").trim()
-}
-
-function ordineIndirizzoConsegna(o) {
-  return String(o?.indirizzo_consegna ?? o?.indirizzoConsegna ?? o?.indirizzo ?? "").trim()
-}
-
-function ordineOrarioRitiro(o) {
-  return String(o?.orario_ritiro ?? o?.orarioRitiro ?? "").trim()
-}
 
 /** Salva in DB sempre "HH:mm" allineato alla `date` della fascia (evita etichette locale ambigue). */
 function orarioRitiroFromSelectedSlot(slot) {
@@ -321,6 +305,8 @@ export default function CassaPage() {
   )
 
   const [categories, setCategories] = useState([])
+  const categoriesRef = useRef([])
+  categoriesRef.current = categories
   const [activeCategory, setActiveCategory] = useState(null)
   const [products, setProducts] = useState([])
   const [cart, setCart] = useState([])
@@ -399,6 +385,8 @@ export default function CassaPage() {
   const [showPaginaOrdini, setShowPaginaOrdini] = useState(false)
   const [fuoriAreaModal, setFuoriAreaModal] = useState(null)
   const bypassFuoriAreaCheckRef = useRef(false)
+  /** Area prodotti (scroll) per tornare in cima dopo ordine concluso. */
+  const cassaProductsAreaRef = useRef(null)
   const [ordiniSearch, setOrdiniSearch] = useState("")
   const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotsDisponibili }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
@@ -1627,6 +1615,49 @@ export default function CassaPage() {
     setMistoRighe((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.id !== id)))
   }, [])
 
+  /** Dopo ordine confermato: menu prodotti pronto (tab, overlay, categoria default, scroll). */
+  const portaMenuPrincipaleDopoOrdine = useCallback(() => {
+    setCassaMobileTab("menu")
+    setShowPaginaOrdini(false)
+    setShowPlanningBar(false)
+    setPlanningSlotModal(null)
+    setPlanningSpostaLoading(null)
+    setOrdineDetail(null)
+    setOrdineDetailLoading(false)
+    setModificaOrdineModal(null)
+    setSegnaPagatoModal(null)
+    setLastOrderModalDetail(null)
+    setLastOrderLoading(false)
+    setLastOrderDetailLoading(false)
+    setSearchPizza("")
+    setProductModalOpen(false)
+    setProductToAdd(null)
+    setClienteDomicilioQuickOpen(false)
+    setNoteModalOpen(false)
+    setNuovoClienteModalOpen(false)
+    setProfiloClienteModalOpen(false)
+    setNuovoFidelityClienteModalOpen(false)
+    setChiudiGiornataConfirmOpen(false)
+    const sorted = categoriesRef.current
+    if (sorted?.length) {
+      const key = (n) => (n || "").toLowerCase().trim()
+      const classiche = sorted.find((c) => key(c.nome) === "classiche")
+      const pizzaFirst = sorted.find((c) => ["classiche", "speciali", "bianche", "chiuse"].includes(key(c.nome)))
+      setActiveCategory((classiche || pizzaFirst || sorted[0]).id)
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = cassaProductsAreaRef.current
+        if (el && typeof el.scrollTo === "function") {
+          el.scrollTo({ top: 0, left: 0, behavior: "auto" })
+        } else if (el) {
+          el.scrollTop = 0
+        }
+        window.scrollTo(0, 0)
+      })
+    })
+  }, [])
+
   /////////////////////////////////////////////////////////
   // CHECKOUT
   /////////////////////////////////////////////////////////
@@ -1898,6 +1929,7 @@ export default function CassaPage() {
       setSelectedFidelitySaldo(null)
       setFidelitySearchDone(false)
       setShowRiepilogo(false)
+      portaMenuPrincipaleDopoOrdine()
       loadOrdini()
 
       const po = tenantData?.parametri_operativi || {}
@@ -2295,12 +2327,19 @@ export default function CassaPage() {
           parametri={tenantData?.parametri_operativi}
           onConfirm={confirmModificaPizza}
         />
-        <NuovoClienteModal open={nuovoClienteModalOpen} onClose={() => setNuovoClienteModalOpen(false)} tenantId={tenantId} onSuccess={handleNuovoClienteSuccess} />
+        <NuovoClienteModal
+          open={nuovoClienteModalOpen}
+          onClose={() => setNuovoClienteModalOpen(false)}
+          tenantId={tenantId}
+          onSuccess={handleNuovoClienteSuccess}
+          parametriOperativi={tenantData?.parametri_operativi}
+        />
         <NuovoClienteModal
           open={nuovoFidelityClienteModalOpen}
           onClose={() => setNuovoFidelityClienteModalOpen(false)}
           tenantId={tenantId}
           onSuccess={handleNuovoFidelityClienteSuccess}
+          parametriOperativi={tenantData?.parametri_operativi}
         />
       </>
     )
@@ -2793,7 +2832,7 @@ export default function CassaPage() {
           })}
         </ul>
       </div>
-      <div style={{ ...styles.productsArea, ...cassaMobileShell.productsExtra }}>
+      <div ref={cassaProductsAreaRef} style={{ ...styles.productsArea, ...cassaMobileShell.productsExtra }}>
         {showPlanningBar && (
           <div style={styles.planningBar}>
             <div style={styles.planningBarHeader}>
@@ -3074,14 +3113,17 @@ export default function CassaPage() {
         onClose={() => setNuovoClienteModalOpen(false)}
         tenantId={tenantId}
         onSuccess={handleNuovoClienteSuccess}
+        parametriOperativi={tenantData?.parametri_operativi}
       />
 
       <NuovoClienteModal
+        key={selectedCliente?.id ? `anagrafica-${selectedCliente.id}` : "anagrafica-none"}
         open={profiloClienteModalOpen}
         onClose={() => setProfiloClienteModalOpen(false)}
         tenantId={tenantId}
         onSuccess={handleProfiloClienteSuccess}
         initialData={selectedCliente}
+        parametriOperativi={tenantData?.parametri_operativi}
       />
 
       {clienteDomicilioQuickOpen && selectedCliente ? (
@@ -3357,245 +3399,22 @@ export default function CassaPage() {
         </div>
       )}
 
-      {modificaOrdineModal && (
-        <div style={styles.modalOverlay} onClick={() => !modificaOrdineSaving && setModificaOrdineModal(null)} role="dialog" aria-modal="true">
-          <div style={{ ...styles.detailModal, maxWidth: 520, maxHeight: "min(92vh, 720px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0 }}>Modifica ordine #{modificaOrdineModal.numero ?? modificaOrdineModal.id}</h3>
-              <button type="button" style={styles.planningBarClose} onClick={() => !modificaOrdineSaving && setModificaOrdineModal(null)} disabled={modificaOrdineSaving}>✕</button>
-            </div>
-
-            {/* Dettaglio ordine (sempre visibile) */}
-            <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #eee" }}>
-              <p style={{ margin: "0 0 8px", color: "#666", fontSize: 14 }}>
-                {ordineIsDelivery(modificaOrdineModal) ? "Consegna" : "Ritiro in negozio"}
-              </p>
-              {ordineIsDelivery(modificaOrdineModal) && ordineIndirizzoConsegna(modificaOrdineModal) && (
-                <p style={{ margin: "0 0 8px", fontWeight: 500, fontSize: 14 }}>Indirizzo: {ordineIndirizzoConsegna(modificaOrdineModal)}</p>
-              )}
-              {ordineNomeCliente(modificaOrdineModal) && (
-                <p style={{ margin: "0 0 4px", fontWeight: 500, fontSize: 14 }}>Cliente: {ordineNomeCliente(modificaOrdineModal)}</p>
-              )}
-              {ordineOrarioRitiro(modificaOrdineModal) && (
-                <p style={{ margin: "0 0 12px", color: "#555", fontSize: 14 }}>Orario ritiro: {ordineOrarioRitiro(modificaOrdineModal)}</p>
-              )}
-              <p style={{ margin: "0 0 8px", fontWeight: 600, fontSize: 14 }}>Prodotti</p>
-              {modificaProdottiList.length === 0 ? (
-                <p style={{ margin: "0 0 8px", fontSize: 13, color: "#888" }}>Carico listino…</p>
-              ) : null}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
-                {modificaRighe.map((row) => {
-                  const sub = Number(row.prezzo || 0) * Math.max(1, Number(row.quantita) || 1)
-                  const inList = modificaProdottiList.some((p) => String(p.id) === String(row.prodotto_id))
-                  return (
-                    <div
-                      key={row.key}
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        alignItems: "center",
-                        padding: "8px 0",
-                        borderBottom: "1px solid #f0f0f0",
-                        fontSize: 14,
-                      }}
-                    >
-                      <select
-                        value={String(row.prodotto_id)}
-                        disabled={modificaOrdineSaving || modificaProdottiList.length === 0}
-                        onChange={(e) => {
-                          const pid = e.target.value
-                          const p = modificaProdottiList.find((x) => String(x.id) === pid)
-                          if (!p) return
-                          setModificaRighe((rows) =>
-                            rows.map((r) =>
-                              r.key === row.key
-                                ? {
-                                    ...r,
-                                    prodotto_id: p.id,
-                                    nome: p.nome ?? "—",
-                                    prezzo: Number(p.prezzo) || 0,
-                                    ingredienti_cottura_summary: "",
-                                  }
-                                : r,
-                            ),
-                          )
-                        }}
-                        style={{ flex: "1 1 200px", minWidth: 0, padding: "6px 8px", borderRadius: 6, border: "1px solid #ccc" }}
-                      >
-                        {!inList ? (
-                          <option value={String(row.prodotto_id)}>
-                            {row.nome ?? "—"} (attuale, € {Number(row.prezzo || 0).toFixed(2)})
-                          </option>
-                        ) : null}
-                        {modificaProdottiList.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nome ?? "—"} — € {Number(p.prezzo || 0).toFixed(2)}
-                          </option>
-                        ))}
-                      </select>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <button
-                          type="button"
-                          disabled={modificaOrdineSaving}
-                          onClick={() =>
-                            setModificaRighe((rows) =>
-                              rows.map((r) =>
-                                r.key === row.key
-                                  ? { ...r, quantita: Math.max(1, (Number(r.quantita) || 1) - 1) }
-                                  : r,
-                              ),
-                            )
-                          }
-                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #ccc", cursor: "pointer" }}
-                        >
-                          −
-                        </button>
-                        <span style={{ minWidth: 22, textAlign: "center" }}>{row.quantita}</span>
-                        <button
-                          type="button"
-                          disabled={modificaOrdineSaving}
-                          onClick={() =>
-                            setModificaRighe((rows) =>
-                              rows.map((r) =>
-                                r.key === row.key ? { ...r, quantita: (Number(r.quantita) || 1) + 1 } : r,
-                              ),
-                            )
-                          }
-                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #ccc", cursor: "pointer" }}
-                        >
-                          +
-                        </button>
-                      </div>
-                      <span style={{ fontWeight: 500, whiteSpace: "nowrap" }}>€ {sub.toFixed(2)}</span>
-                      <button
-                        type="button"
-                        disabled={modificaOrdineSaving || modificaRighe.length <= 1}
-                        onClick={() => setModificaRighe((rows) => rows.filter((r) => r.key !== row.key))}
-                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #c62828", color: "#c62828", background: "#fff", cursor: "pointer" }}
-                      >
-                        Rimuovi
-                      </button>
-                      {row.formato_nome || row.ingredienti_cottura_summary ? (
-                        <div style={{ width: "100%", fontSize: 12, color: "#666" }}>
-                          {row.formato_nome ? <div>Formato: {row.formato_nome}</div> : null}
-                          {row.ingredienti_cottura_summary ? (
-                            <div style={{ marginTop: row.formato_nome ? 4 : 0 }}>{row.ingredienti_cottura_summary}</div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-              <button
-                type="button"
-                disabled={modificaOrdineSaving || modificaProdottiList.length === 0}
-                onClick={() => {
-                  const p0 = modificaProdottiList[0]
-                  if (!p0) return
-                  setModificaRighe((rows) => [
-                    ...rows,
-                    {
-                      key: `new-${newLocalId()}`,
-                      prodotto_id: p0.id,
-                      nome: p0.nome ?? "—",
-                      quantita: 1,
-                      prezzo: Number(p0.prezzo) || 0,
-                      formato_nome: "",
-                      ingredienti_cottura_summary: "",
-                    },
-                  ])
-                }}
-                style={{ ...styles.planningBarToggle, marginBottom: 12 }}
-              >
-                + Aggiungi prodotto
-              </button>
-              <p style={{ fontWeight: 600, margin: 0, fontSize: 14 }}>
-                Totale (da salvare): € {modificaTotaleAnteprima.toFixed(2)}
-              </p>
-              <p style={{ margin: "8px 0 0", fontSize: 13, color: "#555" }}>Pagamento: {modificaOrdineModal.tipo_pagamento || "—"}</p>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontWeight: 500 }}>Nome cliente</span>
-                <input
-                  type="text"
-                  value={modificaForm.nome_cliente}
-                  onChange={(e) => setModificaForm((f) => ({ ...f, nome_cliente: e.target.value }))}
-                  placeholder="Nome cliente"
-                  style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-                />
-              </label>
-              {!ordineIsDelivery(modificaOrdineModal) && (
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontWeight: 500 }}>Telefono (ritiro, opzionale)</span>
-                  <input
-                    type="tel"
-                    value={modificaForm.telefono_ritiro}
-                    onChange={(e) => setModificaForm((f) => ({ ...f, telefono_ritiro: e.target.value }))}
-                    placeholder="+39…"
-                    style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-                  />
-                </label>
-              )}
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontWeight: 500 }}>Orario ritiro / consegna</span>
-                <input
-                  type="text"
-                  value={modificaForm.orario_ritiro}
-                  onChange={(e) => setModificaForm((f) => ({ ...f, orario_ritiro: e.target.value }))}
-                  placeholder="es. 18:30"
-                  style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-                />
-              </label>
-              {ordineIsDelivery(modificaOrdineModal) && (
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontWeight: 500 }}>Indirizzo consegna</span>
-                  <input
-                    type="text"
-                    value={modificaForm.indirizzo_consegna}
-                    onChange={(e) => setModificaForm((f) => ({ ...f, indirizzo_consegna: e.target.value }))}
-                    placeholder="Indirizzo"
-                    style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-                  />
-                </label>
-              )}
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontWeight: 500 }}>Note</span>
-                <textarea
-                  value={modificaForm.note}
-                  onChange={(e) => setModificaForm((f) => ({ ...f, note: e.target.value }))}
-                  placeholder="Note ordine"
-                  rows={2}
-                  style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc", resize: "vertical" }}
-                />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontWeight: 500 }}>Tipo pagamento</span>
-                <select
-                  value={modificaForm.tipo_pagamento}
-                  onChange={(e) => setModificaForm((f) => ({ ...f, tipo_pagamento: e.target.value }))}
-                  style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-                >
-                  {TIPI_PAGAMENTO.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button type="button" style={styles.impostazioniBtn} onClick={handleSalvaModificaOrdine} disabled={modificaOrdineSaving}>
-                {modificaOrdineSaving ? "Salvataggio..." : "Salva"}
-              </button>
-              <button type="button" style={styles.planningBarToggle} onClick={() => !modificaOrdineSaving && setModificaOrdineModal(null)} disabled={modificaOrdineSaving}>
-                Annulla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {modificaOrdineModal ? (
+        <CassaModificaOrdineModal
+          styles={styles}
+          ordine={modificaOrdineModal}
+          saving={modificaOrdineSaving}
+          modificaForm={modificaForm}
+          setModificaForm={setModificaForm}
+          modificaRighe={modificaRighe}
+          setModificaRighe={setModificaRighe}
+          modificaProdottiList={modificaProdottiList}
+          modificaTotaleAnteprima={modificaTotaleAnteprima}
+          tipiPagamento={TIPI_PAGAMENTO}
+          onClose={() => setModificaOrdineModal(null)}
+          onSave={handleSalvaModificaOrdine}
+        />
+      ) : null}
 
       {lastOrderLoading && (
         <div style={styles.modalOverlay}>

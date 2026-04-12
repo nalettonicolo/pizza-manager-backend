@@ -45,6 +45,9 @@ const PublicOrdineCheckoutPage = lazy(() => import("@/features/public/pages/Publ
 const SuperAdminDashboard = lazy(() => import("@/features/superadmin/pages/SuperAdminDashboard"));
 const Licenses = lazy(() => import("@/features/superadmin/pages/Licenses"));
 const Tenants = lazy(() => import("@/features/superadmin/pages/Tenants"));
+const SuperadminTenantArchivioPasswordPage = lazy(() =>
+  import("@/features/superadmin/pages/SuperadminTenantArchivioPasswordPage"),
+);
 const Settings = lazy(() => import("@/features/superadmin/pages/Settings"));
 const Piani = lazy(() => import("@/features/superadmin/pages/Piani"));
 const ServiziCatalogo = lazy(() => import("@/features/superadmin/pages/ServiziCatalogo"));
@@ -57,6 +60,7 @@ const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/Serviz
 const SuperadminIngressoPage = lazy(() => import("@/features/superadmin/pages/SuperadminIngressoPage"));
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
+const SuperadminViewportTesterPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportTesterPage"));
 
 /* ================= ADMIN (lazy) ================= */
 const Report = lazy(() => import("@/features/admin/pages/Report"));
@@ -352,8 +356,24 @@ export default function AppRouter() {
           <Route element={<SuperAdminLayout />}>
             <Route path="/superadmin" element={<Navigate to="/superadmin/ingresso" replace />} />
             <Route path="/superadmin/test-reparti" element={<Suspense fallback={<PageFallback />}><TestRepartiPanelPage /></Suspense>} />
+            <Route
+              path="/superadmin/test-layout"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminViewportTesterPage />
+                </Suspense>
+              }
+            />
             <Route path="/superadmin/dashboard" element={<Suspense fallback={<PageFallback />}><SuperAdminDashboard /></Suspense>} />
             <Route path="/superadmin/tenants" element={<Suspense fallback={<PageFallback />}><Tenants /></Suspense>} />
+            <Route
+              path="/superadmin/tenants/:tenantId/archivio-password"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminTenantArchivioPasswordPage />
+                </Suspense>
+              }
+            />
             <Route path="/superadmin/servizi" element={<Suspense fallback={<PageFallback />}><ServiziCatalogo /></Suspense>} />
             <Route path="/superadmin/servizi/:servizioId" element={<Suspense fallback={<PageFallback />}><ServizioSchedaPage /></Suspense>} />
             <Route path="/superadmin/deploy-clienti" element={<Suspense fallback={<PageFallback />}><DeployClientiPage /></Suspense>} />

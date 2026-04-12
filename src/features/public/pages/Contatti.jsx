@@ -157,7 +157,7 @@ export default function Contatti() {
     );
     const subject = encodeURIComponent(`Richiesta informazioni PizzaManager - ${azienda}`);
     const body = encodeURIComponent(
-      `Nome: ${nome}\nEmail: ${email}\nAzienda / Pizzeria: ${azienda}\nTelefono: ${telefono}\n\n---\n${pianoBlock}\n---\n\nMessaggio:\n${messaggio}`,
+      `Nome: ${nome}\nEmail: ${email}\nAzienda / Pizzeria: ${azienda}\nTelefono: ${telefono}\n\nPiano o moduli richiesti:\n${pianoBlock}\n\nMessaggio:\n${messaggio}`,
     );
     window.location.href = `mailto:${DEFAULT_EMAIL}?subject=${subject}&body=${body}`;
     setSent(true);

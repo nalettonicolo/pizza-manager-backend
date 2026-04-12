@@ -1,9 +1,10 @@
-import { Fragment, useEffect, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
 import { Outlet, NavLink, Link, useLocation, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { usePv } from "@/app/contexts/PvContext";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
@@ -62,6 +63,15 @@ const settingsSidebarItems = [
   { to: "/admin/settings/parametri", label: "Parametri" },
 ];
 
+function topNavLinkEnd(to) {
+  return !(
+    to === "/admin/menu" ||
+    to === "/admin/settings" ||
+    to === "/admin/magazzino" ||
+    to === "/admin/contabilita"
+  );
+}
+
 export default function AdminLayout() {
   const { user, logout, ruolo } = useAuth();
   const navigate = useNavigate();
@@ -69,6 +79,10 @@ export default function AdminLayout() {
   const { activePv, pvList, loading: pvLoading } = usePv();
   const { hasServizio, enforcementActive } = useTenantServizi();
   const location = useLocation();
+  const adminNavCompact = useMediaQuery("(max-width: 768px)");
+  const [adminMobileNavOpen, setAdminMobileNavOpen] = useState(false);
+  const closeMobileNav = useCallback(() => setAdminMobileNavOpen(false), []);
+
   const isMenuArea = location.pathname.startsWith("/admin/menu");
   const isSettingsArea = location.pathname.startsWith("/admin/settings");
   const isMagazzinoArea = location.pathname.startsWith("/admin/magazzino");
@@ -113,6 +127,24 @@ export default function AdminLayout() {
   const adminNeedsPvChoice = ruoloKey === "admin" && pvList.length > 1;
 
   useEffect(() => {
+    closeMobileNav();
+  }, [location.pathname, closeMobileNav]);
+
+  useEffect(() => {
+    if (!adminNavCompact || !adminMobileNavOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") closeMobileNav();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [adminNavCompact, adminMobileNavOpen, closeMobileNav]);
+
+  useEffect(() => {
     return prefetchWhenIdle([
       () => import("@/features/admin/pages/ManualeUtentePage"),
       () => import("@/features/admin/pages/menu/CategoriePage"),
@@ -147,35 +179,43 @@ export default function AdminLayout() {
               brandName
             )}
           </Link>
-          <nav>
-            {visibleTopNav.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={
-                  item.to === "/admin/menu" ||
-                  item.to === "/admin/settings" ||
-                  item.to === "/admin/magazzino" ||
-                  item.to === "/admin/contabilita"
-                    ? false
-                    : true
-                }
-                className={({ isActive }) => (isActive ? "active" : "")}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
+          {adminNavCompact ? (
+            <button
+              type="button"
+              className="admin-bar-mobile-toggle"
+              aria-expanded={adminMobileNavOpen}
+              aria-controls="admin-mobile-nav-panel"
+              aria-label={adminMobileNavOpen ? "Chiudi menu sezioni" : "Apri menu sezioni"}
+              onClick={() => setAdminMobileNavOpen((o) => !o)}
+            >
+              <span className="admin-bar-mobile-toggle-bars" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="admin-bar-mobile-toggle-label">Menu</span>
+            </button>
+          ) : null}
+          {!adminNavCompact ? (
+            <nav className="admin-bar-nav-inline" aria-label="Sezioni admin">
+              {visibleTopNav.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={topNavLinkEnd(item.to)}
+                  className={({ isActive }) => (isActive ? "active" : "")}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          ) : null}
         </div>
         <div className="admin-bar-right" style={{ alignItems: "center", gap: 12 }}>
-          <span
-            className="admin-bar-user-email"
-            style={{ fontSize: 12, color: "rgba(255,255,255,0.88)", maxWidth: 200 }}
-            title={user?.email}
-          >
+          <span className="admin-bar-user-email" title={user?.email}>
             {user?.email}
           </span>
-          <span style={{ fontSize: 13 }}>Admin</span>
+          <span className="admin-bar-role-label">Admin</span>
           <button
             type="button"
             className="admin-bar-logout"
@@ -189,6 +229,32 @@ export default function AdminLayout() {
             Esci
           </button>
         </div>
+        {adminNavCompact && adminMobileNavOpen ? (
+          <div
+            className="admin-mobile-nav-backdrop"
+            role="presentation"
+            onClick={closeMobileNav}
+          >
+            <nav
+              id="admin-mobile-nav-panel"
+              className="admin-mobile-nav-panel"
+              aria-label="Sezioni admin"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {visibleTopNav.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={topNavLinkEnd(item.to)}
+                  className={({ isActive }) => (isActive ? "active" : "")}
+                  onClick={closeMobileNav}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        ) : null}
       </header>
 
       <div

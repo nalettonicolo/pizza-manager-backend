@@ -33,6 +33,7 @@ const NAV_DROPDOWNS = [
       { to: "/superadmin/guide", label: "Documentazione" },
       { to: "/superadmin/sviluppo", label: "Roadmap" },
       { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
+      { to: "/superadmin/test-layout", label: "Test viewport layout" },
       { to: "/superadmin/settings", label: "Sistema" },
     ],
   },
@@ -99,6 +100,7 @@ export default function SuperAdminLayout() {
     return prefetchWhenIdle([
       () => import("@/features/superadmin/pages/SuperAdminDashboard"),
       () => import("@/features/superadmin/pages/Tenants"),
+      () => import("@/features/superadmin/pages/SuperadminTenantArchivioPasswordPage"),
       () => import("@/features/superadmin/pages/Piani"),
       () => import("@/features/superadmin/pages/ServiziCatalogo"),
       () => import("@/features/superadmin/pages/Licenses"),
@@ -111,6 +113,7 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/SuperadminIngressoPage"),
       () => import("@/features/superadmin/pages/ServizioSchedaPage"),
       () => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"),
+      () => import("@/features/superadmin/pages/SuperadminViewportTesterPage"),
     ]);
   }, []);
 

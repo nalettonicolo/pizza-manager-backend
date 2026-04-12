@@ -1045,6 +1045,7 @@ export default function FidelityCardPage() {
         onClose={() => setNuovoClienteEnrollModalOpen(false)}
         tenantId={tenantId}
         onSuccess={(c) => void onNuovoClienteEnrollSuccess(c)}
+        parametriOperativi={tenantData?.parametri_operativi}
       />
     </div>
   )

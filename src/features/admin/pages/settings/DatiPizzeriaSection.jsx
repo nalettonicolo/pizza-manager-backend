@@ -8,6 +8,10 @@ import {
 } from "@/features/admin/services/adminService";
 import { KEY_TITOLARE_ESERCENTE } from "@/config/legalEntity";
 import { loadGoogleMapsScript } from "@/lib/googleMapsLoader";
+import {
+  formatIndirizzoFromNominatim,
+  formatIndirizzoFromGoogleAddressComponents,
+} from "@/utils/formatIndirizzoItaliano";
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
@@ -97,8 +101,11 @@ export default function DatiPizzeriaSection() {
           const placePrediction = event.placePrediction ?? event.detail?.placePrediction;
           if (!placePrediction) return;
           const place = placePrediction.toPlace();
-          await place.fetchFields({ fields: ["formattedAddress", "location"] });
-          const formatted = place.formattedAddress;
+          await place.fetchFields({
+            fields: ["addressComponents", "formattedAddress", "location"],
+          });
+          const fromComponents = formatIndirizzoFromGoogleAddressComponents(place.addressComponents || []);
+          const formatted = fromComponents || place.formattedAddress || "";
           if (!formatted) return;
           const loc = place.location;
           let nextLat;
@@ -160,12 +167,21 @@ export default function DatiPizzeriaSection() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          const res = await fetch(
-            `${NOMINATIM_URL}?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { Accept: "application/json", "User-Agent": "PizzaManagerApp/1.0" } },
-          );
+          const revParams = new URLSearchParams({
+            lat: String(latitude),
+            lon: String(longitude),
+            format: "json",
+            addressdetails: "1",
+          });
+          const res = await fetch(`${NOMINATIM_URL}?${revParams}`, {
+            headers: { Accept: "application/json", "User-Agent": "PizzaManagerApp/1.0" },
+          });
           const data = await res.json();
-          const address = data?.display_name ?? `${latitude}, ${longitude}`;
+          const address =
+            formatIndirizzoFromNominatim({
+              address: data?.address,
+              display_name: data?.display_name,
+            }) || data?.display_name || `${latitude}, ${longitude}`;
           setSettings((s) => ({
             ...s,
             indirizzo: address,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { serviziIdsIncludedForPiano } from "@/app/hooks/useTenantServizi";
 import TenantServiziPlanFields from "@/features/superadmin/components/TenantServiziPlanFields";
 import { defaultInclusioni, loadPlansResolved } from "@/features/superadmin/catalog/plansStorage";
@@ -442,8 +443,11 @@ export default function Tenants() {
                   <td style={{ color: "#666", fontSize: 13 }}>
                     {t.created_at ? new Date(t.created_at).toLocaleDateString("it-IT") : "—"}
                   </td>
-                  <td style={{ textAlign: "right" }}>
-                    <button type="button" onClick={() => openEdit(t)} className="sa-table-action">
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <Link to={`/superadmin/tenants/${t.id}/archivio-password`} className="sa-table-action">
+                      Archivio password
+                    </Link>
+                    <button type="button" onClick={() => openEdit(t)} className="sa-table-action" style={{ marginLeft: 8 }}>
                       Modifica
                     </button>
                   </td>
@@ -597,7 +601,12 @@ export default function Tenants() {
                   <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
                     Stesse <strong>note opzionali</strong> che il titolare vede in <strong>Admin → Ruoli</strong> dopo aver
                     inserito la propria password: non sono le credenziali Supabase, solo promemoria (es. password date al
-                    dipendente). Dopo il salvataggio il locale le trova allo sblocco dell&apos;archivio in Ruoli.
+                    dipendente). Dopo il salvataggio il locale le trova allo sblocco dell&apos;archivio in Ruoli. Per
+                    gestire solo le note puoi usare anche la{" "}
+                    <Link to={`/superadmin/tenants/${modal.id}/archivio-password`} style={{ fontWeight: 600 }}>
+                      pagina dedicata «Archivio password»
+                    </Link>
+                    .
                   </p>
                   {archivio.loading ? (
                     <p style={{ fontSize: 14, color: "#64748b" }}>Caricamento account staff…</p>

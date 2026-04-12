@@ -1,0 +1,32 @@
+---
+description: Regole globali PizzaManager — multi-tenant, Supabase-first, sicurezza
+alwaysApply: true
+---
+
+# PizzaManager — regole progetto
+
+Contesto: **repo già avanzato** (React + Vite, Supabase, eventuale `VITE_API_URL` backend). Non proporre setup “da zero” della webapp; lavorare sul codice e sugli script SQL esistenti (`sql/schema_completo_pizzamanager.sql`, `sql/sql_upgrade.sql`).
+
+## Principi
+
+- **Multi-tenant obbligatorio**: dati isolati per `tenant_id`; nessuna query o RPC che esponga altri tenant.
+- **Supabase first**: preferire RLS, viste esposte a PostgREST, **RPC `SECURITY DEFINER`** per operazioni sensibili (ordini, righe, turni). Backend Nest solo se già nel flusso o strettamente necessario.
+- **Nessuna logica critica solo nel frontend**: validazione UX sì; autorità su soldi, totali, permessi e isolamento tenant sul database / RPC.
+- **Sicurezza prioritaria**: policy RLS, `auth.uid()`, niente bypass client-side; se si tocca lo schema, aggiornare anche `sql_upgrade.sql` e allineare `schema_completo` quando richiesto dal team.
+- **Coerenza**: seguire pattern esistenti in `src/features/admin/services/adminService.js`, layout admin/operativo/superadmin, convenzioni import del repo.
+
+## Invocazione profili agente (chat)
+
+Usa **file contesto** con `@`:
+
+- `@agents/supervisor.md` — validazione finale
+- `@agents/architecture.md` — dove mettere la logica
+- `@agents/product.md` — flussi pizzeria
+- `@agents/database.md` — SQL / RLS / RPC
+- `@agents/code.md` — implementazione React
+- `@agents/ui.md` — layout e UX
+- `@agents/copywriter.md` — testi pubblici professionali (landing, microcopy, marketing)
+- `@agents/test.md` — test e casi limite
+- `@agents/security.md` — review sicurezza
+
+Ciclo consigliato: **una feature alla volta**; dopo implementazione e test, passare dal supervisore. Per **nuove pagine o stringhe** visibili agli utenti esterni, coinvolgere `@agents/copywriter.md` prima del merge.
