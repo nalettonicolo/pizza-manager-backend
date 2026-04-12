@@ -46,6 +46,17 @@
     0 24px 48px -12px rgba(15, 23, 42, 0.12);
 }
 
+.login-layout-preview-banner {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+}
+
 .login-brand {
   text-align: center;
   margin-bottom: 28px;
@@ -225,6 +236,88 @@
   }
 }
 
+/* Telefoni e iframe stretti (test layout): card a tutta larghezza utile, tocchi comodi */
+@media (max-width: 480px) {
+  .login-page {
+    padding: max(16px, env(safe-area-inset-top, 0px)) 12px max(24px, env(safe-area-inset-bottom, 0px));
+    align-items: flex-start;
+  }
+
+  .login-page-inner {
+    max-width: none;
+  }
+
+  .login-card {
+    padding: 24px 18px 22px;
+    border-radius: 16px;
+  }
+
+  .login-brand-mark {
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+    border-radius: 14px;
+  }
+
+  .login-brand-title {
+    font-size: clamp(1.25rem, 5vw, 1.5rem);
+  }
+
+  .login-brand-sub {
+    font-size: 0.875rem;
+  }
+
+  .login-input {
+    padding: 14px 14px;
+    font-size: 16px; /* evita zoom iOS su focus */
+  }
+
+  .login-submit {
+    padding: 15px 18px;
+    font-size: 1rem;
+    min-height: 48px;
+  }
+
+  .login-footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .login-card {
+    padding: 20px 14px 18px;
+  }
+
+  .login-form {
+    gap: 14px;
+  }
+}
+
+/* Tablet stretto / landscape mobile */
+@media (max-height: 520px) and (orientation: landscape) {
+  .login-page {
+    align-items: flex-start;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+  }
+
+  .login-card {
+    padding: 20px 22px 18px;
+  }
+
+  .login-brand {
+    margin-bottom: 16px;
+  }
+
+  .login-brand-mark {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 8px;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   .login-page::before {
     background:
@@ -254,5 +347,11 @@
 
   .login-input:focus {
     border-color: var(--login-primary-light);
+  }
+
+  .login-layout-preview-banner {
+    color: #93c5fd;
+    background: rgba(30, 58, 138, 0.35);
+    border-color: rgba(96, 165, 250, 0.35);
   }
 }

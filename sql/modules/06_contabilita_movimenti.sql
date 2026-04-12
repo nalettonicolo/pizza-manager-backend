@@ -1,6 +1,7 @@
 ﻿
 -- =============================================================================
--- 6) ContabilitÃ : movimenti manuali su DB (alternativa / affiancamento a localStorage)
+-- 6) Contabilità: movimenti manuali su DB (alternativa / affiancamento a localStorage)
+-- Canonico anche in sql/sql_upgrade.sql (blocco moduli) e sql/schema_completo_pizzamanager.sql (append).
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.contabilita_movimenti (

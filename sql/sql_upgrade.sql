@@ -6,17 +6,803 @@
 --   sql/schema_completo_pizzamanager.sql
 --   (include ex snapshot remoto + tutte le patch che erano in supabase/migrations/).
 --
+-- Non fanno parte di questo flusso Supabase/Postgres: server/pizzeria-backend/prisma/*.sql
+-- (migrazioni Prisma), struttura_pizzeria.sql (snapshot storico locale).
+--
 -- Questo file è il punto unico per le nuove DDL/DML incrementali: preferire
 -- blocchi idempotenti (IF NOT EXISTS, DO $$ … $$, DROP … IF EXISTS dove sicuro).
 -- Le patch che toccano Ordine / create_order_with_items / replace_order_items vanno
--- incluse qui (non solo nei moduli sotto sql/modules/), così un’unica esecuzione basta.
+-- incluse qui (non solo nei moduli sotto sql/modules/), così un'unica esecuzione basta.
 --
 -- Changelog (estratto):
+--   2026-04-11 — Moduli sql/modules/ 01–11 inclusi all'inizio del file (ordine esecuzione).
 --   2026-04-11 — public.replace_order_items: modifica righe ordine dalla cassa
 --     (sostituisce righe, totale, azzera cucina_prep_stato; staff cassa / accesso_cassa).
 --   2026-04 — public.utenti_ruoli.nome_visualizzato + vista ruoli_pizzeria aggiornata.
 --
 -- =============================================================================
+
+
+-- -----------------------------------------------------------------------------
+-- Moduli sql/modules (01–11): stesso contenuto dei file in sql/modules/ (ordine).
+-- 04–05–12–13: la logica Ordine/create_order e fiscal è nelle sezioni successive;
+--    il file 13_ordine_telefono_ritiro.sql è solo nota (nessun SQL).
+-- Attenzione: 02/10 fanno DROP VIEW public.punti_vendita — non usare se quella
+--    relazione è ancora una TABLE legacy (solo VIEW).
+-- -----------------------------------------------------------------------------
+
+-- =============================================================================
+-- 1) FIDELITY + DEFAULT PARAMETRI TENANT
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.fidelity_saldi (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  anagrafica_cliente_id UUID NOT NULL REFERENCES public.anagrafica_clienti(id) ON DELETE CASCADE,
+  punti INT NOT NULL DEFAULT 0,
+  codice_carta TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT fidelity_saldi_tenant_cliente_unique UNIQUE (tenant_id, anagrafica_cliente_id),
+  CONSTRAINT fidelity_saldi_tenant_codice_unique UNIQUE (tenant_id, codice_carta),
+  CONSTRAINT fidelity_saldi_punti_non_neg CHECK (punti >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fidelity_saldi_tenant ON public.fidelity_saldi(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_fidelity_saldi_anagrafica ON public.fidelity_saldi(anagrafica_cliente_id);
+
+CREATE TABLE IF NOT EXISTS public.fidelity_movimenti (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  anagrafica_cliente_id UUID NOT NULL REFERENCES public.anagrafica_clienti(id) ON DELETE CASCADE,
+  punti INT NOT NULL,
+  tipo TEXT NOT NULL,
+  ordine_id UUID,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fidelity_movimenti_tenant_cliente
+  ON public.fidelity_movimenti(tenant_id, anagrafica_cliente_id, created_at DESC);
+
+ALTER TABLE public.fidelity_saldi ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fidelity_movimenti ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "fidelity_saldi_staff_all" ON public.fidelity_saldi;
+CREATE POLICY "fidelity_saldi_staff_all" ON public.fidelity_saldi
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "fidelity_movimenti_staff_all" ON public.fidelity_movimenti;
+DROP POLICY IF EXISTS "fidelity_movimenti_staff_select" ON public.fidelity_movimenti;
+DROP POLICY IF EXISTS "fidelity_movimenti_staff_insert" ON public.fidelity_movimenti;
+CREATE POLICY "fidelity_movimenti_staff_select" ON public.fidelity_movimenti
+  FOR SELECT USING (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+CREATE POLICY "fidelity_movimenti_staff_insert" ON public.fidelity_movimenti
+  FOR INSERT WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fidelity_saldi TO authenticated;
+GRANT SELECT, INSERT ON public.fidelity_movimenti TO authenticated;
+
+COMMENT ON TABLE public.fidelity_saldi IS 'Punti fidelity per cliente anagrafica (cassa); codice_carta univoco per tenant.';
+COMMENT ON TABLE public.fidelity_movimenti IS 'Storico variazioni punti (manuale, ordine, ecc.).';
+
+ALTER TABLE public.fidelity_saldi
+  ADD COLUMN IF NOT EXISTS nome_negozio TEXT;
+
+COMMENT ON COLUMN public.fidelity_saldi.nome_negozio IS
+  'Nome come lo chiami in negozio (bancone); opzionale, affiancato al codice carta.';
+
+UPDATE core.tenants t
+SET parametri_operativi =
+  COALESCE(t.parametri_operativi, '{}'::jsonb)
+  || jsonb_build_object(
+    'consegna_domicilio_attiva',
+    CASE
+      WHEN COALESCE(t.parametri_operativi, '{}'::jsonb) ? 'consegna_domicilio_attiva'
+        THEN (COALESCE(t.parametri_operativi, '{}'::jsonb)->>'consegna_domicilio_attiva')::boolean
+      ELSE true
+    END,
+    'fidelity_abilita_clienti_domicilio',
+    CASE
+      WHEN COALESCE(t.parametri_operativi, '{}'::jsonb) ? 'fidelity_abilita_clienti_domicilio'
+        THEN (COALESCE(t.parametri_operativi, '{}'::jsonb)->>'fidelity_abilita_clienti_domicilio')::boolean
+      ELSE true
+    END
+  );
+
+
+
+
+-- =============================================================================
+-- 2) core.punti_vendita (multi-sede) + vista public se assente
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS core.punti_vendita (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  slug TEXT,
+  attivo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_punti_vendita_tenant ON core.punti_vendita(tenant_id);
+
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS consegna_area_poligono JSONB;
+COMMENT ON COLUMN core.punti_vendita.consegna_area_poligono IS 'GeoJSON Polygon WGS84; se NULL in checkout si usa parametri_operativi.consegna_area_poligono del tenant.';
+
+DROP VIEW IF EXISTS public.punti_vendita CASCADE;
+CREATE VIEW public.punti_vendita AS
+  SELECT
+    pv.id,
+    pv.tenant_id,
+    pv.nome,
+    pv.slug,
+    pv.attivo,
+    pv.consegna_area_poligono,
+    pv.created_at,
+    pv.updated_at
+  FROM core.punti_vendita pv
+  WHERE pv.tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT ON public.punti_vendita TO authenticated;
+GRANT SELECT ON public.punti_vendita TO anon;
+
+
+
+
+-- =============================================================================
+-- 3) Estensioni core.ordini
+-- Logistica rider enterprise (rider_id, percorsi, stato_delivery enum): modulo 11.
+-- =============================================================================
+
+DO $$
+BEGIN
+  IF to_regclass('core.ordini') IS NULL THEN
+    RAISE NOTICE 'core.ordini assente: salto estensioni ordine.';
+    RETURN;
+  END IF;
+
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS consegna_lng DOUBLE PRECISION;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS consegna_lat DOUBLE PRECISION;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS pagamento_dettaglio JSONB;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS stato_consegna TEXT;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS punto_vendita_id UUID;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS turno_operatori_id INTEGER;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS telefono_ritiro TEXT;
+
+  COMMENT ON COLUMN core.ordini.telefono_ritiro IS 'Telefono contatto per ritiro in negozio (opzionale, es. ordine telefonico).';
+
+  COMMENT ON COLUMN core.ordini.consegna_lng IS 'Longitudine indirizzo consegna (verifica area / tracciamento).';
+  COMMENT ON COLUMN core.ordini.consegna_lat IS 'Latitudine indirizzo consegna.';
+  COMMENT ON COLUMN core.ordini.pagamento_dettaglio IS 'Pagamento misto: es. [{"tipo":"Contanti","importo":10},{"tipo":"Carta","importo":5}].';
+  COMMENT ON COLUMN core.ordini.stato_consegna IS 'Delivery: es. RICHIESTA, IN_PREPARAZIONE, IN_VIAGGIO, CONSEGNATO.';
+  COMMENT ON COLUMN core.ordini.punto_vendita_id IS 'Punto vendita (core.punti_vendita) se multi-PV.';
+  COMMENT ON COLUMN core.ordini.turno_operatori_id IS 'Turno cassa aperto (public.turni_operatori.id) al momento dell''ordine; null per ordini web o senza turno.';
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'turni_operatori'
+      AND c.relkind = 'r'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'ordini_turno_operatori_id_fkey'
+    ) THEN
+      ALTER TABLE core.ordini
+        ADD CONSTRAINT ordini_turno_operatori_id_fkey
+        FOREIGN KEY (turno_operatori_id) REFERENCES public.turni_operatori (id) ON DELETE SET NULL;
+    END IF;
+  END IF;
+
+  IF to_regclass('core.punti_vendita') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'ordini_punto_vendita_id_fkey'
+    ) THEN
+      ALTER TABLE core.ordini
+        ADD CONSTRAINT ordini_punto_vendita_id_fkey
+        FOREIGN KEY (punto_vendita_id) REFERENCES core.punti_vendita(id) ON DELETE SET NULL;
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+END $$;
+
+
+
+
+-- =============================================================================
+-- 6) Contabilità: movimenti manuali su DB (alternativa / affiancamento a localStorage)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.contabilita_movimenti (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  data_mov DATE NOT NULL,
+  descrizione TEXT,
+  importo NUMERIC(12, 2) NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('contanti', 'elettronico')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contabilita_movimenti_tenant_data
+  ON public.contabilita_movimenti(tenant_id, data_mov DESC);
+
+ALTER TABLE public.contabilita_movimenti ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "contabilita_movimenti_staff_all" ON public.contabilita_movimenti;
+CREATE POLICY "contabilita_movimenti_staff_all" ON public.contabilita_movimenti
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contabilita_movimenti TO authenticated;
+
+COMMENT ON TABLE public.contabilita_movimenti IS
+  'Incassi manuali registrati da Admin (contanti / elettronico); usabile al posto del solo localStorage.';
+
+
+
+
+-- =============================================================================
+-- 7) Magazzino: movimenti di magazzino (base incrementale)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.magazzino_movimenti (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  prodotto_id UUID,
+  descrizione TEXT NOT NULL,
+  qty_delta NUMERIC(14, 3) NOT NULL,
+  unita TEXT DEFAULT 'pz',
+  riferimento TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_magazzino_movimenti_tenant ON public.magazzino_movimenti(tenant_id, created_at DESC);
+
+ALTER TABLE public.magazzino_movimenti ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "magazzino_movimenti_staff_all" ON public.magazzino_movimenti;
+CREATE POLICY "magazzino_movimenti_staff_all" ON public.magazzino_movimenti
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_movimenti TO authenticated;
+
+COMMENT ON TABLE public.magazzino_movimenti IS
+  'Movimenti di carico/scarico; prodotto_id opzionale se il movimento è aggregato o non legato al listino.';
+
+
+
+
+-- =============================================================================
+-- 8) Seed: un punto vendita predefinito per tenant senza sedi (multi-PV / cassa)
+-- =============================================================================
+
+INSERT INTO core.punti_vendita (tenant_id, nome, slug, attivo)
+SELECT t.id, 'Sede principale', 'principale', true
+FROM core.tenants t
+WHERE NOT EXISTS (SELECT 1 FROM core.punti_vendita pv WHERE pv.tenant_id = t.id);
+
+
+
+
+-- =============================================================================
+-- 9) Vetrina cliente: campi normativi e pagamenti (policy HTML + Stripe/SumUp predisposizione)
+-- =============================================================================
+
+DO $legal$
+BEGIN
+  IF to_regclass('admin.tenants') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_ragione_sociale TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_piva TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_pec TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS privacy_policy_html TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS cookie_policy_html TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS pagamento_online_provider TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS stripe_publishable_key TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS sumup_merchant_public_id TEXT';
+    COMMENT ON COLUMN admin.tenants.privacy_policy_html IS 'HTML informativa privacy vetrina; se NULL si usa testo predefinito app.';
+    COMMENT ON COLUMN admin.tenants.cookie_policy_html IS 'HTML cookie policy vetrina; se NULL si usa testo predefinito app.';
+    COMMENT ON COLUMN admin.tenants.pagamento_online_provider IS 'stripe | sumup | null — checkout pubblico.';
+    COMMENT ON COLUMN admin.tenants.stripe_publishable_key IS 'Chiave pubblica Stripe (pk_...), sicura in client.';
+  END IF;
+END
+$legal$;
+
+CREATE OR REPLACE FUNCTION public.resolve_public_tenant_by_domain(p_host text)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, admin
+AS $$
+  SELECT to_jsonb(t)
+  FROM (
+    SELECT
+      id,
+      nome,
+      logo_url,
+      indirizzo,
+      email,
+      telefono,
+      orari_settimana,
+      parametri_operativi,
+      legal_ragione_sociale,
+      legal_piva,
+      legal_pec,
+      privacy_policy_html,
+      cookie_policy_html,
+      pagamento_online_provider,
+      stripe_publishable_key,
+      sumup_merchant_public_id
+    FROM admin.tenants
+    WHERE deleted_at IS NULL
+      AND (attivo IS NULL OR attivo = true)
+      AND (
+        (
+          public_domain IS NOT NULL
+          AND btrim(public_domain) <> ''
+          AND lower(btrim(public_domain)) = lower(btrim(p_host))
+        )
+        OR (
+          lower(btrim(p_host)) LIKE '%.pizzamanager.it'
+          AND lower(btrim(slug)) = lower(split_part(btrim(p_host), '.', 1))
+        )
+      )
+    LIMIT 1
+  ) t;
+$$;
+
+COMMENT ON FUNCTION public.resolve_public_tenant_by_domain(text) IS 'Menu pubblico: risolve tenant da hostname (dominio cliente collegato in admin.tenants.public_domain).';
+
+
+
+-- =============================================================================
+-- 8) punti_vendita: coordinate sede (centro mappa / marcatore area consegna)
+-- =============================================================================
+
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+COMMENT ON COLUMN core.punti_vendita.lat IS 'Latitudine sede (centro mappa e marcatore in admin aree consegna).';
+COMMENT ON COLUMN core.punti_vendita.lng IS 'Longitudine sede (centro mappa e marcatore in admin aree consegna).';
+
+DROP VIEW IF EXISTS public.punti_vendita CASCADE;
+CREATE VIEW public.punti_vendita AS
+  SELECT
+    pv.id,
+    pv.tenant_id,
+    pv.nome,
+    pv.slug,
+    pv.attivo,
+    pv.consegna_area_poligono,
+    pv.lat,
+    pv.lng,
+    pv.created_at,
+    pv.updated_at
+  FROM core.punti_vendita pv
+  WHERE pv.tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT ON public.punti_vendita TO authenticated;
+GRANT SELECT ON public.punti_vendita TO anon;
+
+
+-- =============================================================================
+-- 11) Rider / consegne enterprise — anagrafica rider, turni, percorsi, eventi
+-- =============================================================================
+-- Regola A (logistica): il flag bloccato_cucina su consegna_percorso_ordine indica
+-- ordini non riordinabili al ricalcolo percorso (es. già in forno).
+--
+-- Dipendenze: core.tenants, core.ordini, core.punti_vendita (opzionale), core.users (opzionale)
+-- Prerequisiti progetto: 03_ordini_extensions.sql (tipo_ordine, stato_consegna, coordinate, turno cassa, …)
+-- Allineamento: supabase/migrations/20260408120000_rider_delivery_enterprise.sql
+-- =============================================================================
+
+-- --- Enum stato logistica delivery (affianca stato_consegna TEXT legacy) ----------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                 WHERE n.nspname = 'core' AND t.typname = 'stato_delivery') THEN
+    CREATE TYPE core.stato_delivery AS ENUM (
+      'DA_ASSEGNARE',
+      'ASSEGNATO',
+      'IN_ATTESA_BANCONE',
+      'IN_VIAGGIO',
+      'PRESSO_CLIENTE',
+      'CONSEGNATO',
+      'ANOMALIA'
+    );
+  END IF;
+END $$;
+
+COMMENT ON TYPE core.stato_delivery IS
+  'Ciclo consegna rider (affianca core.ordini.stato_consegna TEXT per compatibilità).';
+
+-- --- Rider -------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS core.rider (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  nome_display TEXT NOT NULL,
+  telefono TEXT,
+  attivo BOOLEAN NOT NULL DEFAULT true,
+  veicolo_tipo TEXT,
+  note TEXT,
+  staff_user_id UUID REFERENCES core.users(id) ON DELETE SET NULL,
+  auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT rider_almeno_un_utente CHECK (
+    staff_user_id IS NOT NULL OR auth_user_id IS NOT NULL OR length(trim(nome_display)) > 0
+  )
+);
+
+ALTER TABLE core.rider ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rider_auth_tenant
+  ON core.rider (tenant_id, auth_user_id)
+  WHERE auth_user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_rider_tenant_attivo ON core.rider (tenant_id) WHERE attivo = true AND deleted_at IS NULL;
+
+COMMENT ON TABLE core.rider IS 'Operatori consegna per tenant (app rider o staff).';
+COMMENT ON COLUMN core.rider.staff_user_id IS 'Operatore backoffice core.users, se presente.';
+COMMENT ON COLUMN core.rider.auth_user_id IS 'Login Supabase auth.users per app rider nativa.';
+
+-- --- Turno operativo rider (distinto dal turno cassa) ------------------------
+CREATE TABLE IF NOT EXISTS core.turno_rider (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  rider_id UUID NOT NULL REFERENCES core.rider(id) ON DELETE CASCADE,
+  punto_vendita_id UUID REFERENCES core.punti_vendita(id) ON DELETE SET NULL,
+  stato TEXT NOT NULL DEFAULT 'aperto' CHECK (stato IN ('aperto', 'chiuso')),
+  aperto_il TIMESTAMPTZ NOT NULL DEFAULT now(),
+  chiuso_il TIMESTAMPTZ,
+  note TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_turno_rider_tenant_aperto
+  ON core.turno_rider (tenant_id, rider_id)
+  WHERE stato = 'aperto' AND chiuso_il IS NULL;
+
+COMMENT ON TABLE core.turno_rider IS 'Turno operativo rider (apertura/chiusura giornata o servizio).';
+
+-- --- Percorso (versionato; regola A su righe ordine) -------------------------
+CREATE TABLE IF NOT EXISTS core.consegna_percorso (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  rider_id UUID NOT NULL REFERENCES core.rider(id) ON DELETE CASCADE,
+  turno_rider_id UUID REFERENCES core.turno_rider(id) ON DELETE SET NULL,
+  versione INT NOT NULL DEFAULT 1,
+  stato TEXT NOT NULL DEFAULT 'bozza' CHECK (stato IN ('bozza', 'attivo', 'completato', 'sostituito', 'annullato')),
+  provider TEXT,
+  geometria JSONB,
+  durata_stimata_sec INT,
+  distanza_metri NUMERIC(12, 2),
+  creato_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  chiuso_at TIMESTAMPTZ,
+  extra JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_consegna_percorso_tenant_rider
+  ON core.consegna_percorso (tenant_id, rider_id, creato_at DESC);
+
+COMMENT ON TABLE core.consegna_percorso IS 'Piano di consegna (ricalcoli → nuova riga o versione).';
+COMMENT ON COLUMN core.consegna_percorso.geometria IS 'Polyline/geojson o risposta provider (opzionale).';
+
+-- --- Ordini nel percorso (sequenza + blocco cucina) --------------------------
+CREATE TABLE IF NOT EXISTS core.consegna_percorso_ordine (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  percorso_id UUID NOT NULL REFERENCES core.consegna_percorso(id) ON DELETE CASCADE,
+  ordine_id UUID NOT NULL REFERENCES core.ordini(id) ON DELETE CASCADE,
+  sequenza INT NOT NULL CHECK (sequenza >= 1),
+  bloccato_cucina BOOLEAN NOT NULL DEFAULT false,
+  eta_minuti INT,
+  dwell_secondi INT,
+  note TEXT,
+  UNIQUE (percorso_id, ordine_id),
+  UNIQUE (percorso_id, sequenza)
+);
+
+CREATE INDEX IF NOT EXISTS idx_percorso_ordine_ordine ON core.consegna_percorso_ordine (ordine_id);
+
+COMMENT ON COLUMN core.consegna_percorso_ordine.bloccato_cucina IS
+  'Se true, il ricalcolo percorso non deve spostare/riordinare questo ordine (regola A: es. in forno).';
+
+-- --- Ultima posizione rider --------------------------------------------------
+CREATE TABLE IF NOT EXISTS core.rider_posizione (
+  rider_id UUID PRIMARY KEY REFERENCES core.rider(id) ON DELETE CASCADE,
+  lat DOUBLE PRECISION NOT NULL,
+  lng DOUBLE PRECISION NOT NULL,
+  accuracy_m DOUBLE PRECISION,
+  aggiornato_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rider_posizione_aggiornato ON core.rider_posizione (aggiornato_at DESC);
+
+-- --- Eventi / audit consegna -------------------------------------------------
+CREATE TABLE IF NOT EXISTS core.ordine_consegna_evento (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  ordine_id UUID NOT NULL REFERENCES core.ordini(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  percorso_id UUID REFERENCES core.consegna_percorso(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ordine_consegna_evento_tenant_created
+  ON core.ordine_consegna_evento (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ordine_consegna_evento_ordine
+  ON core.ordine_consegna_evento (ordine_id, created_at DESC);
+
+COMMENT ON TABLE core.ordine_consegna_evento IS 'Append-only: transizioni stato, ricalcoli percorso, note operative.';
+
+-- --- Outbox notifiche (push / worker Edge) -----------------------------------
+CREATE TABLE IF NOT EXISTS public.notifiche_outbox (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,
+  destinatario TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  stato TEXT NOT NULL DEFAULT 'in_coda' CHECK (stato IN ('in_coda', 'inviato', 'fallito', 'annullato')),
+  tentativi INT NOT NULL DEFAULT 0,
+  ultimo_errore TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  inviato_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifiche_outbox_tenant_stato
+  ON public.notifiche_outbox (tenant_id, stato, created_at)
+  WHERE stato = 'in_coda';
+
+COMMENT ON TABLE public.notifiche_outbox IS 'Coda notifiche (FCM/email) per processamento Edge/cron.';
+
+-- --- Estensioni core.ordini ----------------------------------------------------
+DO $$
+BEGIN
+  IF to_regclass('core.ordini') IS NULL THEN
+    RAISE NOTICE 'core.ordini assente: salto colonne rider.';
+    RETURN;
+  END IF;
+
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS rider_id UUID REFERENCES core.rider(id) ON DELETE SET NULL;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS turno_rider_id UUID REFERENCES core.turno_rider(id) ON DELETE SET NULL;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS percorso_attivo_id UUID REFERENCES core.consegna_percorso(id) ON DELETE SET NULL;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS stato_delivery core.stato_delivery;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS assegnato_rider_at TIMESTAMPTZ;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS ritiro_bancone_rider_at TIMESTAMPTZ;
+  ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS consegna_effettiva_at TIMESTAMPTZ;
+
+  COMMENT ON COLUMN core.ordini.rider_id IS 'Rider assegnato all''ordine delivery.';
+  COMMENT ON COLUMN core.ordini.turno_rider_id IS 'Turno rider di riferimento (opzionale).';
+  COMMENT ON COLUMN core.ordini.percorso_attivo_id IS 'Ultimo percorso attivo noto per l''ordine.';
+  COMMENT ON COLUMN core.ordini.stato_delivery IS 'Stato logistica (enum); affianca stato_consegna TEXT legacy.';
+  COMMENT ON COLUMN core.ordini.assegnato_rider_at IS 'Quando l''ordine è stato assegnato al rider.';
+  COMMENT ON COLUMN core.ordini.ritiro_bancone_rider_at IS 'Quando il rider ha ritirato la merce al bancone.';
+  COMMENT ON COLUMN core.ordini.consegna_effettiva_at IS 'Consegna al cliente completata.';
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('core.ordini') IS NULL THEN
+    RETURN;
+  END IF;
+  CREATE INDEX IF NOT EXISTS idx_ordini_tenant_rider_delivery
+    ON core.ordini (tenant_id, rider_id)
+    WHERE rider_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_ordini_tenant_stato_delivery
+    ON core.ordini (tenant_id, stato_delivery)
+    WHERE stato_delivery IS NOT NULL;
+END $$;
+
+-- Backfill stato_delivery da stato_consegna (best-effort; richiede colonne da sql/modules/03_ordini_extensions.sql)
+DO $$
+BEGIN
+  IF to_regclass('core.ordini') IS NULL THEN
+    RETURN;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'core' AND table_name = 'ordini' AND column_name = 'tipo_ordine'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'core' AND table_name = 'ordini' AND column_name = 'stato_consegna'
+  ) THEN
+    RETURN;
+  END IF;
+  UPDATE core.ordini o
+  SET stato_delivery = v.mapped
+  FROM (
+    SELECT id,
+      CASE upper(trim(COALESCE(stato_consegna, '')))
+        WHEN 'CONSEGNATO' THEN 'CONSEGNATO'::core.stato_delivery
+        WHEN 'IN_VIAGGIO' THEN 'IN_VIAGGIO'::core.stato_delivery
+        WHEN 'RICHIESTA' THEN 'DA_ASSEGNARE'::core.stato_delivery
+        WHEN '' THEN 'DA_ASSEGNARE'::core.stato_delivery
+        ELSE NULL
+      END AS mapped
+    FROM core.ordini
+    WHERE tipo_ordine IS NOT NULL AND lower(trim(tipo_ordine)) = 'delivery'
+  ) v
+  WHERE o.id = v.id AND o.stato_delivery IS NULL AND v.mapped IS NOT NULL;
+END $$;
+
+-- --- RLS core.* (staff tenant via utenti_ruoli) --------------------------------
+ALTER TABLE core.rider ENABLE ROW LEVEL SECURITY;
+ALTER TABLE core.turno_rider ENABLE ROW LEVEL SECURITY;
+ALTER TABLE core.consegna_percorso ENABLE ROW LEVEL SECURITY;
+ALTER TABLE core.consegna_percorso_ordine ENABLE ROW LEVEL SECURITY;
+ALTER TABLE core.rider_posizione ENABLE ROW LEVEL SECURITY;
+ALTER TABLE core.ordine_consegna_evento ENABLE ROW LEVEL SECURITY;
+
+-- Rider
+DROP POLICY IF EXISTS rider_select_staff ON core.rider;
+CREATE POLICY rider_select_staff ON core.rider FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = rider.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS rider_modify_staff ON core.rider;
+CREATE POLICY rider_modify_staff ON core.rider FOR ALL TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = rider.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = rider.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+-- turno_rider
+DROP POLICY IF EXISTS turno_rider_select_staff ON core.turno_rider;
+CREATE POLICY turno_rider_select_staff ON core.turno_rider FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = turno_rider.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS turno_rider_modify_staff ON core.turno_rider;
+CREATE POLICY turno_rider_modify_staff ON core.turno_rider FOR ALL TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = turno_rider.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = turno_rider.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+-- consegna_percorso
+DROP POLICY IF EXISTS consegna_percorso_select_staff ON core.consegna_percorso;
+CREATE POLICY consegna_percorso_select_staff ON core.consegna_percorso FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = consegna_percorso.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS consegna_percorso_modify_staff ON core.consegna_percorso;
+CREATE POLICY consegna_percorso_modify_staff ON core.consegna_percorso FOR ALL TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = consegna_percorso.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = consegna_percorso.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+-- consegna_percorso_ordine (tenant via join percorso)
+DROP POLICY IF EXISTS consegna_percorso_ordine_select_staff ON core.consegna_percorso_ordine;
+CREATE POLICY consegna_percorso_ordine_select_staff ON core.consegna_percorso_ordine FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM core.consegna_percorso p
+    JOIN public.utenti_ruoli ur ON ur.tenant_id = p.tenant_id
+    WHERE p.id = consegna_percorso_ordine.percorso_id AND ur.user_id = auth.uid() AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS consegna_percorso_ordine_modify_staff ON core.consegna_percorso_ordine;
+CREATE POLICY consegna_percorso_ordine_modify_staff ON core.consegna_percorso_ordine FOR ALL TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM core.consegna_percorso p
+    JOIN public.utenti_ruoli ur ON ur.tenant_id = p.tenant_id
+    WHERE p.id = consegna_percorso_ordine.percorso_id AND ur.user_id = auth.uid() AND (ur.attivo IS DISTINCT FROM false)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM core.consegna_percorso p
+    JOIN public.utenti_ruoli ur ON ur.tenant_id = p.tenant_id
+    WHERE p.id = consegna_percorso_ordine.percorso_id AND ur.user_id = auth.uid() AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+-- rider_posizione (tenant via rider)
+DROP POLICY IF EXISTS rider_posizione_select_staff ON core.rider_posizione;
+CREATE POLICY rider_posizione_select_staff ON core.rider_posizione FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM core.rider r
+    JOIN public.utenti_ruoli ur ON ur.tenant_id = r.tenant_id
+    WHERE r.id = rider_posizione.rider_id AND ur.user_id = auth.uid() AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS rider_posizione_modify_staff ON core.rider_posizione;
+CREATE POLICY rider_posizione_modify_staff ON core.rider_posizione FOR ALL TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM core.rider r
+    JOIN public.utenti_ruoli ur ON ur.tenant_id = r.tenant_id
+    WHERE r.id = rider_posizione.rider_id AND ur.user_id = auth.uid() AND (ur.attivo IS DISTINCT FROM false)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM core.rider r
+    JOIN public.utenti_ruoli ur ON ur.tenant_id = r.tenant_id
+    WHERE r.id = rider_posizione.rider_id AND ur.user_id = auth.uid() AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+-- ordine_consegna_evento
+DROP POLICY IF EXISTS ordine_consegna_evento_select_staff ON core.ordine_consegna_evento;
+CREATE POLICY ordine_consegna_evento_select_staff ON core.ordine_consegna_evento FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = ordine_consegna_evento.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS ordine_consegna_evento_insert_staff ON core.ordine_consegna_evento;
+CREATE POLICY ordine_consegna_evento_insert_staff ON core.ordine_consegna_evento FOR INSERT TO authenticated
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = ordine_consegna_evento.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+-- Outbox: solo staff; niente UPDATE da client (worker usa service role)
+ALTER TABLE public.notifiche_outbox ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notifiche_outbox_select_staff ON public.notifiche_outbox;
+CREATE POLICY notifiche_outbox_select_staff ON public.notifiche_outbox FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = notifiche_outbox.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+DROP POLICY IF EXISTS notifiche_outbox_insert_staff ON public.notifiche_outbox;
+CREATE POLICY notifiche_outbox_insert_staff ON public.notifiche_outbox FOR INSERT TO authenticated
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid() AND ur.tenant_id = notifiche_outbox.tenant_id AND (ur.attivo IS DISTINCT FROM false)
+  ));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON core.rider TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON core.turno_rider TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON core.consegna_percorso TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON core.consegna_percorso_ordine TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON core.rider_posizione TO authenticated;
+GRANT SELECT, INSERT ON core.ordine_consegna_evento TO authenticated;
+GRANT SELECT, INSERT ON public.notifiche_outbox TO authenticated;
+
 
 -- -----------------------------------------------------------------------------
 -- Patch: fiscal_outbox + payment_link_intents (modulo 12 — stesso contenuto di
@@ -419,7 +1205,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -520,7 +1306,7 @@ COMMENT ON FUNCTION public.create_order_with_items(
 
 -- -----------------------------------------------------------------------------
 -- Sostituisce tutte le righe di un ordine (modifica cassa). Transazionale.
--- Richiede utente con ruolo cassa o accesso_cassa sul tenant dell’ordine.
+-- Richiede utente con ruolo cassa o accesso_cassa sul tenant dellâ€™ordine.
 -- -----------------------------------------------------------------------------
 
 DROP FUNCTION IF EXISTS public.replace_order_items(UUID, NUMERIC, JSONB);
@@ -793,14 +1579,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public."Prodotto" TO authenticated;
 GRANT SELECT ON public."Prodotto" TO anon;
 
 -- -----------------------------------------------------------------------------
--- Dipendenti: nome in sede (es. «Anna» alla cassa) per turni / riferimento umano
+-- Dipendenti: nome in sede (es. Â«AnnaÂ» alla cassa) per turni / riferimento umano
 -- -----------------------------------------------------------------------------
 
 ALTER TABLE public.utenti_ruoli
   ADD COLUMN IF NOT EXISTS nome_visualizzato TEXT;
 
 COMMENT ON COLUMN public.utenti_ruoli.nome_visualizzato IS
-  'Nome o etichetta del dipendente in sede (es. Anna), distinto dall’account email; usabile per turni e report.';
+  'Nome o etichetta del dipendente in sede (es. Anna), distinto dallâ€™account email; usabile per turni e report.';
 
 DROP VIEW IF EXISTS public.ruoli_pizzeria CASCADE;
 

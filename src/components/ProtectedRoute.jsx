@@ -2,6 +2,7 @@ import React from "react"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { devLog } from "@/lib/devLog"
+import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview"
 
 const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
   const { user, tipoUtente, ruolo, loading } = useAuth()
@@ -22,7 +23,11 @@ const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
   }
 
   const ruoloNorm = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
-  const allowed = allowedRoles.some((r) => (r && typeof r === "string" ? r.toLowerCase().trim() : "") === ruoloNorm)
+  const viewportPreview = isViewportLayoutPreviewSearch(location.search)
+  let allowed = allowedRoles.some((r) => (r && typeof r === "string" ? r.toLowerCase().trim() : "") === ruoloNorm)
+  if (!allowed && ruoloNorm === "superadmin" && viewportPreview) {
+    allowed = true
+  }
   if (!allowed) {
     devLog("ProtectedRoute", "ruolo non consentito → /login", { ruolo, allowedRoles })
     return <Navigate to="/login" state={{ from: location }} replace />

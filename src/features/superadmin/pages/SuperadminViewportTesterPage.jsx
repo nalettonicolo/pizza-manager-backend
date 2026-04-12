@@ -122,10 +122,12 @@ export default function SuperadminViewportTesterPage() {
           nell&apos;iframe. Qui sotto resta anche l&apos;anteprima inline per confronti rapidi.
         </p>
         <p style={{ marginTop: 10, fontSize: 13, color: "#64748b", maxWidth: 820, lineHeight: 1.5 }}>
-          <strong>Nota:</strong> Admin e Operativo usano la sessione del browser. In <code>npm run dev</code>, dopo un{" "}
-          <strong>full reload</strong> di Vite la scheda studio ricarica l&apos;area da sola; per il resto usa
-          &quot;Ricarica area&quot; nella scheda studio. Editor visuale drag&amp;drop (pulsanti/riquadri) non è ancora
-          in scope: possibile evoluzione tipo page builder.
+          <strong>Nota:</strong> L&apos;iframe è same-origin: riusa la sessione Supabase (cookie/storage) del browser. Da{" "}
+          <strong>superadmin</strong>, con il parametro <code>_viewport_tester</code> / <code>_studio</code> puoi aprire
+          anche Admin e Operativo senza ruolo <code>admin</code> (solo anteprima layout). Su <strong>/login</strong> in
+          anteprima non parte il redirect automatico se sei già autenticato, così vedi il form responsive. In{" "}
+          <code>npm run dev</code>, dopo un <strong>full reload</strong> di Vite la scheda studio ricarica l&apos;area da
+          sola; altrimenti usa &quot;Ricarica area&quot;.
         </p>
       </header>
 

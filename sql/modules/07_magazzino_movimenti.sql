@@ -1,6 +1,7 @@
 ﻿
 -- =============================================================================
 -- 7) Magazzino: movimenti di magazzino (base incrementale)
+-- Canonico anche in sql/sql_upgrade.sql (blocco moduli) e schema_completo (append).
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.magazzino_movimenti (
@@ -31,4 +32,4 @@ CREATE POLICY "magazzino_movimenti_staff_all" ON public.magazzino_movimenti
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_movimenti TO authenticated;
 
 COMMENT ON TABLE public.magazzino_movimenti IS
-  'Movimenti di carico/scarico; prodotto_id opzionale se il movimento Ã¨ aggregato o non legato al listino.';
+  'Movimenti di carico/scarico; prodotto_id opzionale se il movimento è aggregato o non legato al listino.';

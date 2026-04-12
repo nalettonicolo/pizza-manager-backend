@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 12) Fiscal outbox + payment link intents (Italia: RT / SDI / PSP — scheletro)
+-- Canonico anche in sql/sql_upgrade.sql (dopo moduli 01–11) e schema_completo (append).
 -- =============================================================================
 -- Coda invii verso registratore telematico, intermediari SDI o export file.
 -- Tabella separata per richieste "paga con link" (SMS / hosted page) con webhook.

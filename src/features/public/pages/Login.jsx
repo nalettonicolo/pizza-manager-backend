@@ -9,6 +9,7 @@ import { devLog } from "@/lib/devLog"
 import { supabase } from "@/lib/supabaseClient"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
+import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview"
 import "@/styles/login.css"
 
 export default function Login() {
@@ -24,6 +25,7 @@ export default function Login() {
   useEffect(() => {
     if (loading) return
     if (!user || !tipoUtente) return
+    if (isViewportLayoutPreviewSearch(location.search)) return
 
     devLog("Login", "redirect check", { tipoUtente, ruolo, email: user?.email })
 
@@ -60,7 +62,7 @@ export default function Login() {
 
     devLog("Login", "fallback redirect → /")
     navigate("/", { replace: true })
-  }, [user, ruolo, tipoUtente, loading, navigate, location.state])
+  }, [user, ruolo, tipoUtente, loading, navigate, location.state, location.search])
 
   const isSaaS = getIsSaaSClient()
 
@@ -104,10 +106,17 @@ export default function Login() {
     )
   }
 
+  const layoutPreview = isViewportLayoutPreviewSearch(location.search)
+
   return (
     <div className="login-page">
       <div className="login-page-inner">
         <div className="login-card">
+          {layoutPreview ? (
+            <p className="login-layout-preview-banner" role="status">
+              Anteprima layout: la sessione resta attiva; questa schermata non esegue il reindirizzamento automatico.
+            </p>
+          ) : null}
           <div className="login-brand">
             <div className="login-brand-mark" aria-hidden="true">
               🍕

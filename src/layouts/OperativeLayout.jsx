@@ -19,6 +19,7 @@ import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -51,12 +52,13 @@ export default function OperativeLayout() {
   const brandName = tenantData?.nome || "Pizzeria";
 
   const ruoloKey = typeof ruolo === "string" ? ruolo.toLowerCase().trim() : "";
+  const viewportLayoutPreview = isViewportLayoutPreviewSearch(location.search);
   const defaultPath =
     isQuadRepartiTestEmail(user?.email) && ruoloKey === "pizzaiolo"
       ? PIZZAIOLO_TEST_INGRESSO_PATH
       : OPERATIVE_ROLE_HOME[ruoloKey] || "/operative/dashboard";
   const permessiAreeEffective =
-    ruoloKey === "superadmin" && ENABLE_TEST_REPARTI
+    ruoloKey === "superadmin" && (ENABLE_TEST_REPARTI || viewportLayoutPreview)
       ? PERMESSI_TUTTE_AREE
       : isQuadRepartiTestEmail(user?.email)
         ? PERMESSI_TUTTE_AREE

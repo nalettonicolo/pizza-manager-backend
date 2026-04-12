@@ -9,6 +9,10 @@
 --
 -- Modifiche successive al baseline: solo sql/sql_upgrade.sql (idempotente).
 -- Cartella supabase/migrations/ non contiene più file SQL (usare sql_upgrade o rigenerare snapshot).
+--
+-- In coda: blocco "CONSOLIDAMENTO sql/modules" (contabilità, magazzino, fiscal/payment,
+-- estensioni core.punti_vendita per seed multi-PV, vista Ordine allineata a sql_upgrade).
+-- I file sotto sql/modules/ restano copie di lavoro; fonte operativa unica: questo file + sql_upgrade.
 -- =============================================================================
 
 -- ---------- BEGIN: supabase/migrations/20260220171734_remote_schema.sql ----------
@@ -10522,3 +10526,320 @@ CREATE POLICY anon_select_prodotti_menu_pubblico
     AND (visibile_online = true OR visibile_online IS NULL)
   );
 -- ---------- END: supabase/migrations/20260409120000_anon_select_core_prodotti_menu_pubblico.sql ----------
+
+-- =============================================================================
+-- CONSOLIDAMENTO sql/modules + parti di sql/sql_upgrade.sql (idempotente)
+-- =============================================================================
+-- Allinea il baseline a: 06_contabilita_movimenti, 07_magazzino_movimenti,
+-- 12_fiscal_outbox_payment_links, 08_seed_pv_default (con colonne PV se mancanti),
+-- vista public."Ordine" + trigger (telefono_ritiro, cucina_prep_stato, COALESCE nome_cliente).
+-- =============================================================================
+
+-- --- core.punti_vendita: colonne usate da moduli 02 / 08 / 10 (se assenti nel dump) ---
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS attivo BOOLEAN DEFAULT true;
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS consegna_area_poligono JSONB;
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE core.punti_vendita ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+
+COMMENT ON COLUMN core.punti_vendita.consegna_area_poligono IS 'GeoJSON Polygon WGS84; se NULL in checkout si usa parametri_operativi.consegna_area_poligono del tenant.';
+COMMENT ON COLUMN core.punti_vendita.lat IS 'Latitudine sede (centro mappa e marcatore in admin aree consegna).';
+COMMENT ON COLUMN core.punti_vendita.lng IS 'Longitudine sede (centro mappa e marcatore in admin aree consegna).';
+
+-- --- 06 contabilita_movimenti ---
+CREATE TABLE IF NOT EXISTS public.contabilita_movimenti (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  data_mov DATE NOT NULL,
+  descrizione TEXT,
+  importo NUMERIC(12, 2) NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('contanti', 'elettronico')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contabilita_movimenti_tenant_data
+  ON public.contabilita_movimenti(tenant_id, data_mov DESC);
+
+ALTER TABLE public.contabilita_movimenti ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "contabilita_movimenti_staff_all" ON public.contabilita_movimenti;
+CREATE POLICY "contabilita_movimenti_staff_all" ON public.contabilita_movimenti
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contabilita_movimenti TO authenticated;
+
+COMMENT ON TABLE public.contabilita_movimenti IS
+  'Incassi manuali registrati da Admin (contanti / elettronico); usabile al posto del solo localStorage.';
+
+-- --- 07 magazzino_movimenti ---
+CREATE TABLE IF NOT EXISTS public.magazzino_movimenti (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  prodotto_id UUID,
+  descrizione TEXT NOT NULL,
+  qty_delta NUMERIC(14, 3) NOT NULL,
+  unita TEXT DEFAULT 'pz',
+  riferimento TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_magazzino_movimenti_tenant ON public.magazzino_movimenti(tenant_id, created_at DESC);
+
+ALTER TABLE public.magazzino_movimenti ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "magazzino_movimenti_staff_all" ON public.magazzino_movimenti;
+CREATE POLICY "magazzino_movimenti_staff_all" ON public.magazzino_movimenti
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid())
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_movimenti TO authenticated;
+
+COMMENT ON TABLE public.magazzino_movimenti IS
+  'Movimenti di carico/scarico; prodotto_id opzionale se il movimento è aggregato o non legato al listino.';
+
+-- --- 12 fiscal_outbox + payment_link_intents (stesso contenuto sql/modules/12_*.sql) ---
+CREATE TABLE IF NOT EXISTS public.fiscal_outbox (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  ordine_id UUID REFERENCES core.ordini(id) ON DELETE SET NULL,
+  punto_vendita_id UUID,
+  kind TEXT NOT NULL CHECK (
+    kind IN (
+      'corrispettivo_rt',
+      'chiusura_giornaliera_rt',
+      'annullo_rt',
+      'sdi_fattura',
+      'sdi_nota_credito',
+      'export_file',
+      'noop_test'
+    )
+  ),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (
+    status IN ('pending', 'processing', 'sent', 'ack', 'failed', 'cancelled')
+  ),
+  idempotency_key TEXT NOT NULL,
+  payload_canonical JSONB NOT NULL DEFAULT '{}'::jsonb,
+  provider_key TEXT,
+  provider_request JSONB,
+  provider_response JSONB,
+  last_error TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  next_retry_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  acknowledged_at TIMESTAMPTZ,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  CONSTRAINT fiscal_outbox_tenant_idempotency UNIQUE (tenant_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fiscal_outbox_tenant_status
+  ON public.fiscal_outbox(tenant_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_fiscal_outbox_ordine
+  ON public.fiscal_outbox(ordine_id)
+  WHERE ordine_id IS NOT NULL;
+
+COMMENT ON TABLE public.fiscal_outbox IS
+  'Coda fiscal: corrispettivi RT, chiusure, SDI, export. Adapter esterni mappano payload_canonical → fornitore.';
+
+COMMENT ON COLUMN public.fiscal_outbox.payload_canonical IS
+  'Payload interno stabile (importi, righe, aliquote, riferimenti ordine) prima del mapping verso il provider.';
+
+COMMENT ON COLUMN public.fiscal_outbox.provider_key IS
+  'Identificativo implementazione: es. rtmiddleware_acme, export_xml_v1, noop.';
+
+CREATE TABLE IF NOT EXISTS public.payment_link_intents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  ordine_id UUID NOT NULL REFERENCES core.ordini(id) ON DELETE CASCADE,
+  importo_cent BIGINT NOT NULL CHECK (importo_cent > 0),
+  valuta TEXT NOT NULL DEFAULT 'EUR',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (
+    status IN ('pending', 'sent', 'opened', 'paid', 'failed', 'expired', 'cancelled')
+  ),
+  idempotency_key TEXT NOT NULL,
+  destinatario_telefono TEXT,
+  payment_url TEXT,
+  provider_key TEXT,
+  provider_intent_id TEXT,
+  provider_payload JSONB,
+  last_error TEXT,
+  sms_sent_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  CONSTRAINT payment_link_intents_tenant_idempotency UNIQUE (tenant_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_link_intents_tenant_status
+  ON public.payment_link_intents(tenant_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_payment_link_intents_ordine
+  ON public.payment_link_intents(ordine_id);
+
+COMMENT ON TABLE public.payment_link_intents IS
+  'Intent pay-by-link: generazione URL, invio SMS, stato da webhook PSP.';
+
+ALTER TABLE public.fiscal_outbox ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_link_intents ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "fiscal_outbox_staff_all" ON public.fiscal_outbox;
+CREATE POLICY "fiscal_outbox_staff_all" ON public.fiscal_outbox
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT ur.tenant_id FROM public.utenti_ruoli ur WHERE ur.user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT ur.tenant_id FROM public.utenti_ruoli ur WHERE ur.user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "payment_link_intents_staff_all" ON public.payment_link_intents;
+CREATE POLICY "payment_link_intents_staff_all" ON public.payment_link_intents
+  FOR ALL
+  USING (
+    tenant_id IN (SELECT ur.tenant_id FROM public.utenti_ruoli ur WHERE ur.user_id = auth.uid())
+  )
+  WITH CHECK (
+    tenant_id IN (SELECT ur.tenant_id FROM public.utenti_ruoli ur WHERE ur.user_id = auth.uid())
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fiscal_outbox TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.payment_link_intents TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.pm_touch_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_fiscal_outbox_updated ON public.fiscal_outbox;
+CREATE TRIGGER tr_fiscal_outbox_updated
+  BEFORE UPDATE ON public.fiscal_outbox
+  FOR EACH ROW EXECUTE FUNCTION public.pm_touch_updated_at();
+
+DROP TRIGGER IF EXISTS tr_payment_link_intents_updated ON public.payment_link_intents;
+CREATE TRIGGER tr_payment_link_intents_updated
+  BEFORE UPDATE ON public.payment_link_intents
+  FOR EACH ROW EXECUTE FUNCTION public.pm_touch_updated_at();
+
+-- --- 08 seed PV default (dopo colonne slug/attivo) ---
+INSERT INTO core.punti_vendita (tenant_id, nome, slug, attivo)
+SELECT t.id, 'Sede principale', 'principale', true
+FROM core.tenants t
+WHERE NOT EXISTS (SELECT 1 FROM core.punti_vendita pv WHERE pv.tenant_id = t.id);
+
+-- --- Vista Ordine + INSTEAD OF UPDATE (allineamento sql/sql_upgrade.sql) ---
+ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS telefono_ritiro TEXT;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS cucina_prep_stato JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core
+AS $tr$
+BEGIN
+  UPDATE core.ordini
+  SET
+    stato              = COALESCE(NEW.stato, OLD.stato),
+    totale             = COALESCE(NEW.totale, OLD.totale),
+    note               = COALESCE(NEW.note, OLD.note),
+    tipo_pagamento     = COALESCE(NEW.tipo_pagamento, OLD.tipo_pagamento),
+    tipo_ordine        = COALESCE(NEW.tipo_ordine, OLD.tipo_ordine),
+    nome_cliente       = COALESCE(NEW.nome_cliente, OLD.nome_cliente),
+    telefono_ritiro    = COALESCE(NEW.telefono_ritiro, OLD.telefono_ritiro),
+    orario_ritiro      = COALESCE(NEW.orario_ritiro, OLD.orario_ritiro),
+    indirizzo_consegna = COALESCE(NEW.indirizzo_consegna, OLD.indirizzo_consegna),
+    consegna_lng       = COALESCE(NEW.consegna_lng, OLD.consegna_lng),
+    consegna_lat       = COALESCE(NEW.consegna_lat, OLD.consegna_lat),
+    pagamento_dettaglio = COALESCE(NEW.pagamento_dettaglio, OLD.pagamento_dettaglio),
+    stato_consegna     = COALESCE(NEW.stato_consegna, OLD.stato_consegna),
+    punto_vendita_id   = COALESCE(NEW.punto_vendita_id, OLD.punto_vendita_id),
+    turno_operatori_id = COALESCE(NEW.turno_operatori_id, OLD.turno_operatori_id),
+    rider_id           = COALESCE(NEW.rider_id, OLD.rider_id),
+    turno_rider_id     = COALESCE(NEW.turno_rider_id, OLD.turno_rider_id),
+    percorso_attivo_id = COALESCE(NEW.percorso_attivo_id, OLD.percorso_attivo_id),
+    stato_delivery     = COALESCE(NEW.stato_delivery, OLD.stato_delivery),
+    assegnato_rider_at = COALESCE(NEW.assegnato_rider_at, OLD.assegnato_rider_at),
+    ritiro_bancone_rider_at = COALESCE(NEW.ritiro_bancone_rider_at, OLD.ritiro_bancone_rider_at),
+    consegna_effettiva_at = COALESCE(NEW.consegna_effettiva_at, OLD.consegna_effettiva_at),
+    cucina_prep_stato  = COALESCE(NEW.cucina_prep_stato, OLD.cucina_prep_stato),
+    updated_at         = now()
+  WHERE id = OLD.id
+    AND tenant_id IN (
+      SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+      UNION
+      SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+    );
+  RETURN NEW;
+END;
+$tr$;
+
+DROP VIEW IF EXISTS public."Ordine" CASCADE;
+
+CREATE VIEW public."Ordine" AS
+  SELECT
+    id,
+    numero,
+    stato,
+    totale,
+    note,
+    tipo_pagamento,
+    tipo_ordine,
+    nome_cliente,
+    telefono_ritiro,
+    orario_ritiro,
+    indirizzo_consegna,
+    consegna_lng,
+    consegna_lat,
+    pagamento_dettaglio,
+    stato_consegna,
+    punto_vendita_id,
+    turno_operatori_id,
+    rider_id,
+    turno_rider_id,
+    percorso_attivo_id,
+    stato_delivery,
+    assegnato_rider_at,
+    ritiro_bancone_rider_at,
+    consegna_effettiva_at,
+    cucina_prep_stato,
+    tenant_id AS "tenantId",
+    created_at AS "createdAt",
+    updated_at AS "updatedAt",
+    deleted_at AS "deletedAt"
+  FROM core.ordini
+  WHERE tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."Ordine" TO authenticated;
+
+DROP TRIGGER IF EXISTS ordine_instead_of_update_trigger ON public."Ordine";
+CREATE TRIGGER ordine_instead_of_update_trigger
+  INSTEAD OF UPDATE ON public."Ordine"
+  FOR EACH ROW
+  EXECUTE FUNCTION public.ordine_instead_of_update();
+-- =============================================================================
+-- FINE CONSOLIDAMENTO sql/modules + sql_upgrade (append)
+-- =============================================================================

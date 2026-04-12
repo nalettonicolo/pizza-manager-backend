@@ -1,6 +1,7 @@
 ﻿
 -- =============================================================================
 -- 9) Vetrina cliente: campi normativi e pagamenti (policy HTML + Stripe/SumUp predisposizione)
+-- Canonico anche in sql/sql_upgrade.sql (blocco moduli). resolve_* già nel baseline schema_completo se presente.
 -- =============================================================================
 
 DO $legal$
@@ -16,7 +17,7 @@ BEGIN
     EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS sumup_merchant_public_id TEXT';
     COMMENT ON COLUMN admin.tenants.privacy_policy_html IS 'HTML informativa privacy vetrina; se NULL si usa testo predefinito app.';
     COMMENT ON COLUMN admin.tenants.cookie_policy_html IS 'HTML cookie policy vetrina; se NULL si usa testo predefinito app.';
-    COMMENT ON COLUMN admin.tenants.pagamento_online_provider IS 'stripe | sumup | null â€” checkout pubblico.';
+    COMMENT ON COLUMN admin.tenants.pagamento_online_provider IS 'stripe | sumup | null — checkout pubblico.';
     COMMENT ON COLUMN admin.tenants.stripe_publishable_key IS 'Chiave pubblica Stripe (pk_...), sicura in client.';
   END IF;
 END
