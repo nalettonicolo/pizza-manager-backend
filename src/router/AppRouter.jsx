@@ -61,6 +61,7 @@ const SuperadminIngressoPage = lazy(() => import("@/features/superadmin/pages/Su
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
 const SuperadminViewportTesterPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportTesterPage"));
+const SuperadminViewportStudioPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportStudioPage"));
 
 /* ================= ADMIN (lazy) ================= */
 const Report = lazy(() => import("@/features/admin/pages/Report"));
@@ -353,6 +354,15 @@ export default function AppRouter() {
         >
           {/* Ingresso: fuori da SuperAdminLayout così la nav completa non viene mai montata (non dipende dal pathname). */}
           <Route path="/superadmin/ingresso" element={<SuperadminIngressoRouteShell />} />
+          {/* Studio viewport: fullscreen senza barra superadmin (anteprima tipo builder). */}
+          <Route
+            path="/superadmin/test-layout/studio"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <SuperadminViewportStudioPage />
+              </Suspense>
+            }
+          />
           <Route element={<SuperAdminLayout />}>
             <Route path="/superadmin" element={<Navigate to="/superadmin/ingresso" replace />} />
             <Route path="/superadmin/test-reparti" element={<Suspense fallback={<PageFallback />}><TestRepartiPanelPage /></Suspense>} />

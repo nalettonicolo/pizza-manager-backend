@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { sanitizeSuperadminPreviewPath } from "@/features/superadmin/pages/SuperadminViewportTesterPage"
+import { sanitizeSuperadminPreviewPath } from "@/features/superadmin/utils/viewportTesterShared"
 
 describe("sanitizeSuperadminPreviewPath", () => {
   it("accetta path interni", () => {

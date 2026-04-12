@@ -114,6 +114,7 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/ServizioSchedaPage"),
       () => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"),
       () => import("@/features/superadmin/pages/SuperadminViewportTesterPage"),
+      () => import("@/features/superadmin/pages/SuperadminViewportStudioPage"),
     ]);
   }, []);
 

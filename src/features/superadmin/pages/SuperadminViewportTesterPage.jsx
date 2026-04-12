@@ -1,48 +1,17 @@
-import { useCallback, useMemo, useState } from "react"
-
-const VIEWPORT_PRESETS = [
-  { id: "iphone-14", label: "iPhone 14", w: 390, h: 844 },
-  { id: "iphone-se", label: "iPhone SE", w: 375, h: 667 },
-  { id: "pixel-7", label: "Pixel 7", w: 412, h: 915 },
-  { id: "ipad-port", label: "iPad verticale", w: 768, h: 1024 },
-  { id: "ipad-land", label: "iPad orizzontale", w: 1024, h: 768 },
-  { id: "tablet-narrow", label: "Tablet stretto", w: 600, h: 960 },
-  { id: "desktop-hd", label: "Desktop HD", w: 1280, h: 720 },
-]
-
-const QUICK_PATHS = [
-  { path: "/preview", label: "Anteprima vetrina" },
-  { path: "/negozio", label: "Negozio pubblico" },
-  { path: "/login", label: "Login" },
-  { path: "/contatti", label: "Contatti" },
-  { path: "/admin/home", label: "Admin · Home" },
-  { path: "/admin/menu/categorie", label: "Admin · Menu" },
-  { path: "/operative/cassa", label: "Operativo · Cassa" },
-  { path: "/operative/dashboard", label: "Operativo · Riepilogo" },
-  { path: "/superadmin/ingresso", label: "Super Admin · Ingresso" },
-]
-
-const ZOOM_OPTIONS = [
-  { value: 0.5, label: "50%" },
-  { value: 0.65, label: "65%" },
-  { value: 0.75, label: "75%" },
-  { value: 0.85, label: "85%" },
-  { value: 1, label: "100%" },
-]
-
-/** Solo path interni same-origin (nessun URL assoluto / protocolli). */
-export function sanitizeSuperadminPreviewPath(raw) {
-  const s = String(raw || "").trim()
-  if (!s.startsWith("/")) return "/preview"
-  if (s.startsWith("//")) return "/preview"
-  const one = s.replace(/^\/{2,}/, "/")
-  if (/^\/https?:/i.test(one)) return "/preview"
-  const [pathPart] = one.split("#")
-  const path = (pathPart || "/preview").split("?")[0] || "/preview"
-  return path.startsWith("/") ? path : "/preview"
-}
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
+import {
+  VIEWPORT_PRESETS,
+  QUICK_PATHS,
+  ZOOM_OPTIONS,
+  sanitizeSuperadminPreviewPath,
+  buildViewportStudioUrl,
+} from "@/features/superadmin/utils/viewportTesterShared"
 
 export default function SuperadminViewportTesterPage() {
+  const [searchParams] = useSearchParams()
+  const hydratedFromUrl = useRef(false)
+
   const [pathInput, setPathInput] = useState("/preview")
   const [presetId, setPresetId] = useState("iphone-14")
   const [customW, setCustomW] = useState(390)
@@ -51,6 +20,43 @@ export default function SuperadminViewportTesterPage() {
   const [rotated, setRotated] = useState(false)
   const [zoom, setZoom] = useState(0.75)
   const [iframeKey, setIframeKey] = useState(0)
+
+  useEffect(() => {
+    if (hydratedFromUrl.current) return
+    hydratedFromUrl.current = true
+    const p = searchParams.get("path")
+    if (p) setPathInput(p)
+    const z = Number(searchParams.get("zoom"))
+    if (Number.isFinite(z) && z > 0) setZoom(Math.min(1, Math.max(0.35, z)))
+    if (searchParams.get("rotate") === "1") setRotated(true)
+
+    const pr = searchParams.get("preset")
+    if (pr && VIEWPORT_PRESETS.some((x) => x.id === pr)) {
+      setPresetId(pr)
+      setUseCustomSize(false)
+      const presetRow = VIEWPORT_PRESETS.find((x) => x.id === pr)
+      if (presetRow) {
+        setCustomW(presetRow.w)
+        setCustomH(presetRow.h)
+      }
+    }
+
+    const w = Number(searchParams.get("w"))
+    const h = Number(searchParams.get("h"))
+    if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+      setCustomW(w)
+      setCustomH(h)
+      const match = VIEWPORT_PRESETS.find((row) => row.w === w && row.h === h)
+      if (match) {
+        setPresetId(match.id)
+        setUseCustomSize(false)
+      } else if (!pr) {
+        setUseCustomSize(true)
+      }
+    }
+
+    if (searchParams.get("custom") === "1") setUseCustomSize(true)
+  }, [searchParams])
 
   const preset = VIEWPORT_PRESETS.find((p) => p.id === presetId) || VIEWPORT_PRESETS[0]
   const baseW = useCustomSize ? customW : preset.w
@@ -76,6 +82,24 @@ export default function SuperadminViewportTesterPage() {
     }
   }, [])
 
+  const openStudioTab = useCallback(
+    (opts) => {
+      const url = buildViewportStudioUrl(opts)
+      window.open(url, "_blank", "noopener,noreferrer")
+    },
+    [],
+  )
+
+  const openStudioWithCurrentFrame = useCallback(() => {
+    openStudioTab({
+      path: safePath,
+      w: baseW,
+      h: baseH,
+      zoom,
+      rotate: rotated,
+    })
+  }, [openStudioTab, safePath, baseW, baseH, zoom, rotated])
+
   const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6, color: "#475569" }
   const inputStyle = {
     width: "100%",
@@ -93,13 +117,15 @@ export default function SuperadminViewportTesterPage() {
         <p className="sa-page-kicker">Super Admin · QA responsive</p>
         <h1 className="dashboard-page-title sa-page-title">Test layout (viewport)</h1>
         <p className="sa-page-lede" style={{ maxWidth: 820 }}>
-          Incapsula una pagina dell&apos;app in un riquadro con larghezza e altezza tipiche di cellulare o tablet.
-          Utile per verificare subito menu, cassa e vetrina senza ridimensionare manualmente il browser.
+          Scegli un dispositivo: si apre una <strong>nuova scheda</strong> in modalità{" "}
+          <strong>studio</strong> (schermo intero, come anteprima Wix/Google Sites) con l&apos;area operativa
+          nell&apos;iframe. Qui sotto resta anche l&apos;anteprima inline per confronti rapidi.
         </p>
         <p style={{ marginTop: 10, fontSize: 13, color: "#64748b", maxWidth: 820, lineHeight: 1.5 }}>
-          <strong>Nota:</strong> Admin e Operativo usano la sessione corrente del browser. Se sei loggato solo come
-          Super Admin, quelle URL possono reindirizzare al login nel riquadro; per testarle entra con un account
-          appropriato oppure usa <strong>Anteprima vetrina</strong> e le pagine pubbliche.
+          <strong>Nota:</strong> Admin e Operativo usano la sessione del browser. In <code>npm run dev</code>, dopo un{" "}
+          <strong>full reload</strong> di Vite la scheda studio ricarica l&apos;area da sola; per il resto usa
+          &quot;Ricarica area&quot; nella scheda studio. Editor visuale drag&amp;drop (pulsanti/riquadri) non è ancora
+          in scope: possibile evoluzione tipo page builder.
         </p>
       </header>
 
@@ -141,7 +167,10 @@ export default function SuperadminViewportTesterPage() {
         </div>
 
         <div>
-          <label style={labelStyle}>Dispositivo (preset)</label>
+          <label style={labelStyle}>Dispositivo → apre scheda studio</label>
+          <p style={{ margin: "0 0 8px", fontSize: 12, color: "#64748b" }}>
+            Clic sul preset: nuova scheda a tutto schermo. Stesso percorso e zoom selezionati qui.
+          </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {VIEWPORT_PRESETS.map((p) => (
               <button
@@ -152,7 +181,16 @@ export default function SuperadminViewportTesterPage() {
                   fontWeight: !useCustomSize && presetId === p.id ? 700 : 500,
                   border: !useCustomSize && presetId === p.id ? "2px solid #334155" : undefined,
                 }}
-                onClick={() => applyPreset(p.id)}
+                onClick={() => {
+                  applyPreset(p.id)
+                  openStudioTab({
+                    path: sanitizeSuperadminPreviewPath(pathInput),
+                    w: p.w,
+                    h: p.h,
+                    zoom,
+                    rotate: rotated,
+                  })
+                }}
               >
                 {p.label} ({p.w}×{p.h})
               </button>
@@ -185,11 +223,28 @@ export default function SuperadminViewportTesterPage() {
             <button type="button" className="sa-table-action" onClick={() => setUseCustomSize(true)}>
               Applica misure
             </button>
+            <button
+              type="button"
+              className="btn-primary-dashboard"
+              style={{ fontSize: 13, padding: "8px 14px" }}
+              onClick={() => {
+                setUseCustomSize(true)
+                openStudioTab({
+                  path: sanitizeSuperadminPreviewPath(pathInput),
+                  w: customW,
+                  h: customH,
+                  zoom,
+                  rotate: rotated,
+                })
+              }}
+            >
+              Studio con misure custom
+            </button>
           </div>
         </div>
 
         <div>
-          <label style={labelStyle}>Zoom riquadro</label>
+          <label style={labelStyle}>Zoom (scheda + anteprima sotto)</label>
           <select
             value={String(zoom)}
             onChange={(e) => setZoom(Number(e.target.value))}
@@ -208,10 +263,13 @@ export default function SuperadminViewportTesterPage() {
             {rotated ? "Orientamento: orizzontale" : "Orientamento: verticale"} (ruota)
           </button>
           <button type="button" className="btn-primary-dashboard" onClick={() => setIframeKey((k) => k + 1)}>
-            Ricarica iframe
+            Ricarica iframe (qui)
+          </button>
+          <button type="button" className="btn-primary-dashboard" onClick={openStudioWithCurrentFrame}>
+            Apri studio (scheda attuale)
           </button>
           <a href={iframeSrc} target="_blank" rel="noopener noreferrer" className="sa-table-action">
-            Apri in scheda
+            Solo URL in scheda
           </a>
         </div>
       </div>
