@@ -20,6 +20,7 @@ import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview";
+import { applyTenantFavicon } from "@/utils/tenantFavicon";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -50,6 +51,10 @@ export default function OperativeLayout() {
   const tenantThemeClass = resolvedTenantTheme ? " tenant-theme-on" : "";
   const logoUrl = tenantData?.logo_url ?? null;
   const brandName = tenantData?.nome || "Pizzeria";
+
+  useEffect(() => {
+    void applyTenantFavicon(logoUrl);
+  }, [logoUrl]);
 
   const ruoloKey = typeof ruolo === "string" ? ruolo.toLowerCase().trim() : "";
   const viewportLayoutPreview = isViewportLayoutPreviewSearch(location.search);
@@ -101,7 +106,8 @@ export default function OperativeLayout() {
   const isCassaPage = location.pathname === "/operative/cassa" || location.pathname.startsWith("/operative/cassa/");
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
-  const operativeFullBleed = isPizzaioloPage || isRepartiQuadTestPage;
+  const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
+  const operativeFullBleed = isPizzaioloPage || isRepartiQuadTestPage || isOperativeIngressoPage;
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
@@ -152,6 +158,9 @@ export default function OperativeLayout() {
       () => import("@/features/operative/pages/OperativeDashboard"),
       () => import("@/features/operative/cassa/pages/CassaPage"),
       () => import("@/features/operative/cucina/pages/Cucina"),
+      () => import("@/features/operative/bancone/pages/Bancone"),
+      () => import("@/features/operative/delivery/pages/DeliveryDashboard"),
+      () => import("@/features/operative/pizzaiolo/pages/Dashboard"),
     ]);
   }, []);
 

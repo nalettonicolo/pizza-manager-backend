@@ -8,6 +8,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
+import { applyTenantFavicon } from "@/utils/tenantFavicon";
 
 /**
  * Voci allineate alle route reali (vedi docs/ARCHITETTURA_E_STATO.md).
@@ -184,6 +185,10 @@ export default function AdminLayout() {
   const resolvedTenantTheme = resolveMenuTheme(tenantData?.parametri_operativi);
   const adminThemeStyle = adminLayoutCssVarsFromTheme(resolvedTenantTheme);
   const tenantThemeClass = resolvedTenantTheme ? " tenant-theme-on" : "";
+
+  useEffect(() => {
+    void applyTenantFavicon(logoUrl);
+  }, [logoUrl]);
 
   return (
     <Fragment>

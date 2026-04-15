@@ -602,7 +602,7 @@ export default function IngredientiPage() {
               <strong>prep_cucina</strong> (1/sì = preparazione in cucina, es. scongelare) è opzionale: i file senza quella colonna restano validi. Nelle celle allergeni usa 1, x o sì. <strong>Ordine</strong>: 0–99 = in cottura, 100+ = a fine cottura. Prezzi con 2 decimali.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                 <input
                   type="file"
                   accept=".csv,text/csv"
@@ -610,17 +610,15 @@ export default function IngredientiPage() {
                   style={{ display: "none" }}
                   id="csv-file-input"
                 />
-                <span
-                  role="button"
-                  tabIndex={0}
+                <button
+                  type="button"
                   onClick={() => document.getElementById("csv-file-input")?.click()}
-                  onKeyDown={(e) => e.key === "Enter" && document.getElementById("csv-file-input")?.click()}
                   className="btn-primary-dashboard"
                   style={{ opacity: csvImporting ? 0.7 : 1, pointerEvents: csvImporting ? "none" : "auto" }}
                 >
                   {csvImporting ? "Caricamento..." : "Scegli file CSV"}
-                </span>
-              </label>
+                </button>
+              </div>
               <button
                 type="button"
                 className="btn-primary-dashboard"

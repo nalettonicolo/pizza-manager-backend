@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
-import { updateTenantSettings, getCategories } from "@/features/admin/services/adminService";
+import {
+  updateTenantSettings,
+  getCategories,
+  getFoodcostPriceMismatchReport,
+} from "@/features/admin/services/adminService";
 import PromozioniCalendarioEditor from "@/features/admin/components/PromozioniCalendarioEditor";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 
@@ -28,6 +32,7 @@ const defaultParametri = () => ({
   consegne_ogni_min: "",
   ritiro_ogni_min: "",
   tempo_preparazione_pizza: "",
+  foodcost_margine_percent: "0",
   soglia_giallo_pizze: "10",
   comanda_copie: "1",
   comanda_font_size: "13",
@@ -39,6 +44,9 @@ export default function ParametriSection() {
   const { tenantId } = useTenant();
   const [saving, setSaving] = useState(false);
   const [promoCategories, setPromoCategories] = useState([]);
+  const [foodcostCheckLoading, setFoodcostCheckLoading] = useState(false);
+  const [foodcostMismatchCount, setFoodcostMismatchCount] = useState(0);
+  const [foodcostModalOpen, setFoodcostModalOpen] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -54,6 +62,28 @@ export default function ParametriSection() {
       c = true;
     };
   }, [tenantId]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    setFoodcostCheckLoading(true);
+    void getFoodcostPriceMismatchReport(tenantId)
+      .then((res) => {
+        if (cancelled) return;
+        const count = Array.isArray(res?.mismatches) ? res.mismatches.length : 0;
+        setFoodcostMismatchCount(count);
+        if (count > 0) setFoodcostModalOpen(true);
+      })
+      .catch(() => {
+        if (!cancelled) setFoodcostMismatchCount(0);
+      })
+      .finally(() => {
+        if (!cancelled) setFoodcostCheckLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, settings?.parametri_operativi]);
 
   const raw = settings?.parametri_operativi && typeof settings.parametri_operativi === "object"
     ? settings.parametri_operativi
@@ -127,6 +157,8 @@ export default function ParametriSection() {
         consegne_ogni_min: p.consegne_ogni_min === "" ? 0 : Number(p.consegne_ogni_min) || 0,
         ritiro_ogni_min: p.ritiro_ogni_min === "" ? 0 : Number(p.ritiro_ogni_min) || 0,
         tempo_preparazione_pizza: p.tempo_preparazione_pizza === "" ? 0 : Number(p.tempo_preparazione_pizza) || 0,
+        foodcost_margine_percent:
+          p.foodcost_margine_percent === "" ? 0 : Math.min(95, Math.max(0, Number(p.foodcost_margine_percent) || 0)),
         soglia_giallo_pizze: p.soglia_giallo_pizze === "" ? 10 : Number(p.soglia_giallo_pizze) || 10,
         comanda_copie: p.comanda_copie === "" ? 1 : Math.max(1, Number(p.comanda_copie) || 1),
         comanda_font_size: p.comanda_font_size === "" ? 13 : Math.max(9, Number(p.comanda_font_size) || 13),
@@ -175,6 +207,28 @@ export default function ParametriSection() {
     <div className="dashboard-settings-page">
       <h1 className="dashboard-page-title">Parametri operativi</h1>
       <section className="dashboard-box dashboard-settings-section">
+        {foodcostMismatchCount > 0 ? (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid #fecaca",
+              background: "#fef2f2",
+              color: "#991b1b",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>Controllo foodcost/listino:</strong> trovati {foodcostMismatchCount} prodotti con prezzo listino non allineato al costo ingredienti.
+            Verifica in Menu e ricalcola prezzi prima del servizio.
+          </div>
+        ) : null}
+        {foodcostCheckLoading ? (
+          <p style={{ marginTop: 0, marginBottom: 12, fontSize: 12, color: "#64748b" }}>
+            Verifica allineamento foodcost in corso...
+          </p>
+        ) : null}
         <div className="dashboard-settings-fields" style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 420 }}>
           <label>
             Pony disponibili per consegna da lunedì a giovedì 
@@ -425,6 +479,21 @@ export default function ParametriSection() {
             />
           </label>
           <label>
+            Food cost - margine target (% guadagno)
+            <input
+              type="number"
+              min={0}
+              max={95}
+              placeholder="es. 30"
+              value={p.foodcost_margine_percent === "" ? "" : p.foodcost_margine_percent}
+              onChange={(e) => setParam("foodcost_margine_percent", e.target.value === "" ? "" : e.target.value)}
+              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+            />
+            <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "#64748b", lineHeight: 1.45 }}>
+              Prezzo target = costo totale / (1 - margine%). Esempio: margine 30% su costo 5,00 € → prezzo 7,14 €.
+            </span>
+          </label>
+          <label>
             Soglia giallo (pizze sotto il max per mostrare slot in giallo)
             <input
               type="number"
@@ -471,6 +540,47 @@ export default function ParametriSection() {
           </label>
         </div>
       </section>
+
+      {foodcostModalOpen && foodcostMismatchCount > 0 ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 10050,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setFoodcostModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 10,
+              maxWidth: 560,
+              width: "100%",
+              padding: "16px 18px",
+              border: "1px solid #fecaca",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, color: "#991b1b" }}>Controllo foodcost/listino</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 14, lineHeight: 1.5, color: "#334155" }}>
+              Rilevati <strong>{foodcostMismatchCount}</strong> prodotti con prezzo listino non coerente rispetto al costo ingredienti.
+              Aggiorna i prezzi in menu prima del servizio.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button type="button" className="dashboard-settings-btn-secondary" onClick={() => setFoodcostModalOpen(false)}>
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <section className="dashboard-box dashboard-settings-section" style={{ marginTop: 24 }}>
         <h2 className="dashboard-page-title" style={{ fontSize: 18, marginBottom: 12 }}>

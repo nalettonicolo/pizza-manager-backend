@@ -36,9 +36,14 @@ export function sanitizeSuperadminPreviewPath(raw) {
   if (s.startsWith("//")) return "/preview"
   const one = s.replace(/^\/{2,}/, "/")
   if (/^\/https?:/i.test(one)) return "/preview"
-  const [pathPart] = one.split("#")
-  const path = (pathPart || "/preview").split("?")[0] || "/preview"
-  return path.startsWith("/") ? path : "/preview"
+  try {
+    const parsed = new URL(one, "https://pizzamanager.local")
+    const pathname = parsed.pathname || "/preview"
+    if (!pathname.startsWith("/")) return "/preview"
+    return `${pathname}${parsed.search || ""}`
+  } catch {
+    return "/preview"
+  }
 }
 
 /**

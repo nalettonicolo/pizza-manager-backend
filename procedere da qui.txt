@@ -1,40 +1,56 @@
-analizza lo stato di sviluppo di questa webapp, poi facciamo recap per procedere con le varie funzioni che poi saranno i servizi da includere nel piano o meno.
+- SISTEMA TUTTO CIO' OVVIAMENTE IO TI MANDO I LINK RIFERITI AL MIO DOMINIO MA DOVRA' ESSERE OPERATIVO PER TUTTI I CLIENTI: 
+- ORA CHE HO ESEGUITO @sql/sql_upgrade.sql INTEGRALO NELLLO @sql/schema_completo_pizzamanager.sql POI SVUOTA IL CONTENUTO DI @sql/sql_upgrade.sql IN MODO DA AVERE SOLO LE NUOVE IMPLEMENTAZIONI. 
+- VERIFICARE PERCHE' SULLA PAGINA https://pizzamanager.it/preview LE CATEGORIE DEL MENù DICONO ALTRO E NON LE CATEGORIE PRESENTI E CREATE DA ADMIN TENANT,
+- SULLA PAGINA https://pizzamanager.it/admin/menu/listini VOGLIO CHE MI PERMETTI DI STAMPARLO O ESPORTALO IN PDF
+- SULLA PAGINA https://pizzamanager.it/admin/dipendenti CREA ANCHE UNA FUNZIONE PER AGGIUNGERE I DIPENDENTI, SERVIRA' PER ARCHIVIARE LE BUSTE PAGHE DI OGNI DIPENDENTE, I DATI PERSONALI, I CORSI TUTTO PER AVERE UN PUNTO CENTRALIZZATO.
+- SULLA PAGINA https://pizzamanager.it/admin/settings/dati-pizzeria  Vetrina web — normativa e pagamenti online
+Testi privacy/cookie con segnaposto tipo {{nome_attivita}}, {{piva}}, {{pec}}, {{indirizzo}}, {{email}}. Se lasci vuoti, restano i testi predefiniti dell'app. VOGLIO UN TESTO PIU' PROFESSIONALE
+- SPIEGAMI MEGLIO IL DISCORSO VETRINA SOPRATUTTO L'AREA SUMUP, STRIPE, E LA PRIVACY POLICY E POLICY COOKIE
+- https://pizzamanager.it/admin/settings/layout SE CARICO LOGO A DESTRA DEL CAMPO LOGO VEDI SE RIUSCIAMO A CARICARE O ESTRARRE DAL LOGO IL SIMBOLO CHE IDENTIFICA L'ATTIVITà IN MODO DA METTERLO AFFIANCO AL NOME DELLA SCHEDA DEL BROWSER
+- https://pizzamanager.it/admin/settings/area-consegna MAPPA VUOTA, SPIEGA MEGLIO COSA FA E COSA NO. NON è CHIARO Punti vendita
+Per ogni sede imposta il marcatore e il poligono; puoi generare un cerchio con la stima in alto, poi modificare i vertici. Se manca l'area della sede, vale il poligono globale di questa pagina.
 
-Analizzando la struttura del progetto, le funzionalità implementate e la documentazione per fornire un recap utile alla pianificazione dei servizi.
+Sede principale
+Usa coordinate da Dati pizzeria
+Genera area da stima moto (~24 km/h × 15 min → ~6.0 km)
+Rimuovi area per questa sede
+La stima usa i valori nella sezione Area globale (salva prima se li hai modificati). Poi adatta il poligono alla rete stradale.
+- https://pizzamanager.it/admin/manuale QUI CI SONO I RIMANDI A DEI FILE CON IL NOME DEL FILE DEL PROGETTO, NON E' PROFESSIONALE PER UN CLIENTE. MIGLIORA L'ESPERIENZA TESTI.
+- VERIFICA https://pizzamanager.it/superadmin/licenses Le righe sono ricavate dai dati cliente: in database non risultano ancora record in subscriptions (controlla policy RLS o esegui il salvataggio da Clienti).
+- SPIEGA MEGLIO https://pizzamanager.it/superadmin/pubblicazione-sito?tenant=95c0b10f-b677-4131-abd9-e60e8cf9e3bf     Inserisci l'hostname che deve aprire la webapp (deve coincidere con il dominio aggiunto in Firebase Hosting e con il record DNS). Esempi: menu.tuonome.it, ordini.ristorante.it.
 
-Ecco un’analisi sintetica dello stato di sviluppo e un recap orientato ai piani/servizi (senza ripetere contenuti sensibili: nel file txt.txt ci sono credenziali e URL di DB in chiaro — conviene rimuoverle dal repo o spostarle in un gestore segreti e ruotare le password).
+Dominio pubblico
+AAA.IT
+Salvataggio come: aaa.it
 
-Architettura attuale
-Frontend: React 18 + Vite; entry src/app/main.jsx → AppRouter (src/router/AppRouter.jsx).
-Stato/auth: AuthProvider, TenantProvider, PvProvider, ThemeProvider (cartella src/app/contexts).
-Dati principali: Supabase (client in src/lib/supabaseClient, tabelle tipo tenants, ordini, ecc.).
-Deploy: script npm run build + Firebase Hosting (package.json); documentazione in DEPLOY_COMANDI.md.
-Backend separato: cartella server/pizzeria-backend (Nest/Prisma) per parti aggiuntive; in documentazione si parla di API per turni e integrazioni, non come unico middleware per tutto il tenant.
-Host: logica SaaS vs “negozio pubblico” in AppRouter: su pizzamanager.it / app.* / localhost si espone la piattaforma completa; su altri hostname la root va a PublicStore e rotte come /ordine per il cliente finale.
+Sito web del cliente (opzionale)
+URL del sito vetrina esterno del locale (es. Google Sites, sito istituzionale). Non è il dominio PizzaManager: serve solo per riferimento e collegamenti dalla guida.
 
-Cosa è già coperto (per area)
-Area	Stato
-Pubblico SaaS	Landing, negozio, login, privacy/cookie/termini, support, selezione PV, preview webapp
-Super Admin	Dashboard, clienti (tenants), catalogo servizi e piani (UI), abbonamenti/licenze, impostazioni, deploy siti clienti, home pizzeria demo
-Admin tenant	Dashboard KPI, report vendite, menu completo (categorie, formati, pizze, ingredienti, impasti, bibite, dolci, fritti, allergeni, cottura), dipendenti, ruoli, impostazioni (dati, layout, orari, parametri), pubblicazione sito (in evoluzione; doc in docs/GUIDA_ADMIN.md + migrazioni dominio pubblico)
-Operativo	Cassa (anche prodotti esauriti), cucina, bancone, pizzaioli, delivery, turni, dashboard operativa — con permessi per area
-Dominio pizzeria (non-SaaS)	Flusso ordine legacy (OrdinePage + /ordine-confermato); in parallelo lavoro su dominio pubblico + RPC per risolvere il tenant dal dominio (patch SQL in sql/sql_upgrade.sql o nuove migration se rigenerate)
-La mappa dettagliata admin vs roadmap è in docs/ARCHITETTURA_E_STATO.md (gap: lista ordini solo admin, KPI avanzati, billing, monitor, ecc.).
+AAA.IT
+Stato pubblicazione
 
-Piani e “servizi”: come sono collegati oggi
-Catalogo servizi (src/features/superadmin/catalog/defaultCatalog.js): elenco servizi con ID stabili (ordini_cassa, stampa_comanda, ordini_online, tablet_ruoli, report_analisi, multi_sede, api_integrazioni, ecc.) e bundle Base / Pro / Enterprise / Full / Su misura (IDS_BASE, IDS_PRO, …).
-Super Admin → Servizi e Piani: persistenza su localStorage (servicesStorage.js), non su DB centralizzato: utili per prezzi e packaging commerciale, ma non ancora enforcement automatico lato app.
-Feature gate da piano tenant: usePlan (src/app/hooks/usePlan.js) con livelli FREE/TRIAL/PRO/ENTERPRISE è usato in modo molto limitato (es. Home.jsx); la maggior parte dell’accesso è per ruolo (ProtectedRoute), non per servizio acquistato.
-Conclusione: i “servizi da includere nel piano” sono oggi definiti bene in catalogo e UI superadmin, ma non sono ancora il motore unico che abilita/disabilita moduli in produzione.
-Recap per decidere cosa mettere nei piani
-Usa il catalogo come lista canonica degli ID servizio; per ogni voce valuta:
+DNS / Firebase in configurazione
+- https://pizzamanager.it/superadmin/test-layout NON FUNZIONA COME RICHIESTO. 
+- SE HO SELEZIONATO UN CLIENTE A DOMICILIO E POI CLICCO SULLA X PER DESELEZIONARLO IL CARRELLO SI DEVE SVUOTARE IN MANIERA AUTOMATICA, RESTA NOME DEL CLIENTE L'ORDINE APERTO MA NON CONFERMATO, SE RICHIAMO QUEL CLIENTE VEDRO' L'ORDINE INCOMPLETO, STESSA COSA SE HO ASSOCIATO IL CLIENTE CREATO DA ME AL CLIENTE CHE SI è REGISTRATO ONLINE E DA CASA IN AUTONOMIA HA CREATO PARZIALMENTE L'ORDINE E NON CONCLUSO DEVO VEDERLO. ATTENZIONE CHE SE PER MOTIVI DI ORARIO O ALTRI MOTIVI IL CLIENTE DA DOMICILIO MI DICE RITIRO IN NEGOZIO IO POSSO MODFICARLO, SE SONO AL TELEFONO POSSO CLICCARE SUL TASTO IN NEGOZIO A DX DEL NOME CLIENTE, SE INVECE HO GIA' PRESO ORDINE A DOMICILIO E IL CLIENTE MI RICHIAMA PER MODIFICARE IL RITIRO CREIAMO UN TASTO DENTRO L'ORDINE.
+- IN FASE DI RIEPILGO ORDINE PRIMA DELLA CONFERMA PERSISTONO I PROBLEMI DI ORARI, NEL SENSO IO HO GIA' DELLE PIZZE PRENOTATE MA SULLE SLOT ORARIE NON LE VEDO. QUESTO MI CREA GROSSI PROBLEMI IN QUANTO NON SO QUANTE PIZZE HO IN UNA FASCIA ORARIA E POTREBBE RECARMI DANNI DI IMMAGINE PERCHE' FAREI RITARDI STRATOSFERICI.
+- SULLA COLONNA ORDINI A SX DEL MENU IN PAGINA CASSA ATTENIONE ALLE ICONE DEI TIPI DI PAGAMENTO PRESENTI NEGLI ORDINI, HO 2 TIPOLOGIE DI PAGAMENTO DIVERSE SEGNATE E LA STESSA ICONA.
+- SULLA BARRA DI RICERCA DELLE PIZZE SE INSERISCO IL NOME DI UN INGREDIENTE DEVO VEDERE TUTTE LE PIZZE CHE CONTENGONO QUELL'INGREDIENTE, QUESTA COSA VALE ANCHE PER IL CLIENTE A CASA.
+- SULLA HOMEPAGE DELLA PIZZERIA SE IL CLIENTE NON HA ORDINI ONLINE INCLUSI NEL PIANO DI ABBONAMENTO AL CLIENTE FINALE NON INTERESSA, QUINDI RIMUOVI LA VOCE AGGIUNGI ANCHE SE DISABILITATA, RIMUOVI LA SEZIONE REGISTRATI, PERMETTI LA VISUALIZZAZIONE DEL MENU.
+- SE CLICCO PLANNING E POI CLICCO SOPRA UN ORDINE FAMMI VEDERE IL RIEPILOGO. 
+- QUI https://pizzamanager.it/admin/menu/ingredienti SE CLICCO CARICA CSV MI VIENE CHIESTO 2 VOLTE DI CARICARE IL FILE. COSA INUTILE. 
+- CERCHIAMO DI RENDERE PIU' PROFESSIONALE E VELOCE IL CARICAMENTO DEGLI INGREDIENTI, SE ABILITATO FOODCOST I PREZZI DEGLI INGREDIENTI DEVONO COMBACIARE CON IL LISTINO. IN CASO CONTRARIO PERCHE' UN PRODOTTO HA SUBITO UN AUMENTO SEGNALALO METTENDO UN ERRORE SU UN MODALE POPUP IN MODO CHE ADMIN TENANT E CASSA ASSOCIATA A QUEL TENANT VEDANO QUESTO ERRORE.
+- SE CARICO UN INGREDIENTE E DICHIARO CHE VA A FINE COTTURA SUL CSV O SULLA PAGINA DEDICATA POI QUANDO LO AGGIUNGO ALLA PIZZA DEVE RISPETTARE DI DEFAULT L'IMPOSTAZIONE DATA, POI IL CLIENTE PUò CHIEDERE DI CAMBIARE CON L'APPOSITO MENU' GIA' CREATO. 
+- LATENZA DI CARICAMENTO TRA LE PAGINE RISOLVI E VELOCIZZA
+- SU https://pizzamanager.it/operative/pizzaiolo-ingresso RIMUOVI COLONNA A SX DELLA PAGINA, LASCIA AL MOMENTO SOLO I 2 TASTI SCHERMATA PIZZAIOLI O TEST (4SCHERMATE), SUL SITO DEL CLIENTE CI SARA' SOLO L'ACCESSO DIRETTO ALL'AREA OPERATIVA DEDICATA,(STESSA COSA PER CUCINA, BANCONE E I VARI PONY/DELIVERY)
+- SULLA SCHERMATA DI CUCINA RISOLVIAMO IL CONFLITTO HO DETTO CHE SE UN INGREDIENTE VIENE CLASSIFICATO DA PREPARARE IMPOSTATO IN FASE DI CARICAMENTO, E POI DOBBIAMO ASSOCIARE UN INGREDIENTE AL TIPO DI PREPARAZIONE E CONSERVAZIONE. NEL SENSO CHE SE è CONGELATO LO ASSOCIAMO AD UNA CASELLA DI COLORE BLU, SE AFFETTATO CELLA COLORE VERDE, SE BIBITE CELLA COLORE BIANCO, SE FRITTO CELLA DI COLORE GIALLA, SE INGREDIENTI COMUNI CELLA DI COLORE ROSA, PERò LASCEREI LA POSSIBILITA' DI PERSONALIZZARE IL COLORE DELLE CELLE ED EVENTUALMENTE DI CREARNI DI NUOVI. 
+- RICORDIAMOCI SE CUCINA HA PREPARATO INGREDIENTE E CLICCA SOPRA DAL SUO TABLET SPARISCE E NEL TABLET BANCONE DIVENTA IN GRIGETTO, IN MODO CHE IL BANCONE SE SI TIRA FUORI GLI INGREDIENTI NECESSARI AGLI ORDINI IN FORNO CI CLICCA SOPRA E LA CELLA PRENDE DI NUOVO COLORE OVVIAMENTE SOLO DELLE COSE CHE NON SONO ANDATE IN COTTURA. 
 
-Già implementato e usabile → candidato forte per un piano (es. ordini cassa, stampa comanda, ruoli operativi se coperti dalle route).
-Parziale o solo commerciale (es. API, account manager, SLA) → piano alto o add-on, finché non c’è codice + enforcement.
-In lavoro (pubblicazione dominio, menu per hostname) → allineare al servizio ordini online / vetrina quando la catena dominio → tenant sarà stabile.
-Prossimo passo consigliato per allineare “piani” e prodotto:
-
-decidere quali ID del defaultCatalog sono in scope per la release;
-per ciascuno, indicare se serve solo etichetta commerciale o anche gate (nascondere route / chiamate API);
-se serve il gate, pianificare dove leggerlo (colonna su tenants o tabella tenant_services + controllo in router o layout).
-Se vuoi, nel messaggio successivo possiamo prendere il defaultCatalog riga per riga e classificarlo in Sì piano / Opzionale / Non ancora in base a come vuoi strutturare Base/Pro/Enterprise.
+--- AGGIUNTE OPERATIVE (DA CHIUDERE DOMANI) ---
+- VERIFICA FINALE END-TO-END SU AMBIENTE REALE (ADMIN/CASSA/PUBBLICO): TEST MANUALI COMPLETI DI TUTTI I FLUSSI TOCCATI (CASSA, PLANNING, FOODCOST, CUCINA/BANCONE, VETRINA) CON CHECKLIST EVIDENZE.
+- CASSA: CONTROLLARE IL CASO CLIENTE ONLINE PARZIALE + CLIENTE LOCALE ASSOCIATO (MERGE IDENTITA') PER ESSERE SICURI CHE L'ORDINE INCOMPLETO VENGA RIPRESO SEMPRE.
+- FOODCOST: AGGIUNGERE UN PULSANTE "RICALCOLA PREZZI ORA" CONFERMATO DA ADMIN (CON LOG AZIONE) PER ALLINEAMENTO RAPIDO LISTINO DOPO MODIFICA COSTI/MARGINE.
+- FOODCOST: MIGLIORARE IL POPUP MISMATCH CON DETTAGLIO PRIME N PIZZE FUORI SOGLIA (NOME, PREZZO ATTUALE, PREZZO TARGET, DELTA), NON SOLO CONTEGGIO.
+- CUCINA/BANCONE: AGGIUNGERE PERSISTENZA STATO "PRESO AL BANCONE" (SE NECESSARIA) PER NON PERDERE I TAP AL REFRESH/POLL, MANTENENDO LA REGOLA COTTURA/NON COTTURA.
+- PERFORMANCE: PROFILARE LE ROTTE PIU' PESANTI (CASSA, CUCINA, BANCONE, ADMIN MENU) E RENDERE MISURABILE IL MIGLIORAMENTO (TEMPO MEDIO PRIMA/DOPO).
+- DOCUMENTAZIONE: AGGIORNARE MANUALE UTENTE CON LE NUOVE LOGICHE (FOODCOST MARGINE %, ALERT MISMATCH, FLUSSO CLIENTE DELIVERY/NEGOZIO, CUCINA->BANCONE).
+- SQL: PRIMA DI CHIUDERE IL CICLO, RICONTROLLARE CHE sql/sql_upgrade.sql CONTENGA SOLO PATCH DAVVERO NON ANCORA CONSOLIDATE IN schema_completo.

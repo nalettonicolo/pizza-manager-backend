@@ -76,8 +76,8 @@ export default function SuperadminPubblicazioneSitoPage() {
         <p className="sa-page-kicker">Super Admin · go-live</p>
         <h1 className="dashboard-page-title sa-page-title">Pubblicazione dominio tenant</h1>
         <p className="sa-page-lede">
-          Guida deploy, DNS, Firebase e salvataggio dominio / stato: solo dalla console piattaforma, con scelta del
-          cliente.
+          Guida deploy, DNS, Firebase e salvataggio dominio/stato: solo dalla console piattaforma, con scelta del
+          cliente. Compila prima il dominio pubblico (hostname) e solo dopo segna il tenant come live.
         </p>
       </header>
 

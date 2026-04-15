@@ -15,6 +15,29 @@ import {
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
+const DEFAULT_PRIVACY_TEMPLATE =
+  `<h2>Informativa privacy</h2>
+<p>La presente informativa descrive il trattamento dei dati personali degli utenti che visitano il sito <strong>{{nome_attivita}}</strong>, ai sensi del Regolamento (UE) 2016/679 (GDPR).</p>
+<h3>Titolare del trattamento</h3>
+<p>Titolare: <strong>{{ragione_sociale}}</strong>. Sede: {{indirizzo}}. Email: {{email}}. PEC: {{pec}}. P.IVA: {{piva}}.</p>
+<h3>Finalita' e base giuridica</h3>
+<p>I dati sono trattati per gestione richieste, ordini online, assistenza clienti e adempimenti di legge (art. 6, par. 1, lett. b, c e f GDPR).</p>
+<h3>Conservazione</h3>
+<p>I dati sono conservati per il tempo necessario all'erogazione del servizio e agli obblighi fiscali/legali applicabili.</p>
+<h3>Diritti dell'interessato</h3>
+<p>L'interessato puo' esercitare i diritti previsti dagli artt. 15-22 GDPR contattando {{email}}. E' sempre possibile proporre reclamo al Garante Privacy.</p>`;
+const DEFAULT_COOKIE_TEMPLATE =
+  `<h2>Cookie policy</h2>
+<p>Il sito <strong>{{nome_attivita}}</strong> utilizza cookie tecnici necessari al corretto funzionamento del menu e delle funzionalita' di navigazione.</p>
+<h3>Tipologie utilizzate</h3>
+<ul>
+  <li>Cookie tecnici di sessione e sicurezza (necessari).</li>
+  <li>Cookie di preferenza, ove attivati.</li>
+</ul>
+<h3>Cookie di profilazione o terze parti</h3>
+<p>Non vengono installati cookie di profilazione senza consenso. Se in futuro verranno introdotti strumenti di analisi/marketing, sara' richiesto il consenso secondo normativa.</p>
+<h3>Gestione cookie</h3>
+<p>E' possibile gestire o disabilitare i cookie dalle impostazioni del browser. La disattivazione dei cookie tecnici puo' compromettere alcune funzionalita'.</p>`;
 
 export default function DatiPizzeriaSection() {
   const { settings, setSettings } = useOutletContext();
@@ -383,9 +406,30 @@ export default function DatiPizzeriaSection() {
         <h2 className="dashboard-settings-section-title">Vetrina web — normativa e pagamenti online</h2>
         <p className="dati-pizzeria-hint" style={{ marginBottom: 16, lineHeight: 1.55 }}>
           Testi privacy/cookie con segnaposto tipo <code>{"{{nome_attivita}}"}</code>, <code>{"{{piva}}"}</code>,{" "}
-          <code>{"{{pec}}"}</code>, <code>{"{{indirizzo}}"}</code>, <code>{"{{email}}"}</code>. Se lasci vuoti, restano i
-          testi predefiniti dell&apos;app.
+          <code>{"{{pec}}"}</code>, <code>{"{{indirizzo}}"}</code>, <code>{"{{email}}"}</code>. Se lasci i campi vuoti,
+          resta la policy predefinita dell&apos;app.
         </p>
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 14px",
+            border: "1px solid #dbeafe",
+            background: "#eff6ff",
+            borderRadius: 8,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "#1e3a8a",
+          }}
+        >
+          <strong>Pagamenti online - come funziona:</strong>
+          <br />
+          <strong>Stripe</strong>: inserisci chiave pubblica <code>pk_...</code> e salva la chiave segreta{" "}
+          <code>sk_...</code>. La segreta viene usata solo lato server.
+          <br />
+          <strong>SumUp</strong>: inserisci il merchant/public id richiesto dalla tua integrazione.
+          <br />
+          Il provider selezionato viene usato dalla vetrina per proporre il checkout online.
+        </div>
         <div className="dashboard-settings-fields">
           <label>
             Ragione sociale (P.IVA / contratti)
@@ -473,6 +517,15 @@ export default function DatiPizzeriaSection() {
           </label>
           <label>
             Privacy policy (HTML, opzionale)
+            <div style={{ marginBottom: 8 }}>
+              <button
+                type="button"
+                className="dashboard-settings-btn-secondary"
+                onClick={() => setSettings({ ...settings, privacy_policy_html: DEFAULT_PRIVACY_TEMPLATE })}
+              >
+                Usa modello professionale privacy
+              </button>
+            </div>
             <textarea
               rows={5}
               value={settings?.privacy_policy_html || ""}
@@ -482,6 +535,15 @@ export default function DatiPizzeriaSection() {
           </label>
           <label>
             Cookie policy (HTML, opzionale)
+            <div style={{ marginBottom: 8 }}>
+              <button
+                type="button"
+                className="dashboard-settings-btn-secondary"
+                onClick={() => setSettings({ ...settings, cookie_policy_html: DEFAULT_COOKIE_TEMPLATE })}
+              >
+                Usa modello professionale cookie
+              </button>
+            </div>
             <textarea
               rows={5}
               value={settings?.cookie_policy_html || ""}

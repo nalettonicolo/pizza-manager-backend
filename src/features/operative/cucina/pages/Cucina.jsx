@@ -23,6 +23,24 @@ import {
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
 const POLL_MS = 10000
+const PREP_CATEGORIA_COLORI_DEFAULT = {
+  congelato: "#dbeafe",
+  affettato: "#dcfce7",
+  bibite: "#ffffff",
+  fritto: "#fef9c3",
+  comune: "#fce7f3",
+}
+
+function resolvePrepTaskColor(task) {
+  const custom = String(task?.ingredienteColore || "").trim()
+  if (custom) return custom
+  const cat = String(task?.ingredienteCategoria || "").trim().toLowerCase()
+  if (cat.includes("congel")) return PREP_CATEGORIA_COLORI_DEFAULT.congelato
+  if (cat.includes("affett")) return PREP_CATEGORIA_COLORI_DEFAULT.affettato
+  if (cat.includes("bibit")) return PREP_CATEGORIA_COLORI_DEFAULT.bibite
+  if (cat.includes("fritt")) return PREP_CATEGORIA_COLORI_DEFAULT.fritto
+  return PREP_CATEGORIA_COLORI_DEFAULT.comune
+}
 
 function rigaGroupKey(r) {
   return `${r.prodottoId ?? r.prodotto_id}|${r.formatoNome ?? r.formato_nome ?? ""}`
@@ -327,6 +345,10 @@ export default function Cucina() {
               Fritti / Bibite / Dolci. Tocca quando la preparazione è pronta.
               {totalPrepPending > 0 ? ` · ${totalPrepPending} totali da fare` : ""}
             </p>
+            <p style={styles.prepLegend}>
+              Colori base preparazione: congelato blu, affettato verde, bibite bianco, fritto giallo, comuni rosa.
+              Se un ingrediente ha un colore personalizzato in anagrafica, qui viene usato quello.
+            </p>
             <div style={styles.taskList}>
               {pendingInTab.length === 0 && doneInTab.length === 0 ? (
                 <p style={styles.mutedSmall}>Nessuna preparazione per questa fascia.</p>
@@ -336,11 +358,16 @@ export default function Cucina() {
                 const busy = prepActionId === key
                 const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
                 const isVoceProdotto = t.kind === "prodotto"
+                const prepBg = resolvePrepTaskColor(t)
                 return (
                   <button
                     key={key}
                     type="button"
-                    style={styles.taskBtn}
+                    style={{
+                      ...styles.taskBtn,
+                      background: prepBg,
+                      borderColor: "#d1d5db",
+                    }}
                     disabled={busy}
                     onClick={() => handleMarkPrepDone(t)}
                   >
@@ -515,6 +542,7 @@ const styles = {
     borderRadius: 10,
   },
   prepHint: { margin: "0 0 12px", fontSize: 13, color: "#33691e", lineHeight: 1.4 },
+  prepLegend: { margin: "0 0 12px", fontSize: 12, color: "#475569", lineHeight: 1.5 },
   fornoSection: {
     marginBottom: 20,
     padding: 14,

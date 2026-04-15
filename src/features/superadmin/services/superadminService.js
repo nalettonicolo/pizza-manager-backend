@@ -533,6 +533,40 @@ export async function getSubscriptions() {
     };
   });
 
+  // Se alcune righe non sono scrivibili in subscriptions (RLS/migrazione), mostra comunque il cliente in elenco
+  // usando i dati tenant, così la pagina Licenze non risulta "incompleta" per quei tenant.
+  const enrichedTenantIds = new Set(enriched.map((r) => r.tenant_id));
+  const derivedMissingRows = tenants
+    .filter((t) => t.id && !enrichedTenantIds.has(t.id))
+    .map((t) => {
+      const ciclo = parseAbbonamentoCicloGiorni(t, t);
+      const sconto = parseScontoAnnualePercent(t, t, ciclo);
+      return {
+        id: `tenant-${t.id}`,
+        tenant_id: t.id,
+        piano: pianoToDbEnum(t.piano),
+        stato: "ATTIVA",
+        rinnovo_il: computeProssimoRinnovoIl(t.data_attivazione_abbonamento, ciclo),
+        ciclo_fatturazione_giorni: ciclo,
+        sconto_annuale_percent: sconto,
+        created_at: t.created_at ?? null,
+        updated_at: t.updated_at ?? null,
+        tenant_nome: t.nome ?? "—",
+        tenant_slug: t.slug ?? "—",
+        rinnovo_automatico: !!t.addebito_automatico_mensile,
+        data_attivazione_abbonamento: t.data_attivazione_abbonamento ?? null,
+        _fromTenantOnly: true,
+      };
+    });
+
+  if (derivedMissingRows.length > 0) {
+    return [...enriched, ...derivedMissingRows].sort((a, b) => {
+      const ad = String(a.created_at || "");
+      const bd = String(b.created_at || "");
+      return ad < bd ? 1 : ad > bd ? -1 : 0;
+    });
+  }
+
   /** Se non esiste alcuna riga in subscriptions (es. policy RLS che blocca insert), mostra comunque i clienti come righe derivate dal tenant. */
   if (enriched.length === 0 && tenants.length > 0) {
     return tenants.map((t) => ({

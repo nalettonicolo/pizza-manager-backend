@@ -3,7 +3,7 @@
   Pagina in app: Admin → Manuale (`/admin/manuale`).
 -->
 
-> **Nota per chi modifica il repo:** la roadmap in colonna sinistra e la mappa concettuale sono in **`src/content/manualeRoadmap.js`**. Dopo le modifiche: build e deploy del frontend (`npm run deploy` o `npm run deploy:hosting`). Altre guide: **`docs/GUIDA_SUPERADMIN.md`**, **`docs/GUIDA_ADMIN.md`**; consultabili anche da **Super Admin → Documentazione** (`/superadmin/guide`).
+> Questo manuale e' pensato per titolare e staff: trovi una roadmap rapida a sinistra e una mappa concettuale per raggiungere subito la sezione che ti serve.
 
 ## Introduzione
 
@@ -63,11 +63,9 @@ Sul **dominio principale** del servizio trovi **landing**, **piani** (descrizion
 
 ---
 
-## Aggiornare il manuale
+## Supporto e aggiornamenti
 
-Il testo in app è in **`src/content/manualeUtente.md`** e la struttura della roadmap in **`src/content/manualeRoadmap.js`**. Dopo una modifica: build e deploy del frontend.
-
-Documentazione piattaforma: **`docs/GUIDA_SUPERADMIN.md`**, **`docs/GUIDA_ADMIN.md`**, **Super Admin → Documentazione**.
+Le istruzioni del manuale vengono aggiornate insieme all'applicazione. Se noti differenze tra quanto vedi in pagina e i tuoi permessi/moduli attivi, chiedi supporto al referente della piattaforma.
 
 ---
 

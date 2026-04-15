@@ -62,9 +62,18 @@ export function aggregateBanconeIngredientsBySlot(ordini, righePerOrdine, ingred
     const slot = orarioToSlotLabel(orario, slotMinutes) ?? "Senza orario"
     if (!bySlot[slot]) bySlot[slot] = new Map()
 
+    const doneByRigaRaw =
+      ord?.cucina_prep_stato && typeof ord.cucina_prep_stato === "object"
+        ? ord.cucina_prep_stato.doneByRiga
+        : ord?.cucinaPrepStato && typeof ord.cucinaPrepStato === "object"
+          ? ord.cucinaPrepStato.doneByRiga
+          : null
+    const doneByRiga = doneByRigaRaw && typeof doneByRigaRaw === "object" ? doneByRigaRaw : {}
+
     const righe = righePerOrdine[ord.id] || []
     for (const r of righe) {
       const pid = r.prodottoId ?? r.prodotto_id
+      const rigaId = r.id ?? r.riga_id
       const q = Number(r.quantita) || 1
       const list = ingredientsByProduct[pid]
       const summary = (r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? "").trim()
@@ -76,15 +85,27 @@ export function aggregateBanconeIngredientsBySlot(ordini, righePerOrdine, ingred
           const pickKey = `ing:${slot}:${id}`
           const prev = bySlot[slot].get(pickKey)
           const label = ing.nome || "—"
+          const isFuoriCottura = ing.vaInCottura === false
+          const doneForThisRiga = rigaId
+            ? Array.isArray(doneByRiga[String(rigaId)]) &&
+              doneByRiga[String(rigaId)].map(String).includes(String(id))
+            : false
           if (prev) prev.count += q
           else
             bySlot[slot].set(pickKey, {
               pickKey,
               label,
               count: q,
+              doneCount: 0,
               categoria: ing.categoria,
               colore: ing.colore,
+              vaInCottura: ing.vaInCottura === true,
+              nonCottura: isFuoriCottura,
             })
+          if (doneForThisRiga) {
+            const curr = bySlot[slot].get(pickKey)
+            curr.doneCount = (curr?.doneCount || 0) + q
+          }
         }
       } else if (summary) {
         const rid = r.id ?? r.riga_id ?? `${ord.id}-${pid}-${summary.slice(0, 12)}`
@@ -96,8 +117,11 @@ export function aggregateBanconeIngredientsBySlot(ordini, righePerOrdine, ingred
             pickKey,
             label: summary,
             count: q,
+            doneCount: 0,
             categoria: "altro",
             colore: "",
+            vaInCottura: false,
+            nonCottura: true,
           })
       }
     }

@@ -149,7 +149,11 @@ export default function PublicStore() {
   const filteredProducts = useMemo(() => {
     const q = (searchPizza || "").toLowerCase().trim();
     if (!q) return productsByCategory;
-    return productsByCategory.filter((p) => (p.nome || "").toLowerCase().includes(q));
+    return productsByCategory.filter((p) => {
+      const nome = (p.nome || "").toLowerCase();
+      const descrizione = (p.descrizione || "").toLowerCase();
+      return nome.includes(q) || descrizione.includes(q);
+    });
   }, [productsByCategory, searchPizza]);
 
   const handleAddProduct = useCallback(
@@ -208,8 +212,7 @@ export default function PublicStore() {
         {!vetrinaOrdiniOk ? (
           <div style={styles.browseOnlyBanner}>
             <strong>Menù in consultazione.</strong> Gli ordini online non sono attivi per questo locale (licenza o
-            impostazioni). Accedi o registrati dall&apos;angolo in alto a destra solo per gestire il tuo account; per
-            ordinare contatta la pizzeria.
+            impostazioni). Puoi consultare liberamente il menù; per ordinare contatta la pizzeria.
           </div>
         ) : null}
         <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
@@ -233,9 +236,7 @@ export default function PublicStore() {
             <span style={{ ...styles.menuTitleFallback, color: accent }}>Menù</span>
           </div>
         )}
-        {vetrinaOrdiniOk && !user ? (
-          <p style={styles.loginHint}>Accedi per aggiungere al carrello (si apre il login).</p>
-        ) : null}
+        {vetrinaOrdiniOk && !user ? <p style={styles.loginHint}>Accedi per aggiungere al carrello.</p> : null}
         {user && totalQty > 0 && vetrinaOrdiniOk ? (
           <div style={styles.cartBar}>
             <span>

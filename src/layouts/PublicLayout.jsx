@@ -7,6 +7,7 @@ import { getIsSaaSClient } from "@/utils/saasHost"
 import { getPublicTenantInfo } from "@/features/services/publicService"
 import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
+import { applyTenantFavicon } from "@/utils/tenantFavicon"
 import "@/styles/public-layout.css"
 
 const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
@@ -92,6 +93,10 @@ export default function PublicLayout() {
     if (modalDismissed) return false
     return true
   }, [authLoading, isLanding, publicTenantId, tipoUtente, authTenantId, publicParametri, publicTenantRow, modalDismissed])
+  const vetrinaOrdiniOnlineEnabled = useMemo(
+    () => readOrdiniOnlineVetrinaAllowed(publicParametri, publicTenantRow),
+    [publicParametri, publicTenantRow],
+  )
 
   const dismissOrdineOnlineModal = () => {
     try {
@@ -103,6 +108,11 @@ export default function PublicLayout() {
   }
 
   const logoLabel = isLanding ? "PizzaManager" : (tenantName || "PizzaManager")
+  const logoUrl = isLanding ? null : (publicTenantRow?.logo_url ?? null)
+
+  useEffect(() => {
+    void applyTenantFavicon(logoUrl)
+  }, [logoUrl])
 
   const prefetchLogin = () => {
     void import("@/features/public/pages/Login")
@@ -201,14 +211,16 @@ export default function PublicLayout() {
           >
             Accedi
           </Link>
-          <Link
-            to={isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
-            className="public-layout-btn public-layout-btn--primary"
-            onMouseEnter={isSaaS ? undefined : prefetchRegistrazione}
-            onFocus={isSaaS ? undefined : prefetchRegistrazione}
-          >
-            {isSaaS ? "Registrati ora" : "Crea account"}
-          </Link>
+          {isVetrinaPage && !vetrinaOrdiniOnlineEnabled ? null : (
+            <Link
+              to={isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
+              className="public-layout-btn public-layout-btn--primary"
+              onMouseEnter={isSaaS ? undefined : prefetchRegistrazione}
+              onFocus={isSaaS ? undefined : prefetchRegistrazione}
+            >
+              {isSaaS ? "Registrati ora" : "Crea account"}
+            </Link>
+          )}
         </div>
       </header>
 

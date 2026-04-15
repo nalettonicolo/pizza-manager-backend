@@ -53,6 +53,7 @@ import {
   applyFidelityMovimento,
   updateTenantSettings,
   logCassaAuditEvent,
+  getFoodcostPriceMismatchReport,
 } from "@/features/admin/services/adminService"
 import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson"
 import { roundTotalToFiveCents } from "@/utils/cassaArrotondamento"
@@ -118,7 +119,8 @@ function iconTipoPagamentoLista(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
   if (t.includes("contanti")) return "💵"
   if (t.includes("carta") && !t.includes("casa")) return "💳"
-  if (tipoPagamentoInAttesa(tipoPagamento)) return "🔗"
+  if (t.includes("link") || t.includes("carta da casa")) return "🔗"
+  if (t.includes("da pagare")) return "⏳"
   return "⏳"
 }
 
@@ -175,6 +177,7 @@ function formatOrarioFallbackDaCreazione(o) {
   if (Number.isNaN(d.getTime())) return ""
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
 }
+
 
 function orarioVisualizzatoLista(o) {
   const t = ordineOrarioRitiro(o)
@@ -329,6 +332,7 @@ export default function CassaPage() {
   const [tipoOrdine, setTipoOrdine] = useState(TIPO_ORDINE.NEGOZIO)
   const [deliverySearch, setDeliverySearch] = useState("")
   const [selectedCliente, setSelectedCliente] = useState(null)
+  const [deliveryDraftByClienteId, setDeliveryDraftByClienteId] = useState({})
   const [deliverySearchResults, setDeliverySearchResults] = useState([])
   const [deliverySearchLoading, setDeliverySearchLoading] = useState(false)
   const [nuovoClienteModalOpen, setNuovoClienteModalOpen] = useState(false)
@@ -415,6 +419,9 @@ export default function CassaPage() {
   const [payLinkPhone, setPayLinkPhone] = useState("")
   const [payLinkBusy, setPayLinkBusy] = useState(false)
   const [payLinkMessage, setPayLinkMessage] = useState("")
+  const [foodcostMismatchCount, setFoodcostMismatchCount] = useState(0)
+  const [foodcostAlertDismissed, setFoodcostAlertDismissed] = useState(false)
+  const [foodcostModalOpen, setFoodcostModalOpen] = useState(false)
 
   /////////////////////////////////////////////////////////
   // RESET ON TENANT CHANGE
@@ -430,6 +437,7 @@ export default function CassaPage() {
     seenOrderIdsForToastRef.current = new Set()
     setCassaWebToasts([])
     setTurnoCassa(null)
+    setDeliveryDraftByClienteId({})
   }, [tenantId])
 
   /////////////////////////////////////////////////////////
@@ -462,6 +470,31 @@ export default function CassaPage() {
     }
     setCassaDraftReady(true)
   }, [tenantId, activePvId, pvLoading])
+
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    const runCheck = async () => {
+      try {
+        const report = await getFoodcostPriceMismatchReport(tenantId)
+        if (cancelled) return
+        const count = Array.isArray(report?.mismatches) ? report.mismatches.length : 0
+        setFoodcostMismatchCount(count)
+        if (count > 0) {
+          setFoodcostAlertDismissed(false)
+          setFoodcostModalOpen(true)
+        }
+      } catch {
+        if (!cancelled) setFoodcostMismatchCount(0)
+      }
+    }
+    void runCheck()
+    const t = setInterval(() => void runCheck(), 30000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [tenantId])
 
   useEffect(() => {
     if (!cassaDraftReady || !tenantId || pvLoading) return
@@ -1083,11 +1116,43 @@ export default function CassaPage() {
       ? [c.nome, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""].filter(Boolean).join(" – ")
       : ""
   const handleSelectCliente = useCallback((c) => {
+    const savedDraft = c?.id ? deliveryDraftByClienteId[c.id] : null
     setSelectedCliente(c)
     setDeliverySearch(displayCliente(c))
     setDeliverySearchResults([])
     setClienteDomicilioQuickOpen(true)
-  }, [])
+    if (savedDraft) {
+      setCart(Array.isArray(savedDraft.cart) ? savedDraft.cart : [])
+      setCheckoutNote(savedDraft.checkoutNote || "")
+      setCheckoutNomeCliente(savedDraft.checkoutNomeCliente || "")
+      setCheckoutTelefonoCliente(savedDraft.checkoutTelefonoCliente || "")
+      setCheckoutSelectedSlot(savedDraft.checkoutSelectedSlot || null)
+    }
+  }, [deliveryDraftByClienteId])
+
+  const handleSwitchConsegnaToNegozio = useCallback(async () => {
+    const curr = selectedCliente
+    if (!curr) return
+    const nome = String(curr.nome || "").trim()
+    const telefono = String(curr.telefono || "").trim()
+    setDeliveryDraftByClienteId((prev) => ({
+      ...prev,
+      [curr.id]: {
+        cart: Array.isArray(cart) ? cart : [],
+        checkoutNote,
+        checkoutNomeCliente: checkoutNomeCliente || nome,
+        checkoutTelefonoCliente: checkoutTelefonoCliente || telefono,
+        checkoutSelectedSlot,
+      },
+    }))
+    setTipoOrdine(TIPO_ORDINE.NEGOZIO)
+    setCheckoutNomeCliente((v) => v || nome)
+    setCheckoutTelefonoCliente((v) => v || telefono)
+    setSelectedCliente(null)
+    setDeliverySearch("")
+    setDeliverySearchResults([])
+    setClienteDomicilioQuickOpen(false)
+  }, [selectedCliente, cart, checkoutNote, checkoutNomeCliente, checkoutTelefonoCliente, checkoutSelectedSlot])
   const handleNuovoClienteSuccess = (cliente) => {
     setSelectedCliente(cliente)
     setDeliverySearch(displayCliente(cliente))
@@ -1267,10 +1332,28 @@ export default function CassaPage() {
           <button
             type="button"
             onClick={() => {
+              if (selectedCliente?.id) {
+                const nome = String(selectedCliente.nome || "").trim()
+                const telefono = String(selectedCliente.telefono || "").trim()
+                setDeliveryDraftByClienteId((prev) => ({
+                  ...prev,
+                  [selectedCliente.id]: {
+                    cart: Array.isArray(cart) ? cart : [],
+                    checkoutNote,
+                    checkoutNomeCliente: checkoutNomeCliente || nome,
+                    checkoutTelefonoCliente: checkoutTelefonoCliente || telefono,
+                    checkoutSelectedSlot,
+                  },
+                }))
+              }
               setSelectedCliente(null)
               setDeliverySearch("")
               setDeliverySearchResults([])
               setClienteDomicilioQuickOpen(false)
+              setCart([])
+              setCheckoutNote("")
+              setCheckoutSelectedSlot(null)
+              setCheckoutError(null)
             }}
             style={{ padding: "8px 10px", background: "#666", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, cursor: "pointer", flexShrink: 0 }}
             title="Deseleziona cliente"
@@ -1325,6 +1408,23 @@ export default function CassaPage() {
                 title="Note ordine (solo negozio)"
               >
                 Note
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSwitchConsegnaToNegozio()}
+                style={{
+                  padding: tm ? "12px 14px" : "8px 14px",
+                  background: "#455a64",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  fontSize: tm ? 15 : 13,
+                  minHeight: tm ? 48 : undefined,
+                  flex: tm ? "1 1 auto" : undefined,
+                }}
+                title="Sposta questo ordine da consegna a ritiro in negozio"
+              >
+                In negozio
               </button>
             </>
           ) : (
@@ -2036,7 +2136,11 @@ export default function CassaPage() {
   const filteredProducts = useMemo(() => {
     const q = (searchPizza || "").toLowerCase().trim()
     if (!q) return products
-    return products.filter((p) => (p.nome || "").toLowerCase().includes(q))
+    return products.filter((p) => {
+      const nome = (p.nome || "").toLowerCase()
+      const descrizione = (p.descrizione || "").toLowerCase()
+      return nome.includes(q) || descrizione.includes(q)
+    })
   }, [products, searchPizza])
 
   const disabledProductIds = useMemo(() => {
@@ -2400,6 +2504,66 @@ export default function CassaPage() {
           >
             Vai ai turni
           </button>
+        </div>
+      ) : null}
+      {foodcostMismatchCount > 0 && !foodcostAlertDismissed ? (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 12,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#991b1b",
+            fontSize: 14,
+            lineHeight: 1.45,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>
+            <strong>Controllo foodcost:</strong> {foodcostMismatchCount} prodotti non allineati con il listino.
+            Verifica i prezzi prima del servizio.
+          </span>
+          <button
+            type="button"
+            className="cassa-toolbar-compact-btn"
+            style={{ fontWeight: 700 }}
+            onClick={() => {
+              setFoodcostAlertDismissed(true)
+              setFoodcostModalOpen(false)
+            }}
+          >
+            Chiudi
+          </button>
+        </div>
+      ) : null}
+      {foodcostModalOpen && foodcostMismatchCount > 0 ? (
+        <div style={styles.modalOverlay} role="dialog" aria-modal="true" onClick={() => setFoodcostModalOpen(false)}>
+          <div style={{ ...styles.detailModal, maxWidth: 520, width: "95%" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 18, color: "#991b1b" }}>Controllo foodcost/listino</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 14, lineHeight: 1.5, color: "#334155" }}>
+              Sono presenti <strong>{foodcostMismatchCount}</strong> prodotti con prezzo listino non allineato al costo ingredienti.
+              Correggi in Admin prima di accettare molti ordini.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="cassa-toolbar-compact-btn"
+                onClick={() => {
+                  setFoodcostModalOpen(false)
+                  setFoodcostAlertDismissed(true)
+                }}
+                style={{ fontWeight: 700 }}
+              >
+                Ho capito
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {postCheckoutPayLink ? (
@@ -3026,7 +3190,22 @@ export default function CassaPage() {
                     return (
                       <li key={o.id} style={{ borderBottom: "1px solid #eee", padding: "12px 0" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              void openOrdineDetail(o.id)
+                              setPlanningSlotModal(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                void openOrdineDetail(o.id)
+                                setPlanningSlotModal(null)
+                              }
+                            }}
+                            title="Apri riepilogo ordine"
+                          >
                             <div style={{ fontWeight: 600 }}>#{numero} · {nome}</div>
                             {isDelivery && indirizzo && (
                               <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
@@ -3036,6 +3215,17 @@ export default function CassaPage() {
                             <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void openOrdineDetail(o.id)
+                                setPlanningSlotModal(null)
+                              }}
+                              style={{ ...styles.impostazioniBtn, marginTop: 0, background: "#1565c0", color: "#fff", padding: "6px 10px" }}
+                              title="Apri riepilogo ordine"
+                            >
+                              Riepilogo
+                            </button>
                             <label style={{ fontSize: 12, fontWeight: 500 }}>Sposta a:</label>
                             <select
                               value={orarioCorrente}
@@ -3322,6 +3512,24 @@ export default function CassaPage() {
               </p>
             ) : null}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {!ordineIsAnnullato(ordineDetail) && ordineIsDelivery(ordineDetail) ? (
+                <button
+                  type="button"
+                  style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#455a64", color: "#fff" }}
+                  onClick={async () => {
+                    try {
+                      await updateOrder(ordineDetail.id, { tipo_ordine: TIPO_ORDINE.NEGOZIO, indirizzo_consegna: null })
+                      await loadOrdini()
+                      await openOrdineDetail(ordineDetail.id)
+                    } catch (e) {
+                      console.error(e)
+                      alert("Errore passaggio a ritiro in negozio. " + (e?.message || ""))
+                    }
+                  }}
+                >
+                  Passa a ritiro in negozio
+                </button>
+              ) : null}
               <button
                 type="button"
                 style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#6a1b9a", color: "#fff" }}

@@ -221,6 +221,29 @@ export default function AreaConsegnaSection() {
         area dedicata. Coordinate sede: <Link to="/admin/settings/dati-pizzeria">Dati pizzeria</Link>. Altri parametri operativi:{" "}
         <Link to="/admin/settings/parametri">Parametri</Link>.
       </p>
+      <div
+        style={{
+          marginTop: 12,
+          padding: "12px 14px",
+          border: "1px solid #bfdbfe",
+          background: "#eff6ff",
+          borderRadius: 8,
+          fontSize: 13,
+          lineHeight: 1.6,
+          color: "#1e40af",
+          maxWidth: 900,
+        }}
+      >
+        <strong>Come leggere questa pagina:</strong>
+        <br />
+        1) Imposta velocita' e minuti nella sezione <strong>Area globale</strong>.
+        <br />
+        2) Per ogni sede usa <strong>Usa coordinate da Dati pizzeria</strong> (o trascina il marcatore verde).
+        <br />
+        3) Clicca <strong>Genera area da stima moto</strong> per creare un cerchio iniziale e poi adatta i vertici alle strade.
+        <br />
+        4) Se una sede non ha area propria, il checkout usa il poligono globale.
+      </div>
 
       <section className="dashboard-box dashboard-settings-section" style={{ marginTop: 20, maxWidth: 900 }}>
         <h2 style={{ fontSize: 17, marginBottom: 10 }}>Area globale (tenant)</h2>
@@ -392,6 +415,24 @@ export default function AreaConsegnaSection() {
                   "— (imposta coordinate in Dati pizzeria o trascina il marcatore dopo aver salvato lat/lng sul DB)"
                 )}
               </p>
+              {cc.lat == null || cc.lng == null ? (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "#92400e",
+                    background: "#fffbeb",
+                    border: "1px solid #fde68a",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    marginTop: 8,
+                    maxWidth: 720,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Mappa apparentemente vuota: non e' un errore. Manca il centro della sede; imposta prima le coordinate o usa il
+                  marcatore verde.
+                </p>
+              ) : null}
               <div style={{ marginTop: 12 }}>
                 <button
                   type="button"

@@ -257,6 +257,23 @@ export default function DeliveryAreaMapEditor({
 
   return (
     <div>
+      {!centerOk ? (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "10px 12px",
+            borderRadius: 8,
+            border: "1px solid #fde68a",
+            background: "#fffbeb",
+            color: "#92400e",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Centro sede non impostato: la mappa apre una vista generale dell'Italia. Imposta prima lat/lng della sede o trascina
+          il marcatore verde e poi salva.
+        </div>
+      ) : null}
       <div
         ref={mapElRef}
         style={{

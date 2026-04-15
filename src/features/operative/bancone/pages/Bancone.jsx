@@ -156,10 +156,13 @@ export default function Bancone() {
     [slotPizze]
   )
 
-  const orderIdsKey = useMemo(
+  const orderStateKey = useMemo(
     () =>
       ordiniVisibili
-        .map((o) => o.id)
+        .map((o) => {
+          const prep = JSON.stringify(o?.cucina_prep_stato ?? o?.cucinaPrepStato ?? {})
+          return `${o.id}:${prep}`
+        })
         .filter(Boolean)
         .sort()
         .join(","),
@@ -167,10 +170,10 @@ export default function Bancone() {
   )
 
   useEffect(() => {
-    if (prevOrderIdsKeyRef.current === orderIdsKey) return
-    prevOrderIdsKeyRef.current = orderIdsKey
+    if (prevOrderIdsKeyRef.current === orderStateKey) return
+    prevOrderIdsKeyRef.current = orderStateKey
     setPickedBanconeKeys(new Set())
-  }, [orderIdsKey])
+  }, [orderStateKey])
 
   const banconeSlotOrder = useMemo(
     () => banconeSlotsFromOrders(ordiniVisibili, PLANNING_GRID_SLOT_MINUTES),
@@ -433,6 +436,9 @@ export default function Bancone() {
                       {ingList.map((item) => {
                         const picked = pickedBanconeKeys.has(item.pickKey)
                         const fullBg = banconeIngredientPickedColor(item)
+                        const nonCottura = item.nonCottura !== false
+                        const kitchenPrepared = Number(item.doneCount || 0) > 0
+                        const disabledForCottura = !nonCottura
                         return (
                           <button
                             key={item.pickKey}
@@ -442,11 +448,24 @@ export default function Bancone() {
                               ...(picked
                                 ? { background: fullBg, color: "#1a1a1a", borderColor: "#9e9e9e", fontWeight: 600 }
                                 : styles.pickChipTodo),
+                              ...(kitchenPrepared ? styles.pickChipFromKitchen : {}),
+                              ...(disabledForCottura ? styles.pickChipDisabled : {}),
                             }}
-                            onClick={() => togglePickedBancone(item.pickKey)}
+                            onClick={() => {
+                              if (disabledForCottura) return
+                              togglePickedBancone(item.pickKey)
+                            }}
+                            title={
+                              disabledForCottura
+                                ? "Ingrediente in cottura: il pick Bancone è disponibile solo per voci fuori cottura."
+                                : kitchenPrepared
+                                  ? "Preparato in cucina: ora risulta in grigio su Bancone. Tocca per segnarlo preso al bancone."
+                                  : "Tocca quando l'hai messo in busta."
+                            }
                           >
                             {item.count > 1 ? `${item.count}× ` : ""}
                             {item.label}
+                            {kitchenPrepared ? " · da cucina" : ""}
                           </button>
                         )
                       })}
@@ -570,6 +589,15 @@ const styles = {
     color: "#616161",
     fontWeight: 500,
     borderColor: "#bdbdbd",
+  },
+  pickChipFromKitchen: {
+    background: "#e2e8f0",
+    color: "#475569",
+    borderColor: "#94a3b8",
+  },
+  pickChipDisabled: {
+    opacity: 0.65,
+    cursor: "not-allowed",
   },
   bibiteSubheading: {
     fontSize: 11,

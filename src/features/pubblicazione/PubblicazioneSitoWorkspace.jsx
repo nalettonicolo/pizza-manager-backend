@@ -252,6 +252,21 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
             <h2 className="dashboard-settings-section-title" style={{ marginTop: 0 }}>
               2. Dominio del cliente (vetrina/menu)
             </h2>
+            <div
+              style={{
+                margin: "0 0 12px",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #bfdbfe",
+                background: "#eff6ff",
+                color: "#1e40af",
+                fontSize: 13,
+                lineHeight: 1.55,
+              }}
+            >
+              <strong>Regola chiave:</strong> qui va solo l&apos;<strong>hostname pubblico</strong> che deve aprire la webapp
+              PizzaManager (senza <code>https://</code>). Deve coincidere con dominio aggiunto su Firebase e record DNS.
+            </div>
             <p style={{ margin: "0 0 14px", fontSize: 14, lineHeight: 1.65, color: "#475569" }}>
               Inserisci l&apos;hostname che deve aprire la webapp (deve coincidere con il dominio aggiunto in Firebase
               Hosting e con il record DNS). Esempi: <code>menu.tuonome.it</code>, <code>ordini.ristorante.it</code>.
@@ -306,6 +321,10 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
 
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Stato pubblicazione</label>
+              <p style={{ margin: "0 0 8px", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+                Usa <strong>DNS / Firebase in configurazione</strong> finché propagazione e certificato SSL non sono
+                completati. Passa a <strong>Dominio online</strong> solo dopo test reale del dominio cliente.
+              </p>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}

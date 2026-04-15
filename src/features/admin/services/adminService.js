@@ -800,6 +800,43 @@ export async function updateStaffNomeVisualizzato(tenantId, userId, nomeVisualiz
   if (error) throw mapSupabaseRuoliError(error)
 }
 
+export async function listStaffArchivioDipendenti(tenantId) {
+  if (!tenantId) return []
+  const { data, error } = await supabase
+    .from("staff_archivio_dipendenti")
+    .select("*")
+    .eq("tenant_id", tenantId)
+  if (error) throw mapStaffArchivioError(error)
+  return data || []
+}
+
+export async function upsertStaffArchivioDipendente(tenantId, userId, payload = {}) {
+  if (!tenantId || !userId) throw new Error("Tenant o dipendente mancanti.")
+  const row = {
+    tenant_id: tenantId,
+    user_id: userId,
+    nome_completo: payload.nome_completo || null,
+    codice_fiscale: payload.codice_fiscale || null,
+    data_nascita: payload.data_nascita || null,
+    luogo_nascita: payload.luogo_nascita || null,
+    indirizzo_residenza: payload.indirizzo_residenza || null,
+    telefono_personale: payload.telefono_personale || null,
+    email_personale: payload.email_personale || null,
+    mansione: payload.mansione || null,
+    tipo_contratto: payload.tipo_contratto || null,
+    data_assunzione: payload.data_assunzione || null,
+    iban: payload.iban || null,
+    corsi_formazione: Array.isArray(payload.corsi_formazione) ? payload.corsi_formazione : [],
+    documenti_lavoro: Array.isArray(payload.documenti_lavoro) ? payload.documenti_lavoro : [],
+    note_hr: payload.note_hr || null,
+    updated_at: new Date().toISOString(),
+  }
+  const { error } = await supabase
+    .from("staff_archivio_dipendenti")
+    .upsert(row, { onConflict: "tenant_id,user_id" })
+  if (error) throw mapStaffArchivioError(error)
+}
+
 const AREA_COLUMNS = "accesso_riepilogo, accesso_cassa, accesso_cucina, accesso_bancone, accesso_pizzaiolo, accesso_delivery, accesso_pony"
 
 // Ruoli pizzeria (vista ruoli_pizzeria + RPC)
@@ -964,6 +1001,21 @@ function mapStaffPasswordNoteError(error) {
     return new Error(
       "Permesso negato: serve essere admin del locale (tenant_admins) oppure Super Admin con migrazione RLS aggiornata.",
     )
+  }
+  return error
+}
+
+function mapStaffArchivioError(error) {
+  if (!error) return error
+  const code = error.code
+  const msg = String(error.message || "")
+  if (code === "42P01" || /relation .* does not exist/i.test(msg)) {
+    return new Error(
+      "Tabella staff_archivio_dipendenti assente. Esegui sql/sql_upgrade.sql in Supabase SQL Editor.",
+    )
+  }
+  if (code === "42501" || /permission denied/i.test(msg)) {
+    return new Error("Permesso negato su archivio dipendenti. Verifica policy RLS/ruolo admin tenant.")
   }
   return error
 }
@@ -1695,6 +1747,27 @@ function _toNum(v) {
   return Number.isNaN(n) ? 0 : n
 }
 
+function readFoodcostMarginPercent(parametriLike) {
+  const src = parametriLike && typeof parametriLike === "object" ? parametriLike : {}
+  const raw =
+    src.foodcost_margine_percent ??
+    src.foodcost_margin_percent ??
+    src.food_cost_margin_percent ??
+    src.foodcost_margine
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return 0
+  return Math.min(95, Math.max(0, n))
+}
+
+function prezzoFromCostoWithMargin(costoTotale, marginePercent) {
+  const costo = _toNum(costoTotale)
+  const m = Math.min(95, Math.max(0, Number(marginePercent) || 0))
+  if (m <= 0) return costo
+  const denom = 1 - m / 100
+  if (denom <= 0.0001) return costo
+  return costo / denom
+}
+
 /**
  * Calcola il prezzo di un prodotto (base impasto + somma costi ingredienti).
  * Usare in Cassa/store quando il prezzo salvato non include gli ingredienti.
@@ -1707,11 +1780,12 @@ export async function getProductPrezzoCalcolato(tenantId, productId) {
       getProductIngredienti(tenantId, productId),
     ])
     const costoBase = _toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
+    const marginePercent = readFoodcostMarginPercent(config)
     let totalIng = 0
     for (const ing of ings || []) {
       totalIng += _toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
     }
-    return costoBase + totalIng
+    return prezzoFromCostoWithMargin(costoBase + totalIng, marginePercent)
   } catch (e) {
     console.warn("getProductPrezzoCalcolato error:", e)
     return 0
@@ -1731,6 +1805,7 @@ export async function enrichProductsWithPrezzoCalcolato(tenantId, products) {
       getProductIngredientiBatch(tenantId, ids),
     ])
     const costoBase = _toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
+    const marginePercent = readFoodcostMarginPercent(config)
 
     const out = []
     for (const p of products) {
@@ -1740,7 +1815,9 @@ export async function enrichProductsWithPrezzoCalcolato(tenantId, products) {
         totalIng += _toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
       }
       const hasIngredienti = ings.length > 0
-      const prezzoCalcolato = hasIngredienti ? costoBase + totalIng : 0
+      const prezzoCalcolato = hasIngredienti
+        ? prezzoFromCostoWithMargin(costoBase + totalIng, marginePercent)
+        : 0
       const prezzoUsare = prezzoCalcolato > 0 ? prezzoCalcolato : _toNum(p.prezzo)
       out.push({ ...p, prezzo: prezzoUsare })
     }
@@ -1873,6 +1950,7 @@ export async function recalculateAllPizzaPrices(tenantId) {
     return !cid || allowedCategoryIds.has(cid)
   })
   const costoBase = toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
+  const marginePercent = readFoodcostMarginPercent(config)
 
   for (const product of pizze) {
     const ings = await getProductIngredienti(tenantId, product.id)
@@ -1881,9 +1959,76 @@ export async function recalculateAllPizzaPrices(tenantId) {
       const cost = toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
       totalIng += cost
     }
-    const newPrezzo = costoBase + totalIng
+    const newPrezzo = prezzoFromCostoWithMargin(costoBase + totalIng, marginePercent)
     await updateProduct(product.id, { prezzo: newPrezzo })
   }
+}
+
+function isFoodcostEnabledByParametri(parametri) {
+  const po = parametri && typeof parametri === "object" ? parametri : {}
+  return (
+    po.foodcost_attivo === true ||
+    po.foodcost_enabled === true ||
+    po.abilita_foodcost === true ||
+    po.food_cost_attivo === true
+  )
+}
+
+/**
+ * Verifica mismatch prezzo listino vs prezzo calcolato foodcost (solo categorie pizza).
+ * Ritorna elenco differenze se foodcost è attivo nei parametri operativi.
+ */
+export async function getFoodcostPriceMismatchReport(tenantId, opts = {}) {
+  if (!tenantId) return { enabled: false, mismatches: [] }
+  const thresholdEuro = Number(opts.thresholdEuro)
+  const threshold = Number.isFinite(thresholdEuro) ? Math.max(0.01, thresholdEuro) : 0.01
+  const excludeSlugs = new Set(["fritti", "dolci", "bibite"])
+  const [tenant, categories, products, config] = await Promise.all([
+    getTenantSettings(tenantId),
+    getCategories(tenantId),
+    getProducts(tenantId),
+    getConfigurazioneCosti(tenantId),
+  ])
+  const enabled = isFoodcostEnabledByParametri(tenant?.parametri_operativi ?? tenant?.parametriOperativi)
+  if (!enabled) return { enabled: false, mismatches: [] }
+
+  const allowedCategoryIds = new Set(
+    (categories || []).filter((c) => !excludeSlugs.has((c.slug || "").toLowerCase())).map((c) => c.id),
+  )
+  const pizze = (products || []).filter((p) => {
+    const cid = p.categoria_id ?? p.categoriaId
+    return !cid || allowedCategoryIds.has(cid)
+  })
+  if (!pizze.length) return { enabled: true, mismatches: [] }
+
+  const ids = pizze.map((p) => p.id).filter(Boolean)
+  const ingByProduct = await getProductIngredientiBatch(tenantId, ids)
+  const costoBase = toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
+  const marginePercent = readFoodcostMarginPercent(
+    tenant?.parametri_operativi ?? tenant?.parametriOperativi ?? config,
+  )
+  const mismatches = []
+  for (const p of pizze) {
+    const current = toNum(p.prezzo)
+    const ings = ingByProduct[p.id] || []
+    let totalIng = 0
+    for (const ing of ings) {
+      totalIng += toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
+    }
+    const expected = prezzoFromCostoWithMargin(costoBase + totalIng, marginePercent)
+    const delta = expected - current
+    if (Math.abs(delta) >= threshold) {
+      mismatches.push({
+        productId: p.id,
+        nome: p.nome || "Prodotto",
+        prezzoListino: current,
+        prezzoCalcolato: expected,
+        delta,
+      })
+    }
+  }
+  mismatches.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+  return { enabled: true, mismatches }
 }
 
 ///////////////////////////////////////////////////////////
