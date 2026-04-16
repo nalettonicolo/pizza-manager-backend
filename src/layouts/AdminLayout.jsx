@@ -172,14 +172,6 @@ export default function AdminLayout() {
     ]);
   }, []);
 
-  if (blockedRedirect) {
-    return <Navigate to={blockedRedirect} replace />;
-  }
-
-  if (adminNeedsPvChoice && !pvLoading && !activePv) {
-    return <Navigate to="/select-pv" replace />;
-  }
-
   const logoUrl = tenantData?.logo_url ?? null;
   const brandName = tenantData?.nome || "PizzaManager";
   const resolvedTenantTheme = resolveMenuTheme(tenantData?.parametri_operativi);
@@ -189,6 +181,14 @@ export default function AdminLayout() {
   useEffect(() => {
     void applyTenantFavicon(logoUrl);
   }, [logoUrl]);
+
+  if (blockedRedirect) {
+    return <Navigate to={blockedRedirect} replace />;
+  }
+
+  if (adminNeedsPvChoice && !pvLoading && !activePv) {
+    return <Navigate to="/select-pv" replace />;
+  }
 
   return (
     <Fragment>

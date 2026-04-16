@@ -1533,6 +1533,12 @@ export default function CassaPage() {
     cassaOrdineInCorso,
     cart.length,
     cassaMobileLayout,
+    handleSwitchConsegnaToNegozio,
+    cart,
+    checkoutNote,
+    checkoutNomeCliente,
+    checkoutTelefonoCliente,
+    checkoutSelectedSlot,
   ])
 
   /////////////////////////////////////////////////////////
