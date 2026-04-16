@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { createLazyWithChunkReload } from "@/utils/lazyWithReload";
 import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
+import { isSaaSHostname } from "@/utils/saasHost";
 
 /* ================= LAYOUT ================= */
 import PublicLayout from "@/layouts/PublicLayout";
@@ -141,7 +142,7 @@ const OPERATIVE_ROLES_WITH_SUPERADMIN_TEST = ENABLE_TEST_REPARTI ? [...OPERATIVE
    HOST DETECTION
 ========================================================= */
 
-const host = window.location.hostname;
+const host = typeof window !== "undefined" ? window.location.hostname : "";
 
 const isLocal =
   host.includes("localhost") ||
@@ -149,11 +150,8 @@ const isLocal =
 
 const isSupportHost = host === "support.pizzamanager.it";
 
-const isSaaS =
-  host === "pizzamanager.it" ||
-  host.startsWith("app.") ||
-  isSupportHost ||
-  isLocal;
+/** Allineato a `isSaaSHostname` (saasHost): include Firebase Hosting e VITE_FULL_APP_HOSTNAMES. */
+const isSaaS = isSaaSHostname(host);
 
 /** Vetrina cliente (registrazione, password): anche in localhost per sviluppo. */
 const showPublicClientAuthRoutes = !isSaaS || isLocal;
