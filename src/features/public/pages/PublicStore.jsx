@@ -8,7 +8,11 @@ import ErrorState from "@/components/feedback/ErrorState";
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid";
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs";
 
-import { getPublicMenu, getPublicTenantInfo } from "@/features/services/publicService";
+import {
+  getPublicMenu,
+  getPublicTenantInfo,
+  getPublicMenuIngredientNames,
+} from "@/features/services/publicService";
 import { getProductIngredientiMap } from "@/features/admin/services/adminService";
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { sortByOrdine } from "@/utils/sortByOrdine";
@@ -110,7 +114,10 @@ export default function PublicStore() {
         if (tenant?.id && Array.isArray(menuData) && menuData.length > 0) {
           try {
             const ids = menuData.map((p) => p.id).filter(Boolean);
-            const map = await getProductIngredientiMap(tenant.id, ids);
+            let map = await getPublicMenuIngredientNames(tenant.id, ids);
+            if (map == null) {
+              map = await getProductIngredientiMap(tenant.id, ids);
+            }
             setIngredientiRicercaMap(map || {});
           } catch (e) {
             console.warn("Vetrina: ingredienti ricetta (ricerca):", e);

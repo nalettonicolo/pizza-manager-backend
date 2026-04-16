@@ -7344,6 +7344,70 @@ COMMENT ON FUNCTION public.get_public_menu_for_domain(text) IS 'Menu pubblico fi
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_domain(text) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_domain(text) TO authenticated;
 
+-- Menu per tenant su piattaforma SaaS (stessa riga-set della vista; anon usa EXECUTE invece di SELECT sulla vista)
+CREATE OR REPLACE FUNCTION public.get_public_menu_for_tenant(p_tenant_id UUID)
+RETURNS SETOF public.prodotti_menu_pubblico
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, core
+AS $$
+  SELECT v.*
+  FROM public.prodotti_menu_pubblico v
+  WHERE p_tenant_id IS NOT NULL
+    AND v.tenant_id = p_tenant_id;
+$$;
+
+COMMENT ON FUNCTION public.get_public_menu_for_tenant(UUID) IS
+  'Menu pubblico filtrato per tenant (anteprima /negozio /preview, ?tenant=). SECURITY DEFINER: necessario dopo REVOKE SELECT anon su public.prodotti_menu_pubblico.';
+
+GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO authenticated;
+
+-- Ingredienti ricetta per ricerca menu vetrina (anon); solo prodotti coerenti con prodotti_menu_pubblico
+CREATE OR REPLACE FUNCTION public.get_public_menu_ingredient_names(
+  p_tenant_id UUID,
+  p_product_ids UUID[]
+)
+RETURNS TABLE (
+  prodotto_id UUID,
+  nomi TEXT[]
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, core
+AS $$
+  SELECT
+    pi.prodotto_id,
+    coalesce(
+      array_agg(btrim(i.nome) ORDER BY lower(btrim(i.nome)))
+        FILTER (WHERE i.nome IS NOT NULL AND btrim(i.nome) <> ''),
+      '{}'::text[]
+    ) AS nomi
+  FROM core.prodotto_ingrediente pi
+  INNER JOIN core.ingredienti i
+    ON i.id = pi.ingrediente_id
+   AND i.tenant_id = pi.tenant_id
+  INNER JOIN core.prodotti p
+    ON p.id = pi.prodotto_id
+   AND p.tenant_id = pi.tenant_id
+  WHERE pi.tenant_id = p_tenant_id
+    AND p_product_ids IS NOT NULL
+    AND cardinality(p_product_ids) >= 1
+    AND pi.prodotto_id = ANY(p_product_ids)
+    AND p.deleted_at IS NULL
+    AND (p.attivo = true OR p.attivo IS NULL)
+    AND (p.visibile_online = true OR p.visibile_online IS NULL)
+    AND i.deleted_at IS NULL
+  GROUP BY pi.prodotto_id;
+$$;
+
+COMMENT ON FUNCTION public.get_public_menu_ingredient_names(UUID, UUID[]) IS
+  'Vetrina pubblica: elenco nomi ingredienti per prodotti del menu online del tenant. SECURITY DEFINER; allineato ai filtri di public.prodotti_menu_pubblico.';
+
+GRANT EXECUTE ON FUNCTION public.get_public_menu_ingredient_names(UUID, UUID[]) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_public_menu_ingredient_names(UUID, UUID[]) TO authenticated;
 
 -- URL del sito vetrina del cliente (es. Google Sites, sito istituzionale) — separato dal dominio PizzaManager.
 

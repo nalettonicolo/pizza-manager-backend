@@ -76,6 +76,26 @@ async function resolveSaaSPublicTenant(resolved = {}) {
   return null;
 }
 
+async function getPublicMenuFromView(tenantId) {
+  let q = supabase.from("prodotti_menu_pubblico").select("*");
+  if (tenantId) {
+    q = q.eq("tenant_id", tenantId);
+  }
+  const { data, error } = await q.order("nome", { ascending: true });
+
+  if (error) {
+    logSupabaseError("publicService.getPublicMenu", error, {
+      operation: "from(prodotti_menu_pubblico)",
+      tenantId: tenantId || undefined,
+    });
+    return [];
+  }
+
+  return sortByOrdine(
+    (data || []).map(({ tenant_id: _tenantId, ...rest }) => rest),
+  );
+}
+
 /**
  * Menu vetrina pubblica.
  * @param {{ tenantId?: string | null }} [options] — Su SaaS: filtra per tenant risolto (obbligatorio per non mescolare sedi).
@@ -101,23 +121,55 @@ export async function getPublicMenu(options = {}) {
     return [];
   }
 
-  let q = supabase.from("prodotti_menu_pubblico").select("*");
+  // Con REVOKE SELECT anon su prodotti_menu_pubblico, la lettura diretta fallisce: usa RPC SECURITY DEFINER.
   if (tenantId) {
-    q = q.eq("tenant_id", tenantId);
-  }
-  const { data, error } = await q.order("nome", { ascending: true });
-
-  if (error) {
-    logSupabaseError("publicService.getPublicMenu", error, {
-      operation: "from(prodotti_menu_pubblico)",
-      tenantId: tenantId || undefined,
+    const { data, error } = await supabase.rpc("get_public_menu_for_tenant", {
+      p_tenant_id: tenantId,
+    });
+    if (!error) {
+      const rows = Array.isArray(data) ? data : [];
+      return sortByOrdine(
+        rows.map(({ tenant_id: _tenantId, ...rest }) => rest),
+      );
+    }
+    if (isRpcMissingError(error)) {
+      return getPublicMenuFromView(tenantId);
+    }
+    logSupabaseError("publicService.getPublicMenu.rpc", error, {
+      operation: "get_public_menu_for_tenant",
+      p_tenant_id: tenantId,
     });
     return [];
   }
 
-  return sortByOrdine(
-    (data || []).map(({ tenant_id: _tenantId, ...rest }) => rest),
-  );
+  return getPublicMenuFromView(null);
+}
+
+/**
+ * Nomi ingredienti per ricerca sul menu vetrina (sessione anon).
+ * RPC `get_public_menu_ingredient_names`: tenant-safe, stessi filtri della vista pubblica prodotti.
+ * @returns {Promise<Record<string, string[]> | null>} `null` se la RPC non è ancora deployata (fallback lato caller).
+ */
+export async function getPublicMenuIngredientNames(tenantId, productIds) {
+  if (!tenantId || !productIds?.length) return {};
+  const { data, error } = await supabase.rpc("get_public_menu_ingredient_names", {
+    p_tenant_id: tenantId,
+    p_product_ids: productIds,
+  });
+  if (error) {
+    if (isRpcMissingError(error)) return null;
+    logSupabaseError("publicService.getPublicMenuIngredientNames", error, {
+      tenantId,
+      count: productIds.length,
+    });
+    return {};
+  }
+  const map = {};
+  for (const row of data || []) {
+    const pid = row?.prodotto_id;
+    if (pid) map[pid] = Array.isArray(row.nomi) ? row.nomi : [];
+  }
+  return map;
 }
 
 /**
