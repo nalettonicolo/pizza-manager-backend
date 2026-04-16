@@ -2,14 +2,23 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Outlet, NavLink, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
+import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
 import "@/styles/superadmin-enterprise.css";
+
+const PIATTAFORMA_ITEMS_BASE = [
+  { to: "/superadmin/guide", label: "Documentazione" },
+  { to: "/superadmin/sviluppo", label: "Roadmap" },
+  { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
+  { to: "/superadmin/test-layout", label: "Test viewport layout" },
+  { to: "/superadmin/settings", label: "Sistema" },
+];
+
+const PIATTAFORMA_ITEMS = ENABLE_TEST_REPARTI
+  ? [{ to: "/superadmin/test-reparti", label: "Pannello test reparti" }, ...PIATTAFORMA_ITEMS_BASE]
+  : PIATTAFORMA_ITEMS_BASE;
 
 /** Menu compatto desktop: solo queste voci in barra; sottovoci in dropdown al passaggio del mouse. */
 const NAV_DROPDOWNS = [
-  {
-    label: "Accesso",
-    items: [{ to: "/superadmin/ingresso", label: "Ingresso" }],
-  },
   {
     label: "Commercio",
     items: [
@@ -29,13 +38,7 @@ const NAV_DROPDOWNS = [
   },
   {
     label: "Piattaforma",
-    items: [
-      { to: "/superadmin/guide", label: "Documentazione" },
-      { to: "/superadmin/sviluppo", label: "Roadmap" },
-      { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
-      { to: "/superadmin/test-layout", label: "Test viewport layout" },
-      { to: "/superadmin/settings", label: "Sistema" },
-    ],
+    items: PIATTAFORMA_ITEMS,
   },
 ];
 
@@ -110,7 +113,6 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/SuperadminGuideDocPage"),
       () => import("@/features/superadmin/pages/SviluppoPage"),
       () => import("@/features/superadmin/pages/Settings"),
-      () => import("@/features/superadmin/pages/SuperadminIngressoPage"),
       () => import("@/features/superadmin/pages/ServizioSchedaPage"),
       () => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"),
       () => import("@/features/superadmin/pages/SuperadminViewportTesterPage"),

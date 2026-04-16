@@ -24,27 +24,6 @@ import { formatPrice, parsePrice } from "@/utils/format";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 import { productMatchesMenuSearch } from "@/utils/menuProductSearch";
 
-const modalStyles = {
-  row: { marginBottom: 12 },
-  label: { display: "block", marginBottom: 4, fontWeight: 600 },
-  input: { width: "100%", padding: "8px 10px", boxSizing: "border-box" },
-  select: { width: "100%", padding: "8px 10px", boxSizing: "border-box" },
-  twoCol: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 },
-  col: { border: "1px solid #ddd", borderRadius: 8, padding: 12, minHeight: 200 },
-  colTitle: { fontWeight: 600, marginBottom: 8, fontSize: 14 },
-  search: { width: "100%", padding: "8px 10px", marginBottom: 8, boxSizing: "border-box" },
-  list: { listStyle: "none", padding: 0, margin: 0, maxHeight: 220, overflowY: "auto" },
-  listItem: {
-    padding: "6px 10px",
-    cursor: "pointer",
-    borderBottom: "1px solid #eee",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  priceBar: { marginTop: 12, padding: "10px 12px", background: "#f0f7ff", borderRadius: 8, fontWeight: 600 },
-};
-
 export default function PizzePage() {
   const { tenantId } = useTenant();
   const [categories, setCategories] = useState([]);
@@ -71,6 +50,7 @@ export default function PizzePage() {
   const [allergeni, setAllergeni] = useState([]);
   const [allergeniMap, setAllergeniMap] = useState({});
   const [customizingIngredient, setCustomizingIngredient] = useState(null);
+  const [selectedPosizioneCottura, setSelectedPosizioneCottura] = useState({});
 
   // Modifica
   const [editName, setEditName] = useState("");
@@ -80,6 +60,7 @@ export default function PizzePage() {
   const [editSelectedVariants, setEditSelectedVariants] = useState({});
   const [editIngredientSearch, setEditIngredientSearch] = useState("");
   const [editCustomizingIngredient, setEditCustomizingIngredient] = useState(null);
+  const [editSelectedPosizioneCottura, setEditSelectedPosizioneCottura] = useState({});
 
   const loadCategories = useCallback(async () => {
     if (!tenantId) return [];
@@ -189,6 +170,16 @@ export default function PizzePage() {
     { id: "poco", label: "Poco" },
   ];
 
+  const POSIZIONI_COTTURA = [
+    { id: "in_cottura", label: "In cottura" },
+    { id: "fuori_cottura", label: "Fuori cottura" },
+    { id: "a_parte", label: "A parte" },
+  ];
+
+  function labelPosizioneCottura(posId) {
+    return POSIZIONI_COTTURA.find((p) => p.id === posId)?.label ?? "In cottura";
+  }
+
   function getIngredientLinePrice(ing, variant) {
     const base = parsePrice(ing.costo) || parsePrice(ing.costoUnitario) || parsePrice(ing.costo_unitario) || 0;
     if (variant === "abbondante") return base + (parsePrice(ing.costoAbbondante) || parsePrice(ing.costo_abbondante) || 0);
@@ -217,6 +208,7 @@ export default function PizzePage() {
   function addIngredient(ing) {
     setSelectedIngredients((prev) => [...prev, ing]);
     setSelectedVariants((prev) => ({ ...prev, [ing.id]: "normale" }));
+    setSelectedPosizioneCottura((prev) => ({ ...prev, [ing.id]: "in_cottura" }));
     setIngredientSearch("");
   }
 
@@ -227,17 +219,28 @@ export default function PizzePage() {
       delete next[id];
       return next;
     });
+    setSelectedPosizioneCottura((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   function addEditIngredient(ing) {
     setEditSelectedIngredients((prev) => [...prev, ing]);
     setEditSelectedVariants((prev) => ({ ...prev, [ing.id]: "normale" }));
+    setEditSelectedPosizioneCottura((prev) => ({ ...prev, [ing.id]: "in_cottura" }));
     setEditIngredientSearch("");
   }
 
   function removeEditIngredient(id) {
     setEditSelectedIngredients((prev) => prev.filter((i) => i.id !== id));
     setEditSelectedVariants((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setEditSelectedPosizioneCottura((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
@@ -250,6 +253,7 @@ export default function PizzePage() {
     setNewFormatoId(formati[0]?.id || "");
     setSelectedIngredients([]);
     setSelectedVariants({});
+    setSelectedPosizioneCottura({});
     setIngredientSearch("");
     setCustomizingIngredient(null);
     setModalOpen(true);
@@ -268,7 +272,14 @@ export default function PizzePage() {
       });
       if (product?.id && selectedIngredients.length > 0) {
         try {
-          await setProdottoIngredienti(tenantId, product.id, selectedIngredients.map((i) => i.id));
+          await setProdottoIngredienti(
+            tenantId,
+            product.id,
+            selectedIngredients.map((i) => ({
+              ingrediente_id: i.id,
+              posizione_cottura: selectedPosizioneCottura[i.id] || "in_cottura",
+            })),
+          );
         } catch (e) {
           console.warn("Ingredienti non salvati:", e);
         }
@@ -308,10 +319,19 @@ export default function PizzePage() {
       const ings = ids.map((id) => map.get(id)).filter(Boolean);
       setEditSelectedIngredients(ings);
       setEditSelectedVariants(ings.reduce((acc, ing) => ({ ...acc, [ing.id]: "normale" }), {}));
+      setEditSelectedPosizioneCottura(
+        ingList.reduce((acc, row) => {
+          const id = row.id;
+          if (!id) return acc;
+          acc[id] = row.posizione_cottura || "in_cottura";
+          return acc;
+        }, {}),
+      );
     } catch (err) {
       console.error("Errore caricamento ingredienti pizza:", err);
       setEditSelectedIngredients([]);
       setEditSelectedVariants({});
+      setEditSelectedPosizioneCottura({});
     }
   }
 
@@ -344,7 +364,14 @@ export default function PizzePage() {
     try {
       // Salva prima gli ingredienti: se fallisce non chiudere il modale
       try {
-        await setProdottoIngredienti(tenantId, editPizza.id, editSelectedIngredients.map((i) => i.id));
+        await setProdottoIngredienti(
+          tenantId,
+          editPizza.id,
+          editSelectedIngredients.map((i) => ({
+            ingrediente_id: i.id,
+            posizione_cottura: editSelectedPosizioneCottura[i.id] || "in_cottura",
+          })),
+        );
       } catch (e) {
         console.error("Ingredienti non aggiornati:", e);
         const msg = e?.message || "";
@@ -400,68 +427,67 @@ export default function PizzePage() {
         </div>
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nuova pizza">
-        <div className="dashboard-box" style={{ padding: 20 }}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nuova pizza" wide tall>
+        <div className="pizza-modal-shell">
           {modalDataLoading ? (
             <p>Caricamento...</p>
           ) : (
             <>
-              <div style={modalStyles.row}>
-                <label style={modalStyles.label}>Nome pizza</label>
-                <input
-                  type="text"
-                  style={modalStyles.input}
-                  placeholder="Es. Margherita"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
+              <div className="pizza-modal-fields-grid">
+                <div>
+                  <label htmlFor="pizza-new-name">Nome pizza</label>
+                  <input
+                    id="pizza-new-name"
+                    type="text"
+                    placeholder="Es. Margherita"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="pizza-new-cat">Categoria</label>
+                  <select
+                    id="pizza-new-cat"
+                    value={newCategoryId}
+                    onChange={(e) => setNewCategoryId(e.target.value)}
+                  >
+                    <option value="">Seleziona categoria</option>
+                    {categoriesForPizza.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="pizza-new-fmt">Formato</label>
+                  <select
+                    id="pizza-new-fmt"
+                    value={newFormatoId}
+                    onChange={(e) => setNewFormatoId(e.target.value)}
+                  >
+                    <option value="">Nessun formato</option>
+                    {formati.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.nome} {f.prezzo != null && Number(f.prezzo) !== 0 ? `(+ € ${formatPrice(f.prezzo)})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div style={modalStyles.row}>
-                <label style={modalStyles.label}>Categoria</label>
-                <select
-                  style={modalStyles.select}
-                  value={newCategoryId}
-                  onChange={(e) => setNewCategoryId(e.target.value)}
-                >
-                  <option value="">Seleziona categoria</option>
-                  {categoriesForPizza.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={modalStyles.row}>
-                <label style={modalStyles.label}>Formato</label>
-                <select
-                  style={modalStyles.select}
-                  value={newFormatoId}
-                  onChange={(e) => setNewFormatoId(e.target.value)}
-                >
-                  <option value="">Nessun formato</option>
-                  {formati.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome} {f.prezzo != null && Number(f.prezzo) !== 0 ? `(+ € ${formatPrice(f.prezzo)})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={modalStyles.label}>Ingredienti</div>
-              <div style={modalStyles.twoCol}>
-                <div style={modalStyles.col}>
-                  <div style={modalStyles.colTitle}>Disponibili</div>
+              <p className="pizza-modal-ingredients-heading">Ingredienti</p>
+              <div className="pizza-modal-ingredients">
+                <div className="pizza-modal-ing-col">
+                  <div className="pizza-modal-ing-col-title">Disponibili</div>
                   <input
                     type="text"
-                    style={modalStyles.search}
+                    className="pizza-modal-ing-search"
                     placeholder="Cerca ingrediente..."
                     value={ingredientSearch}
                     onChange={(e) => setIngredientSearch(e.target.value)}
+                    aria-label="Cerca tra gli ingredienti disponibili"
                   />
-                  <ul style={modalStyles.list}>
+                  <ul className="pizza-modal-ing-list">
                     {availableIngredients.map((ing) => (
-                      <li
-                        key={ing.id}
-                        style={modalStyles.listItem}
-                        onClick={() => addIngredient(ing)}
-                      >
+                      <li key={ing.id} onClick={() => addIngredient(ing)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); addIngredient(ing); } }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           {ing.nome}
                           {getAllergeniIcons(ing.id).map((a) => (
@@ -472,31 +498,37 @@ export default function PizzePage() {
                       </li>
                     ))}
                     {availableIngredients.length === 0 && (
-                      <li style={{ padding: 8, color: "#666" }}>Nessun ingrediente o tutti già aggiunti</li>
+                      <li style={{ padding: 8, color: "#666", cursor: "default" }}>Nessun ingrediente o tutti già aggiunti</li>
                     )}
                   </ul>
                 </div>
-                <div style={modalStyles.col}>
-                  <div style={modalStyles.colTitle}>In pizza (clicca per personalizzare)</div>
-                  <ul style={modalStyles.list}>
+                <div className="pizza-modal-ing-col">
+                  <div className="pizza-modal-ing-col-title">In pizza (clicca per personalizzare)</div>
+                  <ul className="pizza-modal-ing-list">
                     {selectedIngredients.map((ing) => {
                       const variant = selectedVariants[ing.id] || "normale";
                       const linePrice = getIngredientLinePrice(ing, variant);
+                      const pos = selectedPosizioneCottura[ing.id] || "in_cottura";
+                      const posExtra = pos !== "in_cottura" ? ` · ${labelPosizioneCottura(pos)}` : "";
                       return (
                         <li
                           key={ing.id}
-                          style={{ ...modalStyles.listItem, background: "#f5f5f5", display: "flex", alignItems: "center", gap: 8 }}
+                          className="pizza-modal-ing-list__in-pizza"
+                          style={{ display: "flex", alignItems: "center", gap: 8 }}
                         >
                           <span
                             style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
                             onClick={() => setCustomizingIngredient(ing)}
-                            title="Clicca per personalizzare (Normale/Abbondante/Senza/Poco)"
+                            title="Clicca per personalizzare variante prezzo e posizione in cottura"
                           >
                             {ing.nome}
                             {getAllergeniIcons(ing.id).map((a) => (
                               <span key={a.id} title={a.nome || ""} style={{ fontSize: "0.95em" }}>{a.icona || "⚠️"}</span>
                             ))}
-                            <span style={{ fontSize: 11, color: "#666" }}>({VARIANTS.find((v) => v.id === variant)?.label ?? variant})</span>
+                            <span style={{ fontSize: 11, color: "#666" }}>
+                              ({VARIANTS.find((v) => v.id === variant)?.label ?? variant}
+                              {posExtra})
+                            </span>
                           </span>
                           <span>€ {formatPrice(linePrice)}</span>
                           <button
@@ -511,6 +543,7 @@ export default function PizzePage() {
                               padding: "4px 8px",
                               borderRadius: 4,
                               fontSize: 14,
+                              flexShrink: 0,
                             }}
                             aria-label="Rimuovi"
                           >
@@ -520,7 +553,7 @@ export default function PizzePage() {
                       );
                     })}
                     {selectedIngredients.length === 0 && (
-                      <li style={{ padding: 8, color: "#666" }}>Aggiungi ingredienti da sinistra</li>
+                      <li style={{ padding: 8, color: "#666", cursor: "default" }}>Aggiungi ingredienti da sinistra</li>
                     )}
                   </ul>
                 </div>
@@ -528,7 +561,40 @@ export default function PizzePage() {
               <Modal open={!!customizingIngredient} onClose={() => setCustomizingIngredient(null)} title={customizingIngredient ? `Personalizza: ${customizingIngredient.nome}` : "Personalizza"}>
                 {customizingIngredient && (
                   <div style={{ padding: 12 }}>
-                    <p style={{ marginBottom: 12, fontSize: 14 }}>Scegli la variante (influenza il prezzo):</p>
+                    <p style={{ marginBottom: 8, fontSize: 14, fontWeight: 600 }}>Posizione rispetto alla cottura</p>
+                    <p style={{ marginBottom: 8, fontSize: 13, color: "#555" }}>
+                      Indica se l&apos;ingrediente va in forno, dopo cottura o servito a parte.
+                    </p>
+                    {POSIZIONI_COTTURA.map((p) => {
+                      const isSel = (selectedPosizioneCottura[customizingIngredient.id] || "in_cottura") === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedPosizioneCottura((prev) => ({
+                              ...prev,
+                              [customizingIngredient.id]: p.id,
+                            }))
+                          }
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            marginBottom: 8,
+                            padding: "10px 12px",
+                            textAlign: "left",
+                            background: isSel ? "#e8f5e9" : "#f5f5f5",
+                            border: `2px solid ${isSel ? "#2e7d32" : "#ddd"}`,
+                            borderRadius: 8,
+                            cursor: "pointer",
+                            fontWeight: isSel ? 600 : 400,
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                    <p style={{ margin: "16px 0 12px", fontSize: 14 }}>Scegli la variante (influenza il prezzo):</p>
                     {VARIANTS.map((v) => {
                       const price = getIngredientLinePrice(customizingIngredient, v.id);
                       const isSelected = (selectedVariants[customizingIngredient.id] || "normale") === v.id;
@@ -563,13 +629,13 @@ export default function PizzePage() {
                   </div>
                 )}
               </Modal>
-              <div style={modalStyles.priceBar}>
-                Prezzo calcolato: € {formatPrice(prezzoCalcolato)}
-                <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
-                  (base € {formatPrice(costoBase)} + formato € {formatPrice(formatoPrezzo)} + ingredienti € {formatPrice(ingredientiTotal)})
-                </span>
-              </div>
-              <div style={{ marginTop: 16 }}>
+              <div className="pizza-modal-footer">
+                <p className="pizza-modal-price">
+                  Prezzo calcolato: € {formatPrice(prezzoCalcolato)}
+                  <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+                    (base € {formatPrice(costoBase)} + formato € {formatPrice(formatoPrezzo)} + ingredienti € {formatPrice(ingredientiTotal)})
+                  </span>
+                </p>
                 <button type="button" className="btn-primary-dashboard" onClick={handleAdd}>
                   Aggiungi pizza
                 </button>
@@ -579,67 +645,66 @@ export default function PizzePage() {
         </div>
       </Modal>
 
-      <Modal open={!!editPizza} onClose={() => setEditPizza(null)} title="Modifica pizza">
-        <div className="dashboard-box" style={{ padding: 20 }}>
+      <Modal open={!!editPizza} onClose={() => setEditPizza(null)} title="Modifica pizza" wide tall>
+        <div className="pizza-modal-shell">
           {modalDataLoading && formati.length === 0 ? (
             <p>Caricamento...</p>
           ) : (
             <>
-              <div style={modalStyles.row}>
-                <label style={modalStyles.label}>Nome pizza</label>
-                <input
-                  type="text"
-                  style={modalStyles.input}
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
+              <div className="pizza-modal-fields-grid">
+                <div>
+                  <label htmlFor="pizza-edit-name">Nome pizza</label>
+                  <input
+                    id="pizza-edit-name"
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="pizza-edit-cat">Categoria</label>
+                  <select
+                    id="pizza-edit-cat"
+                    value={editCategoryId}
+                    onChange={(e) => setEditCategoryId(e.target.value)}
+                  >
+                    <option value="">Seleziona categoria</option>
+                    {categoriesForPizza.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="pizza-edit-fmt">Formato</label>
+                  <select
+                    id="pizza-edit-fmt"
+                    value={editFormatoId}
+                    onChange={(e) => setEditFormatoId(e.target.value)}
+                  >
+                    <option value="">Nessun formato</option>
+                    {formati.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.nome} {f.prezzo != null && Number(f.prezzo) !== 0 ? `(+ € ${formatPrice(f.prezzo)})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div style={modalStyles.row}>
-                <label style={modalStyles.label}>Categoria</label>
-                <select
-                  style={modalStyles.select}
-                  value={editCategoryId}
-                  onChange={(e) => setEditCategoryId(e.target.value)}
-                >
-                  <option value="">Seleziona categoria</option>
-                  {categoriesForPizza.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={modalStyles.row}>
-                <label style={modalStyles.label}>Formato</label>
-                <select
-                  style={modalStyles.select}
-                  value={editFormatoId}
-                  onChange={(e) => setEditFormatoId(e.target.value)}
-                >
-                  <option value="">Nessun formato</option>
-                  {formati.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome} {f.prezzo != null && Number(f.prezzo) !== 0 ? `(+ € ${formatPrice(f.prezzo)})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={modalStyles.label}>Ingredienti</div>
-              <div style={modalStyles.twoCol}>
-                <div style={modalStyles.col}>
-                  <div style={modalStyles.colTitle}>Disponibili</div>
+              <p className="pizza-modal-ingredients-heading">Ingredienti</p>
+              <div className="pizza-modal-ingredients">
+                <div className="pizza-modal-ing-col">
+                  <div className="pizza-modal-ing-col-title">Disponibili</div>
                   <input
                     type="text"
-                    style={modalStyles.search}
+                    className="pizza-modal-ing-search"
                     placeholder="Cerca ingrediente..."
                     value={editIngredientSearch}
                     onChange={(e) => setEditIngredientSearch(e.target.value)}
+                    aria-label="Cerca tra gli ingredienti disponibili"
                   />
-                  <ul style={modalStyles.list}>
+                  <ul className="pizza-modal-ing-list">
                     {editAvailableIngredients.map((ing) => (
-                      <li
-                        key={ing.id}
-                        style={modalStyles.listItem}
-                        onClick={() => addEditIngredient(ing)}
-                      >
+                      <li key={ing.id} onClick={() => addEditIngredient(ing)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); addEditIngredient(ing); } }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           {ing.nome}
                           {getAllergeniIcons(ing.id).map((a) => (
@@ -650,31 +715,37 @@ export default function PizzePage() {
                       </li>
                     ))}
                     {editAvailableIngredients.length === 0 && (
-                      <li style={{ padding: 8, color: "#666" }}>Nessun ingrediente o tutti già aggiunti</li>
+                      <li style={{ padding: 8, color: "#666", cursor: "default" }}>Nessun ingrediente o tutti già aggiunti</li>
                     )}
                   </ul>
                 </div>
-                <div style={modalStyles.col}>
-                  <div style={modalStyles.colTitle}>In pizza (clicca per personalizzare)</div>
-                  <ul style={modalStyles.list}>
+                <div className="pizza-modal-ing-col">
+                  <div className="pizza-modal-ing-col-title">In pizza (clicca per personalizzare)</div>
+                  <ul className="pizza-modal-ing-list">
                     {editSelectedIngredients.map((ing) => {
                       const variant = editSelectedVariants[ing.id] || "normale";
                       const linePrice = getIngredientLinePrice(ing, variant);
+                      const pos = editSelectedPosizioneCottura[ing.id] || "in_cottura";
+                      const posExtra = pos !== "in_cottura" ? ` · ${labelPosizioneCottura(pos)}` : "";
                       return (
                         <li
                           key={ing.id}
-                          style={{ ...modalStyles.listItem, background: "#f5f5f5", display: "flex", alignItems: "center", gap: 8 }}
+                          className="pizza-modal-ing-list__in-pizza"
+                          style={{ display: "flex", alignItems: "center", gap: 8 }}
                         >
                           <span
                             style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
                             onClick={() => setEditCustomizingIngredient(ing)}
-                            title="Clicca per personalizzare (Normale/Abbondante/Senza/Poco)"
+                            title="Clicca per personalizzare variante prezzo e posizione in cottura"
                           >
                             {ing.nome}
                             {getAllergeniIcons(ing.id).map((a) => (
                               <span key={a.id} title={a.nome || ""} style={{ fontSize: "0.95em" }}>{a.icona || "⚠️"}</span>
                             ))}
-                            <span style={{ fontSize: 11, color: "#666" }}>({VARIANTS.find((v) => v.id === variant)?.label ?? variant})</span>
+                            <span style={{ fontSize: 11, color: "#666" }}>
+                              ({VARIANTS.find((v) => v.id === variant)?.label ?? variant}
+                              {posExtra})
+                            </span>
                           </span>
                           <span>€ {formatPrice(linePrice)}</span>
                           <button
@@ -689,6 +760,7 @@ export default function PizzePage() {
                               padding: "4px 8px",
                               borderRadius: 4,
                               fontSize: 14,
+                              flexShrink: 0,
                             }}
                             aria-label="Rimuovi"
                           >
@@ -698,7 +770,7 @@ export default function PizzePage() {
                       );
                     })}
                     {editSelectedIngredients.length === 0 && (
-                      <li style={{ padding: 8, color: "#666" }}>Aggiungi ingredienti da sinistra</li>
+                      <li style={{ padding: 8, color: "#666", cursor: "default" }}>Aggiungi ingredienti da sinistra</li>
                     )}
                   </ul>
                 </div>
@@ -706,7 +778,40 @@ export default function PizzePage() {
               <Modal open={!!editCustomizingIngredient} onClose={() => setEditCustomizingIngredient(null)} title={editCustomizingIngredient ? `Personalizza: ${editCustomizingIngredient.nome}` : "Personalizza"}>
                 {editCustomizingIngredient && (
                   <div style={{ padding: 12 }}>
-                    <p style={{ marginBottom: 12, fontSize: 14 }}>Scegli la variante (influenza il prezzo):</p>
+                    <p style={{ marginBottom: 8, fontSize: 14, fontWeight: 600 }}>Posizione rispetto alla cottura</p>
+                    <p style={{ marginBottom: 8, fontSize: 13, color: "#555" }}>
+                      Indica se l&apos;ingrediente va in forno, dopo cottura o servito a parte.
+                    </p>
+                    {POSIZIONI_COTTURA.map((p) => {
+                      const isSel = (editSelectedPosizioneCottura[editCustomizingIngredient.id] || "in_cottura") === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() =>
+                            setEditSelectedPosizioneCottura((prev) => ({
+                              ...prev,
+                              [editCustomizingIngredient.id]: p.id,
+                            }))
+                          }
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            marginBottom: 8,
+                            padding: "10px 12px",
+                            textAlign: "left",
+                            background: isSel ? "#e8f5e9" : "#f5f5f5",
+                            border: `2px solid ${isSel ? "#2e7d32" : "#ddd"}`,
+                            borderRadius: 8,
+                            cursor: "pointer",
+                            fontWeight: isSel ? 600 : 400,
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                    <p style={{ margin: "16px 0 12px", fontSize: 14 }}>Scegli la variante (influenza il prezzo):</p>
                     {VARIANTS.map((v) => {
                       const price = getIngredientLinePrice(editCustomizingIngredient, v.id);
                       const isSelected = (editSelectedVariants[editCustomizingIngredient.id] || "normale") === v.id;
@@ -741,13 +846,13 @@ export default function PizzePage() {
                   </div>
                 )}
               </Modal>
-              <div style={modalStyles.priceBar}>
-                Prezzo calcolato: € {formatPrice(editPrezzoCalcolato)}
-                <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
-                  (base € {formatPrice(editCostoBase)} + formato € {formatPrice(editFormatoPrezzo)} + ingredienti € {formatPrice(editIngredientiTotal)})
-                </span>
-              </div>
-              <div style={{ marginTop: 16 }}>
+              <div className="pizza-modal-footer">
+                <p className="pizza-modal-price">
+                  Prezzo calcolato: € {formatPrice(editPrezzoCalcolato)}
+                  <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+                    (base € {formatPrice(editCostoBase)} + formato € {formatPrice(editFormatoPrezzo)} + ingredienti € {formatPrice(editIngredientiTotal)})
+                  </span>
+                </p>
                 <button type="button" className="btn-primary-dashboard" onClick={handleSaveEdit}>
                   Salva modifiche
                 </button>

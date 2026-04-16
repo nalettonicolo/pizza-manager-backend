@@ -479,21 +479,6 @@ export default function ParametriSection() {
             />
           </label>
           <label>
-            Food cost - margine target (% guadagno)
-            <input
-              type="number"
-              min={0}
-              max={95}
-              placeholder="es. 30"
-              value={p.foodcost_margine_percent === "" ? "" : p.foodcost_margine_percent}
-              onChange={(e) => setParam("foodcost_margine_percent", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-            <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "#64748b", lineHeight: 1.45 }}>
-              Prezzo target = costo totale / (1 - margine%). Esempio: margine 30% su costo 5,00 € → prezzo 7,14 €.
-            </span>
-          </label>
-          <label>
             Soglia giallo (pizze sotto il max per mostrare slot in giallo)
             <input
               type="number"

@@ -51,7 +51,7 @@ export default function Login() {
     if (tipoUtente === "staff") {
       const ruoloNorm = (ruolo && typeof ruolo === "string") ? ruolo.toLowerCase().trim() : ""
       let targetRoute = "/operative/dashboard"
-      if (ruoloNorm === "superadmin") targetRoute = "/superadmin/ingresso"
+      if (ruoloNorm === "superadmin") targetRoute = "/superadmin/dashboard"
       else if (ruoloNorm === "admin") targetRoute = ADMIN_TENANT_HOME
       else targetRoute = getOperativeHomePathForStaff(ruolo, user?.email)
 

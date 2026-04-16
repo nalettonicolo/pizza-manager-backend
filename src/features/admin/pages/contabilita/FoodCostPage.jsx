@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { useTenant } from "@/app/contexts/TenantContext";
+import { updateTenantSettings } from "@/features/admin/services/adminService";
 
 function marginePct(costoAlKg, pesoG, prezzoVendita) {
   const kg = Number(pesoG) / 1000;
@@ -11,14 +14,50 @@ function marginePct(costoAlKg, pesoG, prezzoVendita) {
 }
 
 export default function FoodCostPage() {
+  const { tenantId, tenantData, refreshTenant } = useTenant();
   const { data, setData, ready } = useTenantLocalJson("contabilita_foodcost", { righe: [] });
   const [ingrediente, setIngrediente] = useState("");
   const [costoAlKg, setCostoAlKg] = useState("");
   const [pesoTeoricoG, setPesoTeoricoG] = useState("");
   const [prezzoVendita, setPrezzoVendita] = useState("");
   const [note, setNote] = useState("");
+  const [margineDraft, setMargineDraft] = useState("");
+  const [margineSaving, setMargineSaving] = useState(false);
 
   const rows = useMemo(() => data.righe, [data.righe]);
+
+  useEffect(() => {
+    const raw = tenantData?.parametri_operativi?.foodcost_margine_percent;
+    if (raw === undefined || raw === null || raw === "") {
+      setMargineDraft("");
+      return;
+    }
+    setMargineDraft(String(raw));
+  }, [tenantData?.parametri_operativi?.foodcost_margine_percent]);
+
+  const saveMargineTarget = useCallback(async () => {
+    if (!tenantId || !tenantData) return;
+    const n =
+      margineDraft === "" ? 0 : Math.min(95, Math.max(0, Number(String(margineDraft).replace(",", ".")) || 0));
+    setMargineSaving(true);
+    try {
+      const parametri_operativi = {
+        ...(tenantData.parametri_operativi && typeof tenantData.parametri_operativi === "object"
+          ? tenantData.parametri_operativi
+          : {}),
+        foodcost_margine_percent: n,
+      };
+      await updateTenantSettings(tenantId, { parametri_operativi });
+      await refreshTenant();
+      setMargineDraft(String(n));
+      alert("Margine target salvato.");
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Salvataggio non riuscito.");
+    } finally {
+      setMargineSaving(false);
+    }
+  }, [tenantId, tenantData, margineDraft, refreshTenant]);
 
   if (!ready) {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
@@ -49,7 +88,7 @@ export default function FoodCostPage() {
   return (
     <AdminModuleShell
       title="Food cost"
-      lead="Verifica costo ingrediente al kg rispetto al peso teorico in ricetta e al prezzo di vendita: utile per margine stimato per porzione."
+      lead="Margine target sul listino (parametro globale) e analisi per ingrediente. Il margine % sulle righe sotto è stimato rispetto al prezzo di vendita."
       specTitle="Logica (semplificata)"
       specChildren={
         <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -59,6 +98,53 @@ export default function FoodCostPage() {
         </ul>
       }
     >
+      <div
+        style={{
+          marginBottom: 24,
+          padding: "14px 16px",
+          borderRadius: 10,
+          border: "1px solid #e2e8f0",
+          background: "#f8fafc",
+          maxWidth: 420,
+        }}
+      >
+        <label style={{ fontSize: 13, fontWeight: 600, color: "#334155", display: "block", marginBottom: 6 }}>
+          Food cost — margine target (% guadagno)
+        </label>
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.45 }}>
+          Usato per ricalcoli listino e controlli in cassa. Prezzo target = costo totale / (1 − margine%). Esempio: margine
+          30% su costo 5,00 € → prezzo 7,14 €.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <input
+            type="number"
+            min={0}
+            max={95}
+            placeholder="es. 30"
+            value={margineDraft}
+            onChange={(e) => setMargineDraft(e.target.value)}
+            disabled={!tenantId || !tenantData || margineSaving}
+            style={{ padding: "8px 10px", width: 120, borderRadius: 6, border: "1px solid #cbd5e1" }}
+            aria-label="Margine target percentuale food cost"
+          />
+          <button
+            type="button"
+            className="btn-primary-dashboard"
+            disabled={!tenantId || !tenantData || margineSaving}
+            onClick={() => void saveMargineTarget()}
+          >
+            {margineSaving ? "Salvataggio…" : "Salva margine"}
+          </button>
+        </div>
+        <p style={{ margin: "10px 0 0", fontSize: 12, color: "#64748b" }}>
+          Altri parametri operativi restano in{" "}
+          <Link to="/admin/settings/parametri" style={{ fontWeight: 600 }}>
+            Impostazioni → Parametri
+          </Link>
+          .
+        </p>
+      </div>
+
       <div
         style={{
           display: "grid",

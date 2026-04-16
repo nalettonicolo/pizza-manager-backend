@@ -41,7 +41,7 @@ export default function TestRepartiPanelPage() {
         }}
       >
         <Link
-          to="/superadmin/ingresso"
+          to="/superadmin/dashboard"
           style={{
             padding: "8px 14px",
             background: "#d35400",

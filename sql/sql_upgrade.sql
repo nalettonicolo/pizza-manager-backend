@@ -445,3 +445,83 @@ COMMENT ON FUNCTION public.get_public_menu_for_tenant(UUID) IS
 
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO authenticated;
+
+-- 2026-04-17 - prodotto_ingrediente: posizione in cottura (menu pizze admin)
+ALTER TABLE core.prodotto_ingrediente ADD COLUMN IF NOT EXISTS posizione_cottura TEXT NOT NULL DEFAULT 'in_cottura';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'prodotto_ingrediente_posizione_cottura_chk'
+  ) THEN
+    ALTER TABLE core.prodotto_ingrediente ADD CONSTRAINT prodotto_ingrediente_posizione_cottura_chk
+      CHECK (posizione_cottura IN ('in_cottura', 'fuori_cottura', 'a_parte'));
+  END IF;
+END $$;
+
+COMMENT ON COLUMN core.prodotto_ingrediente.posizione_cottura IS
+  'Dove va messo l''ingrediente sulla pizza: in forno, dopo cottura, o servito a parte.';
+
+DROP VIEW IF EXISTS public.prodotto_ingrediente CASCADE;
+
+CREATE VIEW public.prodotto_ingrediente AS
+  SELECT
+    pi.id,
+    pi.tenant_id,
+    pi.prodotto_id,
+    pi.ingrediente_id,
+    pi.quantita,
+    pi.ordine,
+    pi.posizione_cottura
+  FROM core.prodotto_ingrediente pi
+  WHERE pi.tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+
+GRANT SELECT, INSERT, DELETE ON public.prodotto_ingrediente TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.prodotto_ingrediente_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO core.prodotto_ingrediente (
+    tenant_id,
+    prodotto_id,
+    ingrediente_id,
+    quantita,
+    ordine,
+    posizione_cottura
+  )
+  VALUES (
+    NEW.tenant_id,
+    NEW.prodotto_id,
+    NEW.ingrediente_id,
+    COALESCE(NEW.quantita, 1),
+    COALESCE(NEW.ordine, 0),
+    COALESCE(NEW.posizione_cottura, 'in_cottura')
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS prodotto_ingrediente_insert_trigger ON public.prodotto_ingrediente;
+CREATE TRIGGER prodotto_ingrediente_insert_trigger
+  INSTEAD OF INSERT ON public.prodotto_ingrediente
+  FOR EACH ROW EXECUTE FUNCTION public.prodotto_ingrediente_insert();
+
+CREATE OR REPLACE FUNCTION public.prodotto_ingrediente_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM core.prodotto_ingrediente
+  WHERE prodotto_id = OLD.prodotto_id
+    AND tenant_id = OLD.tenant_id
+    AND ingrediente_id = OLD.ingrediente_id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS prodotto_ingrediente_delete_trigger ON public.prodotto_ingrediente;
+CREATE TRIGGER prodotto_ingrediente_delete_trigger
+  INSTEAD OF DELETE ON public.prodotto_ingrediente
+  FOR EACH ROW EXECUTE FUNCTION public.prodotto_ingrediente_delete();

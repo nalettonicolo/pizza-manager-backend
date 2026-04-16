@@ -1755,11 +1755,17 @@ body {
 
 /* Modifica pizza cassa: larghezza e altezza adattate, scroll sull’overlay */
 @media (min-width: 900px) {
-  .dashboard-modal-overlay--tall {
+  .dashboard-modal-overlay--tall:not(:has(.pizza-modal-shell)) {
     align-items: flex-start;
     padding-top: 24px;
     padding-bottom: 24px;
     overflow-y: auto;
+  }
+
+  .dashboard-modal-overlay--tall:has(.pizza-modal-shell) {
+    align-items: center;
+    overflow-y: auto;
+    padding: 16px;
   }
   .dashboard-modal--tall.dashboard-modal--wide {
     max-width: min(1100px, 96vw);
@@ -1814,6 +1820,184 @@ body {
 .dashboard-modal-body {
   padding: 20px;
   overflow-y: auto;
+}
+
+/* Admin Menu → Pizze: modale largo, scroll solo sulle liste ingredienti (no doppio scroll sul body) */
+.dashboard-modal:has(.pizza-modal-shell) {
+  max-height: min(94vh, 1000px);
+}
+
+.dashboard-modal:has(.pizza-modal-shell) .dashboard-modal-header {
+  flex-shrink: 0;
+}
+
+.dashboard-modal:has(.pizza-modal-shell) .dashboard-modal-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px;
+}
+
+@media (min-width: 900px) {
+  .dashboard-modal--tall.dashboard-modal--wide:has(.pizza-modal-shell) {
+    max-height: min(94vh, 1000px);
+  }
+
+  .dashboard-modal--tall.dashboard-modal--wide:has(.pizza-modal-shell) .dashboard-modal-body {
+    max-height: none;
+    overflow: hidden;
+  }
+}
+
+.pizza-modal-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  max-height: 100%;
+}
+
+.pizza-modal-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px 14px;
+  flex-shrink: 0;
+}
+
+@media (min-width: 680px) {
+  .pizza-modal-fields-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.pizza-modal-fields-grid label {
+  font-weight: 600;
+  font-size: 13px;
+  display: block;
+  margin-bottom: 4px;
+  color: #334155;
+}
+
+.pizza-modal-fields-grid input,
+.pizza-modal-fields-grid select {
+  width: 100%;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.pizza-modal-ingredients-heading {
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+  color: #0f172a;
+  flex-shrink: 0;
+}
+
+.pizza-modal-ingredients {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  flex: 1 1 0;
+  min-height: 220px;
+  overflow: hidden;
+}
+
+@media (max-width: 679px) {
+  .pizza-modal-ingredients {
+    grid-template-columns: 1fr;
+    flex: 0 1 auto;
+    max-height: min(56vh, 440px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+.pizza-modal-ing-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 10px 6px;
+  background: #fafbfc;
+}
+
+.pizza-modal-ing-col-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #334155;
+  flex-shrink: 0;
+}
+
+.pizza-modal-ing-search {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+ul.pizza-modal-ing-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1 1 0;
+  min-height: 120px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pizza-modal-ing-list li {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #e8e8e8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.pizza-modal-ing-list li[role="button"]:focus-visible {
+  outline: 2px solid #1976d2;
+  outline-offset: -2px;
+}
+
+.pizza-modal-ing-list li:last-child {
+  border-bottom: none;
+}
+
+.pizza-modal-ing-list li.pizza-modal-ing-list__in-pizza {
+  cursor: default;
+  background: #f1f5f9;
+}
+
+.pizza-modal-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.pizza-modal-price {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .dashboard-list-item-allergeni {

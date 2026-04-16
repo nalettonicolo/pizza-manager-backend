@@ -6503,6 +6503,8 @@ CREATE TABLE IF NOT EXISTS core.prodotto_ingrediente (
     UNIQUE (prodotto_id, ingrediente_id)
 );
 
+ALTER TABLE core.prodotto_ingrediente ADD COLUMN IF NOT EXISTS posizione_cottura TEXT NOT NULL DEFAULT 'in_cottura';
+
 -- ============================================================
 -- ORDINI
 -- ============================================================

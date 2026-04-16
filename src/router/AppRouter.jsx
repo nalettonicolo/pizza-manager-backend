@@ -59,7 +59,6 @@ const SuperadminGuideHub = lazy(() => import("@/features/superadmin/pages/Supera
 const SuperadminGuideDocPage = lazy(() => import("@/features/superadmin/pages/SuperadminGuideDocPage"));
 const SviluppoPage = lazy(() => import("@/features/superadmin/pages/SviluppoPage"));
 const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/ServizioSchedaPage"));
-const SuperadminIngressoPage = lazy(() => import("@/features/superadmin/pages/SuperadminIngressoPage"));
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
 const SuperadminViewportTesterPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportTesterPage"));
@@ -115,24 +114,6 @@ const RepartiQuadTestPage = lazy(() => import("@/features/operative/pages/Repart
 const PizzaioloIngressoPage = lazy(() => import("@/features/operative/pages/PizzaioloIngressoPage"));
 
 const PageFallback = () => <div className="p-6 flex items-center justify-center min-h-[120px]"><span className="text-gray-400 text-sm">Caricamento...</span></div>;
-
-const SUPERADMIN_HEADER_PX = 56;
-
-/** Stesso guscio di SuperAdminLayout senza la barra di navigazione (solo per Ingresso). */
-function SuperadminIngressoRouteShell() {
-  return (
-    <div className="dashboard-wrap theme-superadmin" style={{ paddingTop: SUPERADMIN_HEADER_PX }}>
-      <main className="dashboard-main" style={{ flex: 1, minWidth: 0 }}>
-        <div className="dashboard-content">
-          <Suspense fallback={<PageFallback />}>
-            <SuperadminIngressoPage />
-          </Suspense>
-        </div>
-        <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
-      </main>
-    </div>
-  );
-}
 
 const OPERATIVE_ROLES = ["operatore", "cassa", "bancone", "cucina", "pony", "delivery", "pizzaiolo"];
 /** In dev o con VITE_ENABLE_TEST_REPARTI: superadmin può aprire le schermate operative (pannello test iframe). */
@@ -351,8 +332,7 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         >
-          {/* Ingresso: fuori da SuperAdminLayout così la nav completa non viene mai montata (non dipende dal pathname). */}
-          <Route path="/superadmin/ingresso" element={<SuperadminIngressoRouteShell />} />
+          <Route path="/superadmin/ingresso" element={<Navigate to="/superadmin/dashboard" replace />} />
           {/* Studio viewport: fullscreen senza barra superadmin (anteprima tipo builder). */}
           <Route
             path="/superadmin/test-layout/studio"
@@ -363,7 +343,7 @@ export default function AppRouter() {
             }
           />
           <Route element={<SuperAdminLayout />}>
-            <Route path="/superadmin" element={<Navigate to="/superadmin/ingresso" replace />} />
+            <Route path="/superadmin" element={<Navigate to="/superadmin/dashboard" replace />} />
             <Route path="/superadmin/test-reparti" element={<Suspense fallback={<PageFallback />}><TestRepartiPanelPage /></Suspense>} />
             <Route
               path="/superadmin/test-layout"

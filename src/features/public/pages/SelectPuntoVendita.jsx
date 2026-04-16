@@ -10,7 +10,7 @@ import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 function postSelectPath(ruolo, email) {
   const r = (ruolo && String(ruolo).toLowerCase().trim()) || "";
   if (r === "admin") return ADMIN_TENANT_HOME;
-  if (r === "superadmin") return "/superadmin/ingresso";
+  if (r === "superadmin") return "/superadmin/dashboard";
   return getOperativeHomePathForStaff(ruolo, email);
 }
 

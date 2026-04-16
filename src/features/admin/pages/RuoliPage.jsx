@@ -36,6 +36,19 @@ const ACCESS_TO_AREA_KEY = {
   accesso_pony: "pony",
 };
 
+const RUOLO_BASE_OPTIONS = [
+  { value: "admin", label: "Amministratore" },
+  { value: "operatore", label: "Operatore (multi-reparto)" },
+  { value: "cassa", label: "Cassa" },
+  { value: "bancone", label: "Bancone" },
+  { value: "cucina", label: "Cucina" },
+  { value: "pizzaiolo", label: "Pizzaiolo" },
+  { value: "delivery", label: "Delivery" },
+  { value: "pony", label: "Pony" },
+];
+
+const RUOLO_BASE_VALUES = new Set(RUOLO_BASE_OPTIONS.map((o) => o.value));
+
 function nomeInSedeOEmail(r) {
   const nv = r.nome_visualizzato != null && String(r.nome_visualizzato).trim() !== "" ? String(r.nome_visualizzato).trim() : ""
   if (nv) return nv
@@ -104,6 +117,7 @@ export default function RuoliPage() {
   const [reauthError, setReauthError] = useState(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaveBusy, setNoteSaveBusy] = useState(false);
+  const [roleBusyUserId, setRoleBusyUserId] = useState(null);
 
   const archivioSbloccato = typeof archivioUnlockUntil === "number" && Date.now() < archivioUnlockUntil;
 
@@ -250,6 +264,24 @@ export default function RuoliPage() {
     }
   }
 
+  async function handleRuoloBaseChange(record, nuovoRuolo) {
+    if (!tenantId || !record?.user_id) return;
+    if (record.ruolo === nuovoRuolo) return;
+    setRoleBusyUserId(record.user_id);
+    try {
+      await updateRuoloPizzeriaPermessi(tenantId, record.user_id, { ruolo: nuovoRuolo });
+      await loadRuoli();
+      if (detailUser?.user_id === record.user_id) {
+        setDetailUser((prev) => (prev ? { ...prev, ruolo: nuovoRuolo } : null));
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Aggiornamento ruolo non riuscito.");
+    } finally {
+      setRoleBusyUserId(null);
+    }
+  }
+
   if (loading) return <Loader />;
   if (error) return <ErrorState message={error} />;
 
@@ -257,7 +289,8 @@ export default function RuoliPage() {
     <div className="dashboard-settings-page">
       <h1 className="dashboard-page-title">Ruoli</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 20 }}>
-        Permessi operativi per ogni account: aree del menu, parametri cassa. Per l’elenco in tabella e il ruolo base vedi{" "}
+        Qui assegni il <strong>ruolo base</strong> (cassa, cucina, operatore, …) e i permessi operativi: aree del menu,
+        parametri cassa. Per <strong>nome in sede</strong> e <strong>archivio anagrafico / HR</strong> usa{" "}
         <Link to="/admin/dipendenti" style={{ fontWeight: 600 }}>
           Dipendenti
         </Link>
@@ -268,7 +301,8 @@ export default function RuoliPage() {
         <h2 className="dashboard-settings-section-title">Elenco ruoli</h2>
         <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
           In elenco il titolo è il <strong>nome in sede</strong> se l’hai impostato in Dipendenti (es. Anna), altrimenti
-          l’etichetta dall’email; sotto compaiono email e ruolo tecnico. Clicca per aprire il dettaglio e le aree consentite.
+          l’etichetta dall’email. Scegli il <strong>ruolo base</strong> dal menu a tendina; clicca il nome per aprire il
+          dettaglio e le aree consentite.
         </p>
         <p style={{ color: "#64748b", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
           <strong>Password (archivio titolare):</strong> non è la password tecnica in Supabase Auth, ma una{" "}
@@ -330,7 +364,28 @@ export default function RuoliPage() {
                       </span>
                     ) : null}
                   </button>
-                    <span style={{ fontSize: 13, color: "#64748b" }}>Ruolo: {r.ruolo}</span>
+                    <div style={{ marginTop: 8, maxWidth: 320 }} onClick={(e) => e.stopPropagation()}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>
+                        Ruolo base
+                      </label>
+                      <select
+                        className="dipendenti-role-select"
+                        value={r.ruolo}
+                        disabled={roleBusyUserId === r.user_id}
+                        onChange={(e) => handleRuoloBaseChange(r, e.target.value)}
+                        aria-label={`Ruolo base per ${nomeInSedeOEmail(r)}`}
+                      >
+                        {RUOLO_BASE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                        {r.ruolo && !RUOLO_BASE_VALUES.has(r.ruolo) ? (
+                          <option value={r.ruolo}>{r.ruolo}</option>
+                        ) : null}
+                      </select>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Valore tecnico: {r.ruolo || "—"}</div>
+                    </div>
                     <div style={{ fontSize: 12, color: "#64748b", marginTop: 8, lineHeight: 1.45 }}>
                       <span style={{ fontWeight: 600, color: "#475569" }}>Password (archivio): </span>
                       {archivioSbloccato ? (
@@ -395,9 +450,28 @@ export default function RuoliPage() {
                 Etichetta account: {labelFromEmailPrefix(detailUser.email) || "—"}
               </p>
             ) : null}
-            <p style={{ marginBottom: 12, color: "#64748b", fontSize: 14 }}>
-              Ruolo assegnato: <strong style={{ color: "#334155" }}>{detailUser.ruolo}</strong>
-            </p>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>
+                Ruolo base
+              </label>
+              <select
+                className="dipendenti-role-select"
+                style={{ maxWidth: "100%" }}
+                value={detailUser.ruolo}
+                disabled={roleBusyUserId === detailUser.user_id}
+                onChange={(e) => handleRuoloBaseChange(detailUser, e.target.value)}
+              >
+                {RUOLO_BASE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+                {detailUser.ruolo && !RUOLO_BASE_VALUES.has(detailUser.ruolo) ? (
+                  <option value={detailUser.ruolo}>{detailUser.ruolo}</option>
+                ) : null}
+              </select>
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "#94a3b8" }}>Valore tecnico: {detailUser.ruolo || "—"}</p>
+            </div>
             <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.8, marginBottom: 16 }}>
               {getCosaPuoFare(detailUser.ruolo, detailUser.puo_modificare_parametri).map((item, i) => (
                 <li key={i}>{item}</li>

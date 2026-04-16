@@ -18,7 +18,7 @@ export const QUICK_PATHS = [
   { path: "/admin/menu/categorie", label: "Admin · Menu" },
   { path: "/operative/cassa", label: "Operativo · Cassa" },
   { path: "/operative/dashboard", label: "Operativo · Riepilogo" },
-  { path: "/superadmin/ingresso", label: "Super Admin · Ingresso" },
+  { path: "/superadmin/dashboard", label: "Super Admin · Panoramica" },
 ]
 
 export const ZOOM_OPTIONS = [

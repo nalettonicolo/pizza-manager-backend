@@ -1702,29 +1702,39 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
 }
 
 /** Ingredienti associati a un prodotto (per modale in cottura in cassa/cliente). Ritorna [] se nessun ingrediente o tabella mancante.
- *  Ordine: segue l'ordine di inserimento nella pizza (ordine in prodotto_ingrediente) per menu e schermate operative. */
+ *  Ordine: segue l'ordine di inserimento nella pizza (ordine in prodotto_ingrediente) per menu e schermate operative.
+ *  Include `posizione_cottura` se la colonna è presente sul DB (`in_cottura` | `fuori_cottura` | `a_parte`). */
 export async function getProductIngredienti(tenantId, productId) {
   if (!tenantId || !productId) return []
   try {
     let rows
-    const { data: dataWithOrdine, error: errOrdine } = await supabase
-      .from("prodotto_ingrediente")
-      .select("ingrediente_id, ordine")
-      .eq("prodotto_id", productId)
-      .eq("tenant_id", tenantId)
+    const base = () =>
+      supabase.from("prodotto_ingrediente").eq("prodotto_id", productId).eq("tenant_id", tenantId)
+
+    const { data: dataFull, error: errFull } = await base()
+      .select("ingrediente_id, ordine, posizione_cottura")
       .order("ordine", { ascending: true })
-    if (errOrdine && (errOrdine.code === "PGRST204" || errOrdine.message?.includes("ordine"))) {
-      const { data: dataNoOrdine, error } = await supabase
-        .from("prodotto_ingrediente")
-        .select("ingrediente_id")
-        .eq("prodotto_id", productId)
-        .eq("tenant_id", tenantId)
-      if (error || !dataNoOrdine?.length) return []
-      rows = dataNoOrdine
-    } else if (errOrdine || !dataWithOrdine?.length) {
-      return []
+    if (!errFull) {
+      rows = dataFull || []
+    } else if (
+      errFull.code === "PGRST204" ||
+      String(errFull.message || "").includes("posizione_cottura") ||
+      String(errFull.message || "").includes("column")
+    ) {
+      const { data: dataWithOrdine, error: errOrdine } = await base()
+        .select("ingrediente_id, ordine")
+        .order("ordine", { ascending: true })
+      if (errOrdine && (errOrdine.code === "PGRST204" || String(errOrdine.message || "").includes("ordine"))) {
+        const { data: dataNoOrdine, error } = await base().select("ingrediente_id")
+        if (error) return []
+        rows = dataNoOrdine || []
+      } else if (errOrdine) {
+        return []
+      } else {
+        rows = dataWithOrdine || []
+      }
     } else {
-      rows = dataWithOrdine
+      return []
     }
     const ids = rows.map((r) => r.ingrediente_id).filter(Boolean)
     if (!ids.length) return []
@@ -1733,6 +1743,7 @@ export async function getProductIngredienti(tenantId, productId) {
     const byId = new Map(ingredients.map((ing) => [ing.id, ing]))
     let ordered = ids.map((id) => byId.get(id)).filter(Boolean)
     if (rows[0] && rows[0].ordine === undefined) ordered = ordered.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""))
+    const posById = new Map(rows.map((r) => [r.ingrediente_id, r.posizione_cottura]))
     return ordered.map((ing) => ({
       id: ing.id,
       nome: ing.nome ?? "",
@@ -1742,11 +1753,18 @@ export async function getProductIngredienti(tenantId, productId) {
       costo_abbondante: ing.costo_abbondante,
       costo_senza: ing.costo_senza,
       costo_poco: ing.costo_poco,
+      posizione_cottura: normalizePosizioneCottura(posById.get(ing.id)),
     }))
   } catch (e) {
     console.warn("getProductIngredienti error:", e)
     return []
   }
+}
+
+function normalizePosizioneCottura(v) {
+  const x = String(v || "").trim()
+  if (x === "fuori_cottura" || x === "a_parte" || x === "in_cottura") return x
+  return "in_cottura"
 }
 
 function _toNum(v) {
@@ -1836,33 +1854,62 @@ export async function enrichProductsWithPrezzoCalcolato(tenantId, products) {
   }
 }
 
+/**
+ * Normalizza input: array di UUID oppure `{ ingrediente_id, posizione_cottura? }`.
+ */
+function normalizeProdottoIngredienteRows(input) {
+  if (!input?.length) return []
+  return input.map((item, index) => {
+    if (typeof item === "string") {
+      return { ingrediente_id: item, ordine: index, posizione_cottura: "in_cottura" }
+    }
+    const id = item.ingrediente_id ?? item.id
+    return {
+      ingrediente_id: id,
+      ordine: item.ordine ?? index,
+      posizione_cottura: normalizePosizioneCottura(item.posizione_cottura),
+    }
+  })
+}
+
 /** Associa gli ingredienti a un prodotto (sostituisce quelli esistenti). L'ordine dell'array definisce l'ordine di uscita (menu/cottura).
- *  Richiede INSERT/DELETE su core.prodotto_ingrediente o trigger sulla vista. Esegui add_ordine_prodotto_ingrediente.sql + view aggiornata. */
-export async function setProdottoIngredienti(tenantId, productId, ingredienteIds) {
+ *  Accetta `ingrediente_id[]` oppure `{ ingrediente_id, posizione_cottura? }[]` (`in_cottura` | `fuori_cottura` | `a_parte`).
+ *  Richiede INSERT/DELETE su core.prodotto_ingrediente o trigger sulla vista. */
+export async function setProdottoIngredienti(tenantId, productId, ingredienteInput) {
   const { error: delErr } = await supabase
     .from("prodotto_ingrediente")
     .delete()
     .eq("prodotto_id", productId)
     .eq("tenant_id", tenantId)
   if (delErr) throw delErr
-  if (!ingredienteIds?.length) return
-  const rows = ingredienteIds.map((ingrediente_id, index) => ({
+  const normalized = normalizeProdottoIngredienteRows(ingredienteInput)
+  if (!normalized.length) return
+
+  const rowsFull = normalized.map((r) => ({
     tenant_id: tenantId,
     prodotto_id: productId,
-    ingrediente_id,
+    ingrediente_id: r.ingrediente_id,
     quantita: 1,
-    ordine: index,
+    ordine: r.ordine,
+    posizione_cottura: r.posizione_cottura,
   }))
-  let insErr = (await supabase.from("prodotto_ingrediente").insert(rows)).error
-  if (insErr && (insErr.code === "PGRST204" || insErr.message?.includes("ordine"))) {
-    const rowsNoOrdine = ingredienteIds.map((ingrediente_id) => ({
-      tenant_id: tenantId,
-      prodotto_id: productId,
-      ingrediente_id,
-      quantita: 1,
-    }))
-    insErr = (await supabase.from("prodotto_ingrediente").insert(rowsNoOrdine)).error
-  }
+  const rowsOrdineOnly = normalized.map((r) => ({
+    tenant_id: tenantId,
+    prodotto_id: productId,
+    ingrediente_id: r.ingrediente_id,
+    quantita: 1,
+    ordine: r.ordine,
+  }))
+  const rowsLegacy = normalized.map((r) => ({
+    tenant_id: tenantId,
+    prodotto_id: productId,
+    ingrediente_id: r.ingrediente_id,
+    quantita: 1,
+  }))
+
+  let insErr = (await supabase.from("prodotto_ingrediente").insert(rowsFull)).error
+  if (insErr) insErr = (await supabase.from("prodotto_ingrediente").insert(rowsOrdineOnly)).error
+  if (insErr) insErr = (await supabase.from("prodotto_ingrediente").insert(rowsLegacy)).error
   if (insErr) throw insErr
 }
 

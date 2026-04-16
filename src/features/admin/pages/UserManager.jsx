@@ -6,31 +6,12 @@ import ErrorState from "@/components/feedback/ErrorState"
 import Modal from "@/components/dashboard/Modal"
 import {
   getTenantUsers,
-  updateUserRole,
   toggleUserActive,
   updateStaffNomeVisualizzato,
   listStaffArchivioDipendenti,
   upsertStaffArchivioDipendente,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
-
-const RUOLO_OPTIONS = [
-  { value: "admin", label: "Amministratore" },
-  { value: "operatore", label: "Operatore (multi-reparto)" },
-  { value: "cassa", label: "Cassa" },
-  { value: "bancone", label: "Bancone" },
-  { value: "cucina", label: "Cucina" },
-  { value: "pizzaiolo", label: "Pizzaiolo" },
-  { value: "delivery", label: "Delivery" },
-  { value: "pony", label: "Pony" },
-]
-
-const RUOLO_VALUES = new Set(RUOLO_OPTIONS.map((o) => o.value))
-
-function ruoloLabel(value) {
-  const o = RUOLO_OPTIONS.find((x) => x.value === value)
-  return o ? o.label : value || "—"
-}
 
 export default function UserManager() {
   const { tenantId } = useTenant()
@@ -94,20 +75,6 @@ export default function UserManager() {
     const attivi = users.filter((u) => u.attivo).length
     return { total, attivi }
   }, [users])
-
-  async function handleRoleChange(userId, ruolo) {
-    if (!tenantId) return
-    setBusyId(userId)
-    try {
-      await updateUserRole(tenantId, userId, ruolo)
-      await loadUsers()
-    } catch (err) {
-      console.error(err)
-      alert(err?.message || "Aggiornamento ruolo non riuscito.")
-    } finally {
-      setBusyId(null)
-    }
-  }
 
   async function handleToggle(userId, current) {
     if (!tenantId) return
@@ -210,9 +177,9 @@ export default function UserManager() {
     <div className="dashboard-settings-page dashboard-dipendenti-page">
       <h1 className="dashboard-page-title">Dipendenti</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 14 }}>
-        Anagrafica degli account collegati alla pizzeria: qui imposti il <strong>ruolo base</strong> e se la persona può
-        accedere. Le <strong>aree operative</strong> (cassa, cucina, riepilogo nel menu operativo, ecc.) si gestiscono nella
-        pagina{" "}
+        Anagrafica locale: <strong>nome in sede</strong>, <strong>accesso</strong> all&apos;account e{" "}
+        <strong>archivio dipendente</strong> (dati anagrafici e HR). Il <strong>ruolo base</strong> e i permessi sul menu
+        operativo si assegnano nella pagina{" "}
         <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
           Ruoli
         </Link>
@@ -220,8 +187,8 @@ export default function UserManager() {
       </p>
 
       <div className="dipendenti-callout" role="note">
-        <strong>Perché due pagine?</strong> Dipendenti = profilo e accesso; Ruoli = permessi dettagliati su ogni schermata
-        operativa (e parametri cassa per chi fa cassa).
+        <strong>Perché due pagine?</strong> Dipendenti = chi è in sede e documentazione; Ruoli = ruolo tecnico e cosa può
+        fare in cassa, cucina, ecc.
       </div>
 
       <section className="dashboard-box dashboard-settings-section" style={{ padding: 0, overflow: "hidden" }}>
@@ -230,8 +197,12 @@ export default function UserManager() {
             Elenco dipendenti
           </h2>
           <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Tabella riepilogativa: cerca per nome, nome in sede o email; imposta il <strong>nome in sede</strong> per sapere chi
-            usa ogni account (utile per turni e riepiloghi). Modifica ruolo o sospendi l’accesso senza uscire dalla pagina.
+            Cerca per nome, nome in sede o email; imposta il <strong>nome in sede</strong> e apri{" "}
+            <strong>Archivio dipendente</strong> per i dati anagrafici. Per il ruolo e i permessi operativi usa la pagina{" "}
+            <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
+              Ruoli
+            </Link>
+            .
           </p>
         </div>
 
@@ -276,7 +247,6 @@ export default function UserManager() {
                   <tr>
                     <th scope="col">Account</th>
                     <th scope="col">Nome in sede</th>
-                    <th scope="col">Ruolo base</th>
                     <th scope="col">Accesso</th>
                   </tr>
                 </thead>
@@ -311,25 +281,6 @@ export default function UserManager() {
                             aria-label={`Nome in sede per ${user.email}`}
                           />
                           <div className="dipendenti-role-hint">Chi usa questo login in negozio (turni, note).</div>
-                        </td>
-                        <td>
-                          <select
-                            className="dipendenti-role-select"
-                            value={user.ruolo}
-                            disabled={rowBusy}
-                            onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                            aria-label={`Ruolo per ${accountLabel}`}
-                          >
-                            {RUOLO_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                            {user.ruolo && !RUOLO_VALUES.has(user.ruolo) ? (
-                              <option value={user.ruolo}>{ruoloLabel(user.ruolo)}</option>
-                            ) : null}
-                          </select>
-                          <div className="dipendenti-role-hint">Valore tecnico: {user.ruolo || "—"}</div>
                         </td>
                         <td>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>

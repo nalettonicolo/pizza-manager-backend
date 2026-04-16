@@ -118,11 +118,12 @@ export default function AdminLayout() {
         if (enforcementActive) {
           return hasServizio("contabilita_locale") || hasServizio("contabilita_semplice");
         }
-        return contabilitaMode !== "none";
+        // Senza enforcement piano: la voce resta sempre visibile (hub, food cost, incassi in base ai moduli attivi).
+        return true;
       }
       return !item.servizioId || hasServizio(item.servizioId);
     });
-  }, [hasServizio, enforcementActive, contabilitaMode]);
+  }, [hasServizio, enforcementActive]);
 
   const blockedRedirect = useMemo(() => {
     if (!enforcementActive) return null;
