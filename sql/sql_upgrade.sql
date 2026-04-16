@@ -47,7 +47,8 @@ CREATE VIEW public.prodotti_menu_pubblico AS
     AND (p.attivo = true OR p.attivo IS NULL)
     AND (p.visibile_online = true OR p.visibile_online IS NULL);
 
-GRANT SELECT ON public.prodotti_menu_pubblico TO anon;
+REVOKE SELECT ON public.prodotti_menu_pubblico FROM anon;
+GRANT SELECT ON public.prodotti_menu_pubblico TO authenticated;
 
 -- 2026-04-15 - Archivio dipendenti (anagrafica HR base per tenant)
 CREATE TABLE IF NOT EXISTS public.staff_archivio_dipendenti (
@@ -92,3 +93,290 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.staff_archivio_dipendenti TO auth
 
 COMMENT ON TABLE public.staff_archivio_dipendenti IS
   'Archivio dipendenti per tenant: dati anagrafici, contrattuali, corsi e note HR.';
+
+-- 2026-04-16 - Hardening create_order_with_items (tenant access + canale web)
+CREATE OR REPLACE FUNCTION public.create_order_with_items(
+  p_tenant_id UUID,
+  p_totale NUMERIC,
+  p_stato TEXT DEFAULT 'IN_PREPARAZIONE',
+  p_items JSONB DEFAULT '[]'::JSONB,
+  p_note TEXT DEFAULT NULL,
+  p_tipo_pagamento TEXT DEFAULT NULL,
+  p_tipo_ordine TEXT DEFAULT NULL,
+  p_nome_cliente TEXT DEFAULT NULL,
+  p_orario_ritiro TEXT DEFAULT NULL,
+  p_indirizzo_consegna TEXT DEFAULT NULL,
+  p_consegna_lng DOUBLE PRECISION DEFAULT NULL,
+  p_consegna_lat DOUBLE PRECISION DEFAULT NULL,
+  p_pagamento_dettaglio JSONB DEFAULT NULL,
+  p_punto_vendita_id UUID DEFAULT NULL,
+  p_turno_operatori_id INTEGER DEFAULT NULL,
+  p_telefono_ritiro TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin
+AS $fn$
+DECLARE
+  v_ordine_id UUID;
+  v_numero INTEGER;
+  v_item JSONB;
+  v_stato core.stato_ordine;
+  v_po jsonb;
+  v_ring jsonb;
+  v_inside boolean;
+  v_is_staff_cassa boolean;
+  v_has_tenant_access boolean;
+  v_is_web_cliente boolean;
+  v_turno_pv uuid;
+BEGIN
+  IF p_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'tenant_obbligatorio';
+  END IF;
+
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'non_autenticato';
+  END IF;
+
+  v_has_tenant_access := false;
+  IF to_regproc('public.pm_core_tenant_access(uuid)') IS NOT NULL THEN
+    SELECT public.pm_core_tenant_access(p_tenant_id) INTO v_has_tenant_access;
+  ELSE
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.utenti_ruoli ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.tenant_id = p_tenant_id
+        AND COALESCE(ur.attivo, true) = true
+    ) INTO v_has_tenant_access;
+  END IF;
+
+  IF NOT COALESCE(v_has_tenant_access, false) THEN
+    RAISE EXCEPTION 'tenant_non_autorizzato';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.clienti c
+    WHERE c.id = auth.uid()
+      AND c.tenant_id = p_tenant_id
+  ) INTO v_is_web_cliente;
+
+  IF v_is_web_cliente THEN
+    IF lower(trim(COALESCE(p_tipo_ordine, ''))) NOT IN ('', 'delivery', 'negozio') THEN
+      RAISE EXCEPTION 'tipo_ordine_non_valido';
+    END IF;
+    IF upper(trim(COALESCE(p_stato, 'IN_PREPARAZIONE'))) NOT IN ('IN_PREPARAZIONE') THEN
+      RAISE EXCEPTION 'stato_ordine_non_valido';
+    END IF;
+  END IF;
+
+  SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero
+  FROM core.ordini
+  WHERE tenant_id = p_tenant_id;
+
+  BEGIN
+    v_stato := COALESCE(NULLIF(trim(p_stato), ''), 'IN_PREPARAZIONE')::core.stato_ordine;
+  EXCEPTION
+    WHEN invalid_text_representation THEN
+      v_stato := 'IN_PREPARAZIONE'::core.stato_ordine;
+  END;
+
+  v_po := NULL;
+  IF to_regclass('admin.tenants') IS NOT NULL THEN
+    SELECT t.parametri_operativi INTO v_po
+    FROM admin.tenants t
+    WHERE t.id = p_tenant_id
+    LIMIT 1;
+  END IF;
+  IF v_po IS NULL AND to_regclass('core.tenants') IS NOT NULL THEN
+    SELECT t.parametri_operativi INTO v_po
+    FROM core.tenants t
+    WHERE t.id = p_tenant_id
+    LIMIT 1;
+  END IF;
+
+  v_ring := NULL;
+  IF v_po IS NOT NULL
+     AND (v_po->'consegna_area_poligono'->>'type') = 'Polygon'
+     AND jsonb_typeof(v_po->'consegna_area_poligono'->'coordinates') = 'array'
+     AND jsonb_array_length(v_po->'consegna_area_poligono'->'coordinates') >= 1
+  THEN
+    v_ring := v_po->'consegna_area_poligono'->'coordinates'->0;
+  END IF;
+
+  IF lower(trim(COALESCE(p_tipo_ordine, ''))) = 'delivery'
+     AND v_ring IS NOT NULL
+     AND jsonb_typeof(v_ring) = 'array'
+     AND jsonb_array_length(v_ring) >= 4
+  THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.utenti_ruoli ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.tenant_id = p_tenant_id
+        AND COALESCE(ur.attivo, true) = true
+        AND (
+          lower(trim(COALESCE(ur.ruolo, ''))) = 'cassa'
+          OR COALESCE(ur.accesso_cassa, false) = true
+        )
+    ) INTO v_is_staff_cassa;
+
+    IF NOT v_is_staff_cassa THEN
+      IF p_consegna_lng IS NULL OR p_consegna_lat IS NULL THEN
+        RAISE EXCEPTION 'Per la consegna a domicilio servono coordinate valide dell''indirizzo (verifica su mappa).';
+      END IF;
+
+      v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
+      IF v_inside IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
+      END IF;
+    END IF;
+  END IF;
+
+  IF p_turno_operatori_id IS NOT NULL THEN
+    IF to_regclass('public.turni_operatori') IS NULL THEN
+      RAISE EXCEPTION 'turni_operatori non disponibile sul database';
+    END IF;
+    SELECT t.punto_vendita_id INTO v_turno_pv
+    FROM public.turni_operatori t
+    WHERE t.id = p_turno_operatori_id
+      AND t.tenant_id = p_tenant_id
+      AND t.user_id = auth.uid()
+      AND t.stato = 'aperto'
+      AND t.chiuso_il IS NULL;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'turno_non_valido';
+    END IF;
+    IF p_punto_vendita_id IS NOT NULL AND v_turno_pv IS DISTINCT FROM p_punto_vendita_id THEN
+      RAISE EXCEPTION 'turno_punto_vendita_mismatch';
+    END IF;
+  END IF;
+
+  INSERT INTO core.ordini (
+    tenant_id,
+    numero,
+    stato,
+    totale,
+    note,
+    tipo_pagamento,
+    tipo_ordine,
+    nome_cliente,
+    telefono_ritiro,
+    orario_ritiro,
+    indirizzo_consegna,
+    consegna_lng,
+    consegna_lat,
+    pagamento_dettaglio,
+    punto_vendita_id,
+    turno_operatori_id
+  )
+  VALUES (
+    p_tenant_id,
+    v_numero,
+    v_stato,
+    p_totale,
+    NULLIF(trim(COALESCE(p_note, '')), ''),
+    NULLIF(trim(COALESCE(p_tipo_pagamento, '')), ''),
+    NULLIF(trim(COALESCE(p_tipo_ordine, '')), ''),
+    NULLIF(trim(COALESCE(p_nome_cliente, '')), ''),
+    NULLIF(trim(COALESCE(p_telefono_ritiro, '')), ''),
+    NULLIF(trim(COALESCE(p_orario_ritiro, '')), ''),
+    NULLIF(trim(COALESCE(p_indirizzo_consegna, '')), ''),
+    p_consegna_lng,
+    p_consegna_lat,
+    p_pagamento_dettaglio,
+    p_punto_vendita_id,
+    p_turno_operatori_id
+  )
+  RETURNING id INTO v_ordine_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB))
+  LOOP
+    INSERT INTO core.riga_ordine (
+      tenant_id,
+      ordine_id,
+      prodotto_id,
+      quantita,
+      prezzo,
+      formato_nome,
+      ingredienti_cottura_summary
+    )
+    VALUES (
+      p_tenant_id,
+      v_ordine_id,
+      (v_item->>'prodotto_id')::UUID,
+      GREATEST(1, COALESCE((v_item->>'quantita')::INTEGER, 1)),
+      COALESCE((v_item->>'prezzo')::NUMERIC, 0),
+      NULLIF(trim(COALESCE(v_item->>'formato_nome', '')), ''),
+      NULLIF(trim(COALESCE(v_item->>'ingredienti_cottura_summary', '')), '')
+    );
+  END LOOP;
+
+  RETURN v_ordine_id;
+END;
+$fn$;
+
+-- 2026-04-16 - Delivery: transizione CONSEGNATO atomica (stato_consegna + stato ordine)
+CREATE OR REPLACE FUNCTION public.delivery_mark_consegnato(
+  p_ordine_id UUID
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_allowed BOOLEAN;
+BEGIN
+  IF p_ordine_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_id_obbligatorio';
+  END IF;
+
+  SELECT o.tenant_id
+  INTO v_tenant_id
+  FROM core.ordini o
+  WHERE o.id = p_ordine_id;
+
+  IF v_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_non_trovato';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid()
+      AND ur.tenant_id = v_tenant_id
+      AND COALESCE(ur.attivo, true) = true
+      AND (
+        lower(trim(COALESCE(ur.ruolo, ''))) IN ('delivery', 'pony', 'cassa', 'admin')
+        OR COALESCE(ur.accesso_delivery, false) = true
+        OR COALESCE(ur.accesso_pony, false) = true
+        OR COALESCE(ur.accesso_cassa, false) = true
+      )
+  ) INTO v_allowed;
+
+  IF NOT COALESCE(v_allowed, false) THEN
+    RAISE EXCEPTION 'non_autorizzato';
+  END IF;
+
+  UPDATE core.ordini o
+  SET
+    stato_consegna = 'CONSEGNATO',
+    stato = 'CONSEGNATO'::core.stato_ordine,
+    stato_delivery = 'CONSEGNATO'::core.stato_delivery,
+    consegna_effettiva_at = COALESCE(o.consegna_effettiva_at, now()),
+    updated_at = now()
+  WHERE o.id = p_ordine_id
+    AND o.tenant_id = v_tenant_id;
+
+  IF to_regclass('core.ordine_consegna_evento') IS NOT NULL THEN
+    INSERT INTO core.ordine_consegna_evento (tenant_id, ordine_id, tipo, payload, created_by)
+    VALUES (v_tenant_id, p_ordine_id, 'delivery_mark_consegnato', '{}'::jsonb, auth.uid());
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.delivery_mark_consegnato(UUID) TO authenticated;

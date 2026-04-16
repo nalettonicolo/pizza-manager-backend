@@ -73,41 +73,7 @@ async function resolveSaaSPublicTenant(resolved = {}) {
     if (!error && data) return data;
   }
 
-  let menuRows = null;
-  let menuErr = null;
-  try {
-    const res = await supabase.from("prodotti_menu_pubblico").select("tenant_id");
-    menuRows = res.data;
-    menuErr = res.error;
-  } catch (e) {
-    menuErr = e;
-  }
-  if (!menuErr && Array.isArray(menuRows) && menuRows.length) {
-    const counts = new Map();
-    for (const r of menuRows) {
-      const tid = r.tenant_id;
-      if (!tid) continue;
-      counts.set(tid, (counts.get(tid) || 0) + 1);
-    }
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    for (const [tid] of sorted) {
-      const { data: t, error: e2 } = await supabase.from("tenants").select("*").eq("id", tid).maybeSingle();
-      if (!e2 && t) return t;
-    }
-  }
-
-  const { data: fallback, error: fbErr } = await supabase
-    .from("tenants")
-    .select("*")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (fbErr) {
-    logSupabaseError("publicService.resolveSaaSPublicTenant", fbErr, { operation: "tenants fallback" });
-    return null;
-  }
-  return fallback || null;
+  return null;
 }
 
 /**
@@ -126,7 +92,9 @@ export async function getPublicMenu(options = {}) {
       return [];
     }
     const rows = Array.isArray(data) ? data : [];
-    return sortByOrdine(rows);
+    return sortByOrdine(
+      rows.map(({ tenant_id: _tenantId, ...rest }) => rest),
+    );
   }
 
   if (isSaaSHostname(host) && !tenantId) {
@@ -147,7 +115,9 @@ export async function getPublicMenu(options = {}) {
     return [];
   }
 
-  return sortByOrdine(data || []);
+  return sortByOrdine(
+    (data || []).map(({ tenant_id: _tenantId, ...rest }) => rest),
+  );
 }
 
 /**

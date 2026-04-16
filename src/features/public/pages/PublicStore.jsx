@@ -9,11 +9,13 @@ import ProductGrid from "@/features/operative/cassa/components/ProductGrid";
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs";
 
 import { getPublicMenu, getPublicTenantInfo } from "@/features/services/publicService";
+import { getProductIngredientiMap } from "@/features/admin/services/adminService";
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 import { usePublicCart } from "@/app/contexts/PublicCartContext";
 import { applyPromoCalendarioToProducts } from "@/utils/promozioniCalendario";
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi";
+import { productMatchesMenuSearch } from "@/utils/menuProductSearch";
 
 function isTodayClosed(orariSettimana) {
   if (!Array.isArray(orariSettimana) || !orariSettimana.length) return false;
@@ -66,6 +68,8 @@ export default function PublicStore() {
   const [vetrinaTenant, setVetrinaTenant] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [searchPizza, setSearchPizza] = useState("");
+  /** Nomi ingredienti per prodotto (ricetta); opzionale se RLS anon non consente la lettura. */
+  const [ingredientiRicercaMap, setIngredientiRicercaMap] = useState({});
 
   const vetrinaOrdiniOk = useMemo(
     () => readOrdiniOnlineVetrinaAllowed(tenantParametri, vetrinaTenant),
@@ -102,6 +106,17 @@ export default function PublicStore() {
         }
         const menuData = await getPublicMenu({ tenantId: tenant?.id ?? null });
         setMenu(menuData || []);
+        setIngredientiRicercaMap({});
+        if (tenant?.id && Array.isArray(menuData) && menuData.length > 0) {
+          try {
+            const ids = menuData.map((p) => p.id).filter(Boolean);
+            const map = await getProductIngredientiMap(tenant.id, ids);
+            setIngredientiRicercaMap(map || {});
+          } catch (e) {
+            console.warn("Vetrina: ingredienti ricetta (ricerca):", e);
+            setIngredientiRicercaMap({});
+          }
+        }
       } catch (err) {
         console.error(err);
         setError("Errore nel caricamento del menu.");
@@ -149,12 +164,10 @@ export default function PublicStore() {
   const filteredProducts = useMemo(() => {
     const q = (searchPizza || "").toLowerCase().trim();
     if (!q) return productsByCategory;
-    return productsByCategory.filter((p) => {
-      const nome = (p.nome || "").toLowerCase();
-      const descrizione = (p.descrizione || "").toLowerCase();
-      return nome.includes(q) || descrizione.includes(q);
-    });
-  }, [productsByCategory, searchPizza]);
+    return productsByCategory.filter((p) =>
+      productMatchesMenuSearch(p, q, ingredientiRicercaMap[p.id]),
+    );
+  }, [productsByCategory, searchPizza, ingredientiRicercaMap]);
 
   const handleAddProduct = useCallback(
     (product) => {
@@ -173,17 +186,18 @@ export default function PublicStore() {
     [vetrinaOrdiniOk, user, navigate, location, addItem]
   );
 
-  const ingredientiMap = useMemo(
-    () =>
-      menu.reduce(
-        (acc, p) => ({
-          ...acc,
-          [p.id]: p.descrizione ? [p.descrizione] : [],
-        }),
-        {}
-      ),
-    [menu]
-  );
+  const ingredientiMap = useMemo(() => {
+    if (!menu.length) return {};
+    return menu.reduce((acc, p) => {
+      const real = ingredientiRicercaMap[p.id];
+      if (Array.isArray(real) && real.length) {
+        acc[p.id] = real;
+      } else {
+        acc[p.id] = p.descrizione ? [p.descrizione] : [];
+      }
+      return acc;
+    }, {});
+  }, [menu, ingredientiRicercaMap]);
 
   if (loading) return <Loader />;
   if (error) return <ErrorState message={error} />;

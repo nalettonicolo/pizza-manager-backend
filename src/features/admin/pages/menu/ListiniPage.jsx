@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
-import { getCategories, getProducts, updateTenantSettings, updateProduct } from "@/features/admin/services/adminService"
+import {
+  getCategories,
+  getProducts,
+  updateTenantSettings,
+  updateProduct,
+  recalculateAllPizzaPrices,
+  logCassaAuditEvent,
+} from "@/features/admin/services/adminService"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { openListinoPdfPrint } from "@/utils/listinoPdfExport"
 import Loader from "@/components/feedback/Loader"
@@ -12,6 +19,7 @@ export default function ListiniPage() {
   const [products, setProducts] = useState([])
   const [saving, setSaving] = useState(false)
   const [restoreBusy, setRestoreBusy] = useState(null)
+  const [recalculateBusy, setRecalculateBusy] = useState(false)
 
   const po =
     tenantData?.parametri_operativi && typeof tenantData.parametri_operativi === "object"
@@ -144,6 +152,36 @@ export default function ListiniPage() {
     }
   }
 
+  const handleRecalculatePricesNow = async () => {
+    if (!tenantId || recalculateBusy) return
+    if (!window.confirm("Ricalcolare ora i prezzi pizza in base ai costi ingredienti e margine configurato?")) return
+    setRecalculateBusy(true)
+    try {
+      const result = await recalculateAllPizzaPrices(tenantId)
+      const updatedCount = Number(result?.updatedCount || 0)
+      const errorCount = Number(result?.errorCount || 0)
+      await logCassaAuditEvent(tenantId, {
+        eventType: "foodcost_recalculate_prices_manual",
+        payload: {
+          updatedCount,
+          errorCount,
+          source: "admin_listini",
+        },
+      })
+      await load()
+      if (errorCount > 0) {
+        window.alert(`Ricalcolo completato: ${updatedCount} prodotti aggiornati, ${errorCount} errori.`)
+      } else {
+        window.alert(`Ricalcolo completato: ${updatedCount} prodotti aggiornati.`)
+      }
+    } catch (e) {
+      console.error(e)
+      window.alert(e?.message || "Ricalcolo prezzi non riuscito.")
+    } finally {
+      setRecalculateBusy(false)
+    }
+  }
+
   if (loading) return <Loader />
 
   return (
@@ -161,6 +199,21 @@ export default function ListiniPage() {
         </p>
         <button type="button" className="btn-primary-dashboard" onClick={exportPdf}>
           Scarica / stampa listino (PDF)
+        </button>
+      </section>
+
+      <section className="dashboard-box dashboard-settings-section" style={{ marginTop: 20 }}>
+        <h2 style={{ fontSize: 16, marginBottom: 12 }}>Ricalcolo prezzi foodcost</h2>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
+          Dopo modifiche su ingredienti o margine puoi riallineare subito il listino pizza, con log operazione in audit.
+        </p>
+        <button
+          type="button"
+          className="btn-primary-dashboard"
+          onClick={() => void handleRecalculatePricesNow()}
+          disabled={recalculateBusy}
+        >
+          {recalculateBusy ? "Ricalcolo in corso..." : "Ricalcola prezzi ora"}
         </button>
       </section>
 

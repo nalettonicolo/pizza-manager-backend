@@ -7488,7 +7488,8 @@ CREATE VIEW public.prodotti_menu_pubblico AS
     AND (p.attivo = true OR p.attivo IS NULL)
     AND (p.visibile_online = true OR p.visibile_online IS NULL);
 
-GRANT SELECT ON public.prodotti_menu_pubblico TO anon;
+REVOKE SELECT ON public.prodotti_menu_pubblico FROM anon;
+GRANT SELECT ON public.prodotti_menu_pubblico TO authenticated;
 
 
 -- -----------------------------------------------------------------------------
@@ -7549,13 +7550,14 @@ GRANT UPDATE ON public.utenti_ruoli TO authenticated;
 
 
 -- -----------------------------------------------------------------------------
--- 6) GRANT schema public / letture anon (menu pubblico, tenant)
+-- 6) GRANT schema public / letture anon minime (menu via RPC tenant-aware)
 -- -----------------------------------------------------------------------------
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT SELECT ON public.tenants TO anon;
 GRANT SELECT ON public."Prodotto" TO anon;
 GRANT SELECT ON public.punti_vendita TO anon;
-GRANT SELECT ON public.prodotti_menu_pubblico TO anon;
+REVOKE SELECT ON public.prodotti_menu_pubblico FROM anon;
+GRANT SELECT ON public.prodotti_menu_pubblico TO authenticated;
 
 
 -- -----------------------------------------------------------------------------

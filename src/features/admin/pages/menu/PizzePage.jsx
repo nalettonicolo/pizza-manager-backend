@@ -22,6 +22,7 @@ import {
 } from "@/features/admin/services/adminService";
 import { formatPrice, parsePrice } from "@/utils/format";
 import { sortByOrdine } from "@/utils/sortByOrdine";
+import { productMatchesMenuSearch } from "@/utils/menuProductSearch";
 
 const modalStyles = {
   row: { marginBottom: 12 },
@@ -138,10 +139,10 @@ export default function PizzePage() {
   }, [loadPizze]);
 
   const filteredPizze = useMemo(() => {
-    if (!searchTerm.trim()) return pizze;
     const q = searchTerm.trim().toLowerCase();
-    return pizze.filter((p) => (p.nome || "").toLowerCase().includes(q));
-  }, [pizze, searchTerm]);
+    if (!q) return pizze;
+    return pizze.filter((p) => productMatchesMenuSearch(p, q, pizzeIngredienti[p.id]));
+  }, [pizze, searchTerm, pizzeIngredienti]);
 
   /** Categorie da mostrare per le pizze: escluse Fritti, Bibite, Dolci */
   const categoriesForPizza = useMemo(() => {

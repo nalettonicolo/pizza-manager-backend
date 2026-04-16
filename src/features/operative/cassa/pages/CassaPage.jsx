@@ -105,6 +105,7 @@ import { readFidelityModalitaAccredito } from "@/utils/fidelityProgramConfig"
 import { applyPromoCalendarioToProducts, fidelitySkippedByPromoCalendario } from "@/utils/promozioniCalendario"
 import { normalizeRuoloOperativo } from "@/utils/operativeAreaAccess"
 import { computeFidelityRedeemPuntiCost } from "@/utils/fidelityRedeem"
+import { productMatchesMenuSearch } from "@/utils/menuProductSearch"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Link (carta da casa)", "Altro"]
@@ -420,6 +421,7 @@ export default function CassaPage() {
   const [payLinkBusy, setPayLinkBusy] = useState(false)
   const [payLinkMessage, setPayLinkMessage] = useState("")
   const [foodcostMismatchCount, setFoodcostMismatchCount] = useState(0)
+  const [foodcostMismatchPreview, setFoodcostMismatchPreview] = useState([])
   const [foodcostAlertDismissed, setFoodcostAlertDismissed] = useState(false)
   const [foodcostModalOpen, setFoodcostModalOpen] = useState(false)
 
@@ -478,14 +480,26 @@ export default function CassaPage() {
       try {
         const report = await getFoodcostPriceMismatchReport(tenantId)
         if (cancelled) return
-        const count = Array.isArray(report?.mismatches) ? report.mismatches.length : 0
+        const mismatches = Array.isArray(report?.mismatches) ? report.mismatches : []
+        const count = mismatches.length
         setFoodcostMismatchCount(count)
+        setFoodcostMismatchPreview(
+          mismatches.slice(0, 8).map((row) => ({
+            nome: row?.nome || "Prodotto",
+            prezzoListino: Number(row?.prezzoListino || 0),
+            prezzoCalcolato: Number(row?.prezzoCalcolato || 0),
+            delta: Number(row?.delta || 0),
+          })),
+        )
         if (count > 0) {
           setFoodcostAlertDismissed(false)
           setFoodcostModalOpen(true)
         }
       } catch {
-        if (!cancelled) setFoodcostMismatchCount(0)
+        if (!cancelled) {
+          setFoodcostMismatchCount(0)
+          setFoodcostMismatchPreview([])
+        }
       }
     }
     void runCheck()
@@ -2142,12 +2156,10 @@ export default function CassaPage() {
   const filteredProducts = useMemo(() => {
     const q = (searchPizza || "").toLowerCase().trim()
     if (!q) return products
-    return products.filter((p) => {
-      const nome = (p.nome || "").toLowerCase()
-      const descrizione = (p.descrizione || "").toLowerCase()
-      return nome.includes(q) || descrizione.includes(q)
-    })
-  }, [products, searchPizza])
+    return products.filter((p) =>
+      productMatchesMenuSearch(p, q, productIngredientiMap[p.id]),
+    )
+  }, [products, searchPizza, productIngredientiMap])
 
   const disabledProductIds = useMemo(() => {
     const set = new Set()
@@ -2556,7 +2568,48 @@ export default function CassaPage() {
               Sono presenti <strong>{foodcostMismatchCount}</strong> prodotti con prezzo listino non allineato al costo ingredienti.
               Correggi in Admin prima di accettare molti ordini.
             </p>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            {foodcostMismatchPreview.length > 0 ? (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6, color: "#334155" }}>Prime pizze fuori soglia</div>
+                <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+                  {foodcostMismatchPreview.map((item, idx) => (
+                    <div
+                      key={`${item.nome}_${idx}`}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(140px,1fr) 88px 88px 78px",
+                        gap: 8,
+                        padding: "8px 10px",
+                        borderBottom: idx < foodcostMismatchPreview.length - 1 ? "1px solid #f1f5f9" : "none",
+                        fontSize: 12,
+                        alignItems: "center",
+                      }}
+                    >
+                      <strong style={{ color: "#0f172a" }}>{item.nome}</strong>
+                      <span>Att. €{item.prezzoListino.toFixed(2)}</span>
+                      <span>Target €{item.prezzoCalcolato.toFixed(2)}</span>
+                      <span style={{ color: item.delta > 0 ? "#b91c1c" : "#0369a1" }}>
+                        Δ {item.delta > 0 ? "+" : ""}
+                        {item.delta.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="cassa-toolbar-compact-btn"
+                onClick={() => {
+                  setFoodcostModalOpen(false)
+                  setFoodcostAlertDismissed(true)
+                  navigate("/admin/listini")
+                }}
+                style={{ fontWeight: 700 }}
+              >
+                Vai a Listini
+              </button>
               <button
                 type="button"
                 className="cassa-toolbar-compact-btn"

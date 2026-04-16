@@ -31,6 +31,12 @@ import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
 const POLL_MS = 10000
+const BANCONE_PICK_STORAGE_PREFIX = "pm_bancone_picked_v1"
+
+function getBanconePickStorageKey(tenantId) {
+  if (!tenantId) return null
+  return `${BANCONE_PICK_STORAGE_PREFIX}:${tenantId}`
+}
 
 export default function Bancone() {
   const { tenantId, tenantData } = useTenant()
@@ -47,6 +53,7 @@ export default function Bancone() {
   const [bibiteProductIds, setBibiteProductIds] = useState(() => new Set())
   /** Chiave ingrediente/bibita/summary preso in busta (inverso cucina: parte grigio, tap = colore). */
   const [pickedBanconeKeys, setPickedBanconeKeys] = useState(() => new Set())
+  const [lastPickResetReason, setLastPickResetReason] = useState("")
   const loadSeqRef = useRef(0)
   const prevOrderIdsKeyRef = useRef("")
 
@@ -138,6 +145,26 @@ export default function Bancone() {
     return () => clearInterval(t)
   }, [loadOrders])
 
+  useEffect(() => {
+    const storageKey = getBanconePickStorageKey(tenantId)
+    if (!storageKey) return
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) {
+        setPickedBanconeKeys(new Set())
+        setLastPickResetReason("")
+        return
+      }
+      const parsed = JSON.parse(raw)
+      const keys = Array.isArray(parsed?.keys) ? parsed.keys.filter((k) => typeof k === "string" && k.trim() !== "") : []
+      setPickedBanconeKeys(new Set(keys))
+      setLastPickResetReason(parsed?.reason ? String(parsed.reason) : "")
+    } catch {
+      setPickedBanconeKeys(new Set())
+      setLastPickResetReason("Ripristino stato non disponibile (dati locali non validi).")
+    }
+  }, [tenantId])
+
   const ordiniVisibili = useMemo(() => {
     const base = filterOrdiniVisibili(orders, minutiVisibili)
     return [...base].sort((a, b) => {
@@ -169,12 +196,6 @@ export default function Bancone() {
     [ordiniVisibili]
   )
 
-  useEffect(() => {
-    if (prevOrderIdsKeyRef.current === orderStateKey) return
-    prevOrderIdsKeyRef.current = orderStateKey
-    setPickedBanconeKeys(new Set())
-  }, [orderStateKey])
-
   const banconeSlotOrder = useMemo(
     () => banconeSlotsFromOrders(ordiniVisibili, PLANNING_GRID_SLOT_MINUTES),
     [ordiniVisibili]
@@ -202,6 +223,53 @@ export default function Bancone() {
       ),
     [ordiniVisibili, righePerOrdine, productNames, bibiteProductIds]
   )
+
+  const availablePickKeys = useMemo(() => {
+    const set = new Set()
+    for (const slot of Object.keys(ingredientsBySlot || {})) {
+      for (const item of ingredientsBySlot[slot] || []) {
+        if (item?.pickKey) set.add(item.pickKey)
+      }
+    }
+    for (const slot of Object.keys(bibiteBySlot || {})) {
+      for (const item of bibiteBySlot[slot] || []) {
+        if (item?.pickKey) set.add(item.pickKey)
+      }
+    }
+    return set
+  }, [ingredientsBySlot, bibiteBySlot])
+
+  useEffect(() => {
+    if (prevOrderIdsKeyRef.current === orderStateKey) return
+    prevOrderIdsKeyRef.current = orderStateKey
+    setPickedBanconeKeys((prev) => {
+      if (!prev?.size) return prev
+      const pruned = [...prev].filter((k) => availablePickKeys.has(k))
+      if (pruned.length === prev.size) return prev
+      const removed = prev.size - pruned.length
+      setLastPickResetReason(
+        removed > 0
+          ? `Aggiornamento ordini: rimossi ${removed} check non più validi.`
+          : "",
+      )
+      return new Set(pruned)
+    })
+  }, [orderStateKey, availablePickKeys])
+
+  useEffect(() => {
+    const storageKey = getBanconePickStorageKey(tenantId)
+    if (!storageKey) return
+    try {
+      const payload = {
+        keys: [...pickedBanconeKeys],
+        reason: lastPickResetReason || "",
+        savedAt: new Date().toISOString(),
+      }
+      window.localStorage.setItem(storageKey, JSON.stringify(payload))
+    } catch {
+      // storage pieno/disabilitato: non bloccare il servizio
+    }
+  }, [tenantId, pickedBanconeKeys, lastPickResetReason])
 
   const togglePickedBancone = useCallback((pickKey) => {
     if (!pickKey) return
@@ -422,6 +490,7 @@ export default function Bancone() {
             <p style={styles.pickHint}>
               Grigio = da prendere per la busta · tocca quando l&apos;hai messo (inverso alla cucina).
             </p>
+            {lastPickResetReason ? <p style={styles.pickResetHint}>{lastPickResetReason}</p> : null}
             {banconeSlotOrder.map((slot) => {
               const ingList = ingredientsBySlot[slot] || []
               const bibList = bibiteBySlot[slot] || []
@@ -565,6 +634,16 @@ const styles = {
   },
   pickColumnTitle: { fontSize: 16, margin: "0 0 6px 0", fontWeight: 700 },
   pickHint: { fontSize: 11, color: "#666", margin: "0 0 12px 0", lineHeight: 1.35 },
+  pickResetHint: {
+    fontSize: 11,
+    color: "#92400e",
+    margin: "0 0 10px 0",
+    lineHeight: 1.35,
+    background: "#fffbeb",
+    border: "1px solid #fde68a",
+    borderRadius: 6,
+    padding: "6px 8px",
+  },
   slotPickBox: {
     marginBottom: 14,
     padding: 10,

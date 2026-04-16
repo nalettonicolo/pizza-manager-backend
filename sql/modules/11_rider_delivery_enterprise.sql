@@ -380,3 +380,66 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON core.consegna_percorso_ordine TO authent
 GRANT SELECT, INSERT, UPDATE, DELETE ON core.rider_posizione TO authenticated;
 GRANT SELECT, INSERT ON core.ordine_consegna_evento TO authenticated;
 GRANT SELECT, INSERT ON public.notifiche_outbox TO authenticated;
+
+-- --- RPC atomica: consegna completata (stato ordine + stato_consegna) ----------
+CREATE OR REPLACE FUNCTION public.delivery_mark_consegnato(
+  p_ordine_id UUID
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_allowed BOOLEAN;
+BEGIN
+  IF p_ordine_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_id_obbligatorio';
+  END IF;
+
+  SELECT o.tenant_id
+  INTO v_tenant_id
+  FROM core.ordini o
+  WHERE o.id = p_ordine_id;
+
+  IF v_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'ordine_non_trovato';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.utenti_ruoli ur
+    WHERE ur.user_id = auth.uid()
+      AND ur.tenant_id = v_tenant_id
+      AND COALESCE(ur.attivo, true) = true
+      AND (
+        lower(trim(COALESCE(ur.ruolo, ''))) IN ('delivery', 'pony', 'cassa', 'admin')
+        OR COALESCE(ur.accesso_delivery, false) = true
+        OR COALESCE(ur.accesso_pony, false) = true
+        OR COALESCE(ur.accesso_cassa, false) = true
+      )
+  ) INTO v_allowed;
+
+  IF NOT COALESCE(v_allowed, false) THEN
+    RAISE EXCEPTION 'non_autorizzato';
+  END IF;
+
+  UPDATE core.ordini o
+  SET
+    stato_consegna = 'CONSEGNATO',
+    stato = 'CONSEGNATO'::core.stato_ordine,
+    stato_delivery = 'CONSEGNATO'::core.stato_delivery,
+    consegna_effettiva_at = COALESCE(o.consegna_effettiva_at, now()),
+    updated_at = now()
+  WHERE o.id = p_ordine_id
+    AND o.tenant_id = v_tenant_id;
+
+  IF to_regclass('core.ordine_consegna_evento') IS NOT NULL THEN
+    INSERT INTO core.ordine_consegna_evento (tenant_id, ordine_id, tipo, payload, created_by)
+    VALUES (v_tenant_id, p_ordine_id, 'delivery_mark_consegnato', '{}'::jsonb, auth.uid());
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.delivery_mark_consegnato(UUID) TO authenticated;

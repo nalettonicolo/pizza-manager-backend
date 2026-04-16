@@ -113,8 +113,52 @@ DECLARE
   v_ring jsonb;
   v_inside boolean;
   v_is_staff_cassa boolean;
+  v_has_tenant_access boolean;
+  v_is_web_cliente boolean;
   v_turno_pv uuid;
 BEGIN
+  IF p_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'tenant_obbligatorio';
+  END IF;
+
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'non_autenticato';
+  END IF;
+
+  v_has_tenant_access := false;
+  IF to_regproc('public.pm_core_tenant_access(uuid)') IS NOT NULL THEN
+    SELECT public.pm_core_tenant_access(p_tenant_id) INTO v_has_tenant_access;
+  ELSE
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.utenti_ruoli ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.tenant_id = p_tenant_id
+        AND COALESCE(ur.attivo, true) = true
+    ) INTO v_has_tenant_access;
+  END IF;
+
+  IF NOT COALESCE(v_has_tenant_access, false) THEN
+    RAISE EXCEPTION 'tenant_non_autorizzato';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.clienti c
+    WHERE c.id = auth.uid()
+      AND c.tenant_id = p_tenant_id
+  ) INTO v_is_web_cliente;
+
+  -- Canale cliente web: limita lo stato iniziale e il tipo ordine per evitare bypass lato client.
+  IF v_is_web_cliente THEN
+    IF lower(trim(COALESCE(p_tipo_ordine, ''))) NOT IN ('', 'delivery', 'negozio') THEN
+      RAISE EXCEPTION 'tipo_ordine_non_valido';
+    END IF;
+    IF upper(trim(COALESCE(p_stato, 'IN_PREPARAZIONE'))) NOT IN ('IN_PREPARAZIONE') THEN
+      RAISE EXCEPTION 'stato_ordine_non_valido';
+    END IF;
+  END IF;
+
   SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero
   FROM core.ordini
   WHERE tenant_id = p_tenant_id;

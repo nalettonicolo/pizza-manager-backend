@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
-import { getOrders, updateOrder, updateOrderStato } from "@/features/admin/services/adminService"
+import { getOrders, updateOrder, markDeliveryConsegnatoAtomic } from "@/features/admin/services/adminService"
 import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 
 const STATO_PRONTO = "PRONTO"
-const STATO_CONSEGNATO = "CONSEGNATO"
 const POLL_MS = 10000
 
 /** Chiave slot per ordini senza orario_ritiro (vista test griglia reparti). */
@@ -167,8 +166,7 @@ export default function DeliveryDashboard(props) {
   const markConsegnato = async (ordineId) => {
     if (!ordineId) return
     try {
-      await updateOrder(ordineId, { stato_consegna: "CONSEGNATO" })
-      await updateOrderStato(ordineId, STATO_CONSEGNATO)
+      await markDeliveryConsegnatoAtomic(ordineId)
       setOrders((prev) => prev.filter((o) => o.id !== ordineId))
     } catch (err) {
       console.error(err)

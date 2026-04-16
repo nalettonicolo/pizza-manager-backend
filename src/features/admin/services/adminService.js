@@ -246,6 +246,13 @@ export async function updateOrderStato(ordineId, stato) {
   if (error) throw error
 }
 
+/** Delivery: transizione atomica a CONSEGNATO (stato_consegna + stato ordine). */
+export async function markDeliveryConsegnatoAtomic(ordineId) {
+  if (!ordineId) throw new Error("ordineId mancante")
+  const { error } = await supabase.rpc("delivery_mark_consegnato", { p_ordine_id: ordineId })
+  if (error) throw error
+}
+
 /** Aggiorna solo lo stato preparazione cucina (JSON: { doneByRiga: { [rigaId]: [ingredienteId] } }). */
 export async function updateOrderCucinaPrepStato(ordineId, cucinaPrepStato) {
   const { error } = await supabase
@@ -273,6 +280,7 @@ export async function updateOrder(ordineId, updates) {
   if (updates.note !== undefined) row.note = updates.note
   if (updates.tipo_pagamento !== undefined) row.tipo_pagamento = updates.tipo_pagamento
   if (updates.indirizzo_consegna !== undefined) row.indirizzo_consegna = updates.indirizzo_consegna
+  if (updates.tipo_ordine !== undefined) row.tipo_ordine = updates.tipo_ordine
   if (updates.pagamento_dettaglio !== undefined) row.pagamento_dettaglio = updates.pagamento_dettaglio
   if (updates.stato_consegna !== undefined) row.stato_consegna = updates.stato_consegna
   if (updates.consegna_lng !== undefined) row.consegna_lng = updates.consegna_lng
@@ -1952,16 +1960,25 @@ export async function recalculateAllPizzaPrices(tenantId) {
   const costoBase = toNum(config?.costo_impasto ?? config?.costoImpasto) || 0
   const marginePercent = readFoodcostMarginPercent(config)
 
+  let updatedCount = 0
+  let errorCount = 0
   for (const product of pizze) {
-    const ings = await getProductIngredienti(tenantId, product.id)
-    let totalIng = 0
-    for (const ing of ings) {
-      const cost = toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
-      totalIng += cost
+    try {
+      const ings = await getProductIngredienti(tenantId, product.id)
+      let totalIng = 0
+      for (const ing of ings) {
+        const cost = toNum(ing.costo_unitario ?? ing.costoUnitario ?? ing.costo)
+        totalIng += cost
+      }
+      const newPrezzo = prezzoFromCostoWithMargin(costoBase + totalIng, marginePercent)
+      await updateProduct(product.id, { prezzo: newPrezzo })
+      updatedCount += 1
+    } catch (e) {
+      errorCount += 1
+      console.warn("recalculateAllPizzaPrices row failed:", product?.id, e)
     }
-    const newPrezzo = prezzoFromCostoWithMargin(costoBase + totalIng, marginePercent)
-    await updateProduct(product.id, { prezzo: newPrezzo })
   }
+  return { updatedCount, errorCount }
 }
 
 function isFoodcostEnabledByParametri(parametri) {
