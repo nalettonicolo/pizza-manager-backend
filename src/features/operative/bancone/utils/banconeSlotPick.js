@@ -1,12 +1,5 @@
 import { orarioToSlotLabel, sortedSlotLabels } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 
-function simpleHash(str) {
-  let h = 0
-  const s = String(str || "")
-  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0
-  return String(h)
-}
-
 /** Slot presenti negli ordini visibili, ordinati cronologicamente (include "Senza orario"). */
 export function banconeSlotsFromOrders(ordini, slotMinutes) {
   const map = {}
@@ -51,6 +44,7 @@ export function banconeIngredientPickedColor(ing) {
 
 /**
  * Ingredienti aggregati per fascia (conteggio righe × quantità).
+ * Mostra solo ingredienti con flag prep_cucina, coerenti con la vista Cucina.
  * @returns {Record<string, Array<{ pickKey: string, label: string, count: number, categoria?: string, colore?: string }>>}
  */
 export function aggregateBanconeIngredientsBySlot(ordini, righePerOrdine, ingredientsByProduct, slotMinutes) {
@@ -76,10 +70,9 @@ export function aggregateBanconeIngredientsBySlot(ordini, righePerOrdine, ingred
       const rigaId = r.id ?? r.riga_id
       const q = Number(r.quantita) || 1
       const list = ingredientsByProduct[pid]
-      const summary = (r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? "").trim()
-
       if (Array.isArray(list) && list.length > 0) {
         for (const ing of list) {
+          if (ing.prepCucina !== true) continue
           const id = ing.id
           if (!id) continue
           const pickKey = `ing:${slot}:${id}`
@@ -107,22 +100,6 @@ export function aggregateBanconeIngredientsBySlot(ordini, righePerOrdine, ingred
             curr.doneCount = (curr?.doneCount || 0) + q
           }
         }
-      } else if (summary) {
-        const rid = r.id ?? r.riga_id ?? `${ord.id}-${pid}-${summary.slice(0, 12)}`
-        const pickKey = `sum:${slot}:${ord.id}:${rid}:${simpleHash(summary)}`
-        const prev = bySlot[slot].get(pickKey)
-        if (prev) prev.count += q
-        else
-          bySlot[slot].set(pickKey, {
-            pickKey,
-            label: summary,
-            count: q,
-            doneCount: 0,
-            categoria: "altro",
-            colore: "",
-            vaInCottura: false,
-            nonCottura: true,
-          })
       }
     }
   }

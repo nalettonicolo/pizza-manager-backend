@@ -594,12 +594,35 @@ export default function IngredientiPage() {
       </Modal>
 
       <Modal open={csvModalOpen} onClose={() => setCsvModalOpen(false)} title="CSV">
-        <div className="dashboard-box" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div
+          className="dashboard-box"
+          style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16, marginBottom: 0, overflowX: "hidden" }}
+        >
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontWeight: 600 }}>Inserisci CSV</span>
-            <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
-              Carica un file CSV in <strong>Formato B (foglio con spunte)</strong>: prima riga con nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina e una colonna per ogni allergene (Glutine, Crostacei, …).{" "}
-              <strong>prep_cucina</strong> (1/sì = preparazione in cucina, es. scongelare) è opzionale: i file senza quella colonna restano validi. Nelle celle allergeni usa 1, x o sì. <strong>Ordine</strong>: 0–99 = in cottura, 100+ = a fine cottura. Prezzi con 2 decimali.
+            <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.35 }}>
+              Carica un file CSV in <strong>Formato B (foglio con spunte)</strong>. Prima riga:
+            </p>
+            <code
+              style={{
+                display: "block",
+                fontSize: 12,
+                color: "#334155",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
+                padding: "8px 10px",
+                whiteSpace: "normal",
+                overflowWrap: "anywhere",
+                wordBreak: "break-word",
+              }}
+            >
+              nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;[colonne allergeni]
+            </code>
+            <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.35 }}>
+              <strong>prep_cucina</strong> (1/sì = preparazione in cucina, es. scongelare) e opzionale: i file senza quella colonna restano
+              validi. Nelle celle allergeni usa 1, x o sì. <strong>Ordine</strong>: 0-99 = in cottura, 100+ = a fine cottura. Prezzi con 2
+              decimali.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>

@@ -3082,7 +3082,10 @@ export default function CassaPage() {
         {showPlanningBar && (
           <div style={styles.planningBar}>
             <div style={styles.planningBarHeader}>
-              <strong>Situazione planning</strong>
+              <div style={styles.planningBarTitleWrap}>
+                <strong style={styles.planningBarTitle}>Situazione planning</strong>
+                <span style={styles.planningBarSubtitle}>Ordini e pizze per fascia oraria</span>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button
                   type="button"
@@ -3115,15 +3118,16 @@ export default function CassaPage() {
                       .finally(() => setOrdiniOnlineToggleSaving(false))
                   }}
                   style={{
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    border: "1px solid #999",
+                    padding: "7px 12px",
+                    borderRadius: 999,
+                    border: "1px solid transparent",
                     background: ordiniOnlineDisabilitati ? "#c62828" : "#2e7d32",
                     color: "#fff",
                     fontSize: 12,
-                    fontWeight: 500,
+                    fontWeight: 700,
                     cursor: ordiniOnlineToggleSaving || !tenantId ? "default" : "pointer",
                     opacity: ordiniOnlineToggleSaving ? 0.75 : 1,
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
                   }}
                   title={
                     ordiniOnlineDisabilitati && !ordiniOnlineInLicenza
@@ -3156,10 +3160,22 @@ export default function CassaPage() {
                 <div style={styles.planningMergedHeader}>
                   <span style={styles.planningMergedCellTime}>Ora</span>
                   <span style={{ ...styles.planningMergedCell, background: "#e3f2fd", borderColor: "#1976d2" }}>
-                    Consegna (dettaglio · finestra parametri {capacityWindowDelivery} min → max teorico {maxPizzeDelivery} pizze)
+                    <span style={styles.planningMergedHeadTitle}>Consegna</span>
+                    <span style={styles.planningMergedHeadMeta}>
+                      Parametri: pizze_ogni_15_min + consegne_ogni_min ({capacityWindowDelivery})
+                    </span>
+                    <span style={styles.planningMergedHeadMetaStrong}>
+                      Capacità: max {maxPizzeDelivery} pizze
+                    </span>
                   </span>
                   <span style={{ ...styles.planningMergedCell, background: "#f3e5f5", borderColor: "#7b1fa2", borderRight: "none" }}>
-                    Ritiro (dettaglio · finestra {capacityWindowNegozio} min → max teorico {maxPizzeNegozio} pizze)
+                    <span style={styles.planningMergedHeadTitle}>Ritiro negozio</span>
+                    <span style={styles.planningMergedHeadMeta}>
+                      Parametri: pizze_ogni_15_min + ritiro_ogni_min ({capacityWindowNegozio})
+                    </span>
+                    <span style={styles.planningMergedHeadMetaStrong}>
+                      Capacità: max {maxPizzeNegozio} pizze
+                    </span>
                   </span>
                 </div>
                 {planningMergedRows.map((row, i) => {
@@ -4069,16 +4085,32 @@ const styles = {
   },
   planningBar: {
     marginBottom: 16,
-    padding: 12,
-    background: "#e3f2fd",
-    border: "1px solid #90caf9",
-    borderRadius: 8,
+    padding: 14,
+    background: "#ffffff",
+    border: "1px solid #d6e2ee",
+    borderRadius: 12,
+    boxShadow: "0 2px 8px rgba(15,23,42,0.06)",
   },
   planningBarHeader: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
+    alignItems: "flex-start",
+    marginBottom: 10,
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  planningBarTitleWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+  },
+  planningBarTitle: {
+    color: "#0f172a",
+    fontSize: 16,
+  },
+  planningBarSubtitle: {
+    fontSize: 12,
+    color: "#475569",
   },
   planningBarClose: {
     background: "none",
@@ -4088,41 +4120,64 @@ const styles = {
     padding: "0 4px",
   },
   planningHint: {
-    fontSize: 13,
-    color: "#555",
+    fontSize: 12,
+    color: "#475569",
     margin: "0 0 12px 0",
+    lineHeight: 1.45,
   },
   planningMergedTable: {
-    border: "1px solid #90caf9",
-    borderRadius: 8,
+    border: "1px solid #d6e2ee",
+    borderRadius: 10,
     overflow: "hidden",
     marginTop: 8,
+    background: "#fff",
   },
   planningMergedHeader: {
     display: "grid",
-    gridTemplateColumns: "56px 1fr 1fr",
+    gridTemplateColumns: "64px 1fr 1fr",
     gap: 0,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     color: "#333",
   },
   planningMergedRow: {
     display: "grid",
-    gridTemplateColumns: "56px 1fr 1fr",
+    gridTemplateColumns: "64px 1fr 1fr",
     gap: 0,
     fontSize: 12,
-    borderTop: "1px solid #90caf9",
+    borderTop: "1px solid #e2e8f0",
   },
   planningMergedCellTime: {
-    padding: "6px 8px",
-    background: "#f5f5f5",
-    borderRight: "1px solid #ddd",
-    fontWeight: 600,
+    padding: "8px 10px",
+    background: "#f8fafc",
+    borderRight: "1px solid #e2e8f0",
+    fontWeight: 700,
+    color: "#0f172a",
   },
   planningMergedCell: {
-    padding: "6px 8px",
-    borderRight: "1px solid #90caf9",
+    padding: "8px 10px",
+    borderRight: "1px solid #d6e2ee",
     borderBottom: "none",
+  },
+  planningMergedHeadTitle: {
+    display: "block",
+    fontSize: 12,
+    color: "#0f172a",
+    fontWeight: 700,
+  },
+  planningMergedHeadMeta: {
+    display: "block",
+    marginTop: 2,
+    fontSize: 10,
+    color: "#475569",
+    fontWeight: 500,
+  },
+  planningMergedHeadMetaStrong: {
+    display: "block",
+    marginTop: 2,
+    fontSize: 11,
+    color: "#0f172a",
+    fontWeight: 700,
   },
   planningSections: {
     display: "flex",

@@ -36,6 +36,32 @@ function formatEuro(n) {
   return `${v.toFixed(2)}€`
 }
 
+function normName(v) {
+  return String(v || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+}
+
+function parseLegacyIngredientNames(product) {
+  const raw = product?.ingredienti ?? product?.descrizione_ingredienti ?? ""
+  if (!raw) return []
+  return String(raw)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function normalizeIngredientRow(ing) {
+  return {
+    ...ing,
+    nome: ing?.nome ?? "",
+    vaInCottura: ing?.vaInCottura === true || ing?.va_in_cottura === true,
+    prepCucina: ing?.prepCucina === true || ing?.prep_cucina === true,
+  }
+}
+
 const s = {
   body: {
     padding: "16px 20px 20px",
@@ -307,7 +333,32 @@ export default function ModificaPizzaModal({
       getCottura(tenantId).catch(() => []),
     ]).then(([ingProd, ingAll, impastiList, formatiList, cotturaData]) => {
       if (cancelled) return
-      setProductIngredienti(ingProd || [])
+      const ingAllList = (ingAll || []).map((ing) => normalizeIngredientRow(ing))
+      const ingProdList = (ingProd || []).map((ing) => normalizeIngredientRow(ing))
+      const hasProductRecipe = ingProdList.length > 0
+      const legacyNames = hasProductRecipe ? [] : parseLegacyIngredientNames(product)
+      const byName = new Map(ingAllList.map((ing) => [normName(ing.nome), ing]))
+      const fallbackFromLegacy = legacyNames.map((name, idx) => {
+        const found = byName.get(normName(name))
+        if (found) {
+          return {
+            ...found,
+            nome: found.nome ?? name,
+            vaInCottura: found.vaInCottura === true || found.va_in_cottura === true,
+            prepCucina: found.prepCucina === true || found.prep_cucina === true,
+          }
+        }
+        return {
+          id: `legacy:${normName(name) || idx}`,
+          nome: name,
+          vaInCottura: true,
+          costo_senza: 0,
+          costo_poco: 0,
+          costo_abbondante: 0,
+        }
+      })
+      const effectiveProductIngredienti = hasProductRecipe ? ingProdList : fallbackFromLegacy
+      setProductIngredienti(effectiveProductIngredienti)
       setAllIngredients(ingAll || [])
       const activeImpasti = (impastiList || []).filter((i) => i.attivo !== false)
       setImpasti(activeImpasti)
@@ -324,7 +375,7 @@ export default function ModificaPizzaModal({
       if (activeCottura.length) setSelectedCotturaId(activeCottura[0].id)
       else setSelectedCotturaId(null)
       const initial = {}
-      ;(ingProd || []).forEach((ing) => {
+      effectiveProductIngredienti.forEach((ing) => {
         initial[ing.id] = {
           variante: "normale",
           cottura: ing.vaInCottura ? "in_cottura" : "fine_cottura",
@@ -414,9 +465,10 @@ export default function ModificaPizzaModal({
 
   const addExtraIngredient = (ing) => {
     if (extraIngredienti.some((e) => e.id === ing.id)) return
+    const inCottura = ing?.vaInCottura === true || ing?.va_in_cottura === true
     setExtraIngredienti((prev) => [
       ...prev,
-      { id: ing.id, nome: ing.nome ?? "", variante: "normale", cottura: "in_cottura" },
+      { id: ing.id, nome: ing.nome ?? "", variante: "normale", cottura: inCottura ? "in_cottura" : "fine_cottura" },
     ])
     setSearchExtra("")
   }
@@ -702,6 +754,7 @@ export default function ModificaPizzaModal({
                     onClick={() => addExtraIngredient(ing)}
                   >
                     + {ing.nome}
+                    {(ing.prepCucina === true || ing.prep_cucina === true) ? " · prep cucina" : ""}
                   </button>
                 ))}
               </div>

@@ -124,6 +124,7 @@ export default function Bancone() {
         ingMap[pid] = (ingBatch[pid] || []).map((ing) => ({
           id: ing.id,
           nome: ing.nome,
+          prepCucina: ing.prepCucina === true,
           vaInCottura: ing.vaInCottura === true,
           categoria: ing.categoria,
           colore: ing.colore,
@@ -496,7 +497,7 @@ export default function Bancone() {
               <>
                 <h2 style={styles.pickColumnTitle}>Ingredienti per orario</h2>
                 <p style={styles.pickHint}>
-                  Grigio = da prendere per la busta · tocca quando l&apos;hai messo (inverso alla cucina).
+                  Elenco basato su &quot;Prep. cucina&quot;: grigio = da prendere per la busta, tocca quando l&apos;hai messo.
                 </p>
               </>
             ) : null}
