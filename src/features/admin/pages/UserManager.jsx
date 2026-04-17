@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
@@ -9,8 +10,6 @@ import {
   updateStaffNomeVisualizzato,
   listStaffArchivioDipendenti,
   getRuoliPizzeria,
-  updateRuoloPizzeriaPermessi,
-  aggiungiRuoloPizzeria,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
 import { RUOLO_BASE_OPTIONS, RUOLO_BASE_VALUES } from "@/features/admin/utils/ruoliPizzeriaUi"
@@ -28,10 +27,6 @@ export default function UserManager() {
   const [archivioByUserId, setArchivioByUserId] = useState({})
 
   const [schedaUser, setSchedaUser] = useState(null)
-
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRuolo, setInviteRuolo] = useState("cassa")
-  const [inviteBusy, setInviteBusy] = useState(false)
 
   const loadUsers = useCallback(async () => {
     try {
@@ -120,46 +115,9 @@ export default function UserManager() {
     }
   }
 
-  async function handleRuoloChange(userId, nuovoRuolo) {
-    if (!tenantId) return
-    const row = ruoliRows.find((r) => r.user_id === userId)
-    if (!row || row.ruolo === nuovoRuolo) return
-    setBusyId(userId)
-    try {
-      await updateRuoloPizzeriaPermessi(tenantId, userId, { ruolo: nuovoRuolo })
-      await loadUsers()
-    } catch (err) {
-      console.error(err)
-      alert(err?.message || "Aggiornamento ruolo non riuscito.")
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  async function handleInviteStaff(e) {
-    e.preventDefault()
-    if (!tenantId) return
-    const email = inviteEmail.trim().toLowerCase()
-    if (!email || !email.includes("@")) {
-      alert("Inserisci un’email valida.")
-      return
-    }
-    setInviteBusy(true)
-    try {
-      await aggiungiRuoloPizzeria(tenantId, email, inviteRuolo)
-      setInviteEmail("")
-      await loadUsers()
-      alert("Richiesta inviata. Se l’utente esiste in Auth, risulta collegato al locale.")
-    } catch (err) {
-      console.error(err)
-      alert(err?.message || "Collegamento non riuscito. Verifica che l’utente esista in Supabase Auth o la RPC del progetto.")
-    } finally {
-      setInviteBusy(false)
-    }
-  }
-
-  const schedaRuolo = schedaUser ? ruoloRecordFor(schedaUser.id) : null
   const schedaArchivio = schedaUser ? archivioByUserId[schedaUser.id] : null
+
+  const ruoloBaseLabel = useMemo(() => Object.fromEntries(RUOLO_BASE_OPTIONS.map((o) => [o.value, o.label])), [])
 
   if (loading) return <Loader />
   if (error) return <ErrorState message={error} />
@@ -168,46 +126,14 @@ export default function UserManager() {
     <div className="dashboard-settings-page dashboard-dipendenti-page">
       <h1 className="dashboard-page-title">Dipendenti</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 14 }}>
-        Gestione completa del personale: <strong>anagrafica</strong>, <strong>corsi</strong>, <strong>documenti</strong>,{" "}
-        <strong>buste paga</strong> e <strong>ruolo operativo</strong> (cassa, cucina, permessi aree). Gli account nascono
-        da Supabase Auth; puoi collegarne uno nuovo con il modulo sotto.
+        Scheda anagrafica e HR per ogni persona: <strong>corsi</strong>, <strong>allegati</strong>, <strong>buste paga</strong>,{" "}
+        <strong>nome in sede</strong> (etichetta operativa). Per <strong>collegare un account</strong>, assegnare il{" "}
+        <strong>ruolo base</strong> e le <strong>aree operative</strong> usa la pagina{" "}
+        <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
+          Ruoli
+        </Link>
+        .
       </p>
-
-      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 18, padding: "16px 20px" }}>
-        <h2 className="dashboard-settings-section-title" style={{ marginTop: 0 }}>
-          Collega un account staff
-        </h2>
-        <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
-          L&apos;email deve corrispondere a un utente già presente in Authentication (o alla procedura RPC del tuo progetto).
-        </p>
-        <form onSubmit={handleInviteStaff} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
-            <input
-              type="email"
-              className="dashboard-search-input"
-              style={{ minWidth: 240 }}
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="nome@dominio.it"
-              autoComplete="off"
-            />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Ruolo iniziale</span>
-            <select className="dipendenti-role-select" value={inviteRuolo} onChange={(e) => setInviteRuolo(e.target.value)}>
-              {RUOLO_BASE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className="btn-primary-dashboard" disabled={inviteBusy}>
-            {inviteBusy ? "Invio…" : "Collega"}
-          </button>
-        </form>
-      </section>
 
       <section className="dashboard-box dashboard-settings-section" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "18px 20px 0" }}>
@@ -215,7 +141,8 @@ export default function UserManager() {
             Elenco dipendenti
           </h2>
           <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Apri la <strong>scheda completa</strong> per dati anagrafici, corsi, allegati e buste paga. Il <strong>ruolo base</strong> è modificabile anche dalla tabella.
+            Apri la <strong>scheda dipendente</strong> per anagrafica, corsi, documenti e buste paga. Ruoli e permessi:{" "}
+            <Link to="/admin/ruoli">pagina Ruoli</Link>.
           </p>
         </div>
 
@@ -262,7 +189,7 @@ export default function UserManager() {
                   <tr>
                     <th scope="col">Account</th>
                     <th scope="col">Nome in sede</th>
-                    <th scope="col">Ruolo</th>
+                    <th scope="col">Ruolo (sola lettura)</th>
                     <th scope="col">Accesso</th>
                   </tr>
                 </thead>
@@ -300,21 +227,17 @@ export default function UserManager() {
                           <div className="dipendenti-role-hint">Chi usa questo login in negozio (turni, note).</div>
                         </td>
                         <td>
-                          <select
-                            className="dipendenti-role-select"
-                            value={rr?.ruolo || user.ruolo || "operatore"}
-                            disabled={rowBusy || !rr}
-                            onChange={(e) => handleRuoloChange(user.id, e.target.value)}
-                            aria-label={`Ruolo per ${user.email}`}
-                          >
-                            {RUOLO_BASE_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                            {rr?.ruolo && !RUOLO_BASE_VALUES.has(rr.ruolo) ? <option value={rr.ruolo}>{rr.ruolo}</option> : null}
-                          </select>
+                          <span style={{ fontSize: 14, color: "#334155" }}>
+                            {rr?.ruolo && RUOLO_BASE_VALUES.has(rr.ruolo)
+                              ? ruoloBaseLabel[rr.ruolo] ?? rr.ruolo
+                              : rr?.ruolo || user.ruolo || "—"}
+                          </span>
                           {!rr ? <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Ruolo non caricato</div> : null}
+                          <div style={{ marginTop: 6 }}>
+                            <Link to="/admin/ruoli" style={{ fontSize: 12, fontWeight: 600 }}>
+                              Modifica in Ruoli →
+                            </Link>
+                          </div>
                         </td>
                         <td>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
@@ -357,10 +280,8 @@ export default function UserManager() {
         onClose={() => setSchedaUser(null)}
         tenantId={tenantId}
         user={schedaUser}
-        ruoloRecord={schedaRuolo}
         archivioRow={schedaArchivio}
         onSaved={loadUsers}
-        onRuoliRefresh={loadUsers}
       />
     </div>
   )

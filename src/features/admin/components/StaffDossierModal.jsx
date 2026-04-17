@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import Modal from "@/components/dashboard/Modal"
 import {
   upsertStaffArchivioDipendente,
@@ -7,8 +8,6 @@ import {
   removeStaffHrFiles,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
-import StaffOperativoHrTab from "@/features/admin/components/StaffOperativoHrTab"
-
 const MAX_FILE = 12 * 1024 * 1024
 
 const TABS = [
@@ -16,7 +15,6 @@ const TABS = [
   { id: "corsi", label: "Corsi" },
   { id: "allegati", label: "Allegati" },
   { id: "buste", label: "Buste paga" },
-  { id: "operativo", label: "Ruolo operativo" },
 ]
 
 function newId() {
@@ -75,10 +73,8 @@ export default function StaffDossierModal({
   onClose,
   tenantId,
   user,
-  ruoloRecord,
   archivioRow,
   onSaved,
-  onRuoliRefresh,
 }) {
   const [tab, setTab] = useState("anagrafica")
   const [saving, setSaving] = useState(false)
@@ -248,10 +244,6 @@ export default function StaffDossierModal({
     ])
   }
 
-  const staffRuoloRefresh = useCallback(async () => {
-    await onRuoliRefresh?.()
-  }, [onRuoliRefresh])
-
   const anagraficaTab = useMemo(() => {
     if (!draft) return null
     return (
@@ -349,6 +341,13 @@ export default function StaffDossierModal({
             </button>
           ))}
         </div>
+        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 14, lineHeight: 1.5 }}>
+          <strong>Ruolo, aree operative e collegamento account</strong> si gestiscono nella pagina{" "}
+          <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
+            Ruoli
+          </Link>
+          , non in questa scheda HR.
+        </p>
 
         {tab === "anagrafica" && anagraficaTab}
 
@@ -460,29 +459,14 @@ export default function StaffDossierModal({
           </div>
         )}
 
-        {tab === "operativo" && ruoloRecord && (
-          <StaffOperativoHrTab tenantId={tenantId} detailUser={ruoloRecord} onDetailUserRefresh={staffRuoloRefresh} />
-        )}
-        {tab === "operativo" && !ruoloRecord ? (
-          <p style={{ color: "#b91c1c" }}>Dati ruolo non disponibili. Ricarica la pagina.</p>
-        ) : null}
-
-        {tab !== "operativo" ? (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
-            <button type="button" className="dashboard-settings-btn-secondary" disabled={saving} onClick={onClose}>
-              Chiudi
-            </button>
-            <button type="button" className="btn-primary-dashboard" disabled={saving} onClick={() => void saveHr()}>
-              {saving ? "Salvataggio…" : "Salva scheda HR"}
-            </button>
-          </div>
-        ) : (
-          <div style={{ marginTop: 12 }}>
-            <button type="button" className="dashboard-settings-btn-secondary" onClick={onClose}>
-              Chiudi
-            </button>
-          </div>
-        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
+          <button type="button" className="dashboard-settings-btn-secondary" disabled={saving} onClick={onClose}>
+            Chiudi
+          </button>
+          <button type="button" className="btn-primary-dashboard" disabled={saving} onClick={() => void saveHr()}>
+            {saving ? "Salvataggio…" : "Salva scheda HR"}
+          </button>
+        </div>
       </div>
     </Modal>
   )

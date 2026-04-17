@@ -22,6 +22,7 @@ const topNavItems = [
   { to: "/admin/magazzino", label: "Magazzino", servizioId: "magazzino_gestione" },
   { to: "/admin/contabilita", label: "Contabilità", servizioId: null },
   { to: "/admin/dipendenti", label: "Dipendenti", servizioId: null },
+  { to: "/admin/ruoli", label: "Ruoli", servizioId: null },
   { to: "/admin/settings", label: "Impostazioni", servizioId: null },
 ];
 

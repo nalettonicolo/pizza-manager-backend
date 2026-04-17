@@ -84,6 +84,7 @@ const FrittiPage = lazy(() => import("@/features/admin/pages/menu/FrittiPage"));
 const AllergeniPage = lazy(() => import("@/features/admin/pages/menu/AllergeniPage"));
 const ListiniPage = lazy(() => import("@/features/admin/pages/menu/ListiniPage"));
 const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
+const RuoliPage = lazy(() => import("@/features/admin/pages/RuoliPage"));
 const ManualeUtentePage = lazy(() => import("@/features/admin/pages/ManualeUtentePage"));
 const MagazzinoHubPage = lazy(() => import("@/features/admin/pages/magazzino/MagazzinoHubPage"));
 const OrdiniFornitoriPage = lazy(() => import("@/features/admin/pages/magazzino/OrdiniFornitoriPage"));
@@ -492,7 +493,7 @@ export default function AppRouter() {
           <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
           <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
-          <Route path="/admin/ruoli" element={<Navigate to="/admin/dipendenti" replace />} />
+          <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
           <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
             <Route index element={<Navigate to="dati-pizzeria" replace />} />
             <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />

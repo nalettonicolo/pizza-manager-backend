@@ -184,6 +184,12 @@ export default function DeliveryDashboard(props) {
       setOrders((prev) => prev.filter((o) => o.id !== ordineId))
     } catch (err) {
       logDeliveryError("markConsegnato", err)
+      const msg = String(err?.message ?? err ?? "")
+      if (/non_autorizzato/i.test(msg)) {
+        window.alert(
+          "Operazione non consentita per il tuo profilo. Serve un ruolo Delivery/Pony/Cassa o i permessi «Accesso delivery» / «Accesso cassa» in Admin → Dipendenti (Ruolo operativo). Gli account di test multi-reparto sono abilitati dopo l’aggiornamento SQL su Supabase.",
+        )
+      }
     }
   }
 

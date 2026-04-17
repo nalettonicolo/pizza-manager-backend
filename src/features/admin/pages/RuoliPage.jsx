@@ -9,6 +9,7 @@ import {
   updateRuoloPizzeriaPermessi,
   listStaffPasswordNotes,
   upsertStaffPasswordNote,
+  aggiungiRuoloPizzeria,
 } from "@/features/admin/services/adminService";
 import { isDefaultAreaForRole, isDedicatedRepartoRole } from "@/utils/operativeAreaAccess";
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
@@ -48,12 +49,6 @@ const RUOLO_BASE_OPTIONS = [
 ];
 
 const RUOLO_BASE_VALUES = new Set(RUOLO_BASE_OPTIONS.map((o) => o.value));
-
-function nomeInSedeOEmail(r) {
-  const nv = r.nome_visualizzato != null && String(r.nome_visualizzato).trim() !== "" ? String(r.nome_visualizzato).trim() : ""
-  if (nv) return nv
-  return labelFromEmailPrefix(r.email) || r.email || "—"
-}
 
 function getCosaPuoFare(ruolo, puoModificareParametri) {
   const list = [];
@@ -118,6 +113,9 @@ export default function RuoliPage() {
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaveBusy, setNoteSaveBusy] = useState(false);
   const [roleBusyUserId, setRoleBusyUserId] = useState(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRuolo, setInviteRuolo] = useState("cassa");
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const archivioSbloccato = typeof archivioUnlockUntil === "number" && Date.now() < archivioUnlockUntil;
 
@@ -264,6 +262,28 @@ export default function RuoliPage() {
     }
   }
 
+  async function handleInviteStaff(e) {
+    e.preventDefault();
+    if (!tenantId) return;
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      alert("Inserisci un’email valida.");
+      return;
+    }
+    setInviteBusy(true);
+    try {
+      await aggiungiRuoloPizzeria(tenantId, email, inviteRuolo);
+      setInviteEmail("");
+      await loadRuoli();
+      alert("Richiesta inviata. Se l’utente esiste in Auth, risulta collegato al locale.");
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Collegamento non riuscito. Verifica che l’utente esista in Supabase Auth o la RPC del progetto.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   async function handleRuoloBaseChange(record, nuovoRuolo) {
     if (!tenantId || !record?.user_id) return;
     if (record.ruolo === nuovoRuolo) return;
@@ -289,20 +309,56 @@ export default function RuoliPage() {
     <div className="dashboard-settings-page">
       <h1 className="dashboard-page-title">Ruoli</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 20 }}>
-        Qui assegni il <strong>ruolo base</strong> (cassa, cucina, operatore, …) e i permessi operativi: aree del menu,
-        parametri cassa. Per <strong>nome in sede</strong> e <strong>archivio anagrafico / HR</strong> usa{" "}
+        Collegamento account ↔ <strong>ruolo base</strong> e <strong>permessi</strong> (aree operative, parametri cassa, note
+        password di servizio). Qui <strong>non</strong> si compilano dati anagrafici nè HR: per{" "}
+        <strong>nome in sede</strong>, <strong>corsi</strong>, <strong>documenti</strong> e <strong>buste paga</strong> usa{" "}
         <Link to="/admin/dipendenti" style={{ fontWeight: 600 }}>
           Dipendenti
         </Link>
         .
       </p>
 
+      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 18, padding: "16px 20px" }}>
+        <h2 className="dashboard-settings-section-title" style={{ marginTop: 0 }}>
+          Collega un account staff
+        </h2>
+        <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+          L&apos;email deve corrispondere a un utente già presente in Authentication (o alla procedura RPC del tuo progetto).
+        </p>
+        <form onSubmit={(e) => void handleInviteStaff(e)} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
+            <input
+              type="email"
+              className="dashboard-search-input"
+              style={{ minWidth: 240 }}
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="nome@dominio.it"
+              autoComplete="off"
+            />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Ruolo iniziale</span>
+            <select className="dipendenti-role-select" value={inviteRuolo} onChange={(e) => setInviteRuolo(e.target.value)}>
+              {RUOLO_BASE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="btn-primary-dashboard" disabled={inviteBusy}>
+            {inviteBusy ? "Invio…" : "Collega"}
+          </button>
+        </form>
+      </section>
+
       <section className="dashboard-box dashboard-settings-section">
         <h2 className="dashboard-settings-section-title">Elenco ruoli</h2>
         <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
-          In elenco il titolo è il <strong>nome in sede</strong> se l’hai impostato in Dipendenti (es. Anna), altrimenti
-          l’etichetta dall’email. Scegli il <strong>ruolo base</strong> dal menu a tendina; clicca il nome per aprire il
-          dettaglio e le aree consentite.
+          Riga principale: <strong>email dell’account</strong>. Se in Dipendenti hai impostato il nome in sede, compare sotto
+          come promemoria. Scegli il <strong>ruolo base</strong> dal menu; clicca l’email per il dettaglio (aree consentite).
         </p>
         <p style={{ color: "#64748b", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
           <strong>Password (archivio titolare):</strong> non è la password tecnica in Supabase Auth, ma una{" "}
@@ -356,13 +412,16 @@ export default function RuoliPage() {
                       width: "100%",
                     }}
                   >
-                    <strong style={{ display: "block", textDecoration: "underline" }}>{nomeInSedeOEmail(r)}</strong>
-                    <span style={{ display: "block", fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{r.email}</span>
+                    <strong style={{ display: "block", textDecoration: "underline", wordBreak: "break-all" }}>{r.email}</strong>
                     {r.nome_visualizzato && String(r.nome_visualizzato).trim() ? (
-                      <span style={{ display: "block", fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                        Account: {labelFromEmailPrefix(r.email) || r.email}
+                      <span style={{ display: "block", fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                        Nome in sede (Dipendenti): <strong>{String(r.nome_visualizzato).trim()}</strong>
                       </span>
-                    ) : null}
+                    ) : (
+                      <span style={{ display: "block", fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                        Etichetta account: {labelFromEmailPrefix(r.email) || "—"}
+                      </span>
+                    )}
                   </button>
                     <div style={{ marginTop: 8, maxWidth: 320 }} onClick={(e) => e.stopPropagation()}>
                       <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>
@@ -373,7 +432,7 @@ export default function RuoliPage() {
                         value={r.ruolo}
                         disabled={roleBusyUserId === r.user_id}
                         onChange={(e) => handleRuoloBaseChange(r, e.target.value)}
-                        aria-label={`Ruolo base per ${nomeInSedeOEmail(r)}`}
+                        aria-label={`Ruolo base per ${r.email}`}
                       >
                         {RUOLO_BASE_OPTIONS.map((o) => (
                           <option key={o.value} value={o.value}>
@@ -439,17 +498,20 @@ export default function RuoliPage() {
       <Modal
         open={!!detailUser}
         onClose={() => setDetailUser(null)}
-        title={detailUser ? `Cosa può fare – ${nomeInSedeOEmail(detailUser)}` : ""}
+        title={detailUser ? `Cosa può fare – ${detailUser.email}` : ""}
       >
         {detailUser && (
           <div style={{ padding: "8px 0" }}>
-            <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>{nomeInSedeOEmail(detailUser)}</p>
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b" }}>{detailUser.email}</p>
+            <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0f172a", wordBreak: "break-all" }}>{detailUser.email}</p>
             {detailUser.nome_visualizzato && String(detailUser.nome_visualizzato).trim() ? (
-              <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8" }}>
-                Etichetta account: {labelFromEmailPrefix(detailUser.email) || "—"}
+              <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b" }}>
+                Nome in sede (impostato in Dipendenti): <strong>{String(detailUser.nome_visualizzato).trim()}</strong>
               </p>
-            ) : null}
+            ) : (
+              <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8" }}>
+                Nome in sede: impostalo in <Link to="/admin/dipendenti">Dipendenti</Link>.
+              </p>
+            )}
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>
                 Ruolo base
