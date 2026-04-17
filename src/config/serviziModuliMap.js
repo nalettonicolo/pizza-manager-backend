@@ -85,7 +85,7 @@ export const SCHEDE_SERVIZI_IMPLEMENTAZIONE = {
   },
   ruoli_avanzati: {
     sintesi: "Configurazione ruoli e permessi sulle aree operative.",
-    moduli: [{ label: "Ruoli", paths: ["/admin/ruoli"] }],
+    moduli: [{ label: "Dipendenti (ruoli)", paths: ["/admin/dipendenti"] }],
     riferimentiCodice: ["src/features/admin/pages/RuoliPage.jsx"],
   },
   menu_listini: {

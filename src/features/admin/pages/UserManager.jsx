@@ -1,39 +1,45 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
-import Modal from "@/components/dashboard/Modal"
+import StaffDossierModal from "@/features/admin/components/StaffDossierModal"
 import {
   getTenantUsers,
   toggleUserActive,
   updateStaffNomeVisualizzato,
   listStaffArchivioDipendenti,
-  upsertStaffArchivioDipendente,
+  getRuoliPizzeria,
+  updateRuoloPizzeriaPermessi,
+  aggiungiRuoloPizzeria,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
+import { RUOLO_BASE_OPTIONS, RUOLO_BASE_VALUES } from "@/features/admin/utils/ruoliPizzeriaUi"
 
 export default function UserManager() {
   const { tenantId } = useTenant()
 
   const [users, setUsers] = useState([])
+  const [ruoliRows, setRuoliRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState("")
   const [busyId, setBusyId] = useState(null)
-  /** Bozze nome in sede (allineate al server dopo ogni load). */
   const [nomeDraft, setNomeDraft] = useState({})
   const [archivioByUserId, setArchivioByUserId] = useState({})
-  const [archivioOpenUser, setArchivioOpenUser] = useState(null)
-  const [archivioDraft, setArchivioDraft] = useState(null)
-  const [archivioBusy, setArchivioBusy] = useState(false)
+
+  const [schedaUser, setSchedaUser] = useState(null)
+
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRuolo, setInviteRuolo] = useState("cassa")
+  const [inviteBusy, setInviteBusy] = useState(false)
 
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await getTenantUsers(tenantId)
+      const [data, rr] = await Promise.all([getTenantUsers(tenantId), getRuoliPizzeria(tenantId)])
       setUsers(data)
+      setRuoliRows(rr || [])
       setNomeDraft(Object.fromEntries(data.map((u) => [u.id, u.nomeVisualizzato ?? ""])))
       try {
         const rows = await listStaffArchivioDipendenti(tenantId)
@@ -56,6 +62,7 @@ export default function UserManager() {
     } else {
       setLoading(false)
       setUsers([])
+      setRuoliRows([])
     }
   }, [tenantId, loadUsers])
 
@@ -75,6 +82,11 @@ export default function UserManager() {
     const attivi = users.filter((u) => u.attivo).length
     return { total, attivi }
   }, [users])
+
+  const ruoloRecordFor = useCallback(
+    (userId) => ruoliRows.find((r) => r.user_id === userId) || null,
+    [ruoliRows],
+  )
 
   async function handleToggle(userId, current) {
     if (!tenantId) return
@@ -108,67 +120,46 @@ export default function UserManager() {
     }
   }
 
-  function openArchivioDipendente(user) {
-    const curr = archivioByUserId[user.id] || {}
-    setArchivioOpenUser(user)
-    setArchivioDraft({
-      nome_completo: curr.nome_completo || "",
-      codice_fiscale: curr.codice_fiscale || "",
-      data_nascita: curr.data_nascita || "",
-      luogo_nascita: curr.luogo_nascita || "",
-      indirizzo_residenza: curr.indirizzo_residenza || "",
-      telefono_personale: curr.telefono_personale || "",
-      email_personale: curr.email_personale || "",
-      mansione: curr.mansione || "",
-      tipo_contratto: curr.tipo_contratto || "",
-      data_assunzione: curr.data_assunzione || "",
-      iban: curr.iban || "",
-      note_hr: curr.note_hr || "",
-      corsi_formazione_text: Array.isArray(curr.corsi_formazione) ? curr.corsi_formazione.join("\n") : "",
-      documenti_lavoro_text: Array.isArray(curr.documenti_lavoro) ? curr.documenti_lavoro.join("\n") : "",
-    })
-  }
-
-  async function saveArchivioDipendente() {
-    if (!tenantId || !archivioOpenUser || !archivioDraft) return
-    setArchivioBusy(true)
+  async function handleRuoloChange(userId, nuovoRuolo) {
+    if (!tenantId) return
+    const row = ruoliRows.find((r) => r.user_id === userId)
+    if (!row || row.ruolo === nuovoRuolo) return
+    setBusyId(userId)
     try {
-      const parseLines = (s) =>
-        String(s || "")
-          .split("\n")
-          .map((v) => v.trim())
-          .filter(Boolean)
-      const payload = {
-        nome_completo: archivioDraft.nome_completo.trim(),
-        codice_fiscale: archivioDraft.codice_fiscale.trim(),
-        data_nascita: archivioDraft.data_nascita || null,
-        luogo_nascita: archivioDraft.luogo_nascita.trim(),
-        indirizzo_residenza: archivioDraft.indirizzo_residenza.trim(),
-        telefono_personale: archivioDraft.telefono_personale.trim(),
-        email_personale: archivioDraft.email_personale.trim(),
-        mansione: archivioDraft.mansione.trim(),
-        tipo_contratto: archivioDraft.tipo_contratto.trim(),
-        data_assunzione: archivioDraft.data_assunzione || null,
-        iban: archivioDraft.iban.trim(),
-        note_hr: archivioDraft.note_hr.trim(),
-        corsi_formazione: parseLines(archivioDraft.corsi_formazione_text),
-        documenti_lavoro: parseLines(archivioDraft.documenti_lavoro_text),
-      }
-      await upsertStaffArchivioDipendente(tenantId, archivioOpenUser.id, payload)
-      setArchivioByUserId((m) => ({
-        ...m,
-        [archivioOpenUser.id]: { ...m[archivioOpenUser.id], ...payload, user_id: archivioOpenUser.id },
-      }))
-      alert("Archivio dipendente salvato.")
-      setArchivioOpenUser(null)
-      setArchivioDraft(null)
+      await updateRuoloPizzeriaPermessi(tenantId, userId, { ruolo: nuovoRuolo })
+      await loadUsers()
     } catch (err) {
       console.error(err)
-      alert(err?.message || "Salvataggio archivio non riuscito.")
+      alert(err?.message || "Aggiornamento ruolo non riuscito.")
     } finally {
-      setArchivioBusy(false)
+      setBusyId(null)
     }
   }
+
+  async function handleInviteStaff(e) {
+    e.preventDefault()
+    if (!tenantId) return
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email || !email.includes("@")) {
+      alert("Inserisci un’email valida.")
+      return
+    }
+    setInviteBusy(true)
+    try {
+      await aggiungiRuoloPizzeria(tenantId, email, inviteRuolo)
+      setInviteEmail("")
+      await loadUsers()
+      alert("Richiesta inviata. Se l’utente esiste in Auth, risulta collegato al locale.")
+    } catch (err) {
+      console.error(err)
+      alert(err?.message || "Collegamento non riuscito. Verifica che l’utente esista in Supabase Auth o la RPC del progetto.")
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  const schedaRuolo = schedaUser ? ruoloRecordFor(schedaUser.id) : null
+  const schedaArchivio = schedaUser ? archivioByUserId[schedaUser.id] : null
 
   if (loading) return <Loader />
   if (error) return <ErrorState message={error} />
@@ -177,19 +168,46 @@ export default function UserManager() {
     <div className="dashboard-settings-page dashboard-dipendenti-page">
       <h1 className="dashboard-page-title">Dipendenti</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 14 }}>
-        Anagrafica locale: <strong>nome in sede</strong>, <strong>accesso</strong> all&apos;account e{" "}
-        <strong>archivio dipendente</strong> (dati anagrafici e HR). Il <strong>ruolo base</strong> e i permessi sul menu
-        operativo si assegnano nella pagina{" "}
-        <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
-          Ruoli
-        </Link>
-        .
+        Gestione completa del personale: <strong>anagrafica</strong>, <strong>corsi</strong>, <strong>documenti</strong>,{" "}
+        <strong>buste paga</strong> e <strong>ruolo operativo</strong> (cassa, cucina, permessi aree). Gli account nascono
+        da Supabase Auth; puoi collegarne uno nuovo con il modulo sotto.
       </p>
 
-      <div className="dipendenti-callout" role="note">
-        <strong>Perché due pagine?</strong> Dipendenti = chi è in sede e documentazione; Ruoli = ruolo tecnico e cosa può
-        fare in cassa, cucina, ecc.
-      </div>
+      <section className="dashboard-box dashboard-settings-section" style={{ marginBottom: 18, padding: "16px 20px" }}>
+        <h2 className="dashboard-settings-section-title" style={{ marginTop: 0 }}>
+          Collega un account staff
+        </h2>
+        <p style={{ color: "#64748b", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+          L&apos;email deve corrispondere a un utente già presente in Authentication (o alla procedura RPC del tuo progetto).
+        </p>
+        <form onSubmit={handleInviteStaff} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
+            <input
+              type="email"
+              className="dashboard-search-input"
+              style={{ minWidth: 240 }}
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="nome@dominio.it"
+              autoComplete="off"
+            />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Ruolo iniziale</span>
+            <select className="dipendenti-role-select" value={inviteRuolo} onChange={(e) => setInviteRuolo(e.target.value)}>
+              {RUOLO_BASE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="btn-primary-dashboard" disabled={inviteBusy}>
+            {inviteBusy ? "Invio…" : "Collega"}
+          </button>
+        </form>
+      </section>
 
       <section className="dashboard-box dashboard-settings-section" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "18px 20px 0" }}>
@@ -197,12 +215,7 @@ export default function UserManager() {
             Elenco dipendenti
           </h2>
           <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Cerca per nome, nome in sede o email; imposta il <strong>nome in sede</strong> e apri{" "}
-            <strong>Archivio dipendente</strong> per i dati anagrafici. Per il ruolo e i permessi operativi usa la pagina{" "}
-            <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
-              Ruoli
-            </Link>
-            .
+            Apri la <strong>scheda completa</strong> per dati anagrafici, corsi, allegati e buste paga. Il <strong>ruolo base</strong> è modificabile anche dalla tabella.
           </p>
         </div>
 
@@ -232,21 +245,24 @@ export default function UserManager() {
 
         {users.length === 0 ? (
           <p style={{ padding: "0 20px 24px", color: "#64748b", fontSize: 14, margin: 0 }}>
-            Nessun utente collegato a questo locale. Gli accessi si creano invitando l’utente (es. da Supabase) e
-            assegnando il tenant; poi comparirà qui.
+            Nessun utente collegato a questo locale. Usa il modulo «Collega un account staff» o crea l&apos;utente in Supabase Auth.
           </p>
         ) : filteredUsers.length === 0 ? (
           <p style={{ padding: "0 20px 24px", color: "#64748b", fontSize: 14, margin: 0 }}>
             Nessun risultato per «{filter.trim()}». Prova un altro testo o svuota la ricerca.
           </p>
         ) : (
-          <div className="dashboard-table-wrap dipendenti-table-outer" style={{ borderRadius: 0, borderLeft: "none", borderRight: "none", borderBottom: "none", boxShadow: "none" }}>
+          <div
+            className="dashboard-table-wrap dipendenti-table-outer"
+            style={{ borderRadius: 0, borderLeft: "none", borderRight: "none", borderBottom: "none", boxShadow: "none" }}
+          >
             <div style={{ overflowX: "auto" }}>
               <table className="dipendenti-table">
                 <thead>
                   <tr>
                     <th scope="col">Account</th>
                     <th scope="col">Nome in sede</th>
+                    <th scope="col">Ruolo</th>
                     <th scope="col">Accesso</th>
                   </tr>
                 </thead>
@@ -254,6 +270,7 @@ export default function UserManager() {
                   {filteredUsers.map((user) => {
                     const accountLabel = labelFromEmailPrefix(user.email) || user.nome || "—"
                     const rowBusy = busyId === user.id
+                    const rr = ruoloRecordFor(user.id)
                     return (
                       <tr key={user.id}>
                         <td>
@@ -261,11 +278,11 @@ export default function UserManager() {
                           <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2, wordBreak: "break-all" }}>{user.email}</div>
                           <button
                             type="button"
-                            className="dashboard-settings-btn-secondary"
-                            style={{ marginTop: 8, fontSize: 12, padding: "6px 10px" }}
-                            onClick={() => openArchivioDipendente(user)}
+                            className="btn-primary-dashboard"
+                            style={{ marginTop: 10, fontSize: 12, padding: "8px 12px" }}
+                            onClick={() => setSchedaUser(user)}
                           >
-                            Archivio dipendente
+                            Scheda dipendente
                           </button>
                         </td>
                         <td>
@@ -281,6 +298,23 @@ export default function UserManager() {
                             aria-label={`Nome in sede per ${user.email}`}
                           />
                           <div className="dipendenti-role-hint">Chi usa questo login in negozio (turni, note).</div>
+                        </td>
+                        <td>
+                          <select
+                            className="dipendenti-role-select"
+                            value={rr?.ruolo || user.ruolo || "operatore"}
+                            disabled={rowBusy || !rr}
+                            onChange={(e) => handleRuoloChange(user.id, e.target.value)}
+                            aria-label={`Ruolo per ${user.email}`}
+                          >
+                            {RUOLO_BASE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                            {rr?.ruolo && !RUOLO_BASE_VALUES.has(rr.ruolo) ? <option value={rr.ruolo}>{rr.ruolo}</option> : null}
+                          </select>
+                          {!rr ? <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Ruolo non caricato</div> : null}
                         </td>
                         <td>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
@@ -318,158 +352,16 @@ export default function UserManager() {
         )}
       </section>
 
-      <Modal
-        open={!!archivioOpenUser}
-        onClose={() => {
-          if (archivioBusy) return
-          setArchivioOpenUser(null)
-          setArchivioDraft(null)
-        }}
-        title={archivioOpenUser ? `Archivio dipendente - ${labelFromEmailPrefix(archivioOpenUser.email) || archivioOpenUser.email}` : ""}
-      >
-        {archivioOpenUser && archivioDraft ? (
-          <div style={{ padding: "8px 0", maxHeight: "70vh", overflowY: "auto" }}>
-            <ArchivioField label="Nome completo">
-              <input
-                className="dashboard-search-input"
-                value={archivioDraft.nome_completo}
-                onChange={(e) => setArchivioDraft((d) => ({ ...d, nome_completo: e.target.value }))}
-              />
-            </ArchivioField>
-            <ArchivioField label="Codice fiscale">
-              <input
-                className="dashboard-search-input"
-                value={archivioDraft.codice_fiscale}
-                onChange={(e) => setArchivioDraft((d) => ({ ...d, codice_fiscale: e.target.value.toUpperCase() }))}
-              />
-            </ArchivioField>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <ArchivioField label="Data nascita">
-                <input
-                  type="date"
-                  className="dashboard-search-input"
-                  value={archivioDraft.data_nascita}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, data_nascita: e.target.value }))}
-                />
-              </ArchivioField>
-              <ArchivioField label="Luogo nascita">
-                <input
-                  className="dashboard-search-input"
-                  value={archivioDraft.luogo_nascita}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, luogo_nascita: e.target.value }))}
-                />
-              </ArchivioField>
-            </div>
-            <ArchivioField label="Indirizzo residenza">
-              <input
-                className="dashboard-search-input"
-                value={archivioDraft.indirizzo_residenza}
-                onChange={(e) => setArchivioDraft((d) => ({ ...d, indirizzo_residenza: e.target.value }))}
-              />
-            </ArchivioField>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <ArchivioField label="Telefono personale">
-                <input
-                  className="dashboard-search-input"
-                  value={archivioDraft.telefono_personale}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, telefono_personale: e.target.value }))}
-                />
-              </ArchivioField>
-              <ArchivioField label="Email personale">
-                <input
-                  type="email"
-                  className="dashboard-search-input"
-                  value={archivioDraft.email_personale}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, email_personale: e.target.value }))}
-                />
-              </ArchivioField>
-            </div>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <ArchivioField label="Mansione">
-                <input
-                  className="dashboard-search-input"
-                  value={archivioDraft.mansione}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, mansione: e.target.value }))}
-                />
-              </ArchivioField>
-              <ArchivioField label="Tipo contratto">
-                <input
-                  className="dashboard-search-input"
-                  value={archivioDraft.tipo_contratto}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, tipo_contratto: e.target.value }))}
-                />
-              </ArchivioField>
-            </div>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <ArchivioField label="Data assunzione">
-                <input
-                  type="date"
-                  className="dashboard-search-input"
-                  value={archivioDraft.data_assunzione}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, data_assunzione: e.target.value }))}
-                />
-              </ArchivioField>
-              <ArchivioField label="IBAN">
-                <input
-                  className="dashboard-search-input"
-                  value={archivioDraft.iban}
-                  onChange={(e) => setArchivioDraft((d) => ({ ...d, iban: e.target.value.toUpperCase() }))}
-                />
-              </ArchivioField>
-            </div>
-            <ArchivioField label="Corsi (una riga per corso)">
-              <textarea
-                rows={3}
-                className="dashboard-search-input"
-                value={archivioDraft.corsi_formazione_text}
-                onChange={(e) => setArchivioDraft((d) => ({ ...d, corsi_formazione_text: e.target.value }))}
-              />
-            </ArchivioField>
-            <ArchivioField label="Documenti / buste paga (una riga per voce)">
-              <textarea
-                rows={3}
-                className="dashboard-search-input"
-                value={archivioDraft.documenti_lavoro_text}
-                onChange={(e) => setArchivioDraft((d) => ({ ...d, documenti_lavoro_text: e.target.value }))}
-              />
-            </ArchivioField>
-            <ArchivioField label="Note HR">
-              <textarea
-                rows={3}
-                className="dashboard-search-input"
-                value={archivioDraft.note_hr}
-                onChange={(e) => setArchivioDraft((d) => ({ ...d, note_hr: e.target.value }))}
-              />
-            </ArchivioField>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
-              <button
-                type="button"
-                className="dashboard-settings-btn-secondary"
-                onClick={() => {
-                  if (archivioBusy) return
-                  setArchivioOpenUser(null)
-                  setArchivioDraft(null)
-                }}
-                disabled={archivioBusy}
-              >
-                Annulla
-              </button>
-              <button type="button" className="btn-primary-dashboard" onClick={() => void saveArchivioDipendente()} disabled={archivioBusy}>
-                {archivioBusy ? "Salvataggio..." : "Salva archivio"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+      <StaffDossierModal
+        open={!!schedaUser}
+        onClose={() => setSchedaUser(null)}
+        tenantId={tenantId}
+        user={schedaUser}
+        ruoloRecord={schedaRuolo}
+        archivioRow={schedaArchivio}
+        onSaved={loadUsers}
+        onRuoliRefresh={loadUsers}
+      />
     </div>
-  )
-}
-
-function ArchivioField({ label, children }) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>{label}</span>
-      {children}
-    </label>
   )
 }

@@ -62,6 +62,7 @@ export default function RiepilogoOrdinePage({
   onIncrease,
   onDecrease,
   onRemove,
+  onEditPizza,
   pizzePerSlotFromOrders = {},
   /** Fedeltà (solo ritiro in negozio, se servizio attivo) */
   fidelityAbilitato = false,
@@ -149,6 +150,7 @@ export default function RiepilogoOrdinePage({
                   onIncrease={onIncrease}
                   onDecrease={onDecrease}
                   onRemove={onRemove}
+                  onEditPizza={onEditPizza}
                 />
               </li>
             ))}

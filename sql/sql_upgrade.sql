@@ -20,4 +20,14 @@
 --   -- SQL idempotente
 -- END $$;
 -- -----------------------------------------------------------------------------
---
+
+-- 2026-04-17 - HR dipendenti: foto, allegati strutturati, buste paga
+ALTER TABLE public.staff_archivio_dipendenti
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS allegati_hr JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS buste_paga JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+COMMENT ON COLUMN public.staff_archivio_dipendenti.foto_url IS 'URL o path storage foto profilo dipendente (bucket staff-hr).';
+COMMENT ON COLUMN public.staff_archivio_dipendenti.allegati_hr IS 'Metadati allegati HR (JSON array: id, nome, storage_path, creato_at).';
+COMMENT ON COLUMN public.staff_archivio_dipendenti.buste_paga IS 'Metadati buste paga (JSON array: id, nome, mese_riferimento, storage_path, creato_at).';
+

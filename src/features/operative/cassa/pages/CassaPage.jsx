@@ -1561,7 +1561,7 @@ export default function CassaPage() {
   // CART LOGIC
   /////////////////////////////////////////////////////////
 
-  const addToCartWithIngredienti = useCallback((product, modsPayload = null) => {
+  const addToCartWithIngredienti = useCallback((product, modsPayload = null, modificaCassaDisponibile = true) => {
     const summary = modsPayload?.ingredientiCotturaSummary ?? ""
     const key =
       modsPayload?.formatoSpecial === "famiglia"
@@ -1595,6 +1595,7 @@ export default function CassaPage() {
           ...product,
           prezzo: modsPayload?.prezzoCalcolato != null ? modsPayload.prezzoCalcolato : product.prezzo,
           qty: 1,
+          modificaCassaDisponibile: modificaCassaDisponibile !== false,
           ingredientiCotturaSummary: summary,
           ingredientiModifiche: modsPayload?.ingredientiModifiche,
           extraIngredienti: modsPayload?.extraIngredienti,
@@ -1613,6 +1614,8 @@ export default function CassaPage() {
   const addToCart = useCallback(
     async (product) => {
       if (!tenantId) return
+      const catNome = (categories.find((c) => c.id === activeCategory)?.nome || "").toLowerCase()
+      const modificaCassaDisponibile = !["fritti", "dolci", "bibite"].includes(catNome)
       const ingList = await getProductIngredienti(tenantId, product.id)
       if (ingList?.length > 0) {
         const defaultModifiche = {}
@@ -1631,12 +1634,12 @@ export default function CassaPage() {
             [],
           ),
         }
-        addToCartWithIngredienti(product, defaultPayload)
+        addToCartWithIngredienti(product, defaultPayload, modificaCassaDisponibile)
         return
       }
-      addToCartWithIngredienti(product, null)
+      addToCartWithIngredienti(product, null, modificaCassaDisponibile)
     },
-    [tenantId, addToCartWithIngredienti]
+    [tenantId, addToCartWithIngredienti, categories, activeCategory]
   )
 
   const closePizzaModal = useCallback(() => {
@@ -1646,7 +1649,9 @@ export default function CassaPage() {
   }, [])
 
   const openModificaPizzaFromCart = useCallback((item) => {
-    if (!item?._modsKey && !item?.ingredientiModifiche && !item?.ingredientiCotturaSummary) return
+    if (item?.modificaCassaDisponibile === false) return
+    const hasMods = Boolean(item?._modsKey || item?.ingredientiModifiche || item?.ingredientiCotturaSummary)
+    if (!hasMods && item?.modificaCassaDisponibile !== true) return
     setPizzaModalEditCartLine(item)
     setProductToAdd({ ...item })
     setProductModalOpen(true)
@@ -1661,11 +1666,15 @@ export default function CassaPage() {
         if (pizzaModalEditCartLine) {
           setCart((prev) => prev.filter((p) => p !== pizzaModalEditCartLine))
         }
-        addToCartWithIngredienti(modsPayload.productForCart, {
-          formatoNome: modsPayload.formatoNome,
-          prezzoCalcolato: modsPayload.prezzoCalcolato,
-          formatoSpecial: modsPayload.formatoSpecial ?? (isFamiglia ? "famiglia" : null),
-        })
+        addToCartWithIngredienti(
+          modsPayload.productForCart,
+          {
+            formatoNome: modsPayload.formatoNome,
+            prezzoCalcolato: modsPayload.prezzoCalcolato,
+            formatoSpecial: modsPayload.formatoSpecial ?? (isFamiglia ? "famiglia" : null),
+          },
+          pizzaModalEditCartLine?.modificaCassaDisponibile !== false,
+        )
         closePizzaModal()
         return
       }
@@ -1709,7 +1718,11 @@ export default function CassaPage() {
         closePizzaModal()
         return
       }
-      addToCartWithIngredienti(productToAdd, modsPayload)
+      addToCartWithIngredienti(
+        productToAdd,
+        modsPayload,
+        pizzaModalEditCartLine?.modificaCassaDisponibile !== false,
+      )
       closePizzaModal()
     },
     [productToAdd, pizzaModalEditCartLine, addToCartWithIngredienti, closePizzaModal],
@@ -2501,6 +2514,7 @@ export default function CassaPage() {
           onIncrease={increaseQty}
           onDecrease={decreaseQty}
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
+          onEditPizza={openModificaPizzaFromCart}
           pizzePerSlotFromOrders={pizzePerSlotRiepilogo}
           fidelityAbilitato={fidelityServizioOk}
           fidelityQuery={fidelityQuery}

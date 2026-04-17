@@ -4,7 +4,7 @@
  *
  * Ruoli di reparto (cassa, cucina, …): una sola area operativa, indipendentemente dai DEFAULT true
  * su `accesso_*` in DB (altrimenti con un solo flag false restano tutte le altre aree attive).
- * Per più aree usare il ruolo operatore e le spunte in Admin → Ruoli.
+ * Per più aree usare il ruolo operatore e le spunte in Admin → Dipendenti (scheda / Ruolo operativo).
  */
 
 const RUOLO_OPERATIVO_ALIASES = {

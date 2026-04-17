@@ -834,8 +834,11 @@ export async function upsertStaffArchivioDipendente(tenantId, userId, payload = 
     tipo_contratto: payload.tipo_contratto || null,
     data_assunzione: payload.data_assunzione || null,
     iban: payload.iban || null,
+    foto_url: payload.foto_url != null ? payload.foto_url : null,
     corsi_formazione: Array.isArray(payload.corsi_formazione) ? payload.corsi_formazione : [],
     documenti_lavoro: Array.isArray(payload.documenti_lavoro) ? payload.documenti_lavoro : [],
+    allegati_hr: Array.isArray(payload.allegati_hr) ? payload.allegati_hr : [],
+    buste_paga: Array.isArray(payload.buste_paga) ? payload.buste_paga : [],
     note_hr: payload.note_hr || null,
     updated_at: new Date().toISOString(),
   }
@@ -843,6 +846,41 @@ export async function upsertStaffArchivioDipendente(tenantId, userId, payload = 
     .from("staff_archivio_dipendenti")
     .upsert(row, { onConflict: "tenant_id,user_id" })
   if (error) throw mapStaffArchivioError(error)
+}
+
+/** Bucket Storage privato: creare in Supabase «staff-hr» (privato) + policy per utenti autenticati del tenant. */
+const STAFF_HR_BUCKET = "staff-hr"
+
+export async function uploadStaffHrFile(tenantId, userId, file, subdir = "docs") {
+  if (!tenantId || !userId || !file) throw new Error("File o destinatario mancante.")
+  const rawName = typeof file.name === "string" ? file.name : "file"
+  const ext = rawName.includes(".") ? rawName.split(".").pop().replace(/[^\w.-]/g, "").slice(0, 12) : "bin"
+  const path = `${tenantId}/${userId}/${subdir}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
+  const { error } = await supabase.storage.from(STAFF_HR_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  })
+  if (error) {
+    throw new Error(
+      (error.message || "Upload non riuscito") +
+        " — Verifica in Supabase Storage il bucket «staff-hr» (privato) e le policy per i file HR.",
+    )
+  }
+  return path
+}
+
+export async function getStaffHrSignedUrl(storagePath, expiresSec = 3600) {
+  if (!storagePath) return ""
+  const { data, error } = await supabase.storage.from(STAFF_HR_BUCKET).createSignedUrl(storagePath, expiresSec)
+  if (error) throw error
+  return data?.signedUrl || ""
+}
+
+export async function removeStaffHrFiles(paths) {
+  const list = (paths || []).filter(Boolean)
+  if (!list.length) return
+  const { error } = await supabase.storage.from(STAFF_HR_BUCKET).remove(list)
+  if (error) console.warn("removeStaffHrFiles:", error)
 }
 
 const AREA_COLUMNS = "accesso_riepilogo, accesso_cassa, accesso_cucina, accesso_bancone, accesso_pizzaiolo, accesso_delivery, accesso_pony"
@@ -1708,11 +1746,12 @@ export async function getProductIngredienti(tenantId, productId) {
   if (!tenantId || !productId) return []
   try {
     let rows
-    const base = () =>
-      supabase.from("prodotto_ingrediente").eq("prodotto_id", productId).eq("tenant_id", tenantId)
-
-    const { data: dataFull, error: errFull } = await base()
+    /** PostgREST: `.eq` va dopo `.select` su `from()`, non direttamente su `from()`. */
+    const { data: dataFull, error: errFull } = await supabase
+      .from("prodotto_ingrediente")
       .select("ingrediente_id, ordine, posizione_cottura")
+      .eq("tenant_id", tenantId)
+      .eq("prodotto_id", productId)
       .order("ordine", { ascending: true })
     if (!errFull) {
       rows = dataFull || []
@@ -1721,11 +1760,18 @@ export async function getProductIngredienti(tenantId, productId) {
       String(errFull.message || "").includes("posizione_cottura") ||
       String(errFull.message || "").includes("column")
     ) {
-      const { data: dataWithOrdine, error: errOrdine } = await base()
+      const { data: dataWithOrdine, error: errOrdine } = await supabase
+        .from("prodotto_ingrediente")
         .select("ingrediente_id, ordine")
+        .eq("tenant_id", tenantId)
+        .eq("prodotto_id", productId)
         .order("ordine", { ascending: true })
       if (errOrdine && (errOrdine.code === "PGRST204" || String(errOrdine.message || "").includes("ordine"))) {
-        const { data: dataNoOrdine, error } = await base().select("ingrediente_id")
+        const { data: dataNoOrdine, error } = await supabase
+          .from("prodotto_ingrediente")
+          .select("ingrediente_id")
+          .eq("tenant_id", tenantId)
+          .eq("prodotto_id", productId)
         if (error) return []
         rows = dataNoOrdine || []
       } else if (errOrdine) {

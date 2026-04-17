@@ -22,7 +22,6 @@ const topNavItems = [
   { to: "/admin/magazzino", label: "Magazzino", servizioId: "magazzino_gestione" },
   { to: "/admin/contabilita", label: "Contabilità", servizioId: null },
   { to: "/admin/dipendenti", label: "Dipendenti", servizioId: null },
-  { to: "/admin/ruoli", label: "Ruoli", servizioId: "ruoli_avanzati" },
   { to: "/admin/settings", label: "Impostazioni", servizioId: null },
 ];
 
@@ -130,7 +129,6 @@ export default function AdminLayout() {
     const p = location.pathname;
     if (p.startsWith("/admin/report") && !hasServizio("report_analisi")) return ADMIN_TENANT_HOME;
     if (p.startsWith("/admin/fidelity") && !hasServizio("fidelity_card")) return ADMIN_TENANT_HOME;
-    if (p === "/admin/ruoli" && !hasServizio("ruoli_avanzati")) return ADMIN_TENANT_HOME;
     if (p.startsWith("/admin/magazzino") && !hasServizio("magazzino_gestione")) return ADMIN_TENANT_HOME;
     if (
       p.startsWith("/admin/contabilita") &&
