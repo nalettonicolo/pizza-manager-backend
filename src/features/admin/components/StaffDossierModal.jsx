@@ -136,7 +136,7 @@ export default function StaffDossierModal({
     }
   }, [open, user, archivioRow, resetFromProps])
 
-  const handleFoto = async (e) => {
+  const handleFoto = useCallback(async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ""
     if (!file || !tenantId || !user?.id) return
@@ -156,7 +156,7 @@ export default function StaffDossierModal({
     } finally {
       setFotoBusy(false)
     }
-  }
+  }, [tenantId, user?.id])
 
   const uploadAllegato = async (file, kind) => {
     if (!file || !tenantId || !user?.id) return
@@ -329,7 +329,7 @@ export default function StaffDossierModal({
         </Field>
       </div>
     )
-  }, [draft, fotoPreview, fotoBusy, fotoPath])
+  }, [draft, fotoPreview, fotoBusy, fotoPath, handleFoto])
 
   if (!open || !user) return null
 
