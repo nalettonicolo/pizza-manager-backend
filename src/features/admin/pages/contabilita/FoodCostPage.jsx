@@ -3,9 +3,22 @@ import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
 import { useTenant } from "@/app/contexts/TenantContext";
-import { updateTenantSettings } from "@/features/admin/services/adminService";
+import {
+  updateTenantSettings,
+  getCategories,
+  getProducts,
+  getConfigurazioneCosti,
+  getProductIngredientiBatch,
+  foodCostCostoRicettaEuro,
+} from "@/features/admin/services/adminService";
 
-function marginePct(costoAlKg, pesoG, prezzoVendita) {
+function toNum(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  const n = Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function marginePctManuale(costoAlKg, pesoG, prezzoVendita) {
   const kg = Number(pesoG) / 1000;
   const costo = Number(costoAlKg) * kg;
   const vendita = Number(prezzoVendita);
@@ -24,7 +37,11 @@ export default function FoodCostPage() {
   const [margineDraft, setMargineDraft] = useState("");
   const [margineSaving, setMargineSaving] = useState(false);
 
-  const rows = useMemo(() => data.righe, [data.righe]);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [menuError, setMenuError] = useState(null);
+  const [menuRows, setMenuRows] = useState([]);
+
+  const righeManuali = useMemo(() => data.righe || [], [data.righe]);
 
   useEffect(() => {
     const raw = tenantData?.parametri_operativi?.foodcost_margine_percent;
@@ -34,6 +51,66 @@ export default function FoodCostPage() {
     }
     setMargineDraft(String(raw));
   }, [tenantData?.parametri_operativi?.foodcost_margine_percent]);
+
+  const loadMenuProducts = useCallback(async () => {
+    if (!tenantId) return;
+    setMenuLoading(true);
+    setMenuError(null);
+    try {
+      const [categories, products, config] = await Promise.all([
+        getCategories(tenantId),
+        getProducts(tenantId),
+        getConfigurazioneCosti(tenantId),
+      ]);
+      const costoImpasto = toNum(config?.costo_impasto ?? config?.costoImpasto);
+      const catById = Object.fromEntries((categories || []).map((c) => [c.id, c]));
+      const attivi = (products || []).filter((p) => p.attivo !== false);
+      const ids = attivi.map((p) => p.id).filter(Boolean);
+      const ingByProduct = ids.length ? await getProductIngredientiBatch(tenantId, ids) : {};
+
+      const sorted = [...attivi].sort((a, b) => {
+        const ca = catById[a.categoria_id || a.categoriaId];
+        const cb = catById[b.categoria_id || b.categoriaId];
+        const oa = Number(ca?.ordine) || 0;
+        const ob = Number(cb?.ordine) || 0;
+        if (oa !== ob) return oa - ob;
+        return (a.nome || "").localeCompare(b.nome || "", "it");
+      });
+
+      const rows = sorted.map((p) => {
+        const cid = p.categoria_id || p.categoriaId;
+        const cat = cid ? catById[cid] : null;
+        const slug = cat?.slug || "";
+        const ings = ingByProduct[p.id] || [];
+        const costoRicetta = foodCostCostoRicettaEuro(slug, costoImpasto, ings);
+        const prezzo = toNum(p.prezzo);
+        let margine = null;
+        if (prezzo > 0 && costoRicetta > 0) {
+          margine = ((prezzo - costoRicetta) / prezzo) * 100;
+        }
+        return {
+          id: p.id,
+          categoriaNome: cat?.nome || "—",
+          nome: p.nome || "—",
+          costoRicetta,
+          prezzo,
+          margine,
+        };
+      });
+      setMenuRows(rows);
+    } catch (e) {
+      console.error(e);
+      setMenuError(e?.message || "Caricamento listino non riuscito.");
+      setMenuRows([]);
+    } finally {
+      setMenuLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!tenantId || !ready) return;
+    void loadMenuProducts();
+  }, [tenantId, ready, loadMenuProducts]);
 
   const saveMargineTarget = useCallback(async () => {
     if (!tenantId || !tenantData) return;
@@ -63,7 +140,7 @@ export default function FoodCostPage() {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
   }
 
-  function add() {
+  function addManuale() {
     if (!ingrediente.trim()) return;
     const row = {
       id: newLocalId(),
@@ -73,7 +150,7 @@ export default function FoodCostPage() {
       prezzoVendita: Number(prezzoVendita) || 0,
       note: note.trim(),
     };
-    setData((d) => ({ ...d, righe: [row, ...d.righe] }));
+    setData((d) => ({ ...d, righe: [row, ...(d.righe || [])] }));
     setIngrediente("");
     setCostoAlKg("");
     setPesoTeoricoG("");
@@ -81,20 +158,29 @@ export default function FoodCostPage() {
     setNote("");
   }
 
-  function remove(id) {
-    setData((d) => ({ ...d, righe: d.righe.filter((r) => r.id !== id) }));
+  function removeManuale(id) {
+    setData((d) => ({ ...d, righe: (d.righe || []).filter((r) => r.id !== id) }));
   }
 
   return (
     <AdminModuleShell
       title="Food cost"
-      lead="Margine target sul listino (parametro globale) e analisi per ingrediente. Il margine % sulle righe sotto è stimato rispetto al prezzo di vendita."
-      specTitle="Logica (semplificata)"
+      lead="Elenco automatico da tutte le categorie del menù (pizze, fritti, dolci, bibite, …): costo ricetta stimato da impasto + ingredienti e confronto con il prezzo listino. Sotto puoi aggiungere analisi manuali per singolo ingrediente."
+      specTitle="Logica costo ricetta (listino)"
       specChildren={
         <ul style={{ margin: 0, paddingLeft: 18 }}>
-          <li>Costo teorico = (costo €/kg) × (peso g / 1000).</li>
-          <li>Margine % = (prezzo vendita − costo teorico) / prezzo vendita × 100.</li>
-          <li>Il peso può rappresentare la quota ingrediente su una porzione venduta.</li>
+          <li>
+            Per pizze e categorie «normali»: costo = <strong>costo impasto</strong> (da Impasti) + somma costi ingredienti
+            associati al prodotto.
+          </li>
+          <li>
+            Per <strong>fritti, dolci e bibite</strong>: si usano solo i costi ingredienti se presenti; il costo impasto non
+            viene sommato (come nel ricalcolo listino pizze).
+          </li>
+          <li>
+            Margine % = (prezzo listino − costo ricetta) / prezzo listino. Se il costo ricetta è 0 (nessun dato), il margine
+            non è calcolato.
+          </li>
         </ul>
       }
     >
@@ -144,6 +230,72 @@ export default function FoodCostPage() {
           .
         </p>
       </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: 16, color: "#0f172a" }}>Prodotti dal menù</h2>
+        <button
+          type="button"
+          className="dashboard-settings-btn-secondary"
+          disabled={!tenantId || menuLoading}
+          onClick={() => void loadMenuProducts()}
+        >
+          {menuLoading ? "Aggiornamento…" : "Aggiorna da menù"}
+        </button>
+      </div>
+      {menuError ? (
+        <p style={{ color: "#b91c1c", fontSize: 14, marginBottom: 12 }}>{menuError}</p>
+      ) : null}
+      {menuLoading && menuRows.length === 0 ? (
+        <p style={{ padding: 16, color: "#64748b", fontSize: 14 }}>Caricamento prodotti…</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, marginBottom: 32 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "2px solid #e2e8f0", color: "#64748b" }}>
+              <th style={{ padding: "10px 8px" }}>Categoria</th>
+              <th style={{ padding: "10px 8px" }}>Prodotto</th>
+              <th style={{ padding: "10px 8px" }}>Costo ricetta €</th>
+              <th style={{ padding: "10px 8px" }}>Prezzo listino €</th>
+              <th style={{ padding: "10px 8px" }}>Margine %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {menuRows.map((r) => (
+              <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "10px 8px", color: "#475569" }}>{r.categoriaNome}</td>
+                <td style={{ padding: "10px 8px", fontWeight: 600 }}>{r.nome}</td>
+                <td style={{ padding: "10px 8px" }}>€ {r.costoRicetta.toFixed(2)}</td>
+                <td style={{ padding: "10px 8px" }}>€ {r.prezzo.toFixed(2)}</td>
+                <td
+                  style={{
+                    padding: "10px 8px",
+                    fontWeight: r.margine != null && r.margine < 0 ? 600 : 400,
+                    color: r.margine != null && r.margine < 0 ? "#b91c1c" : "#0f172a",
+                  }}
+                >
+                  {r.margine == null ? "—" : `${r.margine.toFixed(1)} %`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {!menuLoading && menuRows.length === 0 && !menuError ? (
+        <p style={{ padding: "0 0 24px", color: "#94a3b8", fontSize: 14 }}>Nessun prodotto attivo nel menù.</p>
+      ) : null}
+
+      <h2 style={{ fontSize: 16, marginBottom: 12, color: "#0f172a" }}>Analisi manuale per ingrediente (facoltativo)</h2>
+      <p style={{ margin: "0 0 16px", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+        Righe salvate in questo browser (€/kg e peso teorico). Utile per simulazioni non legate a una voce di menù.
+      </p>
 
       <div
         style={{
@@ -200,8 +352,8 @@ export default function FoodCostPage() {
             style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
           />
         </div>
-        <button type="button" className="btn-primary" onClick={add}>
-          Aggiungi riga
+        <button type="button" className="btn-primary" onClick={addManuale}>
+          Aggiungi riga manuale
         </button>
       </div>
 
@@ -218,10 +370,10 @@ export default function FoodCostPage() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {righeManuali.map((r) => {
             const kg = r.pesoTeoricoG / 1000;
             const costoTeo = r.costoAlKg * kg;
-            const m = marginePct(r.costoAlKg, r.pesoTeoricoG, r.prezzoVendita);
+            const m = marginePctManuale(r.costoAlKg, r.pesoTeoricoG, r.prezzoVendita);
             return (
               <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "10px 8px", fontWeight: 600 }}>{r.ingrediente}</td>
@@ -233,7 +385,11 @@ export default function FoodCostPage() {
                   {m == null ? "—" : `${m.toFixed(1)} %`}
                 </td>
                 <td style={{ padding: "10px 8px" }}>
-                  <button type="button" style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }} onClick={() => remove(r.id)}>
+                  <button
+                    type="button"
+                    style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }}
+                    onClick={() => removeManuale(r.id)}
+                  >
                     Elimina
                   </button>
                 </td>
@@ -242,8 +398,8 @@ export default function FoodCostPage() {
           })}
         </tbody>
       </table>
-      {rows.length === 0 ? (
-        <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessuna analisi food cost.</p>
+      {righeManuali.length === 0 ? (
+        <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessuna riga manuale.</p>
       ) : null}
     </AdminModuleShell>
   );

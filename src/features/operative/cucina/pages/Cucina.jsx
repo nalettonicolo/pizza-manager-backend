@@ -19,6 +19,7 @@ import {
   groupOrdersBySlot,
   mergeCucinaSlotKeys,
 } from "@/features/operative/cucina/utils/cucinaPrepTasks"
+import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -48,7 +49,8 @@ function rigaGroupKey(r) {
 
 /** Righe ordine aggregate come in vista Pizzaiolo: qty, nome, riepilogo ingredienti / lista ricetta. */
 function CucinaRigheComposizione({ righe, productNames, ingredientsByProduct }) {
-  if (!righe?.length) return <p style={fornoStyles.mutedRighe}>Nessuna riga prodotto.</p>
+  const quad = useRepartiQuadTest()
+  if (!righe?.length) return quad ? null : <p style={fornoStyles.mutedRighe}>Nessuna riga prodotto.</p>
 
   const aggregated = {}
   for (const r of righe) {
@@ -116,6 +118,7 @@ function CucinaRigheComposizione({ righe, productNames, ingredientsByProduct }) 
 }
 
 export default function Cucina() {
+  const quad = useRepartiQuadTest()
   const { tenantId, tenantData } = useTenant()
   const parametri = tenantData?.parametri_operativi || {}
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
@@ -297,20 +300,24 @@ export default function Cucina() {
 
   return (
     <div style={styles.wrapper} className="operative-mobile-pad">
-      <h1 style={styles.title}>Cucina</h1>
-      <p style={styles.subtitle}>
-        Preparazioni (ingredienti e voci fritti/bibite/dolci se flaggate) e composizione in forno — per fascia oraria. Senza numero ordine o
-        prezzi.
-      </p>
+      {!quad ? (
+        <>
+          <h1 style={styles.title}>Cucina</h1>
+          <p style={styles.subtitle}>
+            Preparazioni (ingredienti e voci fritti/bibite/dolci se flaggate) e composizione in forno — per fascia oraria. Senza numero ordine o
+            prezzi.
+          </p>
+        </>
+      ) : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
       {loading && orders.length === 0 ? (
-        <p style={styles.muted}>Caricamento...</p>
+        quad ? null : <p style={styles.muted}>Caricamento...</p>
       ) : orders.length === 0 ? (
-        <p style={styles.muted}>Nessuna lavorazione in coda (nessun ordine in preparazione).</p>
+        quad ? null : <p style={styles.muted}>Nessuna lavorazione in coda (nessun ordine in preparazione).</p>
       ) : slotTabs.length === 0 ? (
-        <p style={styles.muted}>Nessuna fascia oraria disponibile.</p>
+        quad ? null : <p style={styles.muted}>Nessuna fascia oraria disponibile.</p>
       ) : (
         <>
           <div style={styles.tabRow} role="tablist" aria-label="Fasce orarie">
@@ -339,19 +346,23 @@ export default function Cucina() {
           </div>
 
           <section style={styles.prepSection} aria-label="Preparazioni cucina">
-            <h2 style={styles.sectionTitle}>Da preparare (cucina)</h2>
-            <p style={styles.prepHint}>
-              Ingredienti: flag &quot;Prep. cucina&quot; in Admin → Ingredienti. Fritti, bibite e dolci: stesso flag sul prodotto in Admin →
-              Fritti / Bibite / Dolci. Tocca quando la preparazione è pronta.
-              {totalPrepPending > 0 ? ` · ${totalPrepPending} totali da fare` : ""}
-            </p>
-            <p style={styles.prepLegend}>
-              Colori base preparazione: congelato blu, affettato verde, bibite bianco, fritto giallo, comuni rosa.
-              Se un ingrediente ha un colore personalizzato in anagrafica, qui viene usato quello.
-            </p>
+            {!quad ? (
+              <>
+                <h2 style={styles.sectionTitle}>Da preparare (cucina)</h2>
+                <p style={styles.prepHint}>
+                  Ingredienti: flag &quot;Prep. cucina&quot; in Admin → Ingredienti. Fritti, bibite e dolci: stesso flag sul prodotto in Admin →
+                  Fritti / Bibite / Dolci. Tocca quando la preparazione è pronta.
+                  {totalPrepPending > 0 ? ` · ${totalPrepPending} totali da fare` : ""}
+                </p>
+                <p style={styles.prepLegend}>
+                  Colori base preparazione: congelato blu, affettato verde, bibite bianco, fritto giallo, comuni rosa.
+                  Se un ingrediente ha un colore personalizzato in anagrafica, qui viene usato quello.
+                </p>
+              </>
+            ) : null}
             <div style={styles.taskList}>
               {pendingInTab.length === 0 && doneInTab.length === 0 ? (
-                <p style={styles.mutedSmall}>Nessuna preparazione per questa fascia.</p>
+                quad ? null : <p style={styles.mutedSmall}>Nessuna preparazione per questa fascia.</p>
               ) : null}
               {pendingInTab.map((t) => {
                 const key = `${t.ordineId}:${t.rigaId}:${t.ingredienteId}`
@@ -406,12 +417,16 @@ export default function Cucina() {
           </section>
 
           <section style={styles.fornoSection} aria-label="Composizione in forno">
-            <h2 style={styles.sectionTitle}>In forno — composizione piatti</h2>
-            <p style={styles.fornoHint}>
-              Dettaglio prodotti e ingredienti (in cottura in grassetto). Segna pronto quando la cucina ha finito: passa al pizzaiolo / bancone.
-            </p>
+            {!quad ? (
+              <>
+                <h2 style={styles.sectionTitle}>In forno — composizione piatti</h2>
+                <p style={styles.fornoHint}>
+                  Dettaglio prodotti e ingredienti (in cottura in grassetto). Segna pronto quando la cucina ha finito: passa al pizzaiolo / bancone.
+                </p>
+              </>
+            ) : null}
             {ordersInTab.length === 0 ? (
-              <p style={styles.mutedSmall}>Nessun ordine in questa fascia.</p>
+              quad ? null : <p style={styles.mutedSmall}>Nessun ordine in questa fascia.</p>
             ) : (
               <div style={styles.fornoStack}>
                 {ordersInTab.map((ord) => {

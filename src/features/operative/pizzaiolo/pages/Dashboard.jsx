@@ -21,6 +21,7 @@ import {
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -33,6 +34,7 @@ function googleMapsUrl(indirizzo) {
 }
 
 export default function PizzaioloDashboard() {
+  const quad = useRepartiQuadTest()
   const { tenantId, tenantData } = useTenant()
   const [orders, setOrders] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
@@ -333,7 +335,7 @@ export default function PizzaioloDashboard() {
 
   return (
     <div className="pizzaiolo-dashboard-root">
-      <h1 style={styles.title}>Pizzaiolo</h1>
+      {!quad ? <h1 style={styles.title}>Pizzaiolo</h1> : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -360,21 +362,21 @@ export default function PizzaioloDashboard() {
       {/* Due colonne */}
       <div className="pizzaiolo-dashboard-columns">
         <div style={styles.column}>
-          <h2 style={styles.columnTitle}>In negozio</h2>
+          {!quad ? <h2 style={styles.columnTitle}>In negozio</h2> : null}
           {loading && ordiniNegozio.length === 0 ? (
-            <p style={styles.muted}>Caricamento...</p>
+            quad ? null : <p style={styles.muted}>Caricamento...</p>
           ) : ordiniNegozio.length === 0 ? (
-            <p style={styles.muted}>Nessun ordine in preparazione.</p>
+            quad ? null : <p style={styles.muted}>Nessun ordine in preparazione.</p>
           ) : (
             ordiniNegozio.map((ord) => renderCard(ord, false))
           )}
         </div>
         <div style={styles.column}>
-          <h2 style={styles.columnTitle}>A domicilio</h2>
+          {!quad ? <h2 style={styles.columnTitle}>A domicilio</h2> : null}
           {loading && ordiniDelivery.length === 0 ? (
-            <p style={styles.muted}>Caricamento...</p>
+            quad ? null : <p style={styles.muted}>Caricamento...</p>
           ) : ordiniDelivery.length === 0 ? (
-            <p style={styles.muted}>Nessun ordine in preparazione.</p>
+            quad ? null : <p style={styles.muted}>Nessun ordine in preparazione.</p>
           ) : (
             ordiniDelivery.map((ord) => renderCard(ord, true))
           )}

@@ -33,7 +33,7 @@ DNS / Firebase in configurazione
 - https://pizzamanager.it/superadmin/test-layout NON FUNZIONA COME RICHIESTO. 
 - SE HO SELEZIONATO UN CLIENTE A DOMICILIO E POI CLICCO SULLA X PER DESELEZIONARLO IL CARRELLO SI DEVE SVUOTARE IN MANIERA AUTOMATICA, RESTA NOME DEL CLIENTE L'ORDINE APERTO MA NON CONFERMATO, SE RICHIAMO QUEL CLIENTE VEDRO' L'ORDINE INCOMPLETO, STESSA COSA SE HO ASSOCIATO IL CLIENTE CREATO DA ME AL CLIENTE CHE SI è REGISTRATO ONLINE E DA CASA IN AUTONOMIA HA CREATO PARZIALMENTE L'ORDINE E NON CONCLUSO DEVO VEDERLO. ATTENZIONE CHE SE PER MOTIVI DI ORARIO O ALTRI MOTIVI IL CLIENTE DA DOMICILIO MI DICE RITIRO IN NEGOZIO IO POSSO MODFICARLO, SE SONO AL TELEFONO POSSO CLICCARE SUL TASTO IN NEGOZIO A DX DEL NOME CLIENTE, SE INVECE HO GIA' PRESO ORDINE A DOMICILIO E IL CLIENTE MI RICHIAMA PER MODIFICARE IL RITIRO CREIAMO UN TASTO DENTRO L'ORDINE.
 - IN FASE DI RIEPILGO ORDINE PRIMA DELLA CONFERMA PERSISTONO I PROBLEMI DI ORARI, NEL SENSO IO HO GIA' DELLE PIZZE PRENOTATE MA SULLE SLOT ORARIE NON LE VEDO. QUESTO MI CREA GROSSI PROBLEMI IN QUANTO NON SO QUANTE PIZZE HO IN UNA FASCIA ORARIA E POTREBBE RECARMI DANNI DI IMMAGINE PERCHE' FAREI RITARDI STRATOSFERICI.
-- SULLA COLONNA ORDINI A SX DEL MENU IN PAGINA CASSA ATTENIONE ALLE ICONE DEI TIPI DI PAGAMENTO PRESENTI NEGLI ORDINI, HO 2 TIPOLOGIE DI PAGAMENTO DIVERSE SEGNATE E LA STESSA ICONA.
+- SULLA COLONNA ORDINI A SX DEL MENU IN PAGINA CASSA ATTENZIONE ALLE ICONE DEI TIPI DI PAGAMENTO PRESENTI NEGLI ORDINI, HO 2 TIPOLOGIE DI PAGAMENTO DIVERSE SEGNATE E LA STESSA ICONA.
 - SULLA BARRA DI RICERCA DELLE PIZZE SE INSERISCO IL NOME DI UN INGREDIENTE DEVO VEDERE TUTTE LE PIZZE CHE CONTENGONO QUELL'INGREDIENTE, QUESTA COSA VALE ANCHE PER IL CLIENTE A CASA.
 - SULLA HOMEPAGE DELLA PIZZERIA SE IL CLIENTE NON HA ORDINI ONLINE INCLUSI NEL PIANO DI ABBONAMENTO AL CLIENTE FINALE NON INTERESSA, QUINDI RIMUOVI LA VOCE AGGIUNGI ANCHE SE DISABILITATA, RIMUOVI LA SEZIONE REGISTRATI, PERMETTI LA VISUALIZZAZIONE DEL MENU.
 - SE CLICCO PLANNING E POI CLICCO SOPRA UN ORDINE FAMMI VEDERE IL RIEPILOGO. 
@@ -45,99 +45,60 @@ DNS / Firebase in configurazione
 - SULLA SCHERMATA DI CUCINA RISOLVIAMO IL CONFLITTO HO DETTO CHE SE UN INGREDIENTE VIENE CLASSIFICATO DA PREPARARE IMPOSTATO IN FASE DI CARICAMENTO, E POI DOBBIAMO ASSOCIARE UN INGREDIENTE AL TIPO DI PREPARAZIONE E CONSERVAZIONE. NEL SENSO CHE SE è CONGELATO LO ASSOCIAMO AD UNA CASELLA DI COLORE BLU, SE AFFETTATO CELLA COLORE VERDE, SE BIBITE CELLA COLORE BIANCO, SE FRITTO CELLA DI COLORE GIALLA, SE INGREDIENTI COMUNI CELLA DI COLORE ROSA, PERò LASCEREI LA POSSIBILITA' DI PERSONALIZZARE IL COLORE DELLE CELLE ED EVENTUALMENTE DI CREARNI DI NUOVI. 
 - RICORDIAMOCI SE CUCINA HA PREPARATO INGREDIENTE E CLICCA SOPRA DAL SUO TABLET SPARISCE E NEL TABLET BANCONE DIVENTA IN GRIGETTO, IN MODO CHE IL BANCONE SE SI TIRA FUORI GLI INGREDIENTI NECESSARI AGLI ORDINI IN FORNO CI CLICCA SOPRA E LA CELLA PRENDE DI NUOVO COLORE OVVIAMENTE SOLO DELLE COSE CHE NON SONO ANDATE IN COTTURA. 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
---- AGGIUNTE OPERATIVE (DA CHIUDERE DOMANI) ---
-- VERIFICA FINALE END-TO-END SU AMBIENTE REALE (ADMIN/CASSA/PUBBLICO): TEST MANUALI COMPLETI DI TUTTI I FLUSSI TOCCATI (CASSA, PLANNING, FOODCOST, CUCINA/BANCONE, VETRINA) CON CHECKLIST EVIDENZE.
-- CASSA: CONTROLLARE IL CASO CLIENTE ONLINE PARZIALE + CLIENTE LOCALE ASSOCIATO (MERGE IDENTITA') PER ESSERE SICURI CHE L'ORDINE INCOMPLETO VENGA RIPRESO SEMPRE.
-- FOODCOST: AGGIUNGERE UN PULSANTE "RICALCOLA PREZZI ORA" CONFERMATO DA ADMIN (CON LOG AZIONE) PER ALLINEAMENTO RAPIDO LISTINO DOPO MODIFICA COSTI/MARGINE.
-- FOODCOST: MIGLIORARE IL POPUP MISMATCH CON DETTAGLIO PRIME N PIZZE FUORI SOGLIA (NOME, PREZZO ATTUALE, PREZZO TARGET, DELTA), NON SOLO CONTEGGIO.
-- CUCINA/BANCONE: AGGIUNGERE PERSISTENZA STATO "PRESO AL BANCONE" (SE NECESSARIA) PER NON PERDERE I TAP AL REFRESH/POLL, MANTENENDO LA REGOLA COTTURA/NON COTTURA.
-- PERFORMANCE: PROFILARE LE ROTTE PIU' PESANTI (CASSA, CUCINA, BANCONE, ADMIN MENU) E RENDERE MISURABILE IL MIGLIORAMENTO (TEMPO MEDIO PRIMA/DOPO).
-- DOCUMENTAZIONE: AGGIORNARE MANUALE UTENTE CON LE NUOVE LOGICHE (FOODCOST MARGINE %, ALERT MISMATCH, FLUSSO CLIENTE DELIVERY/NEGOZIO, CUCINA->BANCONE).
-- SQL: PRIMA DI CHIUDERE IL CICLO, RICONTROLLARE CHE sql/sql_upgrade.sql CONTENGA SOLO PATCH DAVVERO NON ANCORA CONSOLIDATE IN schema_completo.
 
---- OSSERVAZIONI DETTAGLIATE AGGIUNTIVE (VERIFICA PROGETTO) ---
+ROADMAP SVILUPPO — PASSO PASSO (ordine consigliato; per ogni feature: @agents/product.md → @agents/architecture.md → @agents/database.md se serve → @agents/code.md / @agents/ui.md → @agents/copywriter.md su ogni stringa/microcopy visibile — **vetrina/pubblico**, **admin tenant** e **superadmin** (tono coerente, no gergo tecnico verso l’utente) → @agents/test.md → @agents/security.md → @agents/supervisor.md)
 
-[CRITICA][SICUREZZA][SQL] MENU PUBBLICO ANON CROSS-TENANT
-- IMPATTO: RISCHIO ESPOSIZIONE MENU DI PIU' TENANT A UTENTI ANONIMI.
-- EVIDENZA: VIEW `public.prodotti_menu_pubblico` + `GRANT SELECT ... TO anon` SENZA FILTRO TENANT FORTE DA DOMINIO.
-- AZIONE: LIMITARE ACCESSO ANON SOLO VIA RPC TENANT-AWARE (ES. DOMINIO -> TENANT), RIMUOVERE `tenant_id` DALL'OUTPUT PUBBLICO, RIVEDERE POLICY.
+FASE 0 — Baseline repository e SQL
+1) Consolidare le patch già applicate: integrare il contenuto attuale di sql/sql_upgrade.sql in sql/schema_completo_pizzamanager.sql dove manca, poi lasciare in sql_upgrade solo migrazioni incremental future (regola progetto).
+2) Alla fine di ogni ciclo SQL: verificare che sql_upgrade contenga solo ciò che non è ancora nel dump completo.
 
-[CRITICA][SICUREZZA][RPC] `create_order_with_items` DA HARDENIZZARE
-- IMPATTO: POTENZIALE CREAZIONE ORDINI SU TENANT NON AUTORIZZATO SE NON C'E' CHECK FORTE.
-- EVIDENZA: FUNZIONE `SECURITY DEFINER` CON INPUT `p_tenant_id`.
-- AZIONE: AGGIUNGERE CHECK ESPLICITO `pm_core_tenant_access(p_tenant_id)` + VALIDAZIONE RUOLO/CANALE; BLOCCO HARD SU FAIL.
+FASE 1 — Sicurezza multi-tenant (bloccante prima di altre espansioni pubbliche)
+3) Rivedere esposizione menu pubblico: niente leakage cross-tenant su view/grant anon; preferire RPC tenant-aware da dominio/host e output senza tenant_id in chiaro dove non serve (@agents/database.md @agents/security.md).
+4) Hardening RPC ordini (es. create_order_with_items): check esplicito accesso tenant e canale; fallimento sicuro se mismatch (@agents/database.md).
+5) Verificare policy RLS e update ordini: filtri sempre tenant-scoped; dove serve, RPC SECURITY DEFINER con controlli interni + test negativi.
 
-[ALTA][CASSA] BUG LOGICO `tipo_ordine` NELLA MODIFICA ORDINE
-- IMPATTO: FLUSSI DELIVERY/NEGOZIO POSSONO RESTARE INCOERENTI (PLANNING/REPORT/REPARTI).
-- EVIDENZA: IN CASSA SI INVIA `tipo_ordine`, MA `updateOrder` DEVE SEMPRE PERSISTERE IL CAMPO NEL ROW UPDATE.
-- AZIONE: TEST END-TO-END "PASSA A RITIRO IN NEGOZIO" + VERIFICA DB E UI SU TUTTI I REPARTI.
+FASE 2 — Vetrina e pubblico (preview / homepage / ricerca)
+6) Preview categorie errate: tracciare sorgente dati (tenant, cache, dominio) e allineare query al menu admin tenant; test su dominio reale e tenant di prova (@agents/code.md @agents/dataflows.md).
+7) Homepage cliente: nascondere CTA ordini/registrazione quando il piano non include ordini online; mostrare comunque il menu (@agents/product.md @agents/ui.md); testi @agents/copywriter.md (stesso standard qualitativo delle altre superfici).
+8) Ricerca menu (cassa + vetrina): includere ingredienti reali delle ricette nel motore di ricerca, non solo nome/descrizione prodotto.
+9) Superadmin licenses: allineare UI a subscriptions — verificare RLS, salvataggio da Clienti, o seed/migrazione dati mancanti.
 
-[ALTA][FOODCOST] POPUP MISMATCH TROPPO GENERICO
-- IMPATTO: OPERATORE VEDE SOLO CONTEGGIO, NON SA QUALI PIZZE SONO FUORI TARGET.
-- EVIDENZA: ALERT CASSA/ADMIN CON SOLO NUMERO MISMATCH.
-- AZIONE: MOSTRARE TOP N PRODOTTI (NOME, PREZZO ATTUALE, PREZZO TARGET, DELTA) + CTA DIRETTA A PAGINA ADMIN LISTINO/FOODCOST.
+FASE 3 — Admin: listini, ingredienti, food cost
+10) Listini: export/stampa PDF dalla pagina admin menu listini.
+11) Ingredienti — CSV: eliminare doppia richiesta file; ottimizzare import (chunk, progress, errori per riga).
+12) Food cost: allineamento prezzi ingredienti ↔ listino quando food cost attivo; modal mismatch con dettaglio (prime N pizze/prodotti: nome, prezzo attuale, target, delta) + link a listino/food cost.
+13) Pulsante admin "Ricalcola prezzi ora" con conferma, log azione, esito (N aggiornati, errori).
+14) Ingrediente "a fine cottura": default rispettato in composizione pizza e override dal menu cliente già esistente.
 
-[ALTA][FOODCOST] MANCANTE AZIONE MANUALE "RICALCOLA PREZZI ORA"
-- IMPATTO: ALLINEAMENTO PREZZI LENTO DOPO CAMBIO COSTI/MARGINE.
-- EVIDENZA: ESISTE LOGICA `recalculateAllPizzaPrices`, MA MANCA FLUSSO UX GUIDATO ADMIN CON CONFERMA.
-- AZIONE: PULSANTE ADMIN CON CONFIRM, LOG AZIONE, ESITO DETTAGLIATO (N PRODOTTI AGGIORNATI, ERRORI).
+FASE 4 — Cassa, ordini, planning
+15) Cliente delivery: deselezione (X) svuota carrello ma mantiene ordine aperto/incompleto; ripresa ordine al richiamo cliente; merge identità locale ↔ online con ordini parziali visibili.
+16) Passaggio domicilio ↔ ritiro: persistenza robusta di tipo_ordine in update ordine; pulsante "ritiro in negozio" da elenco cliente e, se ordine già delivery, controllo dentro dettaglio ordine.
+17) Riepilogo pre-conferma: slot orari con carico reale (pizze già prenotate per fascia); correggere discrepanza capacità vs ordini esistenti.
+18) Planning: click su ordine nella vista planning apre riepilogo ordine.
+19) Icone metodo pagamento in colonna ordini: mappatura univoca tipo → icona (nessun duplicato visivo per tipi diversi).
+20) Performance percepita: code-splitting, query e polling dove serve; misurare route pesanti (cassa, cucina, bancone, admin menu) prima/dopo.
 
-[ALTA][TEST] COPERTURA FLUSSI OPERATIVI INSUFFICIENTE
-- IMPATTO: REGRESSIONI SU CASSA/CUCINA/BANCONE/DELIVERY FACILI DOPO REFCTOR.
-- EVIDENZA: TEST PRESENTI MA NON COMPLETI SU FLUSSI MULTI-STATO.
-- AZIONE: SMOKE SUITE PRIORITARIA: CASSA CHECKOUT+MODIFICA+ANNULLA, CUCINA PREP->PRONTO, BANCONE PRONTO->CONSEGNATO, DELIVERY FSM, PLANNING OVERNIGHT, TURNI CASSA.
+FASE 5 — Superadmin e impostazioni tenant
+21) Pubblicazione sito / DNS: copy e guida più chiara (hostname = dominio Firebase/DNS); verificare salvataggio tenant.
+22) Test layout superadmin: ripristinare comportamento richiesto (bug attuale).
+23) Settings layout: generare o estrarre favicon dal logo e impostare titolo scheda browser.
+24) Area consegna: testi guida + comportamento mappa (punti vendita, poligoni, fallback globale); stato vuoto spiegato.
+25) Dati pizzeria — vetrina: testi privacy/cookie professionali con placeholder {{nome_attivita}}, {{piva}}, ecc.; box informativo SumUp/Stripe/privacy (anche come help inline).
+26) Manuale admin: sostituire riferimenti a nomi file di progetto con titoli e percorsi comprensibili al cliente.
 
-[MEDIA][SICUREZZA] UPDATE ORDINI SOLO PER `id` DA RIVEDERE
-- IMPATTO: SE POLICY RLS REGREDISCE, AUMENTA SUPERFICIE CROSS-TENANT.
-- EVIDENZA: FUNZIONI UPDATE IN SERVICE SPESSO FILTRANO SU `id` SENZA `tenantId`.
-- AZIONE: PREFERIRE RPC TENANT-AWARE PER UPDATE SENSIBILI + TEST NEGATIVI RLS.
+FASE 6 — Dipendenti e HR leggero
+27) Pagina dipendenti: CRUD dipendenti + archivio documenti (buste paga, corsi, dati anagrafici) con permessi tenant e storage sicuro (policy su bucket se allegati).
 
-[MEDIA][DELIVERY] TRANSIZIONE CONSEGNATO NON ATOMICA
-- IMPATTO: STATO DELIVERY E STATO ORDINE POSSONO DIVERGERE SU ERRORE INTERMEDIO.
-- EVIDENZA: DOPPIO UPDATE SEPARATO (`stato_consegna` E `stato`).
-- AZIONE: RPC UNICA TRANSAZIONALE PER CAMBIO STATO CONSEGNA.
+FASE 7 — Operativo: ingressi, cucina, bancone, delivery
+28) Pizzaiolo ingresso (e analoghi bancone/cucina/delivery): layout minimale — solo accesso alle schermate operative dedicate (es. due pulsanti: schermata reparto / test 4 schermate); rimuovere colonna laterale superflua.
+29) Cucina: tipi preparazione/conservazione, palette colori (preset + personalizzazione), celle per stato; flusso tap cucina → elemento grigio in bancone → tap bancone per "preso" con persistenza adeguata (DB o stato condiviso, non solo locale).
+30) Delivery: dove serve, transizione stato consegna atomica (RPC transazionale) per evitare divergenze stato ordine/consegna.
 
-[MEDIA][PLANNING] ORARI OVERNIGHT DA VALIDARE CON TEST DEDICATI
-- IMPATTO: POSSIBILE SLOT AMBIGUI IN APERTURE A CAVALLO MEZZANOTTE.
-- EVIDENZA: LOGICA SUI MINUTI/GRIGLIA COMPLESSA, RISCHIO CASI LIMITE.
-- AZIONE: TEST SPECIFICI SU FINETRE 18:00-02:00, 20:00-00:00, 00:00-04:00.
-
-[MEDIA][RICERCA MENU] INGREDIENTI REALI NON SEMPRE COPERTI
-- IMPATTO: CERCARE "INGREDIENTE" PUO' NON TROVARE PIZZE SE NON E' NELLA DESCRIZIONE TESTUALE.
-- EVIDENZA: FILTRO ATTUALE BASATO PREVALENTEMENTE SU `nome` + `descrizione`.
-- AZIONE: INCLUDERE DIZIONARIO INGREDIENTI REALI DEL PRODOTTO NEL SEARCH INDEX (CASSA + VETRINA).
-
-[MEDIA][BANCONE] STATO PICK NON PERSISTENTE
-- IMPATTO: TAP BANCONE PERSI AL REFRESH/POLL IN SERVIZIO LUNGO.
-- EVIDENZA: STATO LOCALE RESETTATO AL CAMBIO STATO ORDINI.
-- AZIONE: DECIDERE PERSISTENZA (SESSION/LOCAL/DB) E MOSTRARE MOTIVO ULTIMO RESET.
-
-[MEDIA][ACCESSIBILITA'] SEARCH BAR E LISTBOX CATEGORIE DA MIGLIORARE
-- IMPATTO: USABILITA' TASTIERA/SCREEN READER NON OTTIMALE.
-- EVIDENZA: CAMPI CON SOLO PLACEHOLDER; LISTBOX NON COMPLETA SU NAV KEYBOARD.
-- AZIONE: AGGIUNGERE `aria-label`/label semantica e key handlers completi (ENTER/ARROW/ESC).
-
-[MEDIA][CSV INGREDIENTI] IMPORT MASSIVO DA OTTIMIZZARE
-- IMPATTO: FILE GRANDI = ATTESE LUNGHE + UX SCARSA.
-- EVIDENZA: LOOP SEQUENZIALE PER RIGA.
-- AZIONE: BATCH A CHUNK + INDICATORE PROGRESSO + RIEPILOGO ERRORI PER RIGA.
-
-[BASSA][INGRESSI OPERATIVI] PAGINA PIZZAIOLO ANCORA NON MINIMALE AL 100%
-- IMPATTO: UI TEST/PROD MESCOLATA.
-- EVIDENZA: OLTRE 2 CTA PRESENTI LINK/TEXT EXTRA.
-- AZIONE: MODALITA' "PRODUZIONE" CON SOLO 2 PULSANTI, NASCONDENDO EXTRA TEST.
-
-[BASSA][COPY] UNIFORMARE MICROCOPY PUBBLICO/ADMIN
-- IMPATTO: PROFESSIONALITA' PERCEPITA.
-- EVIDENZA: VARIAZIONI MENU/MENU', ORDINI/ORDINAZIONI, FORMULAZIONI ALERT.
-- AZIONE: PASSATA FINALE COPY + GLOSSARIO TERMINI.
-
-[BASSA][OSSERVABILITA'] EVITARE `catch(() => {})` SILENZIOSI
-- IMPATTO: ERRORI REALI NASCOSTI, DEBUG DIFFICILE.
-- EVIDENZA: ALCUNI FLUSSI SERVIZI IGNORANO ERRORI.
-- AZIONE: STANDARD ERRORE UNICO (WRAPPER), LOG STRUTTURATO E MESSAGGIO UTENTE PULITO.
-
-[CHECK FINALE PRIMA CHIUSURA CICLO]
-- ESEGUIRE QA E2E REALE SU TENANT TEST E TENANT PRODUZIONE PILOTA.
-- VERIFICARE MULTI-TENANT ISOLATION SU TUTTE LE RPC/VIEW PUBBLICHE.
-- CONSOLIDARE EVENTUALI NUOVE PATCH SQL IN `schema_completo` E RIPULIRE `sql_upgrade` COME DA REGOLA.
+FASE 8 — Qualità, documentazione, chiusura ciclo
+31) Test automatici: estendere smoke su flussi multi-stato (cassa checkout/modifica, cucina prep→pronto, bancone, delivery, planning overnight, turni).
+32) Accessibilità: search bar e navigazione categorie da tastiera (aria-label, frecce, Enter/Esc) dove previsto.
+33) Osservabilità: evitare catch silenziosi; errori loggati e messaggi utente coerenti.
+34) Copy e microcopy — passata @agents/copywriter.md su **tre superfici**: (a) vetrina/cliente finale; (b) **admin tenant** — etichette, titoli sezione, help inline, vuoti, errori, conferme, PDF/export; (c) **superadmin** — guide, licenze, pubblicazione/DNS, viewport/test layout, messaggi sistema; glossario unificato; niente riferimenti a nomi file di progetto o path tecnici nei testi rivolti all’utente.
+35) Manuale utente interno: aggiornare con food cost, alert mismatch, flussi cliente delivery/negozio, cucina↔bancone.
+36) QA end-to-end su staging e almeno un tenant pilota produzione; checklist in docs (es. QA smoke operativa).
+37) Passaggio finale @agents/supervisor.md su ogni epic prima del merge.

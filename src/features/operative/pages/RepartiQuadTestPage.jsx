@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
+import { RepartiQuadTestProvider } from "@/features/operative/contexts/RepartiQuadTestContext"
 
 /**
  * Stessa SPA dei route operativi, senza iframe: in Edge (Tracking Prevention) gli iframe
@@ -21,10 +22,10 @@ function DeliveryQuadTestPane() {
 }
 
 const PANES = [
-  { path: "/operative/pizzaioli", label: "Pizzaioli", position: "In alto a sinistra", El: PizzaioloDashboard },
-  { path: "/operative/bancone", label: "Bancone", position: "In alto a destra", El: Bancone },
-  { path: "/operative/cucina", label: "Cucina", position: "In basso a sinistra", El: Cucina },
-  { path: "/operative/delivery", label: "Delivery / pony", position: "In basso a destra", El: DeliveryQuadTestPane },
+  { path: "/operative/pizzaioli", label: "Pizzaioli", El: PizzaioloDashboard },
+  { path: "/operative/bancone", label: "Bancone", El: Bancone },
+  { path: "/operative/cucina", label: "Cucina", El: Cucina },
+  { path: "/operative/delivery", label: "Delivery / pony", El: DeliveryQuadTestPane },
 ]
 
 function PanelFallback() {
@@ -105,66 +106,68 @@ export default function RepartiQuadTestPage() {
         </button>
       </div>
 
-      <div
-        className="reparti-quad-grid"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridTemplateRows: "1fr 1fr",
-          gap: 6,
-          padding: 6,
-          background: "#e2e8f0",
-        }}
-      >
-        {PANES.map((f) => {
-          const Comp = f.El
-          return (
-            <div
-              key={`${f.path}-${reloadKey}`}
-              style={{
-                position: "relative",
-                minHeight: 0,
-                minWidth: 0,
-                background: "#fff",
-                borderRadius: 8,
-                overflow: "hidden",
-                border: "1px solid #cbd5e1",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
+      <RepartiQuadTestProvider>
+        <div
+          className="reparti-quad-grid"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gridTemplateRows: "1fr 1fr",
+            gap: 6,
+            padding: 6,
+            background: "#e2e8f0",
+          }}
+        >
+          {PANES.map((f) => {
+            const Comp = f.El
+            return (
               <div
+                key={`${f.path}-${reloadKey}`}
                 style={{
-                  flexShrink: 0,
-                  padding: "4px 8px",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#334155",
-                  background: "#f8fafc",
-                  borderBottom: "1px solid #e2e8f0",
-                }}
-              >
-                {f.position}: {f.label}
-              </div>
-              <div
-                className="reparti-quad-panel-body"
-                style={{
-                  flex: 1,
+                  position: "relative",
                   minHeight: 0,
-                  overflow: "auto",
-                  WebkitOverflowScrolling: "touch",
+                  minWidth: 0,
+                  background: "#fff",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  border: "1px solid #cbd5e1",
+                  display: "flex",
+                  flexDirection: "column",
                 }}
               >
-                <Suspense fallback={<PanelFallback />}>
-                  <Comp />
-                </Suspense>
+                <div
+                  style={{
+                    flexShrink: 0,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#334155",
+                    background: "#f8fafc",
+                    borderBottom: "1px solid #e2e8f0",
+                  }}
+                >
+                  {f.label}
+                </div>
+                <div
+                  className="reparti-quad-panel-body"
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  <Suspense fallback={<PanelFallback />}>
+                    <Comp />
+                  </Suspense>
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      </RepartiQuadTestProvider>
     </div>
   )
 }

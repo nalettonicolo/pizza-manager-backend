@@ -4,7 +4,7 @@ import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 const ITEMS = [
   { to: "/admin/contabilita/fatture", label: "Fatture", description: "Collegate ai DDT fornitori" },
   { to: "/admin/contabilita/pagamenti-fatture", label: "Pagamenti fatture", description: "Scadenze, tipo pagamento, stato pagato" },
-  { to: "/admin/contabilita/food-cost", label: "Food cost", description: "Costi al kg e margine" },
+  { to: "/admin/contabilita/food-cost", label: "Food cost", description: "Listino automatico e margine target" },
   { to: "/admin/contabilita/spese-locale", label: "Spese gestione locale", description: "Affitto, utenze, overhead" },
   { to: "/admin/contabilita/spese-personale", label: "Spese gestione personale", description: "Stipendi, F24, formazione" },
   { to: "/admin/contabilita/incassi", label: "Gestione incassi", description: "Contanti ed elettronico" },

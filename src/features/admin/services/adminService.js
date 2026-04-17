@@ -1794,6 +1794,28 @@ function prezzoFromCostoWithMargin(costoTotale, marginePercent) {
   return costo / denom
 }
 
+/** Slug in cui non si applica il costo impasto alla ricetta (solo Σ ingredienti se ci sono righe). */
+const FOODCOST_NO_IMPASTO_CATEGORY_SLUGS = new Set(["fritti", "dolci", "bibite"])
+
+/**
+ * Costo ricetta a costo pieno (senza margine commerciale): costo impasto + Σ costi ingredienti,
+ * con impasto escluso per fritti / dolci / bibite (allineato al ricalcolo listino pizze).
+ * @param {string|null|undefined} categoriaSlug slug categoria prodotto
+ * @param {number|string|null} costoImpastoEuro da configurazione costi
+ * @param {Array<{ costo_unitario?: number, costoUnitario?: number, costo?: number }>} ingredientiRows
+ */
+export function foodCostCostoRicettaEuro(categoriaSlug, costoImpastoEuro, ingredientiRows) {
+  let totalIng = 0
+  for (const ing of ingredientiRows || []) {
+    totalIng += _toNum(ing?.costo_unitario ?? ing?.costoUnitario ?? ing?.costo)
+  }
+  const slug = String(categoriaSlug || "")
+    .toLowerCase()
+    .trim()
+  const noImpasto = FOODCOST_NO_IMPASTO_CATEGORY_SLUGS.has(slug)
+  return totalIng + (noImpasto ? 0 : _toNum(costoImpastoEuro))
+}
+
 /**
  * Calcola il prezzo di un prodotto (base impasto + somma costi ingredienti).
  * Usare in Cassa/store quando il prezzo salvato non include gli ingredienti.

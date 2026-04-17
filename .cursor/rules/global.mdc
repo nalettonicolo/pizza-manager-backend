@@ -25,8 +25,8 @@ Usa **file contesto** con `@`:
 - `@agents/database.md` — SQL / RLS / RPC
 - `@agents/code.md` — implementazione React
 - `@agents/ui.md` — layout e UX
-- `@agents/copywriter.md` — testi pubblici professionali (landing, microcopy, marketing)
+- `@agents/copywriter.md` — testi UI professionali (vetrina, admin tenant, superadmin: microcopy, guide, marketing dove serve)
 - `@agents/test.md` — test e casi limite
 - `@agents/security.md` — review sicurezza
 
-Ciclo consigliato: **una feature alla volta**; dopo implementazione e test, passare dal supervisore. Per **nuove pagine o stringhe** visibili agli utenti esterni, coinvolgere `@agents/copywriter.md` prima del merge.
+Ciclo consigliato: **una feature alla volta**; dopo implementazione e test, passare dal supervisore. Per **nuove pagine o stringhe** visibili a **cliente finale, gestore locale (admin tenant) o superadmin**, coinvolgere `@agents/copywriter.md` prima del merge quando il testo è parte dell’esperienza prodotto (non refusi minori).

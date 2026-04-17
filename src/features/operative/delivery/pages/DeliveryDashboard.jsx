@@ -5,6 +5,7 @@ import { getOrders, updateOrder, markDeliveryConsegnatoAtomic } from "@/features
 import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 
 const STATO_PRONTO = "PRONTO"
 const POLL_MS = 10000
@@ -89,6 +90,9 @@ function ordineConsegnaLng(o) {
 export default function DeliveryDashboard(props) {
   const { mode } = props || {}
   const quadTest = mode === "quadTestBySlot"
+  const embedQuad = useRepartiQuadTest()
+  /** Vista test a 4 riquadri: niente titoli né testi esplicativi (anche se mode non passato ma dentro provider). */
+  const stripQuadChrome = quadTest || embedQuad
   const { operatoreLabel } = useOutletContext() || {}
   const { tenantId } = useTenant()
   const [orders, setOrders] = useState([])
@@ -306,39 +310,47 @@ export default function DeliveryDashboard(props) {
 
   return (
     <div style={{ padding: pad }}>
-      <h1
-        className={quadTest ? undefined : "dashboard-page-title"}
-        style={quadTest ? { fontSize: titleSize, margin: "0 0 6px", lineHeight: 1.25 } : undefined}
-      >
-        Delivery{operatoreLabel ? ` — ${operatoreLabel}` : ""}
-        {quadTest ? <span style={{ fontWeight: 500, color: "#64748b" }}> · test griglia</span> : null}
-      </h1>
-      {quadTest ? (
-        <p style={{ color: "#64748b", marginBottom: 10, lineHeight: 1.45, fontSize: 11 }}>
-          Tutte le consegne a domicilio di oggi raggruppate per fascia ({PLANNING_GRID_SLOT_MINUTES} min). Con le credenziali
-          pony/delivery useremo il flusso rider dedicato.
-        </p>
-      ) : (
-        <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
-          Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
-          segnano l’ordine pronto. Stato consegna su DB: <code>stato_consegna</code> (flusso:{" "}
-          <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>). Rider dedicato in roadmap.
-          {operatoreLabel ? ` · ${operatoreLabel}` : ""}
-        </p>
-      )}
+      {!stripQuadChrome ? (
+        <>
+          <h1
+            className={quadTest ? undefined : "dashboard-page-title"}
+            style={quadTest ? { fontSize: titleSize, margin: "0 0 6px", lineHeight: 1.25 } : undefined}
+          >
+            Delivery{operatoreLabel ? ` — ${operatoreLabel}` : ""}
+            {quadTest ? <span style={{ fontWeight: 500, color: "#64748b" }}> · test griglia</span> : null}
+          </h1>
+          {quadTest ? (
+            <p style={{ color: "#64748b", marginBottom: 10, lineHeight: 1.45, fontSize: 11 }}>
+              Tutte le consegne a domicilio di oggi raggruppate per fascia ({PLANNING_GRID_SLOT_MINUTES} min). Con le credenziali
+              pony/delivery useremo il flusso rider dedicato.
+            </p>
+          ) : (
+            <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
+              Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
+              segnano l’ordine pronto. Stato consegna su DB: <code>stato_consegna</code> (flusso:{" "}
+              <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>). Rider dedicato in roadmap.
+              {operatoreLabel ? ` · ${operatoreLabel}` : ""}
+            </p>
+          )}
+        </>
+      ) : null}
 
       {loadError ? (
         <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }} role="alert">
           {loadError}
         </p>
       ) : loading && orders.length === 0 ? (
-        <p style={{ color: "#888", fontSize: quadTest ? 12 : undefined }}>Caricamento...</p>
+        stripQuadChrome ? null : (
+          <p style={{ color: "#888", fontSize: quadTest ? 12 : undefined }}>Caricamento...</p>
+        )
       ) : orders.length === 0 ? (
-        <p style={{ color: "#888", lineHeight: 1.5, fontSize: quadTest ? 12 : undefined }}>
-          {quadTest
-            ? "Nessuna consegna a domicilio oggi (ordini annullati esclusi)."
-            : "Nessun ordine delivery in stato PRONTO per oggi. Se hai ordini solo \"ritiro in negozio\", restano in Bancone / Pizzaioli; se sono ancora in preparazione, compariranno qui dopo PRONTO."}
-        </p>
+        stripQuadChrome ? null : (
+          <p style={{ color: "#888", lineHeight: 1.5, fontSize: quadTest ? 12 : undefined }}>
+            {quadTest
+              ? "Nessuna consegna a domicilio oggi (ordini annullati esclusi)."
+              : "Nessun ordine delivery in stato PRONTO per oggi. Se hai ordini solo \"ritiro in negozio\", restano in Bancone / Pizzaioli; se sono ancora in preparazione, compariranno qui dopo PRONTO."}
+          </p>
+        )
       ) : quadTest ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {slotOrder.map((slot) => {
@@ -346,9 +358,11 @@ export default function DeliveryDashboard(props) {
             if (!list.length) return null
             return (
               <section key={slot} style={{ borderLeft: "3px solid #0d9488", paddingLeft: 8 }}>
-                <h2 style={{ margin: "0 0 6px", fontSize: 13, color: "#0f766e", fontWeight: 800 }}>
-                  {slotLabel(slot)} · {list.length} {list.length === 1 ? "ordine" : "ordini"}
-                </h2>
+                {stripQuadChrome ? null : (
+                  <h2 style={{ margin: "0 0 6px", fontSize: 13, color: "#0f766e", fontWeight: 800 }}>
+                    {slotLabel(slot)} · {list.length} {list.length === 1 ? "ordine" : "ordini"}
+                  </h2>
+                )}
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>{list.map((ord) => renderOrderCard(ord, true))}</ul>
               </section>
             )

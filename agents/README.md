@@ -11,7 +11,7 @@ Il progetto è **già in sviluppo avanzato**: non usare questi file per “ricre
 1. Apri la chat (o Composer).
 2. Allega il profilo con `@`, ad esempio: `@agents/product.md`.
 3. Scrivi il task (una feature alla volta).
-4. Ciclo tipico: **product** → **architecture** → **database** (se serve) → **code** / **ui** → **copywriter** (se servono testi pubblici) → **test** → **security** → **supervisor**.
+4. Ciclo tipico: **product** → **architecture** → **database** (se serve) → **code** / **ui** → **copywriter** (stringhe visibili: pubblico, admin tenant, superadmin) → **test** → **security** → **supervisor**.
 
 ## Collegare Supabase (MCP) per monitoraggio da Cursor
 
@@ -37,7 +37,7 @@ Obiettivo: far usare all’assistente i **tool MCP** di Supabase (liste tabelle,
 | `database.md` | SQL, RLS, RPC |
 | `code.md` | React + integrazione |
 | `ui.md` | UX / layout |
-| `copywriter.md` | Testi pubblici professionali (marketing, microcopy, landing) |
+| `copywriter.md` | Testi UI professionali: vetrina, **admin tenant**, **superadmin** (microcopy, guide, senza gergo da repo) |
 | `test.md` | QA |
 | `security.md` | Threat + mitigazioni |
 | `dataflows.md` | Flussi app ↔ tabelle Supabase (monitoraggio con database + security) |

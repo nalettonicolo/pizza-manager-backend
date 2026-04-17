@@ -17,6 +17,7 @@
     "build": "vite build",
     "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
+    "check:live": "node scripts/check-live-index.mjs",
     "deploy:hosting": "npm run ci:frontend && npx firebase deploy --only hosting",
     "deploy:hosting:ci": "npm run ci:frontend && npx --yes firebase deploy --only hosting --non-interactive",
     "deploy:full:ci": "git push && npm run deploy:hosting:ci",

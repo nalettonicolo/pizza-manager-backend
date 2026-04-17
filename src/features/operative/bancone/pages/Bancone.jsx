@@ -27,6 +27,7 @@ import {
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
@@ -39,6 +40,7 @@ function getBanconePickStorageKey(tenantId) {
 }
 
 export default function Bancone() {
+  const quad = useRepartiQuadTest()
   const { tenantId, tenantData } = useTenant()
   const [orders, setOrders] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
@@ -459,8 +461,12 @@ export default function Bancone() {
 
   return (
     <div style={styles.wrapper} className="operative-mobile-pad">
-      <h1 style={styles.title}>Bancone</h1>
-      <p style={styles.subtitle}>Ordini pronti per il ritiro</p>
+      {!quad ? (
+        <>
+          <h1 style={styles.title}>Bancone</h1>
+          <p style={styles.subtitle}>Ordini pronti per il ritiro</p>
+        </>
+      ) : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -476,9 +482,9 @@ export default function Bancone() {
       )}
 
       {loading && ordiniVisibili.length === 0 ? (
-        <p style={styles.muted}>Caricamento...</p>
+        quad ? null : <p style={styles.muted}>Caricamento...</p>
       ) : ordiniVisibili.length === 0 ? (
-        <p style={styles.muted}>Nessun ordine pronto.</p>
+        quad ? null : <p style={styles.muted}>Nessun ordine pronto.</p>
       ) : (
         <div style={styles.mainRow} className="bancone-layout-main">
           <aside
@@ -486,11 +492,15 @@ export default function Bancone() {
             style={styles.leftPickColumn}
             aria-label="Check ingredienti per fascia oraria"
           >
-            <h2 style={styles.pickColumnTitle}>Ingredienti per orario</h2>
-            <p style={styles.pickHint}>
-              Grigio = da prendere per la busta · tocca quando l&apos;hai messo (inverso alla cucina).
-            </p>
-            {lastPickResetReason ? <p style={styles.pickResetHint}>{lastPickResetReason}</p> : null}
+            {!quad ? (
+              <>
+                <h2 style={styles.pickColumnTitle}>Ingredienti per orario</h2>
+                <p style={styles.pickHint}>
+                  Grigio = da prendere per la busta · tocca quando l&apos;hai messo (inverso alla cucina).
+                </p>
+              </>
+            ) : null}
+            {lastPickResetReason && !quad ? <p style={styles.pickResetHint}>{lastPickResetReason}</p> : null}
             {banconeSlotOrder.map((slot) => {
               const ingList = ingredientsBySlot[slot] || []
               const bibList = bibiteBySlot[slot] || []
@@ -498,7 +508,7 @@ export default function Bancone() {
                 <div key={slot} style={styles.slotPickBox}>
                   <div style={styles.slotPickTime}>{slot}</div>
                   {ingList.length === 0 && bibList.length === 0 ? (
-                    <p style={styles.slotPickEmpty}>Nessun ingrediente in elenco per questa fascia.</p>
+                    quad ? null : <p style={styles.slotPickEmpty}>Nessun ingrediente in elenco per questa fascia.</p>
                   ) : null}
                   {ingList.length > 0 ? (
                     <div style={styles.pickChipWrap}>
@@ -542,7 +552,7 @@ export default function Bancone() {
                   ) : null}
                   {bibList.length > 0 ? (
                     <>
-                      <div style={styles.bibiteSubheading}>Bibite</div>
+                      {!quad ? <div style={styles.bibiteSubheading}>Bibite</div> : null}
                       <div style={styles.pickChipWrap}>
                         {bibList.map((item) => {
                           const picked = pickedBanconeKeys.has(item.pickKey)
