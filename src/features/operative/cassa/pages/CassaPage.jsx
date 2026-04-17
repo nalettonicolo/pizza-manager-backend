@@ -2222,12 +2222,10 @@ export default function CassaPage() {
     return groupPizzeBySlotOrarioRitiro(negozio, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi, pizzePerOrdine])
 
+  /** Riepilogo: carico forno unico — somma pizze consegna + ritiro nella stessa fascia (stesso orario in griglia). */
   const pizzePerSlotRiepilogo = useMemo(() => {
-    const filtered = (ordiniOggiAttivi || []).filter((o) =>
-      tipoOrdine === "delivery" ? ordineIsDelivery(o) : !ordineIsDelivery(o),
-    )
-    return groupPizzeBySlotOrarioRitiro(filtered, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
-  }, [tipoOrdine, ordiniOggiAttivi, pizzePerOrdine])
+    return groupPizzeBySlotOrarioRitiro(ordiniOggiAttivi || [], pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
+  }, [ordiniOggiAttivi, pizzePerOrdine])
 
   const ordiniFiltratiPerPagina = useMemo(() => {
     const q = (ordiniSearch || "").toLowerCase().trim()

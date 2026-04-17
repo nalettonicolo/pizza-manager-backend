@@ -1,7 +1,11 @@
 import { useMemo } from "react"
 import { formatPrice } from "@/utils/format"
 import CartItem from "./CartItem"
-import { getTodayOrari, buildSlotsInOpeningHours } from "@/features/operative/cassa/utils/planningUtils"
+import {
+  getTodayOrari,
+  buildSlotsInOpeningHours,
+  PLANNING_GRID_SLOT_MINUTES,
+} from "@/features/operative/cassa/utils/planningUtils"
 
 const TIPI_MISTO_RIGA = ["Contanti", "Carta", "Altro"]
 const TIPI_PAGAMENTO_ORDINE = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
@@ -465,7 +469,7 @@ export default function RiepilogoOrdinePage({
           ) : (
             <>Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. </>
           )}
-          Capacità stimata: max {maxPizzePerSlot} pizze ogni {capacityWindowMin} min (parametri). In ogni fascia il numero indica le pizze già impegnate oggi per quell’orario ({tipoOrdine === "delivery" ? "solo consegne" : "solo ritiro in negozio"}), per organizzare il carico.
+          Capacità stimata: max {maxPizzePerSlot} pizze ogni {PLANNING_GRID_SLOT_MINUTES} min (parametro pizze ogni 15 min). In ogni fascia il numero è il <strong>totale pizze già impegnate oggi</strong> per quell’orario <strong>consegna + ritiro in negozio</strong> (carico forno unico).
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>
