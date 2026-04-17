@@ -172,7 +172,11 @@ export default function UserManager() {
 
         {users.length === 0 ? (
           <p style={{ padding: "0 20px 24px", color: "#64748b", fontSize: 14, margin: 0 }}>
-            Nessun utente collegato a questo locale. Usa il modulo «Collega un account staff» o crea l&apos;utente in Supabase Auth.
+            Nessun utente collegato a questo locale. Per collegare un account vai a{" "}
+            <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
+              Ruoli
+            </Link>{" "}
+            (Collega account) oppure crea l&apos;utente in Supabase Auth.
           </p>
         ) : filteredUsers.length === 0 ? (
           <p style={{ padding: "0 20px 24px", color: "#64748b", fontSize: 14, margin: 0 }}>

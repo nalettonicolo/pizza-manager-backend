@@ -11705,7 +11705,12 @@ BEGIN
     ),
     false
   )
-  OR COALESCE((SELECT public.is_superadmin()), false)
+  OR EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE p.id = auth.uid()
+      AND p.ruolo = 'superadmin'
+  )
   OR EXISTS (
     SELECT 1
     FROM auth.users u

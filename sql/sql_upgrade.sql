@@ -22,6 +22,7 @@
 -- -----------------------------------------------------------------------------
 
 -- 2026-04-18 — delivery_mark_consegnato: allinea autorizzazione a permessi app (superadmin, ruoli admin IT, account test 4 reparti)
+-- 2026-04-18b — superadmin: controllo inline su public.profiles (evita errore se public.is_superadmin() non è mai stato deployato)
 CREATE OR REPLACE FUNCTION public.delivery_mark_consegnato(
   p_ordine_id UUID
 )
@@ -67,7 +68,12 @@ BEGIN
     ),
     false
   )
-  OR COALESCE((SELECT public.is_superadmin()), false)
+  OR EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE p.id = auth.uid()
+      AND p.ruolo = 'superadmin'
+  )
   OR EXISTS (
     SELECT 1
     FROM auth.users u

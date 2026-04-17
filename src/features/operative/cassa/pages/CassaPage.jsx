@@ -1657,8 +1657,6 @@ export default function CassaPage() {
 
   const openModificaPizzaFromCart = useCallback((item) => {
     if (item?.modificaCassaDisponibile === false) return
-    const hasMods = Boolean(item?._modsKey || item?.ingredientiModifiche || item?.ingredientiCotturaSummary)
-    if (!hasMods && item?.modificaCassaDisponibile !== true) return
     setPizzaModalEditCartLine(item)
     setProductToAdd({ ...item })
     setProductModalOpen(true)

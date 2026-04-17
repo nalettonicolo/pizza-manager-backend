@@ -37,10 +37,11 @@ export default function CartItem({
   const metaFs = mobile ? 13 : 11
   const btnStyle = mobile ? styles.actionBtnMobile : styles.actionBtn
   const legacyMods = Boolean(item._modsKey || item.ingredientiModifiche || item.ingredientiCotturaSummary)
+  /** Mostra modifica se non disabilitata esplicitamente (bibite/fritti/dolci). Include righe senza flag (bozze/ripristino). */
   const showEditGear =
     typeof onEditPizza === "function" &&
     item.modificaCassaDisponibile !== false &&
-    (item.modificaCassaDisponibile === true || legacyMods)
+    (item.modificaCassaDisponibile === true || item.modificaCassaDisponibile == null || legacyMods)
   return (
     <div style={styles.row}>
       <div style={mobile ? { flex: 1, minWidth: 0, paddingRight: 8 } : undefined}>

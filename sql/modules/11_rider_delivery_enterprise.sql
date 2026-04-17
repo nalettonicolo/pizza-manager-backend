@@ -407,19 +407,43 @@ BEGIN
     RAISE EXCEPTION 'ordine_non_trovato';
   END IF;
 
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.utenti_ruoli ur
-    WHERE ur.user_id = auth.uid()
-      AND ur.tenant_id = v_tenant_id
-      AND COALESCE(ur.attivo, true) = true
-      AND (
-        lower(trim(COALESCE(ur.ruolo, ''))) IN ('delivery', 'pony', 'cassa', 'admin')
-        OR COALESCE(ur.accesso_delivery, false) = true
-        OR COALESCE(ur.accesso_pony, false) = true
-        OR COALESCE(ur.accesso_cassa, false) = true
+  SELECT COALESCE(
+    (
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.utenti_ruoli ur
+        WHERE ur.user_id = auth.uid()
+          AND ur.tenant_id = v_tenant_id
+          AND COALESCE(ur.attivo, true) = true
+          AND (
+            lower(trim(COALESCE(ur.ruolo, ''))) IN (
+              'delivery', 'pony', 'cassa', 'admin', 'amministratore', 'gestore'
+            )
+            OR COALESCE(ur.accesso_delivery, false) = true
+            OR COALESCE(ur.accesso_pony, false) = true
+            OR COALESCE(ur.accesso_cassa, false) = true
+          )
       )
-  ) INTO v_allowed;
+    ),
+    false
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE p.id = auth.uid()
+      AND p.ruolo = 'superadmin'
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM auth.users u
+    INNER JOIN public.utenti_ruoli ur
+      ON ur.user_id = u.id
+     AND ur.tenant_id = v_tenant_id
+     AND COALESCE(ur.attivo, true) = true
+    WHERE u.id = auth.uid()
+      AND lower(trim(COALESCE(u.email, ''))) = 'pizzaioli@pizzamanager.it'
+  )
+  INTO v_allowed;
 
   IF NOT COALESCE(v_allowed, false) THEN
     RAISE EXCEPTION 'non_autorizzato';
