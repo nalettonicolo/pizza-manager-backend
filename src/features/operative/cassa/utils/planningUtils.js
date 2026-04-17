@@ -2,7 +2,8 @@
  * Utility per il planning fasce orarie in Cassa.
  * Fasce basate su orari di apertura/chiusura (orari_settimana).
  * Griglia fasce: sempre quarti d'ora (:00, :15, :30, :45). I parametri ritiro_ogni_min / consegne_ogni_min
- * servono solo per la capacità (max pizze) in UI, non per l’intervallo tra le etichette orarie.
+ * definiscono finestre per etichette “max teorico” per colonna; il colore rosso/giallo/verde in Cassa usa il
+ * carico forno cumulativo (somma consegna+ritiro) vs pizze_ogni_15_min sulla griglia (vedi Cassa planning).
  */
 
 /** Griglia fissa fasce planning: quarti d'ora. */

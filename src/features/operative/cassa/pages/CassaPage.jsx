@@ -2194,6 +2194,8 @@ export default function CassaPage() {
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
   const maxPizzeDelivery = Math.max(1, Math.round((pizzeOgni15 * capacityWindowDelivery) / 15))
   const maxPizzeNegozio = Math.max(1, Math.round((pizzeOgni15 * capacityWindowNegozio) / 15))
+  /** Unico tetto colore/UI planning: griglia 15 min × throughput pizze/15 min (stesso criterio del riepilogo ordine). */
+  const maxPizzeFornoUnico = Math.max(1, Math.round((pizzeOgni15 * PLANNING_GRID_SLOT_MINUTES) / 15))
 
   /** Griglia unica quarti d'ora; consegne e ritiro condividono le stesse fasce orarie. */
   const planningSlotsGrid = useMemo(() => buildSlotsFullDay(orariOggi), [orariOggi])
@@ -2264,6 +2266,8 @@ export default function CassaPage() {
       const ritiroOrdini = ordiniPerSlotNegozio[slot.key] ?? 0
       const ritiroPizze = pizzePerSlotNegozio[slot.key] ?? 0
       const ritiroOrdiniList = ordiniBySlotNegozio[slot.key] || []
+      const totPizzeForno = deliveryPizze + ritiroPizze
+      const fornoColor = slotColor(totPizzeForno, maxPizzeFornoUnico, sogliaGiallo)
       return {
         slotKey: slot.key,
         label: slot.label,
@@ -2273,8 +2277,9 @@ export default function CassaPage() {
         ritiroOrdini,
         ritiroPizze,
         ritiroOrdiniList,
-        deliveryColor: slotColor(deliveryPizze, maxPizzeDelivery, sogliaGiallo),
-        ritiroColor: slotColor(ritiroPizze, maxPizzeNegozio, sogliaGiallo),
+        totPizzeForno,
+        deliveryColor: fornoColor,
+        ritiroColor: fornoColor,
       }
     })
   }, [
@@ -2285,8 +2290,7 @@ export default function CassaPage() {
     ordiniBySlotNegozio,
     pizzePerSlotDelivery,
     pizzePerSlotNegozio,
-    maxPizzeDelivery,
-    maxPizzeNegozio,
+    maxPizzeFornoUnico,
     sogliaGiallo,
   ])
 
@@ -3139,7 +3143,10 @@ export default function CassaPage() {
               </div>
             </div>
             <p style={styles.planningHint}>
-              Fasce da apertura a chiusura. Per ogni colonna: ordini e pizze già prenotate in quella fascia. Verde: ok, giallo: quasi pieno, rosso: pieno (soglia pizze).
+              Fasce da apertura a chiusura. Le colonne mostrano ordini/pizze per consegna e per ritiro; il{" "}
+              <strong>colore</strong> è uguale in entrambe e riflette il <strong>totale pizze forno</strong> nella fascia
+              (max {maxPizzeFornoUnico} / {PLANNING_GRID_SLOT_MINUTES} min da parametri). Verde: sotto soglia giallo;
+              giallo: quasi pieno; rosso: capacità raggiunta o superata.
             </p>
             {!orariOggi.aperto && (
               <p style={{ margin: "0 0 12px", color: "#c62828", fontWeight: 500 }}>Oggi chiuso (nessuna fascia disponibile).</p>
@@ -3149,10 +3156,10 @@ export default function CassaPage() {
                 <div style={styles.planningMergedHeader}>
                   <span style={styles.planningMergedCellTime}>Ora</span>
                   <span style={{ ...styles.planningMergedCell, background: "#e3f2fd", borderColor: "#1976d2" }}>
-                    Consegne (fasce {PLANNING_GRID_SLOT_MINUTES} min · max {maxPizzeDelivery} pizze / {capacityWindowDelivery} min)
+                    Consegna (dettaglio · finestra parametri {capacityWindowDelivery} min → max teorico {maxPizzeDelivery} pizze)
                   </span>
                   <span style={{ ...styles.planningMergedCell, background: "#f3e5f5", borderColor: "#7b1fa2", borderRight: "none" }}>
-                    Ritiro negozio (fasce {PLANNING_GRID_SLOT_MINUTES} min · max {maxPizzeNegozio} pizze / {capacityWindowNegozio} min)
+                    Ritiro (dettaglio · finestra {capacityWindowNegozio} min → max teorico {maxPizzeNegozio} pizze)
                   </span>
                 </div>
                 {planningMergedRows.map((row, i) => {
