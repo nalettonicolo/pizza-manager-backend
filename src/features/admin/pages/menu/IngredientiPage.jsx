@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -65,6 +65,8 @@ export default function IngredientiPage() {
   const [editAttivo, setEditAttivo] = useState(true);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
   const [csvImporting, setCsvImporting] = useState(false);
+  const csvFileInputId = useId();
+  const csvFileInputRef = useRef(null);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -627,15 +629,17 @@ export default function IngredientiPage() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                 <input
+                  ref={csvFileInputRef}
                   type="file"
                   accept=".csv,text/csv"
                   onChange={handleCsvFileChange}
                   style={{ display: "none" }}
-                  id="csv-file-input"
+                  id={csvFileInputId}
+                  aria-label="Seleziona file CSV ingredienti"
                 />
                 <button
                   type="button"
-                  onClick={() => document.getElementById("csv-file-input")?.click()}
+                  onClick={() => csvFileInputRef.current?.click()}
                   className="btn-primary-dashboard"
                   style={{ opacity: csvImporting ? 0.7 : 1, pointerEvents: csvImporting ? "none" : "auto" }}
                 >

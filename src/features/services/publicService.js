@@ -146,6 +146,67 @@ export async function getPublicMenu(options = {}) {
 }
 
 /**
+ * Deduce categorie dai soli prodotti del menu (fallback se la RPC catalogo non è deployata).
+ * @param {Array<Record<string, unknown>>} menu
+ */
+export function buildCategoriesFromMenuRows(menu) {
+  const byId = new Map();
+  for (const p of menu || []) {
+    const cid = p.categoria_id;
+    if (!cid) continue;
+    const ord = Number(p.ordine) || 0;
+    const cur = byId.get(cid);
+    if (!cur) {
+      byId.set(cid, { id: cid, nome: p.categoria_nome || "Altro", ordine: ord });
+    } else {
+      cur.ordine = Math.min(cur.ordine, ord);
+      if (p.categoria_nome) cur.nome = p.categoria_nome;
+    }
+  }
+  return sortByOrdine([...byId.values()]);
+}
+
+/**
+ * Unisce categorie del menu con il catalogo `core.categorie` (stessi nomi/ordine dell'admin).
+ * @param {Array<Record<string, unknown>>} menu
+ * @param {Array<{ id: string, nome?: string, ordine?: number, slug?: string }>} catalogRows
+ */
+export function mergePublicCategoriesWithCatalog(menu, catalogRows) {
+  const base = buildCategoriesFromMenuRows(menu);
+  const catMap = new Map((catalogRows || []).map((c) => [c.id, c]));
+  return sortByOrdine(
+    base.map((c) => {
+      const cat = catMap.get(c.id);
+      if (!cat) return c;
+      return {
+        id: c.id,
+        nome: (cat.nome && String(cat.nome).trim()) || c.nome,
+        ordine: Number(cat.ordine) || c.ordine,
+      };
+    }),
+  );
+}
+
+/**
+ * Categorie catalogo per tenant (RPC SECURITY DEFINER). Usare insieme a mergePublicCategoriesWithCatalog.
+ * @returns {Promise<Array<{ id: string, nome: string, ordine: number, slug: string | null }>>}
+ */
+export async function getPublicCategoriesForTenant(tenantId) {
+  if (!tenantId) return [];
+  const { data, error } = await supabase.rpc("get_public_categories_for_tenant", {
+    p_tenant_id: tenantId,
+  });
+  if (error) {
+    if (isRpcMissingError(error)) return [];
+    logSupabaseError("publicService.getPublicCategoriesForTenant", error, {
+      p_tenant_id: tenantId,
+    });
+    return [];
+  }
+  return Array.isArray(data) ? data : [];
+}
+
+/**
  * Nomi ingredienti per ricerca sul menu vetrina (sessione anon).
  * RPC `get_public_menu_ingredient_names`: tenant-safe, stessi filtri della vista pubblica prodotti.
  * @returns {Promise<Record<string, string[]> | null>} `null` se la RPC non è ancora deployata (fallback lato caller).

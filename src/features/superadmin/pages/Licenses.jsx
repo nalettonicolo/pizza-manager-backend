@@ -93,8 +93,9 @@ export default function Licenses() {
             color: "#92400e",
           }}
         >
-          Le righe sono ricavate dai dati cliente: in database non risultano ancora record in{" "}
-          <code style={{ fontSize: 13 }}>subscriptions</code> (controlla policy RLS o esegui il salvataggio da Clienti).
+          Alcune righe sono mostrate dai dati anagrafici del cliente mentre l&apos;abbonamento non è ancora salvato nel
+          gestionale. Apri <Link to="/superadmin/tenants">Clienti</Link>, modifica il cliente interessato e salva (scheda
+          Abbonamento): così la riga viene scritta correttamente e i rinnovi restano tracciati.
         </div>
       )}
 

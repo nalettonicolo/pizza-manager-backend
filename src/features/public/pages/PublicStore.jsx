@@ -12,10 +12,11 @@ import {
   getPublicMenu,
   getPublicTenantInfo,
   getPublicMenuIngredientNames,
+  getPublicCategoriesForTenant,
+  mergePublicCategoriesWithCatalog,
 } from "@/features/services/publicService";
 import { getProductIngredientiMap } from "@/features/admin/services/adminService";
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme";
-import { sortByOrdine } from "@/utils/sortByOrdine";
 import { usePublicCart } from "@/app/contexts/PublicCartContext";
 import { applyPromoCalendarioToProducts } from "@/utils/promozioniCalendario";
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi";
@@ -38,23 +39,6 @@ function pickParametriOperativi(tenant) {
   return po && typeof po === "object" ? po : null;
 }
 
-function buildCategoriesFromMenu(menu) {
-  const byId = new Map();
-  for (const p of menu) {
-    const cid = p.categoria_id;
-    if (!cid) continue;
-    const ord = Number(p.ordine) || 0;
-    const cur = byId.get(cid);
-    if (!cur) {
-      byId.set(cid, { id: cid, nome: p.categoria_nome || "Altro", ordine: ord });
-    } else {
-      cur.ordine = Math.min(cur.ordine, ord);
-      if (p.categoria_nome) cur.nome = p.categoria_nome;
-    }
-  }
-  return sortByOrdine([...byId.values()]);
-}
-
 export default function PublicStore() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -70,6 +54,8 @@ export default function PublicStore() {
   const [tenantParametri, setTenantParametri] = useState(null);
   /** Riga tenant completa (piano / licenza) per gate ordini online */
   const [vetrinaTenant, setVetrinaTenant] = useState(null);
+  /** Categorie da core.categorie (RPC) per tab coerenti con admin */
+  const [publicCategoryCatalog, setPublicCategoryCatalog] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [searchPizza, setSearchPizza] = useState("");
   /** Nomi ingredienti per prodotto (ricetta); opzionale se RLS anon non consente la lettura. */
@@ -110,6 +96,12 @@ export default function PublicStore() {
         }
         const menuData = await getPublicMenu({ tenantId: tenant?.id ?? null });
         setMenu(menuData || []);
+        if (tenant?.id) {
+          const cats = await getPublicCategoriesForTenant(tenant.id);
+          setPublicCategoryCatalog(Array.isArray(cats) ? cats : []);
+        } else {
+          setPublicCategoryCatalog([]);
+        }
         setIngredientiRicercaMap({});
         if (tenant?.id && Array.isArray(menuData) && menuData.length > 0) {
           try {
@@ -135,7 +127,10 @@ export default function PublicStore() {
     loadData();
   }, [location.pathname, location.search]);
 
-  const categories = useMemo(() => buildCategoriesFromMenu(menu), [menu]);
+  const categories = useMemo(
+    () => mergePublicCategoriesWithCatalog(menu, publicCategoryCatalog),
+    [menu, publicCategoryCatalog],
+  );
 
   const defaultCategoryId = useMemo(() => {
     if (!categories.length) return null;
@@ -298,7 +293,7 @@ export default function PublicStore() {
           canAdd={vetrinaOrdiniOk}
           onAdd={handleAddProduct}
           showModifica={false}
-          storefront={false}
+          storefront={!vetrinaOrdiniOk}
         />
       </div>
     </div>

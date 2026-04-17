@@ -7369,6 +7369,33 @@ COMMENT ON FUNCTION public.get_public_menu_for_tenant(UUID) IS
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO authenticated;
 
+-- Categorie catalogo admin (core.categorie) per vetrina: allinea tab al nome/ordine reali anche se categoria_nome nel menu è assente
+CREATE OR REPLACE FUNCTION public.get_public_categories_for_tenant(p_tenant_id UUID)
+RETURNS TABLE (
+  id UUID,
+  nome TEXT,
+  ordine INT,
+  slug TEXT
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, core
+AS $$
+  SELECT c.id, c.nome, c.ordine, c.slug
+  FROM core.categorie c
+  WHERE p_tenant_id IS NOT NULL
+    AND c.tenant_id = p_tenant_id
+    AND (c.attivo IS NULL OR c.attivo = true)
+  ORDER BY c.ordine ASC NULLS LAST, lower(c.nome) ASC;
+$$;
+
+COMMENT ON FUNCTION public.get_public_categories_for_tenant(UUID) IS
+  'Vetrina: categorie tenant da core.categorie (come admin). SECURITY DEFINER; anon non legge la view categorie.';
+
+GRANT EXECUTE ON FUNCTION public.get_public_categories_for_tenant(UUID) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_public_categories_for_tenant(UUID) TO authenticated;
+
 -- Ingredienti ricetta per ricerca menu vetrina (anon); solo prodotti coerenti con prodotti_menu_pubblico
 CREATE OR REPLACE FUNCTION public.get_public_menu_ingredient_names(
   p_tenant_id UUID,

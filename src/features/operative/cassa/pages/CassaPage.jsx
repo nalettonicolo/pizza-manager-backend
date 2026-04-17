@@ -118,17 +118,24 @@ function tipoPagamentoInAttesa(tipoPagamento) {
 
 function iconTipoPagamentoLista(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
+  if (t.includes("misto")) return "🔀"
+  if (t.includes("link") || t.includes("carta da casa")) return "🔗"
   if (t.includes("contanti")) return "💵"
   if (t.includes("carta") && !t.includes("casa")) return "💳"
-  if (t.includes("link") || t.includes("carta da casa")) return "🔗"
+  if (t.includes("satispay")) return "📱"
+  if (t.includes("bonifico")) return "🏦"
+  if (t.includes("voucher") || t.includes("buono")) return "🎟️"
+  if (t.includes("altro")) return "🧾"
   if (t.includes("da pagare")) return "⏳"
-  return "⏳"
+  return "📋"
 }
 
 function labelTipoPagamentoLista(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
   if (t.includes("link") || t.includes("carta da casa")) return "Link"
   if (t.includes("da pagare")) return "Da pag."
+  if (t.includes("misto")) return "Misto"
+  if (t.includes("altro")) return "Altro"
   return String(tipoPagamento || "—").trim() || "—"
 }
 const MAX_MISTO_RIGHE = 15
@@ -1372,7 +1379,7 @@ export default function CassaPage() {
               setCheckoutError(null)
             }}
             style={{ padding: "8px 10px", background: "#666", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, cursor: "pointer", flexShrink: 0 }}
-            title="Deseleziona cliente"
+            title="Chiudi cliente: salva bozza ordine (carrello e dati) e la ripristini quando riselezioni il cliente"
           >
             ✕
           </button>

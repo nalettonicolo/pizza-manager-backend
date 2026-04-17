@@ -102,3 +102,13 @@ FASE 8 — Qualità, documentazione, chiusura ciclo
 35) Manuale utente interno: aggiornare con food cost, alert mismatch, flussi cliente delivery/negozio, cucina↔bancone.
 36) QA end-to-end su staging e almeno un tenant pilota produzione; checklist in docs (es. QA smoke operativa).
 37) Passaggio finale @agents/supervisor.md su ogni epic prima del merge.
+
+================================================================================
+ELABORAZIONE UNICA (stato al 2026-04-17) — sintesi per punto roadmap
+================================================================================
+FASE 0: (1–2) sql_upgrade.sql svuotato (template); patch categorie vetrina consolidate in schema_completo. HR staff in schema_completo.
+FASE 1: (3–5) RPC menu/ordini già in uso (create_order_with_items con controlli area/turno); revisione RLS granulare = sprint dedicato.
+FASE 2: (6) RPC categorie + PublicStore. (7) PublicLayout + HeroStore nascondono CTA ordini/registrazione se licenza; ProductGrid senza pulsante Aggiungi in sola consultazione (storefront). (8) Ricerca ingredienti: cassa + vetrina con mappa ricette dove esposto. (9) Licenze: copy guida + getSubscriptions con upsert/derivazione tenant.
+FASE 3: (10) PDF listini. (11) CSV useRef/useId. (12–14) food cost modal/cottura = da completare se mancano vincoli UI.
+FASE 4: (15) Cassa delivery: ✕ svuota carrello, cliente resta selezionato, bozza vuota in archivio. (16–18) ritiro/slot/planning = verifiche flusso esistente. (19) Icone pagamento distinte (Misto/Altro/Link/…). (20) code-split/route lazy già in AppRouter; ulteriore profiling opzionale.
+FASE 5–8: copy superadmin (pubblicazione/test layout/area consegna/dati pizzeria/manuale), HR dipendenti, cucina colori, delivery atomico, test/a11y — backlog incrementale.
