@@ -329,6 +329,8 @@ export default function CassaPage() {
   const [loading, setLoading] = useState(false)
   const [productModalOpen, setProductModalOpen] = useState(false)
   const [productToAdd, setProductToAdd] = useState(null)
+  /** Riferimento riga carrello in modifica (modale pizza); null = nuova aggiunta da listino */
+  const [pizzaModalEditCartLine, setPizzaModalEditCartLine] = useState(null)
   const [searchPizza, setSearchPizza] = useState("")
   const [tipoOrdine, setTipoOrdine] = useState(TIPO_ORDINE.NEGOZIO)
   const [deliverySearch, setDeliverySearch] = useState("")
@@ -1637,26 +1639,80 @@ export default function CassaPage() {
     [tenantId, addToCartWithIngredienti]
   )
 
+  const closePizzaModal = useCallback(() => {
+    setProductModalOpen(false)
+    setProductToAdd(null)
+    setPizzaModalEditCartLine(null)
+  }, [])
+
+  const openModificaPizzaFromCart = useCallback((item) => {
+    if (!item?._modsKey && !item?.ingredientiModifiche && !item?.ingredientiCotturaSummary) return
+    setPizzaModalEditCartLine(item)
+    setProductToAdd({ ...item })
+    setProductModalOpen(true)
+  }, [])
+
   const confirmModificaPizza = useCallback(
     (modsPayload) => {
       if (!productToAdd) return
       const isFamiglia = modsPayload.famigliaGusti && modsPayload.productForCart
       const isMezzoMetroMetro = modsPayload.gustiProducts && modsPayload.productForCart
       if (isFamiglia || isMezzoMetroMetro) {
+        if (pizzaModalEditCartLine) {
+          setCart((prev) => prev.filter((p) => p !== pizzaModalEditCartLine))
+        }
         addToCartWithIngredienti(modsPayload.productForCart, {
           formatoNome: modsPayload.formatoNome,
           prezzoCalcolato: modsPayload.prezzoCalcolato,
           formatoSpecial: modsPayload.formatoSpecial ?? (isFamiglia ? "famiglia" : null),
         })
-        setProductModalOpen(false)
-        setProductToAdd(null)
+        closePizzaModal()
+        return
+      }
+      const summary = modsPayload?.ingredientiCotturaSummary ?? ""
+      const nextKey =
+        modsPayload?.formatoSpecial === "famiglia"
+          ? `famiglia:${modsPayload.formatoNome ?? ""}`
+          : modsPayload?.formatoSpecial === "mezzo_metro" || modsPayload?.formatoSpecial === "metro"
+            ? `${modsPayload.formatoSpecial}:${modsPayload.formatoNome ?? ""}`
+            : modsPayload
+              ? JSON.stringify({
+                  m: modsPayload.ingredientiModifiche,
+                  e: modsPayload.extraIngredienti,
+                  i: modsPayload.impastoId ?? null,
+                  f: modsPayload.formatoId ?? null,
+                  c: modsPayload.cotturaId ?? null,
+                })
+              : ""
+
+      if (pizzaModalEditCartLine) {
+        setCart((prev) =>
+          prev.map((p) =>
+            p === pizzaModalEditCartLine
+              ? {
+                  ...p,
+                  prezzo: modsPayload?.prezzoCalcolato != null ? modsPayload.prezzoCalcolato : p.prezzo,
+                  ingredientiCotturaSummary: summary,
+                  ingredientiModifiche: modsPayload?.ingredientiModifiche,
+                  extraIngredienti: modsPayload?.extraIngredienti,
+                  impastoId: modsPayload?.impastoId,
+                  impastoNome: modsPayload?.impastoNome,
+                  formatoId: modsPayload?.formatoId,
+                  formatoNome: modsPayload?.formatoNome,
+                  cotturaId: modsPayload?.cotturaId,
+                  cotturaNome: modsPayload?.cotturaNome,
+                  _modsKey: nextKey,
+                }
+              : p,
+          ),
+        )
+        closePizzaModal()
         return
       }
       addToCartWithIngredienti(productToAdd, modsPayload)
-      setProductModalOpen(false)
-      setProductToAdd(null)
+      closePizzaModal()
     },
-    [productToAdd, addToCartWithIngredienti]
+    [productToAdd, pizzaModalEditCartLine, addToCartWithIngredienti, closePizzaModal],
   )
 
   const increaseQty = useCallback((item) => {
@@ -1769,6 +1825,7 @@ export default function CassaPage() {
     setSearchPizza("")
     setProductModalOpen(false)
     setProductToAdd(null)
+    setPizzaModalEditCartLine(null)
     setClienteDomicilioQuickOpen(false)
     setNoteModalOpen(false)
     setNuovoClienteModalOpen(false)
@@ -2465,12 +2522,13 @@ export default function CassaPage() {
         />
         <ModificaPizzaModal
           open={productModalOpen}
-          onClose={() => { setProductModalOpen(false); setProductToAdd(null); }}
+          onClose={closePizzaModal}
           product={productToAdd}
           tenantId={tenantId}
           tipoOrdine={tipoOrdine}
           parametri={tenantData?.parametri_operativi}
           onConfirm={confirmModificaPizza}
+          prefillFromProduct={Boolean(pizzaModalEditCartLine)}
         />
         <NuovoClienteModal
           open={nuovoClienteModalOpen}
@@ -3364,6 +3422,7 @@ export default function CassaPage() {
           rowBackground={menuRowBackground}
           onAdd={addToCart}
           onModifica={(p) => {
+            setPizzaModalEditCartLine(null)
             setProductToAdd(p)
             setProductModalOpen(true)
           }}
@@ -3382,6 +3441,7 @@ export default function CassaPage() {
           onIncrease={increaseQty}
           onDecrease={decreaseQty}
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
+          onEditPizza={openModificaPizzaFromCart}
           onCheckout={openRiepilogo}
           onClear={clearCart}
           checkoutError={checkoutError}
@@ -3392,15 +3452,13 @@ export default function CassaPage() {
 
       <ModificaPizzaModal
         open={productModalOpen}
-        onClose={() => {
-          setProductModalOpen(false)
-          setProductToAdd(null)
-        }}
+        onClose={closePizzaModal}
         product={productToAdd}
         tenantId={tenantId}
         tipoOrdine={tipoOrdine}
         parametri={tenantData?.parametri_operativi}
         onConfirm={confirmModificaPizza}
+        prefillFromProduct={Boolean(pizzaModalEditCartLine)}
       />
 
       <NuovoClienteModal

@@ -302,6 +302,8 @@ export default function ModificaPizzaModal({
   tipoOrdine = "negozio",
   parametri,
   onConfirm,
+  /** Se true, `product` è una riga carrello: ripristina modifiche salvate */
+  prefillFromProduct = false,
 }) {
   const [productIngredienti, setProductIngredienti] = useState([])
   const [allIngredients, setAllIngredients] = useState([])
@@ -359,21 +361,16 @@ export default function ModificaPizzaModal({
       })
       const effectiveProductIngredienti = hasProductRecipe ? ingProdList : fallbackFromLegacy
       setProductIngredienti(effectiveProductIngredienti)
-      setAllIngredients(ingAll || [])
+      setAllIngredients(ingAllList)
       const activeImpasti = (impastiList || []).filter((i) => i.attivo !== false)
       setImpasti(activeImpasti)
-      if (activeImpasti.length) setSelectedImpastoId(activeImpasti[0].id)
-      else setSelectedImpastoId(null)
       const activeFormati = (formatiList || []).filter((f) => f.attivo !== false)
       const specialFormati = getFormatiSpecialiList(parametri || {}, tipoOrdine)
       const formatiMerged = [...activeFormati, ...specialFormati]
       setFormati(formatiMerged)
-      if (formatiMerged.length) setSelectedFormatoId(formatiMerged[0].id)
-      else setSelectedFormatoId(null)
       const activeCottura = (cotturaData || []).filter((c) => c.attivo !== false)
       setCotturaList(activeCottura)
-      if (activeCottura.length) setSelectedCotturaId(activeCottura[0].id)
-      else setSelectedCotturaId(null)
+
       const initial = {}
       effectiveProductIngredienti.forEach((ing) => {
         initial[ing.id] = {
@@ -381,12 +378,46 @@ export default function ModificaPizzaModal({
           cottura: ing.vaInCottura ? "in_cottura" : "fine_cottura",
         }
       })
+
+      let selImpasto = activeImpasti.length ? activeImpasti[0].id : null
+      let selFormato = formatiMerged.length ? formatiMerged[0].id : null
+      let selCottura = activeCottura.length ? activeCottura[0].id : null
+      let extras = []
+
+      if (prefillFromProduct && product) {
+        const saved = product.ingredientiModifiche
+        if (saved && typeof saved === "object") {
+          for (const [id, mod] of Object.entries(saved)) {
+            if (initial[id]) {
+              initial[id] = { ...initial[id], ...mod }
+            } else {
+              initial[id] = mod
+            }
+          }
+        }
+        if (product.impastoId && activeImpasti.some((i) => i.id === product.impastoId)) {
+          selImpasto = product.impastoId
+        }
+        if (product.formatoId && formatiMerged.some((f) => f.id === product.formatoId)) {
+          selFormato = product.formatoId
+        }
+        if (product.cotturaId && activeCottura.some((c) => c.id === product.cotturaId)) {
+          selCottura = product.cotturaId
+        }
+        if (Array.isArray(product.extraIngredienti) && product.extraIngredienti.length > 0) {
+          extras = product.extraIngredienti.map((e) => ({ ...e }))
+        }
+      }
+
+      setSelectedImpastoId(selImpasto)
+      setSelectedFormatoId(selFormato)
+      setSelectedCotturaId(selCottura)
       setModifiche(initial)
-      setExtraIngredienti([])
+      setExtraIngredienti(extras)
       setSearchExtra("")
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [open, product?.id, tenantId, tipoOrdine, parametri])
+  }, [open, product?.id, tenantId, tipoOrdine, parametri, prefillFromProduct, product])
 
   useEffect(() => {
     if (!showFamigliaModal || !tenantId) return
@@ -804,7 +835,7 @@ export default function ModificaPizzaModal({
               </button>
               <span style={s.priceBox}>€ {prezzoTotale.toFixed(2)}</span>
               <button type="button" style={s.btnAggiungi} onClick={handleConfirm}>
-                🛒 Aggiungi
+                {prefillFromProduct ? "Salva modifiche" : "🛒 Aggiungi"}
               </button>
             </div>
           </>

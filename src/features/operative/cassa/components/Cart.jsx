@@ -9,6 +9,7 @@ export default function Cart({
   onIncrease,
   onDecrease,
   onRemove,
+  onEditPizza,
   onCheckout,
   onClear,
   checkoutError,
@@ -39,6 +40,7 @@ export default function Cart({
           onIncrease={onIncrease}
           onDecrease={onDecrease}
           onRemove={onRemove}
+          onEditPizza={onEditPizza}
           variant={variant}
         />
       ))}

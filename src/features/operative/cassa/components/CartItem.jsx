@@ -5,11 +5,15 @@ export default function CartItem({
   onIncrease,
   onDecrease,
   onRemove,
+  onEditPizza,
   variant = "default",
 }) {
   const mobile = variant === "mobile"
   const metaFs = mobile ? 13 : 11
   const btnStyle = mobile ? styles.actionBtnMobile : styles.actionBtn
+  const canEditPizza =
+    typeof onEditPizza === "function" &&
+    Boolean(item._modsKey || item.ingredientiModifiche || item.ingredientiCotturaSummary)
   return (
     <div style={styles.row}>
       <div style={mobile ? { flex: 1, minWidth: 0, paddingRight: 8 } : undefined}>
@@ -40,6 +44,17 @@ export default function CartItem({
       </div>
 
       <div style={styles.actions}>
+        {canEditPizza ? (
+          <button
+            type="button"
+            style={{ ...btnStyle, ...styles.gearBtn }}
+            aria-label="Modifica pizza"
+            title="Modifica ingredienti"
+            onClick={() => onEditPizza(item)}
+          >
+            ⚙
+          </button>
+        ) : null}
         <button type="button" style={btnStyle} aria-label="Diminuisci quantità" onClick={() => onDecrease(item)}>
           −
         </button>
@@ -84,5 +99,9 @@ const styles = {
     border: "1px solid #cbd5e1",
     background: "#f8fafc",
     cursor: "pointer",
+  },
+  gearBtn: {
+    fontSize: 16,
+    color: "#334155",
   },
 }

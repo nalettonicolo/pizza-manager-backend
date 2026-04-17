@@ -82,6 +82,16 @@ function ordineConsegnaLng(o) {
   return v != null && Number.isFinite(Number(v)) ? Number(v) : null
 }
 
+function logDeliveryError(context, err) {
+  const msg =
+    err == null
+      ? "Errore sconosciuto"
+      : typeof err === "string"
+        ? err
+        : [err.message, err.code, err.details, err.hint].filter(Boolean).join(" · ") || String(err)
+  console.error(`[DeliveryDashboard] ${context}:`, msg)
+}
+
 /**
  * @param {{ mode?: "quadTestBySlot" }} props
  * - default: solo delivery PRONTO (flusso operativo rider).
@@ -129,7 +139,7 @@ export default function DeliveryDashboard(props) {
         }
         setOrders(rows)
       } catch (err) {
-        console.error(err)
+        logDeliveryError("loadOrders", err)
         if (seq === loadSeqRef.current) {
           setOrders([])
           setLoadError(err?.message || "Errore nel caricamento ordini.")
@@ -153,7 +163,7 @@ export default function DeliveryDashboard(props) {
       await updateOrder(ordineId, { stato_consegna: "ASSEGNATO" })
       await loadOrders({ silent: true })
     } catch (err) {
-      console.error(err)
+      logDeliveryError("setAssegnato", err)
     }
   }
 
@@ -163,7 +173,7 @@ export default function DeliveryDashboard(props) {
       await updateOrder(ordineId, { stato_consegna: "IN_VIAGGIO" })
       await loadOrders({ silent: true })
     } catch (err) {
-      console.error(err)
+      logDeliveryError("setInViaggio", err)
     }
   }
 
@@ -173,7 +183,7 @@ export default function DeliveryDashboard(props) {
       await markDeliveryConsegnatoAtomic(ordineId)
       setOrders((prev) => prev.filter((o) => o.id !== ordineId))
     } catch (err) {
-      console.error(err)
+      logDeliveryError("markConsegnato", err)
     }
   }
 
