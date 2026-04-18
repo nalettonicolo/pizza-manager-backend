@@ -20,36 +20,14 @@ import {
   mergeCucinaSlotKeys,
 } from "@/features/operative/cucina/utils/cucinaPrepTasks"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import {
+  mergeCucinaPrepColorsFromParametri,
+  resolvePrepTaskBackgroundColor,
+} from "@/utils/cucinaPrepCategoryTheme"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
 const POLL_MS = 10000
-
-/**
- * Colori di default per i pulsanti «preparazione cucina» (non sono tab orarie: sono le task cliccabili).
- * Modifica qui le tonalità per categoria (match su testo categoria, case-insensitive).
- * Priorità in resolvePrepTaskColor: 1) colore esadecimale sull’ingrediente (Admin → Ingredienti → Modifica → campo Colore),
- * 2) mappa sotto in base a «categoria» ingrediente, 3) rosa «comune».
- * Vista Bancone (chip ingredienti): colori presi / simili in `bancone/utils/banconeSlotPick.js` → `banconeIngredientPickedColor`.
- */
-const PREP_CATEGORIA_COLORI_DEFAULT = {
-  congelato: "#dbeafe",
-  affettato: "#dcfce7",
-  bibite: "#ffffff",
-  fritto: "#fef9c3",
-  comune: "#fce7f3",
-}
-
-function resolvePrepTaskColor(task) {
-  const custom = String(task?.ingredienteColore || "").trim()
-  if (custom) return custom
-  const cat = String(task?.ingredienteCategoria || "").trim().toLowerCase()
-  if (cat.includes("congel")) return PREP_CATEGORIA_COLORI_DEFAULT.congelato
-  if (cat.includes("affett")) return PREP_CATEGORIA_COLORI_DEFAULT.affettato
-  if (cat.includes("bibit")) return PREP_CATEGORIA_COLORI_DEFAULT.bibite
-  if (cat.includes("fritt")) return PREP_CATEGORIA_COLORI_DEFAULT.fritto
-  return PREP_CATEGORIA_COLORI_DEFAULT.comune
-}
 
 function rigaGroupKey(r) {
   return `${r.prodottoId ?? r.prodotto_id}|${r.formatoNome ?? r.formato_nome ?? ""}`
@@ -129,6 +107,10 @@ export default function Cucina() {
   const quad = useRepartiQuadTest()
   const { tenantId, tenantData } = useTenant()
   const parametri = tenantData?.parametri_operativi || {}
+  const prepCategoryColors = useMemo(
+    () => mergeCucinaPrepColorsFromParametri(tenantData?.parametri_operativi),
+    [tenantData?.parametri_operativi],
+  )
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
   const [orders, setOrders] = useState([])
   const [righeAll, setRigheAll] = useState([])
@@ -407,7 +389,7 @@ export default function Cucina() {
                 const busy = prepActionId === key
                 const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
                 const isVoceProdotto = t.kind === "prodotto"
-                const prepBg = resolvePrepTaskColor(t)
+                const prepBg = resolvePrepTaskBackgroundColor(t, prepCategoryColors)
                 return (
                   <button
                     key={key}

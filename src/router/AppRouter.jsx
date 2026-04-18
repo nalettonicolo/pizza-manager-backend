@@ -83,6 +83,7 @@ const DolciPage = lazy(() => import("@/features/admin/pages/menu/DolciPage"));
 const FrittiPage = lazy(() => import("@/features/admin/pages/menu/FrittiPage"));
 const AllergeniPage = lazy(() => import("@/features/admin/pages/menu/AllergeniPage"));
 const ListiniPage = lazy(() => import("@/features/admin/pages/menu/ListiniPage"));
+const PrepCucinaColoriPage = lazy(() => import("@/features/admin/pages/menu/PrepCucinaColoriPage"));
 const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
 const RuoliPage = lazy(() => import("@/features/admin/pages/RuoliPage"));
 const ManualeUtentePage = lazy(() => import("@/features/admin/pages/ManualeUtentePage"));
@@ -490,6 +491,14 @@ export default function AppRouter() {
           <Route path="/admin/menu/fritti" element={<Suspense fallback={<PageFallback />}><FrittiPage /></Suspense>} />
           <Route path="/admin/menu/allergeni" element={<Suspense fallback={<PageFallback />}><AllergeniPage /></Suspense>} />
           <Route path="/admin/menu/listini" element={<Suspense fallback={<PageFallback />}><ListiniPage /></Suspense>} />
+          <Route
+            path="/admin/menu/prep-cucina-colori"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <PrepCucinaColoriPage />
+              </Suspense>
+            }
+          />
           <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
           <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />

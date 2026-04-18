@@ -557,7 +557,8 @@ export default function IngredientiPage() {
         <strong>categoria</strong> (es. congelato, affettato, fritto, bibite — per la mappa colori di default in Cucina) e{" "}
         <strong>colore</strong> personalizzato (#rrggbb). Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.{" "}
         <strong>Export CSV</strong> aggiunge in coda le colonne <code>categoria</code>, <code>colore</code>, <code>attivo</code> così un re-import
-        mantiene colori, categoria e stato attivo/disattivo.
+        mantiene colori, categoria e stato attivo/disattivo. I colori di default per tipo (congelato, fritto, …) sulla vista Cucina si
+        regolano in <strong>Menu → Colori prep Cucina</strong>.
       </p>
 
       <Modal open={!!editIngredient} onClose={() => setEditIngredient(null)} title="Modifica ingrediente">

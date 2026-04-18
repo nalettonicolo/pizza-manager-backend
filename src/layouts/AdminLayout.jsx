@@ -48,6 +48,7 @@ const menuSidebarItems = [
   { to: "/admin/menu/cottura", label: "Cottura" },
   { to: "/admin/menu/pizze", label: "Pizze" },
   { to: "/admin/menu/ingredienti", label: "Ingredienti" },
+  { to: "/admin/menu/prep-cucina-colori", label: "Colori prep Cucina" },
   { to: "/admin/menu/impasti", label: "Impasti" },
   { to: "/admin/menu/bibite", label: "Bibite" },
   { to: "/admin/menu/dolci", label: "Dolci" },
@@ -167,6 +168,7 @@ export default function AdminLayout() {
       () => import("@/features/admin/pages/ManualeUtentePage"),
       () => import("@/features/admin/pages/menu/CategoriePage"),
       () => import("@/features/admin/pages/menu/IngredientiPage"),
+      () => import("@/features/admin/pages/menu/PrepCucinaColoriPage"),
       () => import("@/features/admin/pages/menu/ImpastiPage"),
       () => import("@/features/admin/pages/UserManager"),
     ]);
