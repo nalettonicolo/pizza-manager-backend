@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Modal from "@/components/dashboard/Modal"
 import {
-  upsertStaffArchivioDipendente,
+  updateStaffArchivioById,
   uploadStaffHrFile,
   getStaffHrSignedUrl,
   removeStaffHrFiles,
@@ -71,7 +71,9 @@ export default function StaffDossierModal({
   open,
   onClose,
   tenantId,
+  /** Account applicativo collegato (opzionale): solo etichetta e cartella storage se presente. */
   user,
+  /** Riga `staff_archivio_dipendenti` (obbligatoria per aprire la modale). */
   archivioRow,
   onSaved,
 }) {
@@ -87,10 +89,17 @@ export default function StaffDossierModal({
   const [fotoPath, setFotoPath] = useState(null)
   const [fotoPreview, setFotoPreview] = useState("")
 
-  const title = user ? `Scheda — ${labelFromEmailPrefix(user.email) || user.email}` : ""
+  const storageSubjectId = user?.id ?? archivioRow?.id
+
+  const title = useMemo(() => {
+    const nome = (archivioRow?.nome_completo || "").trim()
+    if (nome) return `Scheda HR — ${nome}`
+    if (user?.email) return `Scheda HR — ${labelFromEmailPrefix(user.email) || user.email}`
+    return "Scheda HR"
+  }, [archivioRow?.nome_completo, user?.email])
 
   const resetFromProps = useCallback(async () => {
-    if (!user) return
+    if (!archivioRow?.id) return
     const curr = archivioRow || {}
     setDraft({
       nome_completo: curr.nome_completo || "",
@@ -122,26 +131,26 @@ export default function StaffDossierModal({
     } else {
       setFotoPreview("")
     }
-  }, [user, archivioRow])
+  }, [archivioRow])
 
   useEffect(() => {
-    if (open && user) {
+    if (open && archivioRow?.id) {
       void resetFromProps()
       setTab("anagrafica")
     }
-  }, [open, user, archivioRow, resetFromProps])
+  }, [open, archivioRow?.id, archivioRow, resetFromProps])
 
   const handleFoto = useCallback(async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ""
-    if (!file || !tenantId || !user?.id) return
+    if (!file || !tenantId || !storageSubjectId) return
     if (file.size > MAX_FILE) {
       alert("File troppo grande (max 12 MB).")
       return
     }
     setFotoBusy(true)
     try {
-      const path = await uploadStaffHrFile(tenantId, user.id, file, "foto")
+      const path = await uploadStaffHrFile(tenantId, storageSubjectId, file, "foto")
       setFotoPath(path)
       const url = await getStaffHrSignedUrl(path, 7200)
       setFotoPreview(url)
@@ -151,17 +160,17 @@ export default function StaffDossierModal({
     } finally {
       setFotoBusy(false)
     }
-  }, [tenantId, user?.id])
+  }, [tenantId, storageSubjectId])
 
   const uploadAllegato = async (file, kind) => {
-    if (!file || !tenantId || !user?.id) return
+    if (!file || !tenantId || !storageSubjectId) return
     if (file.size > MAX_FILE) {
       alert("File troppo grande (max 12 MB).")
       return
     }
     setFileBusy(true)
     try {
-      const path = await uploadStaffHrFile(tenantId, user.id, file, kind === "busta" ? "buste" : "docs")
+      const path = await uploadStaffHrFile(tenantId, storageSubjectId, file, kind === "busta" ? "buste" : "docs")
       const meta = {
         id: newId(),
         nome: file.name || "file",
@@ -212,10 +221,10 @@ export default function StaffDossierModal({
   }
 
   const saveHr = async () => {
-    if (!tenantId || !user?.id || !draft) return
+    if (!tenantId || !archivioRow?.id || !draft) return
     setSaving(true)
     try {
-      await upsertStaffArchivioDipendente(tenantId, user.id, {
+      await updateStaffArchivioById(tenantId, archivioRow.id, {
         ...draft,
         data_nascita: draft.data_nascita || null,
         data_assunzione: draft.data_assunzione || null,
@@ -225,6 +234,7 @@ export default function StaffDossierModal({
         allegati_hr: allegati,
         buste_paga: buste,
         note_hr: draft.note_hr.trim(),
+        user_id: archivioRow.user_id ?? user?.id ?? null,
       })
       await onSaved?.()
       alert("Scheda salvata.")
@@ -322,7 +332,7 @@ export default function StaffDossierModal({
     )
   }, [draft, fotoPreview, fotoBusy, fotoPath, handleFoto])
 
-  if (!open || !user) return null
+  if (!open || !archivioRow?.id) return null
 
   return (
     <Modal open={open} onClose={() => !saving && onClose()} title={title} wide>

@@ -6595,7 +6595,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS public.staff_archivio_dipendenti (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   nome_completo TEXT,
   codice_fiscale TEXT,
   data_nascita DATE,

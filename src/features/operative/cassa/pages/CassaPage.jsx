@@ -1700,26 +1700,48 @@ export default function CassaPage() {
               : ""
 
       if (pizzaModalEditCartLine) {
-        setCart((prev) =>
-          prev.map((p) =>
-            p === pizzaModalEditCartLine
-              ? {
-                  ...p,
-                  prezzo: modsPayload?.prezzoCalcolato != null ? modsPayload.prezzoCalcolato : p.prezzo,
-                  ingredientiCotturaSummary: summary,
-                  ingredientiModifiche: modsPayload?.ingredientiModifiche,
-                  extraIngredienti: modsPayload?.extraIngredienti,
-                  impastoId: modsPayload?.impastoId,
-                  impastoNome: modsPayload?.impastoNome,
-                  formatoId: modsPayload?.formatoId,
-                  formatoNome: modsPayload?.formatoNome,
-                  cotturaId: modsPayload?.cotturaId,
-                  cotturaNome: modsPayload?.cotturaNome,
-                  _modsKey: nextKey,
-                }
-              : p,
-          ),
-        )
+        const line = pizzaModalEditCartLine
+        const updatedOne = {
+          ...line,
+          qty: 1,
+          prezzo: modsPayload?.prezzoCalcolato != null ? modsPayload.prezzoCalcolato : line.prezzo,
+          ingredientiCotturaSummary: summary,
+          ingredientiModifiche: modsPayload?.ingredientiModifiche,
+          extraIngredienti: modsPayload?.extraIngredienti,
+          impastoId: modsPayload?.impastoId,
+          impastoNome: modsPayload?.impastoNome,
+          formatoId: modsPayload?.formatoId,
+          formatoNome: modsPayload?.formatoNome,
+          cotturaId: modsPayload?.cotturaId,
+          cotturaNome: modsPayload?.cotturaNome,
+          _modsKey: nextKey,
+        }
+
+        /** Stessa logica di raggruppamento di addToCartWithIngredienti (id + riepilogo + chiave modifiche). */
+        const mergeCartPiece = (cartList, piece) => {
+          const summaryP = piece.ingredientiCotturaSummary ?? ""
+          const keyP = piece._modsKey ?? ""
+          const ex = cartList.find(
+            (p) =>
+              p.id === piece.id &&
+              (p.ingredientiCotturaSummary ?? "") === summaryP &&
+              (p._modsKey ?? "") === keyP,
+          )
+          if (ex) {
+            return cartList.map((p) => (p === ex ? { ...p, qty: p.qty + piece.qty } : p))
+          }
+          return [...cartList, piece]
+        }
+
+        setCart((prev) => {
+          const without = prev.filter((p) => p !== line)
+          let next = without
+          if (line.qty > 1) {
+            next = mergeCartPiece(next, { ...line, qty: line.qty - 1 })
+          }
+          next = mergeCartPiece(next, updatedOne)
+          return next
+        })
         closePizzaModal()
         return
       }

@@ -77,7 +77,11 @@ export default function CartItem({
             type="button"
             style={{ ...btnStyle, ...styles.gearBtn }}
             aria-label="Modifica pizza"
-            title="Modifica ingredienti"
+            title={
+              Number(item.qty) > 1
+                ? "Modifica solo una pizza: al salvataggio la riga si divide (le altre restano come erano)."
+                : "Modifica ingredienti"
+            }
             onClick={() => onEditPizza(item)}
           >
             <IconGear size={mobile ? 22 : 18} />

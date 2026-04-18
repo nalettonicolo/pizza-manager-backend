@@ -190,3 +190,11 @@ CREATE VIEW public.ingredienti AS
   END IF;
 END
 $ing_patch$;
+
+-- -----------------------------------------------------------------------------
+-- 2026-04-19 — staff_archivio_dipendenti: schede HR anche senza account (user_id NULL).
+-- -----------------------------------------------------------------------------
+ALTER TABLE public.staff_archivio_dipendenti ALTER COLUMN user_id DROP NOT NULL;
+
+COMMENT ON COLUMN public.staff_archivio_dipendenti.user_id IS
+  'Utente Auth collegato opzionale; NULL = dipendente solo archivio HR (nessun login).';

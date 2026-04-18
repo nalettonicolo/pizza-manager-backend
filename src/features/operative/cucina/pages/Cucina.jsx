@@ -135,6 +135,8 @@ export default function Cucina() {
   const [actionLoading, setActionLoading] = useState(false)
   const [prepActionId, setPrepActionId] = useState(null)
   const [activeSlot, setActiveSlot] = useState(null)
+  /** Se valorizzata, mostra la sezione «composizione in forno» (dettaglio ordini) per quella fascia. */
+  const [compositionSlot, setCompositionSlot] = useState(null)
   const loadSeqRef = useRef(0)
 
   const loadOrders = useCallback(
@@ -231,6 +233,20 @@ export default function Cucina() {
     setActiveSlot(withPending ?? slotTabs[0])
   }, [slotTabs, tasksBySlot, activeSlot])
 
+  useEffect(() => {
+    if (compositionSlot && !slotTabs.includes(compositionSlot)) {
+      setCompositionSlot(null)
+    }
+  }, [slotTabs, compositionSlot])
+
+  const handleSlotTabClick = useCallback((slot) => {
+    setActiveSlot(slot)
+    setCompositionSlot((prev) => {
+      if (prev === slot) return null
+      return slot
+    })
+  }, [])
+
   const openDetail = useCallback(
     async (ordineId) => {
       if (!tenantId || !ordineId) return
@@ -291,8 +307,6 @@ export default function Cucina() {
   const tasksInTab = activeSlot ? tasksBySlot[activeSlot] || [] : []
   const pendingInTab = tasksInTab.filter((t) => !t.done)
   const doneInTab = tasksInTab.filter((t) => t.done)
-  const ordersInTab = activeSlot ? ordersBySlot[activeSlot] || [] : []
-
   const totalPrepPending = useMemo(
     () => Object.values(tasksBySlot).reduce((acc, list) => acc + (list || []).filter((t) => !t.done).length, 0),
     [tasksBySlot],
@@ -304,8 +318,9 @@ export default function Cucina() {
         <>
           <h1 style={styles.title}>Cucina</h1>
           <p style={styles.subtitle}>
-            Preparazioni (ingredienti e voci fritti/bibite/dolci se flaggate) e composizione in forno — per fascia oraria. Senza numero ordine o
-            prezzi.
+            Vista predefinita: solo <strong>preparazioni in cucina</strong> per la fascia selezionata. Tocca una{" "}
+            <strong>fascia oraria</strong> qui sotto per aprire il <strong>dettaglio ordini e piatti in forno</strong> per quella fascia; un secondo
+            tocco sulla <strong>stessa</strong> fascia lo nasconde (passando a un’altra fascia il dettaglio segue la fascia selezionata).
           </p>
         </>
       ) : null}
@@ -325,17 +340,25 @@ export default function Cucina() {
               const pend = (tasksBySlot[slot] || []).filter((t) => !t.done).length
               const nPiatti = (ordersBySlot[slot] || []).length
               const isActive = slot === activeSlot
+              const compositionOpen = compositionSlot === slot
               return (
                 <button
                   key={slot}
                   type="button"
                   role="tab"
                   aria-selected={isActive}
+                  aria-expanded={compositionOpen}
+                  title={
+                    compositionOpen
+                      ? "Tocca di nuovo per nascondere il dettaglio ordini"
+                      : "Tocca per vedere composizione piatti e ordini in questa fascia"
+                  }
                   style={{
                     ...styles.tabBtn,
                     ...(isActive ? styles.tabBtnActive : {}),
+                    ...(compositionOpen ? styles.tabBtnCompositionOpen : {}),
                   }}
-                  onClick={() => setActiveSlot(slot)}
+                  onClick={() => handleSlotTabClick(slot)}
                 >
                   {slotTabLabel(slot)}
                   {pend > 0 ? <span style={styles.tabBadgePrep}>{pend}</span> : null}
@@ -344,6 +367,13 @@ export default function Cucina() {
               )
             })}
           </div>
+          {!quad ? (
+            <p style={styles.tabHint} role="note">
+              {compositionSlot
+                ? `Dettaglio ordini per ${slotTabLabel(compositionSlot)}: tocca di nuovo la stessa fascia (bordo arancione) per chiudere.`
+                : "Tocca una fascia oraria per mostrare piatti in forno e righe ordine; altrimenti resta solo l’elenco preparazioni."}
+            </p>
+          ) : null}
 
           <section style={styles.prepSection} aria-label="Preparazioni cucina">
             {!quad ? (
@@ -416,20 +446,22 @@ export default function Cucina() {
             </div>
           </section>
 
+          {compositionSlot ? (
           <section style={styles.fornoSection} aria-label="Composizione in forno">
             {!quad ? (
               <>
                 <h2 style={styles.sectionTitle}>In forno — composizione piatti</h2>
                 <p style={styles.fornoHint}>
-                  Dettaglio prodotti e ingredienti (in cottura in grassetto). Segna pronto quando la cucina ha finito: passa al pizzaiolo / bancone.
+                  Fascia <strong>{slotTabLabel(compositionSlot)}</strong>: dettaglio prodotti e ingredienti (in cottura in grassetto). Segna pronto
+                  quando la cucina ha finito: passa al pizzaiolo / bancone.
                 </p>
               </>
             ) : null}
-            {ordersInTab.length === 0 ? (
+            {(ordersBySlot[compositionSlot] || []).length === 0 ? (
               quad ? null : <p style={styles.mutedSmall}>Nessun ordine in questa fascia.</p>
             ) : (
               <div style={styles.fornoStack}>
-                {ordersInTab.map((ord) => {
+                {(ordersBySlot[compositionSlot] || []).map((ord) => {
                   const urg =
                     (ord.tipo_ordine || "").toLowerCase() === "delivery" &&
                     isDeliveryUrgentForno(ord, parametri, partenzaConsegneMinuti)
@@ -484,6 +516,7 @@ export default function Cucina() {
               </div>
             )}
           </section>
+          ) : null}
         </>
       )}
 
@@ -532,6 +565,16 @@ const styles = {
     background: "#37474f",
     color: "#fff",
     borderColor: "#37474f",
+  },
+  /** Fascia con dettaglio ordini aperto (oltre alla selezione per le preparazioni). */
+  tabBtnCompositionOpen: {
+    boxShadow: "0 0 0 2px #ff7043",
+  },
+  tabHint: {
+    margin: "0 0 14px",
+    fontSize: 12,
+    color: "#546e7a",
+    lineHeight: 1.45,
   },
   tabBadgePrep: {
     fontSize: 11,

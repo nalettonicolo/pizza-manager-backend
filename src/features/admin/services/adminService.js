@@ -818,11 +818,9 @@ export async function listStaffArchivioDipendenti(tenantId) {
   return data || []
 }
 
-export async function upsertStaffArchivioDipendente(tenantId, userId, payload = {}) {
-  if (!tenantId || !userId) throw new Error("Tenant o dipendente mancanti.")
-  const row = {
+function staffArchivioRowFromPayload(tenantId, payload = {}) {
+  return {
     tenant_id: tenantId,
-    user_id: userId,
     nome_completo: payload.nome_completo || null,
     codice_fiscale: payload.codice_fiscale || null,
     data_nascita: payload.data_nascita || null,
@@ -842,6 +840,45 @@ export async function upsertStaffArchivioDipendente(tenantId, userId, payload = 
     note_hr: payload.note_hr || null,
     updated_at: new Date().toISOString(),
   }
+}
+
+/** Nuova scheda HR (anche senza account). Richiede `user_id` opzionale in Supabase (sql_upgrade 2026-04-19). */
+export async function insertStaffArchivioPersona(tenantId, payload = {}) {
+  if (!tenantId) throw new Error("Tenant mancante.")
+  const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+  const row = {
+    id,
+    ...staffArchivioRowFromPayload(tenantId, payload),
+    user_id: payload.user_id ?? null,
+  }
+  const { data, error } = await supabase.from("staff_archivio_dipendenti").insert(row).select("*").single()
+  if (error) throw mapStaffArchivioError(error)
+  return data
+}
+
+/** Aggiorna scheda per id (scheda principale in pagina HR). */
+export async function updateStaffArchivioById(tenantId, archivioId, payload = {}) {
+  if (!tenantId || !archivioId) throw new Error("Tenant o id scheda mancanti.")
+  const row = {
+    ...staffArchivioRowFromPayload(tenantId, payload),
+  }
+  delete row.tenant_id
+  if (payload.user_id !== undefined) row.user_id = payload.user_id
+  const { error } = await supabase
+    .from("staff_archivio_dipendenti")
+    .update(row)
+    .eq("id", archivioId)
+    .eq("tenant_id", tenantId)
+  if (error) throw mapStaffArchivioError(error)
+}
+
+export async function upsertStaffArchivioDipendente(tenantId, userId, payload = {}) {
+  if (!tenantId || !userId) throw new Error("Tenant o dipendente mancanti.")
+  const row = {
+    tenant_id: tenantId,
+    user_id: userId,
+    ...staffArchivioRowFromPayload(tenantId, payload),
+  }
   const { error } = await supabase
     .from("staff_archivio_dipendenti")
     .upsert(row, { onConflict: "tenant_id,user_id" })
@@ -851,11 +888,12 @@ export async function upsertStaffArchivioDipendente(tenantId, userId, payload = 
 /** Bucket Storage privato: creare in Supabase «staff-hr» (privato) + policy per utenti autenticati del tenant. */
 const STAFF_HR_BUCKET = "staff-hr"
 
-export async function uploadStaffHrFile(tenantId, userId, file, subdir = "docs") {
-  if (!tenantId || !userId || !file) throw new Error("File o destinatario mancante.")
+/** `ownerId` = id utente Auth oppure id riga `staff_archivio_dipendenti` (cartella in bucket staff-hr). */
+export async function uploadStaffHrFile(tenantId, ownerId, file, subdir = "docs") {
+  if (!tenantId || !ownerId || !file) throw new Error("File o destinatario mancante.")
   const rawName = typeof file.name === "string" ? file.name : "file"
   const ext = rawName.includes(".") ? rawName.split(".").pop().replace(/[^\w.-]/g, "").slice(0, 12) : "bin"
-  const path = `${tenantId}/${userId}/${subdir}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
+  const path = `${tenantId}/${ownerId}/${subdir}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
   const { error } = await supabase.storage.from(STAFF_HR_BUCKET).upload(path, file, {
     cacheControl: "3600",
     upsert: false,
