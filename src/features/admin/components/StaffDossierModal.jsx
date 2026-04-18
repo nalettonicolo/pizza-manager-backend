@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
 import Modal from "@/components/dashboard/Modal"
 import {
   upsertStaffArchivioDipendente,
@@ -342,11 +341,8 @@ export default function StaffDossierModal({
           ))}
         </div>
         <p style={{ fontSize: 12, color: "#64748b", marginBottom: 14, lineHeight: 1.5 }}>
-          <strong>Ruolo, aree operative e collegamento account</strong> si gestiscono nella pagina{" "}
-          <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
-            Ruoli
-          </Link>
-          , non in questa scheda HR.
+          Scheda dedicata a <strong>dati HR e documentazione</strong>. L&apos;imputazione economica delle buste paga in contabilità sarà
+          collegata in seguito.
         </p>
 
         {tab === "anagrafica" && anagraficaTab}

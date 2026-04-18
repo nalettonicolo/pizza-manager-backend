@@ -179,11 +179,16 @@ CREATE VIEW public.impasti AS
   );
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.impasti TO authenticated;
 
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS categoria TEXT;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS colore TEXT;
+
 DROP VIEW IF EXISTS public."Ingrediente" CASCADE;
 DROP VIEW IF EXISTS public.ingredienti CASCADE;
 CREATE VIEW public.ingredienti AS
   SELECT i.id, i.tenant_id, i.nome, i.costo_unitario, i.unita_misura, i.attivo, i.deleted_at, i.ordine, i.va_in_cottura,
-         i.costo_abbondante, i.costo_senza, i.costo_poco
+         i.costo_abbondante, i.costo_senza, i.costo_poco,
+         i.prep_cucina, i.categoria, i.colore
   FROM core.ingredienti i
   WHERE i.tenant_id IN (
     SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
@@ -198,8 +203,10 @@ CREATE OR REPLACE FUNCTION public.ingredienti_insert()
 RETURNS TRIGGER AS $$
 DECLARE r core.ingredienti;
 BEGIN
-  INSERT INTO core.ingredienti (tenant_id, nome, costo_unitario, unita_misura, attivo, ordine, va_in_cottura, costo_abbondante, costo_senza, costo_poco)
-  VALUES (NEW.tenant_id, NEW.nome, COALESCE(NEW.costo_unitario, 0), NEW.unita_misura, COALESCE(NEW.attivo, true), COALESCE(NEW.ordine, 0), COALESCE(NEW.va_in_cottura, false), NEW.costo_abbondante, NEW.costo_senza, NEW.costo_poco)
+  INSERT INTO core.ingredienti (tenant_id, nome, costo_unitario, unita_misura, attivo, ordine, va_in_cottura, costo_abbondante, costo_senza, costo_poco,
+    prep_cucina, categoria, colore)
+  VALUES (NEW.tenant_id, NEW.nome, COALESCE(NEW.costo_unitario, 0), NEW.unita_misura, COALESCE(NEW.attivo, true), COALESCE(NEW.ordine, 0), COALESCE(NEW.va_in_cottura, false), NEW.costo_abbondante, NEW.costo_senza, NEW.costo_poco,
+    COALESCE(NEW.prep_cucina, false), NULLIF(trim(COALESCE(NEW.categoria, '')), ''), NULLIF(trim(COALESCE(NEW.colore, '')), ''))
   RETURNING * INTO r;
   NEW.id := r.id; NEW.deleted_at := r.deleted_at;
   RETURN NEW;
@@ -219,7 +226,10 @@ BEGIN
     va_in_cottura = COALESCE(NEW.va_in_cottura, false),
     costo_abbondante = NEW.costo_abbondante,
     costo_senza = NEW.costo_senza,
-    costo_poco = NEW.costo_poco
+    costo_poco = NEW.costo_poco,
+    prep_cucina = COALESCE(NEW.prep_cucina, false),
+    categoria = NULLIF(trim(COALESCE(NEW.categoria, '')), ''),
+    colore = NULLIF(trim(COALESCE(NEW.colore, '')), '')
   WHERE id = OLD.id;
   RETURN NEW;
 END; $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1188,8 +1188,18 @@ export async function createIngredient(payload) {
   if (payload.costoPoco !== undefined) row.costo_poco = payload.costoPoco
   // vaInCottura: invia solo dopo aver eseguito add_va_in_cottura_ingrediente.sql (altrimenti PGRST204)
   if (payload.vaInCottura === true) row.va_in_cottura = true
+  if (payload.vaInCottura === false) row.va_in_cottura = false
   if (payload.prepCucina === true || payload.prep_cucina === true) row.prep_cucina = true
+  if (payload.prepCucina === false || payload.prep_cucina === false) row.prep_cucina = false
   if (payload.ordine !== undefined) row.ordine = payload.ordine
+  if (payload.categoria !== undefined && payload.categoria !== null) {
+    const c = String(payload.categoria).trim()
+    row.categoria = c.length ? c : null
+  }
+  if (payload.colore !== undefined && payload.colore !== null) {
+    const c = String(payload.colore).trim()
+    row.colore = c.length ? c : null
+  }
 
   const { data, error } = await supabase
     .from("Ingrediente")
@@ -1226,6 +1236,13 @@ export async function createIngredient(payload) {
       if (retry.error) throw retry.error
       return retry.data
     }
+    if (error.code === "PGRST204" && (error.message?.includes("categoria") || error.message?.includes("colore"))) {
+      delete row.categoria
+      delete row.colore
+      const retry = await supabase.from("Ingrediente").insert(row).select("id").single()
+      if (retry.error) throw retry.error
+      return retry.data
+    }
     throw error
   }
   return data
@@ -1244,6 +1261,14 @@ export async function updateIngredient(ingredienteId, updates) {
   if (updates.prepCucina !== undefined) row.prep_cucina = updates.prepCucina
   if (updates.prep_cucina !== undefined) row.prep_cucina = updates.prep_cucina
   if (updates.ordine !== undefined) row.ordine = updates.ordine
+  if (updates.categoria !== undefined) {
+    const c = updates.categoria === null || updates.categoria === undefined ? "" : String(updates.categoria).trim()
+    row.categoria = c.length ? c : null
+  }
+  if (updates.colore !== undefined) {
+    const c = updates.colore === null || updates.colore === undefined ? "" : String(updates.colore).trim()
+    row.colore = c.length ? c : null
+  }
   if (Object.keys(row).length === 0) return
   const { error } = await supabase
     .from("Ingrediente")
@@ -1276,6 +1301,17 @@ export async function updateIngredient(ingredienteId, updates) {
     }
     if (error.code === "PGRST204" && error.message?.includes("prep_cucina")) {
       delete row.prep_cucina
+      if (Object.keys(row).length === 0) return
+      const { error: retryErr } = await supabase.from("Ingrediente").update(row).eq("id", ingredienteId)
+      if (retryErr) throw retryErr
+      return
+    }
+    if (
+      error.code === "PGRST204" &&
+      (error.message?.includes("categoria") || error.message?.includes("colore"))
+    ) {
+      delete row.categoria
+      delete row.colore
       if (Object.keys(row).length === 0) return
       const { error: retryErr } = await supabase.from("Ingrediente").update(row).eq("id", ingredienteId)
       if (retryErr) throw retryErr

@@ -10929,6 +10929,8 @@ WHERE NOT EXISTS (SELECT 1 FROM core.punti_vendita pv WHERE pv.tenant_id = t.id)
 -- --- Vista Ordine + INSTEAD OF UPDATE (allineamento sql/sql_upgrade.sql) ---
 ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS telefono_ritiro TEXT;
 ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS categoria TEXT;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS colore TEXT;
 ALTER TABLE core.ordini ADD COLUMN IF NOT EXISTS cucina_prep_stato JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
@@ -9,16 +8,13 @@ import {
   toggleUserActive,
   updateStaffNomeVisualizzato,
   listStaffArchivioDipendenti,
-  getRuoliPizzeria,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
-import { RUOLO_BASE_OPTIONS, RUOLO_BASE_VALUES } from "@/features/admin/utils/ruoliPizzeriaUi"
 
 export default function UserManager() {
   const { tenantId } = useTenant()
 
   const [users, setUsers] = useState([])
-  const [ruoliRows, setRuoliRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState("")
@@ -32,9 +28,8 @@ export default function UserManager() {
     try {
       setLoading(true)
       setError(null)
-      const [data, rr] = await Promise.all([getTenantUsers(tenantId), getRuoliPizzeria(tenantId)])
+      const data = await getTenantUsers(tenantId)
       setUsers(data)
-      setRuoliRows(rr || [])
       setNomeDraft(Object.fromEntries(data.map((u) => [u.id, u.nomeVisualizzato ?? ""])))
       try {
         const rows = await listStaffArchivioDipendenti(tenantId)
@@ -57,7 +52,6 @@ export default function UserManager() {
     } else {
       setLoading(false)
       setUsers([])
-      setRuoliRows([])
     }
   }, [tenantId, loadUsers])
 
@@ -77,11 +71,6 @@ export default function UserManager() {
     const attivi = users.filter((u) => u.attivo).length
     return { total, attivi }
   }, [users])
-
-  const ruoloRecordFor = useCallback(
-    (userId) => ruoliRows.find((r) => r.user_id === userId) || null,
-    [ruoliRows],
-  )
 
   async function handleToggle(userId, current) {
     if (!tenantId) return
@@ -117,8 +106,6 @@ export default function UserManager() {
 
   const schedaArchivio = schedaUser ? archivioByUserId[schedaUser.id] : null
 
-  const ruoloBaseLabel = useMemo(() => Object.fromEntries(RUOLO_BASE_OPTIONS.map((o) => [o.value, o.label])), [])
-
   if (loading) return <Loader />
   if (error) return <ErrorState message={error} />
 
@@ -126,13 +113,9 @@ export default function UserManager() {
     <div className="dashboard-settings-page dashboard-dipendenti-page">
       <h1 className="dashboard-page-title">Dipendenti</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 14 }}>
-        Scheda anagrafica e HR per ogni persona: <strong>corsi</strong>, <strong>allegati</strong>, <strong>buste paga</strong>,{" "}
-        <strong>nome in sede</strong> (etichetta operativa). Per <strong>collegare un account</strong>, assegnare il{" "}
-        <strong>ruolo base</strong> e le <strong>aree operative</strong> usa la pagina{" "}
-        <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
-          Ruoli
-        </Link>
-        .
+        Archivio <strong>HR</strong> per ogni collaboratore con account sul locale: <strong>corsi</strong>, <strong>allegati</strong>,{" "}
+        <strong>buste paga</strong>, <strong>nome in sede</strong> (etichetta operativa) e stato accesso. L&apos;imputazione dei costi
+        buste paga in <strong>contabilità</strong> sarà collegata in una fase successiva.
       </p>
 
       <section className="dashboard-box dashboard-settings-section" style={{ padding: 0, overflow: "hidden" }}>
@@ -141,8 +124,7 @@ export default function UserManager() {
             Elenco dipendenti
           </h2>
           <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Apri la <strong>scheda dipendente</strong> per anagrafica, corsi, documenti e buste paga. Ruoli e permessi:{" "}
-            <Link to="/admin/ruoli">pagina Ruoli</Link>.
+            Apri la <strong>scheda dipendente</strong> per anagrafica, corsi, documenti e buste paga.
           </p>
         </div>
 
@@ -172,11 +154,8 @@ export default function UserManager() {
 
         {users.length === 0 ? (
           <p style={{ padding: "0 20px 24px", color: "#64748b", fontSize: 14, margin: 0 }}>
-            Nessun utente collegato a questo locale. Per collegare un account vai a{" "}
-            <Link to="/admin/ruoli" style={{ fontWeight: 600 }}>
-              Ruoli
-            </Link>{" "}
-            (Collega account) oppure crea l&apos;utente in Supabase Auth.
+            Nessun collaboratore con account associato a questo punto vendita. Quando gli account saranno presenti sul
+            locale, compariranno qui per completare schede HR e documentazione.
           </p>
         ) : filteredUsers.length === 0 ? (
           <p style={{ padding: "0 20px 24px", color: "#64748b", fontSize: 14, margin: 0 }}>
@@ -193,7 +172,6 @@ export default function UserManager() {
                   <tr>
                     <th scope="col">Account</th>
                     <th scope="col">Nome in sede</th>
-                    <th scope="col">Ruolo (sola lettura)</th>
                     <th scope="col">Accesso</th>
                   </tr>
                 </thead>
@@ -201,7 +179,6 @@ export default function UserManager() {
                   {filteredUsers.map((user) => {
                     const accountLabel = labelFromEmailPrefix(user.email) || user.nome || "—"
                     const rowBusy = busyId === user.id
-                    const rr = ruoloRecordFor(user.id)
                     return (
                       <tr key={user.id}>
                         <td>
@@ -229,19 +206,6 @@ export default function UserManager() {
                             aria-label={`Nome in sede per ${user.email}`}
                           />
                           <div className="dipendenti-role-hint">Chi usa questo login in negozio (turni, note).</div>
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 14, color: "#334155" }}>
-                            {rr?.ruolo && RUOLO_BASE_VALUES.has(rr.ruolo)
-                              ? ruoloBaseLabel[rr.ruolo] ?? rr.ruolo
-                              : rr?.ruolo || user.ruolo || "—"}
-                          </span>
-                          {!rr ? <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Ruolo non caricato</div> : null}
-                          <div style={{ marginTop: 6 }}>
-                            <Link to="/admin/ruoli" style={{ fontSize: 12, fontWeight: 600 }}>
-                              Modifica in Ruoli →
-                            </Link>
-                          </div>
                         </td>
                         <td>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>

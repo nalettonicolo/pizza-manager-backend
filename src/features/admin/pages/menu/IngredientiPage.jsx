@@ -50,6 +50,8 @@ export default function IngredientiPage() {
   const [newCostoPoco, setNewCostoPoco] = useState("");
   const [newVaInCottura, setNewVaInCottura] = useState(false);
   const [newPrepCucina, setNewPrepCucina] = useState(false);
+  const [newCategoria, setNewCategoria] = useState("");
+  const [newColore, setNewColore] = useState("");
   const [newOrdine, setNewOrdine] = useState("");
   const [newAllergeni, setNewAllergeni] = useState([]);
   const [editIngredient, setEditIngredient] = useState(null);
@@ -60,6 +62,8 @@ export default function IngredientiPage() {
   const [editCostoPoco, setEditCostoPoco] = useState("");
   const [editVaInCottura, setEditVaInCottura] = useState(false);
   const [editPrepCucina, setEditPrepCucina] = useState(false);
+  const [editCategoria, setEditCategoria] = useState("");
+  const [editColore, setEditColore] = useState("");
   const [editOrdine, setEditOrdine] = useState("");
   const [editAllergeni, setEditAllergeni] = useState([]);
   const [editAttivo, setEditAttivo] = useState(true);
@@ -123,6 +127,8 @@ export default function IngredientiPage() {
     if (newCostoPoco !== "") payload.costoPoco = Number(newCostoPoco);
     if (newVaInCottura) payload.vaInCottura = true;
     if (newPrepCucina) payload.prepCucina = true;
+    if (newCategoria.trim()) payload.categoria = newCategoria.trim();
+    if (newColore.trim()) payload.colore = newColore.trim();
     if (newOrdine !== "" && !Number.isNaN(Number(newOrdine))) payload.ordine = Number(newOrdine);
     try {
       const created = await createIngredient(payload);
@@ -141,6 +147,8 @@ export default function IngredientiPage() {
       setNewCostoPoco("");
       setNewVaInCottura(false);
       setNewPrepCucina(false);
+      setNewCategoria("");
+      setNewColore("");
       setNewOrdine("");
       setNewAllergeni([]);
       setModalOpen(false);
@@ -194,6 +202,8 @@ export default function IngredientiPage() {
     setEditCostoPoco(String(ing.costoPoco ?? ing.costo_poco ?? ""));
     setEditVaInCottura(ing.vaInCottura === true || ing.va_in_cottura === true);
     setEditPrepCucina(ing.prepCucina === true || ing.prep_cucina === true);
+    setEditCategoria(ing.categoria != null ? String(ing.categoria) : "");
+    setEditColore(ing.colore != null ? String(ing.colore) : "");
     setEditOrdine(ing.ordine !== undefined && ing.ordine !== null ? String(ing.ordine) : "");
     setEditAllergeni(allergeniMap[ing.id] ? [...allergeniMap[ing.id]] : []);
     setEditAttivo(ing.attivo !== false);
@@ -213,15 +223,24 @@ export default function IngredientiPage() {
         costo: Number(editPrezzo) || 0,
         attivo: editAttivo,
         prepCucina: editPrepCucina,
+        vaInCottura: editVaInCottura,
+        categoria: editCategoria.trim() || null,
+        colore: editColore.trim() || null,
       };
       if (editOrdine !== "" && !Number.isNaN(Number(editOrdine))) updates.ordine = Number(editOrdine);
+      if (editCostoAbbondante !== "" && !Number.isNaN(Number(editCostoAbbondante)))
+        updates.costoAbbondante = Number(editCostoAbbondante);
+      if (editCostoSenza !== "" && !Number.isNaN(Number(editCostoSenza))) updates.costoSenza = Number(editCostoSenza);
+      if (editCostoPoco !== "" && !Number.isNaN(Number(editCostoPoco))) updates.costoPoco = Number(editCostoPoco);
       let ok = false;
       try {
         await updateIngredient(editIngredient.id, updates);
         ok = true;
       } catch (updateErr) {
         if (updateErr?.code === "PGRST204" && updateErr?.message?.includes("attivo")) {
-          await updateIngredient(editIngredient.id, { nome: updates.nome, costo: updates.costo });
+          const rest = { ...updates };
+          delete rest.attivo;
+          await updateIngredient(editIngredient.id, rest);
           ok = true;
         } else throw updateErr;
       }
@@ -475,7 +494,10 @@ export default function IngredientiPage() {
         </button>
       </div>
       <p className="dashboard-menu-intro">
-        Nome, prezzo unitario, costi variante (abbondante / senza / poco), va in cottura e opzionalmente &quot;Prep. cucina&quot; (scongelare, ecc.) per la schermata Cucina. Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.
+        Nome, prezzo unitario, costi variante (abbondante / senza / poco), <strong>va in cottura</strong> e{" "}
+        <strong>Prep. cucina</strong> (comparsa su monitor Cucina/Bancone con celle colorate). Opzionale:{" "}
+        <strong>categoria</strong> (es. congelato, affettato, fritto, bibite — per la mappa colori di default) e{" "}
+        <strong>colore</strong> personalizzato (#rrggbb). Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.
       </p>
 
       <Modal open={!!editIngredient} onClose={() => setEditIngredient(null)} title="Modifica ingrediente">
@@ -571,6 +593,30 @@ export default function IngredientiPage() {
           <p className="dashboard-form-hint" style={{ margin: "0 0 8px 0", fontSize: 12, color: "#666" }} title={ORDINE_USCITA_RULE}>
             {ORDINE_USCITA_RULE}
           </p>
+          <div className="dashboard-form-row" style={{ flexWrap: "wrap", gap: 12 }}>
+            <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Categoria (Cucina/Bancone)</span>
+              <input
+                type="text"
+                className="dashboard-search-input"
+                placeholder="es. congelato, fritto, bibite"
+                value={editCategoria}
+                onChange={(e) => setEditCategoria(e.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label style={{ flex: "0 1 140px", display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Colore #hex</span>
+              <input
+                type="text"
+                className="dashboard-search-input"
+                placeholder="#dbeafe"
+                value={editColore}
+                onChange={(e) => setEditColore(e.target.value)}
+                maxLength={16}
+              />
+            </label>
+          </div>
           {allergeni.length > 0 && (
             <div className="dashboard-form-row">
               <span style={{ marginRight: 8 }}>Allergeni:</span>
@@ -768,6 +814,30 @@ export default function IngredientiPage() {
         <p className="dashboard-form-hint" style={{ margin: "0 0 8px 0", fontSize: 12, color: "#666" }} title={ORDINE_USCITA_RULE}>
           {ORDINE_USCITA_RULE}
         </p>
+        <div className="dashboard-form-row" style={{ flexWrap: "wrap", gap: 12 }}>
+          <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Categoria (Cucina/Bancone)</span>
+            <input
+              type="text"
+              className="dashboard-search-input"
+              placeholder="es. congelato, fritto, bibite"
+              value={newCategoria}
+              onChange={(e) => setNewCategoria(e.target.value)}
+              maxLength={80}
+            />
+          </label>
+          <label style={{ flex: "0 1 140px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Colore #hex</span>
+            <input
+              type="text"
+              className="dashboard-search-input"
+              placeholder="#dbeafe"
+              value={newColore}
+              onChange={(e) => setNewColore(e.target.value)}
+              maxLength={16}
+            />
+          </label>
+        </div>
         {allergeni.length > 0 && (
           <div className="dashboard-form-row">
             <span style={{ marginRight: 8 }}>Allergeni:</span>
@@ -813,6 +883,8 @@ export default function IngredientiPage() {
                 € {formatPrice(ing.costoUnitario ?? ing.costo_unitario ?? ing.costo)}
                 {ing.vaInCottura === true || ing.va_in_cottura === true ? " · Cottura" : ""}
                 {ing.prepCucina === true || ing.prep_cucina === true ? " · Prep cucina" : ""}
+                {ing.categoria ? ` · ${ing.categoria}` : ""}
+                {ing.colore ? ` · ${ing.colore}` : ""}
               </span>
               <button type="button" className="btn-primary-dashboard" onClick={() => openEdit(ing)} style={{ marginRight: 8 }}>
                 Modifica

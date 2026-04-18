@@ -111,3 +111,82 @@ COMMENT ON FUNCTION public.delivery_mark_consegnato(UUID) IS
   'Segna ordine CONSEGNATO (atomico). Consentito: ruoli delivery/pony/cassa/admin/amministratore/gestore, flag accesso_delivery/pony/cassa, superadmin piattaforma, account test pizzaioli@pizzamanager.it sul tenant.';
 
 GRANT EXECUTE ON FUNCTION public.delivery_mark_consegnato(UUID) TO authenticated;
+
+-- -----------------------------------------------------------------------------
+-- 2026-04-19 — Ingredienti: prep_cucina + categoria/colore (Cucina/Bancone).
+-- Su DB con vista public.ingredienti + trigger INSTEAD OF, prima questi campi
+-- non venivano letti né scritti su core.ingredienti.
+-- -----------------------------------------------------------------------------
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS categoria TEXT;
+ALTER TABLE core.ingredienti ADD COLUMN IF NOT EXISTS colore TEXT;
+
+CREATE OR REPLACE FUNCTION public.ingredienti_insert()
+RETURNS TRIGGER AS $$
+DECLARE r core.ingredienti;
+BEGIN
+  INSERT INTO core.ingredienti (tenant_id, nome, costo_unitario, unita_misura, attivo, ordine, va_in_cottura, costo_abbondante, costo_senza, costo_poco,
+    prep_cucina, categoria, colore)
+  VALUES (NEW.tenant_id, NEW.nome, COALESCE(NEW.costo_unitario, 0), NEW.unita_misura, COALESCE(NEW.attivo, true), COALESCE(NEW.ordine, 0), COALESCE(NEW.va_in_cottura, false), NEW.costo_abbondante, NEW.costo_senza, NEW.costo_poco,
+    COALESCE(NEW.prep_cucina, false), NULLIF(trim(COALESCE(NEW.categoria, '')), ''), NULLIF(trim(COALESCE(NEW.colore, '')), ''))
+  RETURNING * INTO r;
+  NEW.id := r.id; NEW.deleted_at := r.deleted_at;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.ingredienti_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE core.ingredienti SET
+    nome = NEW.nome,
+    costo_unitario = COALESCE(NEW.costo_unitario, 0),
+    unita_misura = NEW.unita_misura,
+    attivo = COALESCE(NEW.attivo, true),
+    ordine = COALESCE(NEW.ordine, 0),
+    va_in_cottura = COALESCE(NEW.va_in_cottura, false),
+    costo_abbondante = NEW.costo_abbondante,
+    costo_senza = NEW.costo_senza,
+    costo_poco = NEW.costo_poco,
+    prep_cucina = COALESCE(NEW.prep_cucina, false),
+    categoria = NULLIF(trim(COALESCE(NEW.categoria, '')), ''),
+    colore = NULLIF(trim(COALESCE(NEW.colore, '')), '')
+  WHERE id = OLD.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DO $ing_patch$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = 'ingredienti' AND c.relkind = 'v'
+  ) THEN
+    EXECUTE 'DROP VIEW IF EXISTS public."Ingrediente" CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS public.ingredienti CASCADE';
+    EXECUTE $cre$
+CREATE VIEW public.ingredienti AS
+  SELECT i.id, i.tenant_id, i.nome, i.costo_unitario, i.unita_misura, i.attivo, i.deleted_at, i.ordine, i.va_in_cottura,
+         i.costo_abbondante, i.costo_senza, i.costo_poco,
+         i.prep_cucina, i.categoria, i.colore
+  FROM core.ingredienti i
+  WHERE i.tenant_id IN (
+    SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()
+    UNION
+    SELECT tenant_id FROM public.clienti WHERE id = auth.uid()
+  );
+    $cre$;
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON public.ingredienti TO authenticated';
+    EXECUTE 'CREATE VIEW public."Ingrediente" AS SELECT * FROM public.ingredienti';
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON public."Ingrediente" TO authenticated';
+    EXECUTE 'DROP TRIGGER IF EXISTS ingredienti_insert_trigger ON public.ingredienti';
+    EXECUTE 'CREATE TRIGGER ingredienti_insert_trigger INSTEAD OF INSERT ON public.ingredienti FOR EACH ROW EXECUTE FUNCTION public.ingredienti_insert()';
+    EXECUTE 'DROP TRIGGER IF EXISTS ingredienti_update_trigger ON public.ingredienti';
+    EXECUTE 'CREATE TRIGGER ingredienti_update_trigger INSTEAD OF UPDATE ON public.ingredienti FOR EACH ROW EXECUTE FUNCTION public.ingredienti_update()';
+    EXECUTE 'DROP TRIGGER IF EXISTS ingredienti_delete_trigger ON public.ingredienti';
+    EXECUTE 'CREATE TRIGGER ingredienti_delete_trigger INSTEAD OF DELETE ON public.ingredienti FOR EACH ROW EXECUTE FUNCTION public.ingredienti_delete()';
+  END IF;
+END
+$ing_patch$;
