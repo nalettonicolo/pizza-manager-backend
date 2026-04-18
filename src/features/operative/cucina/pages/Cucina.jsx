@@ -24,6 +24,14 @@ import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTes
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
 const POLL_MS = 10000
+
+/**
+ * Colori di default per i pulsanti «preparazione cucina» (non sono tab orarie: sono le task cliccabili).
+ * Modifica qui le tonalità per categoria (match su testo categoria, case-insensitive).
+ * Priorità in resolvePrepTaskColor: 1) colore esadecimale sull’ingrediente (Admin → Ingredienti → Modifica → campo Colore),
+ * 2) mappa sotto in base a «categoria» ingrediente, 3) rosa «comune».
+ * Vista Bancone (chip ingredienti): colori presi / simili in `bancone/utils/banconeSlotPick.js` → `banconeIngredientPickedColor`.
+ */
 const PREP_CATEGORIA_COLORI_DEFAULT = {
   congelato: "#dbeafe",
   affettato: "#dcfce7",

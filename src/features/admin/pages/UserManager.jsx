@@ -8,8 +8,16 @@ import {
   getTenantUsers,
   listStaffArchivioDipendenti,
   insertStaffArchivioPersona,
+  deleteStaffArchivioById,
 } from "@/features/admin/services/adminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
+
+function formatDataIt(isoDate) {
+  if (!isoDate) return ""
+  const d = new Date(String(isoDate).slice(0, 10))
+  if (Number.isNaN(d.getTime())) return String(isoDate)
+  return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
 
 function sortArchivioRows(rows) {
   return [...rows].sort((a, b) => {
@@ -35,6 +43,7 @@ export default function UserManager() {
   const [filter, setFilter] = useState("")
   const [schedaId, setSchedaId] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
 
   const loadData = useCallback(async () => {
     if (!tenantId) return
@@ -119,6 +128,31 @@ export default function UserManager() {
     }
   }
 
+  async function handleEliminaScheda(rowId) {
+    if (!tenantId || !rowId || deletingId) return
+    if (
+      !window.confirm(
+        "Eliminare definitivamente questa scheda HR? L’operazione non è annullabile. I file su Storage non vengono rimossi automaticamente.",
+      )
+    ) {
+      return
+    }
+    setDeletingId(rowId)
+    try {
+      await deleteStaffArchivioById(tenantId, rowId)
+      if (schedaId === rowId) setSchedaId(null)
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      alert(
+        err?.message ||
+          "Eliminazione non riuscita. Se mancano le colonne HR recenti, esegui sql/sql_upgrade.sql in Supabase (blocco 2026-04-20).",
+      )
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   if (loading) return <Loader />
   if (error) return <ErrorState message={error} />
 
@@ -200,6 +234,7 @@ export default function UserManager() {
                   <tr>
                     <th scope="col">Dipendente</th>
                     <th scope="col">Mansione</th>
+                    <th scope="col">Stato</th>
                     <th scope="col">Account collegato</th>
                     <th scope="col">Azioni</th>
                   </tr>
@@ -212,6 +247,9 @@ export default function UserManager() {
                     const accountLine = linked
                       ? labelFromEmailPrefix(linked.email) || linked.email || "—"
                       : null
+                    const disabilitata = row.scheda_disabilitata === true
+                    const cess = row.data_cessazione
+                    const rowBusy = deletingId === row.id
                     return (
                       <tr key={row.id}>
                         <td>
@@ -224,6 +262,24 @@ export default function UserManager() {
                         </td>
                         <td>
                           <span style={{ fontSize: 14, color: "#334155" }}>{(row.mansione || "").trim() || "—"}</span>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+                            {disabilitata ? (
+                              <span className="badge badge-warning" style={{ alignSelf: "flex-start" }}>
+                                Scheda disabilitata
+                              </span>
+                            ) : (
+                              <span style={{ color: "#64748b" }}>Attiva</span>
+                            )}
+                            {cess ? (
+                              <span style={{ color: "#475569" }}>
+                                Cessazione: <strong>{formatDataIt(cess)}</strong>
+                              </span>
+                            ) : (
+                              <span style={{ color: "#94a3b8" }}>—</span>
+                            )}
+                          </div>
                         </td>
                         <td>
                           {linked ? (
@@ -241,14 +297,26 @@ export default function UserManager() {
                           ) : null}
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn-primary-dashboard"
-                            style={{ fontSize: 12, padding: "8px 12px" }}
-                            onClick={() => setSchedaId(row.id)}
-                          >
-                            Apri scheda HR
-                          </button>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            <button
+                              type="button"
+                              className="btn-primary-dashboard"
+                              style={{ fontSize: 12, padding: "8px 12px" }}
+                              disabled={rowBusy}
+                              onClick={() => setSchedaId(row.id)}
+                            >
+                              Apri scheda HR
+                            </button>
+                            <button
+                              type="button"
+                              className="dashboard-settings-btn-secondary"
+                              style={{ fontSize: 12, padding: "8px 12px", borderColor: "#b91c1c", color: "#b91c1c" }}
+                              disabled={rowBusy}
+                              onClick={() => void handleEliminaScheda(row.id)}
+                            >
+                              {rowBusy ? "Eliminazione…" : "Elimina"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -267,6 +335,10 @@ export default function UserManager() {
         user={linkedUserForScheda}
         archivioRow={schedaRow}
         onSaved={loadData}
+        onDeleted={async () => {
+          setSchedaId(null)
+          await loadData()
+        }}
       />
     </div>
   )

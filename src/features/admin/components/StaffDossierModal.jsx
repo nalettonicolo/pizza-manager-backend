@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Modal from "@/components/dashboard/Modal"
 import {
   updateStaffArchivioById,
+  deleteStaffArchivioById,
   uploadStaffHrFile,
   getStaffHrSignedUrl,
   removeStaffHrFiles,
@@ -76,9 +77,11 @@ export default function StaffDossierModal({
   /** Riga `staff_archivio_dipendenti` (obbligatoria per aprire la modale). */
   archivioRow,
   onSaved,
+  onDeleted,
 }) {
   const [tab, setTab] = useState("anagrafica")
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [fotoBusy, setFotoBusy] = useState(false)
   const [fileBusy, setFileBusy] = useState(false)
 
@@ -112,9 +115,11 @@ export default function StaffDossierModal({
       mansione: curr.mansione || "",
       tipo_contratto: curr.tipo_contratto || "",
       data_assunzione: curr.data_assunzione || "",
+      data_cessazione: curr.data_cessazione || "",
       iban: curr.iban || "",
       documenti_lavoro_text: Array.isArray(curr.documenti_lavoro) ? curr.documenti_lavoro.join("\n") : "",
       note_hr: curr.note_hr || "",
+      scheda_disabilitata: curr.scheda_disabilitata === true,
     })
     setCorsiList(normalizeCorsi(curr.corsi_formazione))
     setAllegati(Array.isArray(curr.allegati_hr) ? curr.allegati_hr : [])
@@ -228,12 +233,14 @@ export default function StaffDossierModal({
         ...draft,
         data_nascita: draft.data_nascita || null,
         data_assunzione: draft.data_assunzione || null,
+        data_cessazione: draft.data_cessazione || null,
         foto_url: fotoPath,
         corsi_formazione: corsiList,
         documenti_lavoro: parseLines(draft.documenti_lavoro_text),
         allegati_hr: allegati,
         buste_paga: buste,
         note_hr: draft.note_hr.trim(),
+        scheda_disabilitata: draft.scheda_disabilitata === true,
         user_id: archivioRow.user_id ?? user?.id ?? null,
       })
       await onSaved?.()
@@ -243,6 +250,28 @@ export default function StaffDossierModal({
       alert(err?.message || "Salvataggio non riuscito. Esegui in Supabase sql/sql_upgrade.sql se mancano colonne HR.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteScheda = async () => {
+    if (!tenantId || !archivioRow?.id) return
+    if (
+      !window.confirm(
+        "Eliminare definitivamente questa scheda HR dal database? L’operazione non è annullabile. I file già caricati su Storage non vengono rimossi automaticamente.",
+      )
+    ) {
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteStaffArchivioById(tenantId, archivioRow.id)
+      await onDeleted?.()
+      onClose()
+    } catch (err) {
+      console.error(err)
+      alert(err?.message || "Eliminazione non riuscita.")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -322,6 +351,28 @@ export default function StaffDossierModal({
             <input className="dashboard-search-input" value={draft.iban} onChange={(e) => setDraft((d) => ({ ...d, iban: e.target.value.toUpperCase() }))} />
           </Field>
         </div>
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+          <Field label="Cessazione rapporto (data)">
+            <input type="date" className="dashboard-search-input" value={draft.data_cessazione} onChange={(e) => setDraft((d) => ({ ...d, data_cessazione: e.target.value }))} />
+          </Field>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "flex-end" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>Stato scheda</span>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 14, color: "#334155", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={draft.scheda_disabilitata}
+                onChange={(e) => setDraft((d) => ({ ...d, scheda_disabilitata: e.target.checked }))}
+                style={{ width: 18, height: 18 }}
+              />
+              Disabilita scheda HR (archivio / non attiva)
+            </label>
+          </div>
+        </div>
+        {draft.scheda_disabilitata ? (
+          <p style={{ margin: 0, padding: 10, background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, fontSize: 13, color: "#92400e" }}>
+            Scheda contrassegnata come <strong>non attiva</strong>: resta in elenco per storico e consultazione; deseleziona per riattivarla.
+          </p>
+        ) : null}
         <Field label="Note elenco documenti (testo libero)">
           <textarea rows={2} className="dashboard-search-input" value={draft.documenti_lavoro_text} onChange={(e) => setDraft((d) => ({ ...d, documenti_lavoro_text: e.target.value }))} />
         </Field>
@@ -335,7 +386,7 @@ export default function StaffDossierModal({
   if (!open || !archivioRow?.id) return null
 
   return (
-    <Modal open={open} onClose={() => !saving && onClose()} title={title} wide>
+    <Modal open={open} onClose={() => !saving && !deleting && onClose()} title={title} wide>
       <div style={{ padding: "4px 0 0" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, borderBottom: "1px solid #e2e8f0", paddingBottom: 10 }}>
           {TABS.map((t) => (
@@ -465,13 +516,35 @@ export default function StaffDossierModal({
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
-          <button type="button" className="dashboard-settings-btn-secondary" disabled={saving} onClick={onClose}>
-            Chiudi
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 10,
+            marginTop: 18,
+            paddingTop: 12,
+            borderTop: "1px solid #e2e8f0",
+          }}
+        >
+          <button
+            type="button"
+            className="dashboard-settings-btn-secondary"
+            disabled={saving || deleting}
+            onClick={() => void handleDeleteScheda()}
+            style={{ borderColor: "#b91c1c", color: "#b91c1c" }}
+          >
+            {deleting ? "Eliminazione…" : "Elimina scheda"}
           </button>
-          <button type="button" className="btn-primary-dashboard" disabled={saving} onClick={() => void saveHr()}>
-            {saving ? "Salvataggio…" : "Salva scheda HR"}
-          </button>
+          <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
+            <button type="button" className="dashboard-settings-btn-secondary" disabled={saving || deleting} onClick={onClose}>
+              Chiudi
+            </button>
+            <button type="button" className="btn-primary-dashboard" disabled={saving || deleting} onClick={() => void saveHr()}>
+              {saving ? "Salvataggio…" : "Salva scheda HR"}
+            </button>
+          </div>
         </div>
       </div>
     </Modal>

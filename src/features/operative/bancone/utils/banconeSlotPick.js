@@ -12,7 +12,9 @@ export function banconeSlotsFromOrders(ordini, slotMinutes) {
 }
 
 /**
- * Colore "pieno" per chip ingrediente: DB colore se valido, altrimenti da categoria.
+ * Colore "pieno" per chip ingrediente Bancone (dopo il tap): prima campo `colore` su DB (#rgb / rgb()),
+ * altrimenti mappa `byCat` sotto (parole chiave nella «categoria» ingrediente da Admin → Ingredienti).
+ * Per i task colorati in Cucina vedi `Cucina.jsx` → PREP_CATEGORIA_COLORI_DEFAULT / resolvePrepTaskColor.
  */
 export function banconeIngredientPickedColor(ing) {
   const raw = (ing.colore || ing.colore_hex || "").trim()

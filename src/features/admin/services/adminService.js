@@ -838,6 +838,8 @@ function staffArchivioRowFromPayload(tenantId, payload = {}) {
     allegati_hr: Array.isArray(payload.allegati_hr) ? payload.allegati_hr : [],
     buste_paga: Array.isArray(payload.buste_paga) ? payload.buste_paga : [],
     note_hr: payload.note_hr || null,
+    data_cessazione: payload.data_cessazione || null,
+    scheda_disabilitata: payload.scheda_disabilitata === true,
     updated_at: new Date().toISOString(),
   }
 }
@@ -867,6 +869,17 @@ export async function updateStaffArchivioById(tenantId, archivioId, payload = {}
   const { error } = await supabase
     .from("staff_archivio_dipendenti")
     .update(row)
+    .eq("id", archivioId)
+    .eq("tenant_id", tenantId)
+  if (error) throw mapStaffArchivioError(error)
+}
+
+/** Elimina definitivamente la riga archivio HR (non rimuove i file già caricati su Storage). */
+export async function deleteStaffArchivioById(tenantId, archivioId) {
+  if (!tenantId || !archivioId) throw new Error("Tenant o id scheda mancanti.")
+  const { error } = await supabase
+    .from("staff_archivio_dipendenti")
+    .delete()
     .eq("id", archivioId)
     .eq("tenant_id", tenantId)
   if (error) throw mapStaffArchivioError(error)
@@ -1229,6 +1242,7 @@ export async function createIngredient(payload) {
   if (payload.vaInCottura === false) row.va_in_cottura = false
   if (payload.prepCucina === true || payload.prep_cucina === true) row.prep_cucina = true
   if (payload.prepCucina === false || payload.prep_cucina === false) row.prep_cucina = false
+  if (payload.attivo !== undefined) row.attivo = payload.attivo === true
   if (payload.ordine !== undefined) row.ordine = payload.ordine
   if (payload.categoria !== undefined && payload.categoria !== null) {
     const c = String(payload.categoria).trim()

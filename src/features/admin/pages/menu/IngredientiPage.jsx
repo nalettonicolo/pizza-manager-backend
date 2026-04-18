@@ -34,6 +34,19 @@ function parsePrepCucinaCell(val) {
   return isAllergenChecked(val);
 }
 
+function headerColIndex(headerParts, name) {
+  const n = String(name).toLowerCase();
+  return headerParts.findIndex((h) => String(h ?? "").trim().toLowerCase() === n);
+}
+
+/** Cella attivo CSV: vuoto = non modificare in update; 0/no/false = disattivo; altrimenti attivo. */
+function parseCsvAttivoCell(val) {
+  const raw = (val ?? "").toString().trim().toLowerCase();
+  if (raw === "") return undefined;
+  if (raw === "0" || raw === "no" || raw === "false" || raw === "off") return false;
+  return isAllergenChecked(val);
+}
+
 export default function IngredientiPage() {
   const { tenantId } = useTenant();
   const [ingredients, setIngredients] = useState([]);
@@ -303,7 +316,20 @@ export default function IngredientiPage() {
         })
       : ALLERGENE_COLUMN_NAMES.map((nome) => ({ id: null, nome }));
     const allergenCols = allergeniOrder.map((a) => (a.nome || "").trim()).filter(Boolean);
-    const header = ["nome_ingrediente", "ordine", "costo_eur", "abbondante", "senza", "poco", "va_in_cottura", "prep_cucina", ...allergenCols].join(sep);
+    const header = [
+      "nome_ingrediente",
+      "ordine",
+      "costo_eur",
+      "abbondante",
+      "senza",
+      "poco",
+      "va_in_cottura",
+      "prep_cucina",
+      ...allergenCols,
+      "categoria",
+      "colore",
+      "attivo",
+    ].join(sep);
     const rows = ingredients.map((ing) => {
       const nome = (ing.nome ?? "").replace(/"/g, '""');
       const ordine = String(ing.ordine ?? 0);
@@ -318,7 +344,10 @@ export default function IngredientiPage() {
         const a = allergeni.find((x) => (x.nome || "").trim() === colNome && ids.includes(x.id));
         return a ? "1" : "";
       });
-      return [nome, ordine, costo, abb, senza, poco, vaInCottura, prepCucina, ...allergenCells].join(sep);
+      const cat = String(ing.categoria ?? "").replace(/"/g, '""').trim();
+      const colr = String(ing.colore ?? "").replace(/"/g, '""').trim();
+      const att = ing.attivo === false ? "0" : "1";
+      return [nome, ordine, costo, abb, senza, poco, vaInCottura, prepCucina, ...allergenCells, cat, colr, att].join(sep);
     });
     const csv = [header, ...rows].join("\r\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -359,6 +388,9 @@ export default function IngredientiPage() {
       }
       const formatoB = isFormatoB(headerParts);
       const prepIdx = prepCucinaHeaderIndex(headerParts);
+      const catI = headerColIndex(headerParts, "categoria");
+      const colI = headerColIndex(headerParts, "colore");
+      const attI = headerColIndex(headerParts, "attivo");
       const allergenNameToId = {};
       allergeni.forEach((a) => {
         const n = (a.nome || "").trim();
@@ -398,6 +430,18 @@ export default function IngredientiPage() {
         if (vaInCottura) payload.vaInCottura = true;
         if (prepCucina) payload.prepCucina = true;
         if (ordineVal !== undefined && !Number.isNaN(ordineVal)) payload.ordine = ordineVal;
+        if (catI >= 0 && catI < row.length) {
+          const v = (row[catI] ?? "").trim();
+          if (v) payload.categoria = v;
+        }
+        if (colI >= 0 && colI < row.length) {
+          const v = (row[colI] ?? "").trim();
+          if (v) payload.colore = v;
+        }
+        if (attI >= 0 && attI < row.length) {
+          const attParsed = parseCsvAttivoCell(row[attI]);
+          if (attParsed !== undefined) payload.attivo = attParsed;
+        }
 
         let allergeneIds = [];
         if (formatoB && headerParts.length > 7) {
@@ -424,7 +468,6 @@ export default function IngredientiPage() {
             const updates = {
               nome,
               costo: costo,
-              attivo: existing.attivo !== false,
             };
             if (abbondante !== undefined) updates.costoAbbondante = abbondante;
             if (senza !== undefined) updates.costoSenza = senza;
@@ -432,6 +475,21 @@ export default function IngredientiPage() {
             updates.vaInCottura = vaInCottura;
             updates.prepCucina = prepCucina;
             if (ordineVal !== undefined && !Number.isNaN(ordineVal)) updates.ordine = ordineVal;
+            if (catI >= 0 && catI < row.length) {
+              const v = (row[catI] ?? "").trim();
+              updates.categoria = v.length ? v : null;
+            }
+            if (colI >= 0 && colI < row.length) {
+              const v = (row[colI] ?? "").trim();
+              updates.colore = v.length ? v : null;
+            }
+            if (attI >= 0 && attI < row.length) {
+              const attParsed = parseCsvAttivoCell(row[attI]);
+              if (attParsed !== undefined) updates.attivo = attParsed;
+              else updates.attivo = existing.attivo !== false;
+            } else {
+              updates.attivo = existing.attivo !== false;
+            }
             await updateIngredient(existing.id, updates);
             try {
               await setIngredienteAllergeni(tenantId, existing.id, allergeneIds);
@@ -496,8 +554,10 @@ export default function IngredientiPage() {
       <p className="dashboard-menu-intro">
         Nome, prezzo unitario, costi variante (abbondante / senza / poco), <strong>va in cottura</strong> e{" "}
         <strong>Prep. cucina</strong> (comparsa su monitor Cucina/Bancone con celle colorate). Opzionale:{" "}
-        <strong>categoria</strong> (es. congelato, affettato, fritto, bibite — per la mappa colori di default) e{" "}
-        <strong>colore</strong> personalizzato (#rrggbb). Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.
+        <strong>categoria</strong> (es. congelato, affettato, fritto, bibite — per la mappa colori di default in Cucina) e{" "}
+        <strong>colore</strong> personalizzato (#rrggbb). Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.{" "}
+        <strong>Export CSV</strong> aggiunge in coda le colonne <code>categoria</code>, <code>colore</code>, <code>attivo</code> così un re-import
+        mantiene colori, categoria e stato attivo/disattivo.
       </p>
 
       <Modal open={!!editIngredient} onClose={() => setEditIngredient(null)} title="Modifica ingrediente">
@@ -665,12 +725,13 @@ export default function IngredientiPage() {
                 wordBreak: "break-word",
               }}
             >
-              nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;[colonne allergeni]
+              nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;[allergeni];categoria;colore;attivo
             </code>
             <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.35 }}>
               <strong>prep_cucina</strong> (1/sì = preparazione in cucina, es. scongelare) e opzionale: i file senza quella colonna restano
               validi. Nelle celle allergeni usa 1, x o sì. <strong>Ordine</strong>: 0-99 = in cottura, 100+ = a fine cottura. Prezzi con 2
-              decimali.
+              decimali. Colonne finali opzionali <strong>categoria</strong>, <strong>colore</strong> (#hex), <strong>attivo</strong> (1/0): se
+              presenti vengono aggiornate; se assenti (file vecchi) categoria, colore e attivo non si toccano.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -697,11 +758,25 @@ export default function IngredientiPage() {
                 className="btn-primary-dashboard"
                 style={{ background: "#555" }}
                 onClick={() => {
-                  const header = ["nome_ingrediente", "ordine", "costo_eur", "abbondante", "senza", "poco", "va_in_cottura", "prep_cucina", ...ALLERGENE_COLUMN_NAMES].join(";");
+                  const header = [
+                    "nome_ingrediente",
+                    "ordine",
+                    "costo_eur",
+                    "abbondante",
+                    "senza",
+                    "poco",
+                    "va_in_cottura",
+                    "prep_cucina",
+                    ...ALLERGENE_COLUMN_NAMES,
+                    "categoria",
+                    "colore",
+                    "attivo",
+                  ].join(";");
                   const n = ALLERGENE_COLUMN_NAMES.length;
+                  const tailAllerg = ";".repeat(n);
                   const examples = [
-                    "Pomodoro;0;0,40;0,20;-0,40;-0,15;1;0" + ";".repeat(n),
-                    "Mozzarella;0;0,80;0,25;-0,80;-0,20;0;0" + ";".repeat(5) + "1" + ";".repeat(n - 6),
+                    `Pomodoro;0;0,40;0,20;-0,40;-0,15;1;0${tailAllerg};;1`,
+                    `Mozzarella;0;0,80;0,25;-0,80;-0,20;0;0${";".repeat(5)}1${";".repeat(n - 6)};;1`,
                   ];
                   const csv = [header, ...examples].join("\r\n");
                   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -720,7 +795,8 @@ export default function IngredientiPage() {
           <div style={{ borderTop: "1px solid #eee", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontWeight: 600 }}>Esporta CSV</span>
             <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
-              Scarica la lista ingredienti in CSV Formato B (nome, ordine, costi, va in cottura, prep_cucina, colonne allergeni). Ordine: 0–99 in cottura, 100+ a fine cottura. Prezzi con 2 decimali.
+              Scarica la lista ingredienti in CSV Formato B (fino agli allergeni) più in coda <strong>categoria;colore;attivo</strong> per
+              backup completo. Ordine: 0–99 in cottura, 100+ a fine cottura. Prezzi con 2 decimali.
             </p>
             <button type="button" className="btn-primary-dashboard" onClick={handleExportCsv}>
               Esporta CSV

@@ -6613,6 +6613,8 @@ CREATE TABLE IF NOT EXISTS public.staff_archivio_dipendenti (
   allegati_hr JSONB NOT NULL DEFAULT '[]'::jsonb,
   buste_paga JSONB NOT NULL DEFAULT '[]'::jsonb,
   note_hr TEXT,
+  data_cessazione DATE,
+  scheda_disabilitata BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT staff_archivio_dipendenti_tenant_user_unique UNIQUE (tenant_id, user_id)

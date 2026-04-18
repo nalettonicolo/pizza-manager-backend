@@ -198,3 +198,15 @@ ALTER TABLE public.staff_archivio_dipendenti ALTER COLUMN user_id DROP NOT NULL;
 
 COMMENT ON COLUMN public.staff_archivio_dipendenti.user_id IS
   'Utente Auth collegato opzionale; NULL = dipendente solo archivio HR (nessun login).';
+
+-- -----------------------------------------------------------------------------
+-- 2026-04-20 — staff_archivio_dipendenti: cessazione rapporto, scheda disabilitata (HR).
+-- -----------------------------------------------------------------------------
+ALTER TABLE public.staff_archivio_dipendenti
+  ADD COLUMN IF NOT EXISTS data_cessazione DATE NULL,
+  ADD COLUMN IF NOT EXISTS scheda_disabilitata BOOLEAN NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN public.staff_archivio_dipendenti.data_cessazione IS
+  'Data fine rapporto di lavoro (cessazione), se applicabile.';
+COMMENT ON COLUMN public.staff_archivio_dipendenti.scheda_disabilitata IS
+  'Se true la scheda HR è considerata non attiva (es. archivio storico) senza eliminare i dati.';
