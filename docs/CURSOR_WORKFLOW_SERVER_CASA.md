@@ -26,21 +26,27 @@ Dopo aver **committato** le modifiche:
 npm run sync:server
 ```
 
-Fa: **`git push`** → **SSH** su `servercasa` → **`git pull --ff-only`** in `~/progetti/PizzaManagerApp`.
+Fa in automatico sul server, in sequenza:
 
-Se hai toccato il **backend** Nest e vuoi ricompilare e riavviare il servizio systemd sul server:
+1. **`git push`** (GitHub)  
+2. **SSH** → `git pull --ff-only` in `~/progetti/PizzaManagerApp`  
+3. **`npm run build`** in `server/pizzeria-backend`  
+4. **`sudo systemctl restart pizzamanager-api`**
+
+Ti chiederà la **passphrase** SSH (se usi chiave) e, al passo `sudo`, la **password** dell’utente sul server (a meno che `sudo` NOPASSWD sia già configurato per quel comando).
+
+Solo **aggiornare il codice** sul server **senza** rebuild/restart backend (es. hai cambiato solo doc o il frontend lo pubblichi altrove):
 
 ```powershell
-npm run sync:server:backend
+npm run sync:server:pull
 ```
-
-Equivale a `sync-to-server.ps1 -RebuildBackend` (`npm run build` in `server/pizzeria-backend` + `sudo systemctl restart pizzamanager-api`). Ti chiederà la **password sudo** sul server se richiesta.
 
 Parametri utili (avanzato):
 
 ```powershell
 .\scripts\sync-to-server.ps1 -SshHost servercasa -RemotePath "~/progetti/PizzaManagerApp"
-.\scripts\sync-to-server.ps1 -NoPush -RebuildBackend   # solo pull + build (push già fatto)
+.\scripts\sync-to-server.ps1 -NoPush                    # pull + build + restart (push già fatto)
+.\scripts\sync-to-server.ps1 -NoPush -SkipBackend       # solo pull
 ```
 
 **Nota:** il server deve avere già configurato `git` verso GitHub (SSH key o token) per `git pull` senza prompt interattivo.

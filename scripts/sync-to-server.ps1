@@ -1,30 +1,34 @@
 <#
 .SYNOPSIS
-  Da root repo (Windows): push su GitHub e aggiorna il clone sul server via SSH.
+  Da root repo (Windows): push su GitHub e aggiornamento automatico sul server via SSH.
 
 .DESCRIPTION
-  1) git push (salta con -NoPush se hai già pushato)
+  1) git push (salta con -NoPush)
   2) ssh → git pull --ff-only sul server
-  Opzionale: rebuild Nest + restart systemd (solo quando tocchi il backend)
+  3) Di default: build Nest (server/pizzeria-backend) + sudo systemctl restart servizio
+  Usa -SkipBackend se vuoi solo il pull (es. solo doc o deploy frontend altrove).
 
 .PARAMETER SshHost
-  Alias SSH (es. da ~/.ssh/config). Default: servercasa
+  Alias SSH (es. ~/.ssh/config). Default: servercasa
 
 .PARAMETER RemotePath
   Path remoto del repo (bash). Default: ~/progetti/PizzaManagerApp
 
+.PARAMETER SystemdService
+  Unit systemd del backend. Default: pizzamanager-api
+
 .EXAMPLE
   .\scripts\sync-to-server.ps1
 .EXAMPLE
-  .\scripts\sync-to-server.ps1 -RebuildBackend
+  .\scripts\sync-to-server.ps1 -SkipBackend
 .EXAMPLE
-  .\scripts\sync-to-server.ps1 -NoPush -RebuildBackend
+  .\scripts\sync-to-server.ps1 -NoPush
 #>
 param(
     [string] $SshHost = "servercasa",
     [string] $RemotePath = "~/progetti/PizzaManagerApp",
     [switch] $NoPush,
-    [switch] $RebuildBackend,
+    [switch] $SkipBackend,
     [string] $SystemdService = "pizzamanager-api"
 )
 
@@ -44,16 +48,13 @@ if (-not $NoPush) {
 }
 
 $remoteCmd = "set -e; cd $RemotePath && git pull --ff-only"
-if ($RebuildBackend) {
+if (-not $SkipBackend) {
     $remoteCmd += " && cd server/pizzeria-backend && npm run build && sudo systemctl restart $SystemdService"
 }
 
-Write-Host ">>> ssh $SshHost (pull sul server)" -ForegroundColor Cyan
-if ($RebuildBackend) {
-    Write-Host "    (+ build backend + sudo systemctl restart $SystemdService)" -ForegroundColor DarkGray
-}
+Write-Host ">>> ssh $SshHost" -ForegroundColor Cyan
+Write-Host "    $remoteCmd" -ForegroundColor DarkGray
 
-# Argomenti separati: evita problemi di quoting rispetto a una sola stringa per ssh.
 ssh $SshHost bash -lc $remoteCmd
 
 if ($LASTEXITCODE -ne 0) {
