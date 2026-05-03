@@ -176,10 +176,10 @@ Dettaglio variabile nel tempo: seguire la documentazione corrente Cloudflare “
 - [ ] HTTPS funziona sul dominio API (`curl -I https://...`)  
 - [ ] `DATABASE_URL` usa `127.0.0.1` o IP LAN, **non** IP pubblico  
 - [ ] `CORS_ORIGIN` include l’origine reale del frontend in produzione  
-- [ ] Frontend deploy: `VITE_API_URL=https://api.tuodominio.it` (senza slash finale), da applicare in **Fasi successive** quando tagli Supabase  
+- [ ] Frontend deploy: `VITE_API_URL=https://api.tuodominio.it` (senza slash finale); dettaglio auth opzionale Nest vs Supabase in **[Fase 1 — Auth e API](./FASE_1_AUTH_E_API_SELFHOST.md)**  
 
 ---
 
 ## Prossima fase (Fase 1)
 
-Definizione policy RLS vs ruolo Nest e primo endpoint auth unificato; vedi roadmap conversazione architettura. Questo file si limita alla **Fase 0 rete**.
+Configurazione **`VITE_API_URL`**, **`VITE_USE_NEST_AUTH`**, convivenza **RLS Supabase** / **JWT Nest**, checklist smoke e **systemd** per l’API: vedi **[Fase 1 — Auth Nest, API self-host](./FASE_1_AUTH_E_API_SELFHOST.md)**. Questo file resta limitato alla **Fase 0 rete**.

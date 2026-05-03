@@ -75,7 +75,7 @@ Stato backlog e priorità engineering: **`docs/BACKLOG_E_STATO_SVILUPPO.md`**.
 
 - **Cosa fa:** `npm run deploy:hosting` (o la seconda parte di `npm run deploy`) esegue build (cartella `dist`) e pubblica su Firebase Hosting.
 - **Non pubblicare hosting senza build:** non usare da solo `firebase deploy --only hosting` senza build; senza `npm run build` rischi una `dist` incompleta o vecchia. La cartella `dist/` è in `.gitignore` e non va versionata.
-- **Prima del deploy:** verifica che `.env.production` abbia `VITE_API_URL` con l’URL del backend Koyeb (senza slash finale).
+- **Prima del deploy:** nella root usa il file definitivo **`.env.production`** (gitignored) con `VITE_API_URL` verso Nest (es. Koyeb o `https://api.pizzamanager.it`), senza slash finale; compila anche `VITE_SUPABASE_*` e chiavi necessarie come in quel file.
 - **Sito:** https://pizzamanager.it (se il dominio è configurato in Firebase).
 - **Guide in app:** **Admin → Manuale** legge `src/content/manualeUtente.md` e `manualeRoadmap.js`. **Super Admin → Documentazione** incorpora al build i file in `docs/*.md` (es. `GUIDA_SUPERADMIN.md`, `GUIDA_ADMIN.md`, `ARCHITETTURA_E_STATO.md`) e `DEPLOY_COMANDI.md`: dopo averli modificati, ridistribuisci il frontend.
 
@@ -114,6 +114,8 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 - **Linee guida Admin (tenant):** `docs/GUIDA_ADMIN.md`
 - **Architettura e stato (roadmap vs codice):** `docs/ARCHITETTURA_E_STATO.md`
 - **Ruoli, route e flussi dati (Supabase vs `VITE_API_URL`):** `docs/ARCHITETTURA_API_E_RUOLI.md`
+- **Self-host Postgres + API Nest, Fase 0 (HTTPS, firewall, niente 5432 su Internet):** `docs/FASE_0_RETE_SELFHOST.md`
+- **Fase 1 (URL API in produzione, Nest auth opzionale, systemd):** `docs/FASE_1_AUTH_E_API_SELFHOST.md` — template servizio: `infra/selfhost/pizzamanager-api.service.example`
 - **Punto della situazione (stack / deploy):** `PUNTO_SITUAZIONE_ENTERPRISE.md`
 - **Punto della situazione (visione webapp completa):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
 - **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
