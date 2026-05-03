@@ -34,6 +34,13 @@ Browser (SPA)  →  HTTPS  →  Caddy/Nginx  →  Nest (API + Auth + Webhook)
 - Nessun `createClient(supabaseUrl, anonKey)` in bundle produzione.  
 - Variabili: `VITE_API_URL` (obbligatoria); eventuali chiavi solo per mappe/Sentry, **non** Supabase.
 
+### Primo passo implementato in codice (Milestone M1)
+
+- **Nest:** `GET /api/public/tenants/by-slug/:slug` e `GET /api/public/tenants/by-id/:id` (senza JWT), dati da `core.tenants` via Prisma — solo campi non sensibili.
+- **SPA:** con `VITE_PUBLIC_TENANT_VIA_NEST=true` e `VITE_API_URL` impostato, `publicService` prova Nest **prima** di Supabase per la risoluzione tenant in modalità SaaS; fallback su Supabase se l’API non risponde o il flag è spento.
+
+Prossimi blocchi: menu pubblico, RPC cassa, auth cliente, Realtime — vedi fasi §4 più sotto.
+
 ---
 
 ## 3. Inventario “a caldo” (da dove partire in codice)
@@ -86,6 +93,7 @@ Supabase open source sul tuo server ti dà **indipendenza dal vendor hosted**, m
 - `docs/FASE_0_RETE_SELFHOST.md` / `docs/FASE_1_AUTH_E_API_SELFHOST.md` — rete e API.  
 - `docs/ARCHITETTURA_API_E_RUOLI.md` — mappa attuale Supabase vs Nest.  
 - `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` — governance e merge.  
+- `docs/CURSOR_WORKFLOW_SERVER_CASA.md` — aprire il repo sul server da Cursor (Remote SSH).  
 - `@agents/supervisor.md` — validazione prima di cutover produzione.
 
 ---

@@ -68,3 +68,4 @@ jobs:
           VITE_API_URL: http://127.0.0.1:3001
           VITE_GOOGLE_MAPS_API_KEY: ""
           VITE_USE_NEST_AUTH: "false"
+          VITE_PUBLIC_TENANT_VIA_NEST: "false"

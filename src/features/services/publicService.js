@@ -1,3 +1,4 @@
+import { apiClient } from "@/app/api/client.js";
 import { supabase } from "@/lib/supabaseClient";
 import { logSupabaseError } from "@/utils/logSupabaseError";
 import { sortByOrdine } from "@/utils/sortByOrdine";
@@ -14,6 +15,36 @@ function isRpcMissingError(err) {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function publicTenantViaNestEnabled() {
+  return (
+    import.meta.env.VITE_PUBLIC_TENANT_VIA_NEST === "true" &&
+    Boolean(String(import.meta.env.VITE_API_URL ?? "").trim())
+  );
+}
+
+/**
+ * Risolve tenant da Nest (stacco Supabase) se flag attivo. Fallback silenzioso su errore di rete.
+ * @param {{ tenantId?: string | null, tenantSlug?: string | null }} resolved
+ */
+async function tryFetchTenantFromNest(resolved) {
+  if (!publicTenantViaNestEnabled()) return null;
+  const { tenantId, tenantSlug } = resolved;
+  try {
+    if (tenantId && UUID_RE.test(tenantId)) {
+      const { data } = await apiClient.get(`/api/public/tenants/by-id/${encodeURIComponent(tenantId)}`);
+      return data ?? null;
+    }
+    const slug = (tenantSlug || "").trim();
+    if (slug) {
+      const { data } = await apiClient.get(`/api/public/tenants/by-slug/${encodeURIComponent(slug)}`);
+      return data ?? null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 /**
  * Opzioni tenant da query string: `?tenant=<uuid>`, `?tenantId=<uuid>`, `?slug=<slug>`
@@ -54,20 +85,37 @@ export function mergePublicTenantOptions(options = {}) {
  */
 async function resolveSaaSPublicTenant(resolved = {}) {
   const { tenantId, tenantSlug } = resolved;
+  const slugDefault = (import.meta.env.VITE_PUBLIC_DEMO_TENANT_SLUG ?? "demo").trim();
+  const slugTry = (tenantSlug || slugDefault).trim();
+  const envId = import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID;
+
+  if (publicTenantViaNestEnabled()) {
+    const fromNestUrlId = await tryFetchTenantFromNest({ tenantId, tenantSlug: null });
+    if (fromNestUrlId) return fromNestUrlId;
+    if (envId && String(envId).trim()) {
+      const fromNestEnv = await tryFetchTenantFromNest({
+        tenantId: String(envId).trim(),
+        tenantSlug: null,
+      });
+      if (fromNestEnv) return fromNestEnv;
+    }
+    const fromNestSlug = await tryFetchTenantFromNest({
+      tenantId: null,
+      tenantSlug: slugTry,
+    });
+    if (fromNestSlug) return fromNestSlug;
+  }
 
   if (tenantId) {
     const { data, error } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle();
     if (!error && data) return data;
   }
 
-  const envId = import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID;
   if (envId && String(envId).trim()) {
     const { data, error } = await supabase.from("tenants").select("*").eq("id", String(envId).trim()).maybeSingle();
     if (!error && data) return data;
   }
 
-  const slugDefault = (import.meta.env.VITE_PUBLIC_DEMO_TENANT_SLUG ?? "demo").trim();
-  const slugTry = (tenantSlug || slugDefault).trim();
   if (slugTry) {
     const { data, error } = await supabase.from("tenants").select("*").eq("slug", slugTry).maybeSingle();
     if (!error && data) return data;

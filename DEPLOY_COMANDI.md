@@ -118,6 +118,7 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 - **Fase 1 (URL API in produzione, Nest auth opzionale, systemd):** `docs/FASE_1_AUTH_E_API_SELFHOST.md` — template servizio: `infra/selfhost/pizzamanager-api.service.example`
 - **Migrazione DB Supabase hosted → PostgreSQL proprio (dump/restore, Nest, cosa resta da sostituire):** `docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md`
 - **Stacco totale da Supabase (indipendenza: solo Nest + Postgres, fasi e inventario codice):** `docs/STACCO_SUPABASE_TOTALE.md`
+- **Cursor collegato al server (Remote SSH / Git):** `docs/CURSOR_WORKFLOW_SERVER_CASA.md`
 - **Punto della situazione (stack / deploy):** `PUNTO_SITUAZIONE_ENTERPRISE.md`
 - **Punto della situazione (visione webapp completa):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
 - **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
