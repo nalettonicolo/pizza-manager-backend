@@ -1,5 +1,6 @@
 import {
   apiClient,
+  getNestJwt,
   setNestJwt,
   clearNestJwt,
 } from "@/app/api/client.js"
@@ -40,6 +41,29 @@ export async function nestAuthMe() {
   return data
 }
 
-export function nestAuthLogout() {
+/**
+ * Rinnova JWT Nest (Bearer attuale richiesto). Aggiorna `pm_nest_jwt` se ok.
+ * @returns {{ token?: string } | null}
+ */
+export async function nestAuthRefresh() {
+  if (!getNestJwt()) return null
+  try {
+    const { data } = await apiClient.post("/api/auth/refresh")
+    if (data?.token) setNestJwt(data.token)
+    return data ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Chiama POST /api/auth/logout (best-effort) e rimuove il JWT locale. */
+export async function nestAuthLogout() {
+  if (getNestJwt()) {
+    try {
+      await apiClient.post("/api/auth/logout")
+    } catch {
+      /* rete / 401: pulizia locale resta prioritaria */
+    }
+  }
   clearNestJwt()
 }

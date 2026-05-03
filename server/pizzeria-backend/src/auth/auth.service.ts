@@ -66,6 +66,28 @@ export class AuthService {
     })
   }
 
+  /** Nuovo access token con payload aggiornato da DB (sessione sliding). */
+  async refresh(payload: { sub?: string }) {
+    const userId = payload?.sub
+    if (!userId) {
+      throw new UnauthorizedException('Token non valido')
+    }
+    const user = await this.validateUser(userId)
+    if (!user) {
+      throw new UnauthorizedException('Utente non trovato o non attivo')
+    }
+    if (!user.tenant.attivo) {
+      throw new UnauthorizedException('Tenant non attivo')
+    }
+    const tokenPayload = {
+      sub: user.id,
+      tenantId: user.tenantId,
+      ruolo: user.ruolo,
+      email: user.email,
+    }
+    return { token: this.jwtService.sign(tokenPayload) }
+  }
+
   async me(payload: { sub?: string }) {
     const userId = payload?.sub
     if (!userId) {

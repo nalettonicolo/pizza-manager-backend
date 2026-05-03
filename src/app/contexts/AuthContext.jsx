@@ -436,7 +436,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     devLog("Auth", "logout")
     if (isNestAuthEnabled()) {
-      nestAuthLogout()
+      await nestAuthLogout()
     } else {
       try {
         /* scope local = pulisce storage su questo browser (sessione persistente) */
