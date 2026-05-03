@@ -47,7 +47,8 @@ Oltre a Fase 0 (`PORT`, `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`):
 | `VITE_API_URL` | `https://api.tuodominio.it` (senza slash finale) |
 | `VITE_USE_NEST_AUTH` | `true` solo dopo verifica utenti/password su `core.users`; altrimenti `false` |
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Invariati finché i dati restano su Supabase |
-| `VITE_PUBLIC_TENANT_VIA_NEST` | `true` per risolvere il tenant vetrina SaaS via `GET /api/public/tenants/...` prima di Supabase (richiede `VITE_API_URL`); vedi `docs/STACCO_SUPABASE_TOTALE.md` |
+| `VITE_PUBLIC_TENANT_VIA_NEST` | `true` per risolvere il tenant vetrina SaaS via `GET /api/public/tenants/...` prima di Supabase (richiede `VITE_API_URL`) |
+| `VITE_PUBLIC_STOREFRONT_VIA_NEST` | `true` per menu/categorie/ingredienti vetrina via Nest (`/api/public/menu/...`); **non** sostituisce `supabase.auth` |
 
 Dopo ogni modifica: `npm run build` e deploy hosting (es. `npm run deploy:hosting`).
 

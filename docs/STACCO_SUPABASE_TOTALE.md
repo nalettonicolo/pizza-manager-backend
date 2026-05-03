@@ -34,12 +34,17 @@ Browser (SPA)  →  HTTPS  →  Caddy/Nginx  →  Nest (API + Auth + Webhook)
 - Nessun `createClient(supabaseUrl, anonKey)` in bundle produzione.  
 - Variabili: `VITE_API_URL` (obbligatoria); eventuali chiavi solo per mappe/Sentry, **non** Supabase.
 
-### Primo passo implementato in codice (Milestone M1)
+### Milestone M1 — tenant vetrina
 
 - **Nest:** `GET /api/public/tenants/by-slug/:slug` e `GET /api/public/tenants/by-id/:id` (senza JWT), dati da `core.tenants` via Prisma — solo campi non sensibili.
-- **SPA:** con `VITE_PUBLIC_TENANT_VIA_NEST=true` e `VITE_API_URL` impostato, `publicService` prova Nest **prima** di Supabase per la risoluzione tenant in modalità SaaS; fallback su Supabase se l’API non risponde o il flag è spento.
+- **SPA:** con `VITE_PUBLIC_TENANT_VIA_NEST=true` **oppure** `VITE_PUBLIC_STOREFRONT_VIA_NEST=true` (e `VITE_API_URL`), risoluzione tenant SaaS prova Nest prima di Supabase.
 
-Prossimi blocchi: menu pubblico, RPC cassa, auth cliente, Realtime — vedi fasi §4 più sotto.
+### Milestone M2 — menu vetrina (senza toccare auth)
+
+- **Nest:** `GET /api/public/menu/for-tenant/:id`, `GET /api/public/menu/for-domain?host=`, `GET /api/public/menu/categories/:tenantId`, `POST /api/public/menu/ingredient-names` — stesse RPC SQL già usate da PostgREST (`get_public_menu_for_tenant`, ecc.).
+- **SPA:** con **`VITE_PUBLIC_STOREFRONT_VIA_NEST=true`** (e `VITE_API_URL`), `publicService` (`getPublicMenu`, `getPublicCategoriesForTenant`, `getPublicMenuIngredientNames`) prova Nest prima di Supabase. **`supabase.auth`** resta invariato.
+
+Prossimi blocchi: ordini pubblici, delivery, `adminService`, cassa, Realtime — vedi fasi §4 più sotto.
 
 ---
 

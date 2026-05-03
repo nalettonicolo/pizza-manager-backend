@@ -51,6 +51,8 @@ Parametri utili (avanzato):
 
 **Nota:** il server deve avere già configurato `git` verso GitHub (SSH key o token) per `git pull` senza prompt interattivo.
 
+**Vetrina via Nest (senza cambiare auth):** in `.env` / `.env.production` del frontend, `VITE_PUBLIC_STOREFRONT_VIA_NEST=true` attiva menu + categorie + ingredienti pubblici verso `/api/public/menu/*` (richiede `VITE_API_URL`). Solo tenant da Nest: `VITE_PUBLIC_TENANT_VIA_NEST=true` senza storefront.
+
 ## 3. DNS domestico (Telecom / homenet)
 
 Se un nome host breve risolve a `127.0.0.1`, **non** usarlo come `Host` SSH: usa **IP LAN** in `HostName` oppure un alias che non collida (vedi guida passo-passo già usata in sede).

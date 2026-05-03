@@ -47,7 +47,9 @@ async function bootstrap() {
   if (process.env.SWAGGER_ENABLED !== 'false') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Pizzeria API')
-      .setDescription('Backend PizzaManager (auth e integrazioni). Il dato tenant principale è su Supabase.')
+      .setDescription(
+        'Backend PizzaManager: auth/integrazioni e API pubbliche vetrina (`/api/public/*`) verso stacco dati da PostgREST.',
+      )
       .setVersion('1.0')
       .addBearerAuth()
       .build()

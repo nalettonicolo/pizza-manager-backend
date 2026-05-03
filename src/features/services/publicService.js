@@ -16,10 +16,27 @@ function isRpcMissingError(err) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function viteApiUrlPresent() {
+  return Boolean(String(import.meta.env.VITE_API_URL ?? "").trim());
+}
+
+/** Risoluzione tenant via Nest (slug/id). */
 function publicTenantViaNestEnabled() {
   return (
-    import.meta.env.VITE_PUBLIC_TENANT_VIA_NEST === "true" &&
-    Boolean(String(import.meta.env.VITE_API_URL ?? "").trim())
+    viteApiUrlPresent() &&
+    (import.meta.env.VITE_PUBLIC_TENANT_VIA_NEST === "true" ||
+      import.meta.env.VITE_PUBLIC_STOREFRONT_VIA_NEST === "true")
+  );
+}
+
+/** Menu, categorie e ingredienti vetrina via Nest (stacco dati pubblici, non auth). */
+function publicStorefrontMenuViaNestEnabled() {
+  return viteApiUrlPresent() && import.meta.env.VITE_PUBLIC_STOREFRONT_VIA_NEST === "true";
+}
+
+function normalizeMenuRows(rows) {
+  return sortByOrdine(
+    (rows || []).map(({ tenant_id: _tenantId, ...rest }) => rest),
   );
 }
 
@@ -44,6 +61,34 @@ async function tryFetchTenantFromNest(resolved) {
     return null;
   }
   return null;
+}
+
+/** @returns {Promise<undefined | ReturnType<typeof normalizeMenuRows>>} */
+async function tryFetchMenuForTenantNest(tenantId) {
+  if (!publicStorefrontMenuViaNestEnabled() || !tenantId) return undefined;
+  try {
+    const { data } = await apiClient.get(
+      `/api/public/menu/for-tenant/${encodeURIComponent(tenantId)}`,
+    );
+    if (!Array.isArray(data)) return undefined;
+    return normalizeMenuRows(data);
+  } catch {
+    return undefined;
+  }
+}
+
+/** @returns {Promise<undefined | unknown[]>} */
+async function tryFetchMenuForDomainNest(host) {
+  if (!publicStorefrontMenuViaNestEnabled() || !host) return undefined;
+  try {
+    const { data } = await apiClient.get("/api/public/menu/for-domain", {
+      params: { host },
+    });
+    if (!Array.isArray(data)) return undefined;
+    return normalizeMenuRows(data);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -152,6 +197,10 @@ export async function getPublicMenu(options = {}) {
   const tenantId = options.tenantId ?? null;
   const host = getBrowserHostname();
   if (host && !isSaaSHostname(host)) {
+    if (publicStorefrontMenuViaNestEnabled()) {
+      const nestMenu = await tryFetchMenuForDomainNest(host);
+      if (nestMenu !== undefined) return nestMenu;
+    }
     const { data, error } = await supabase.rpc("get_public_menu_for_domain", { p_host: host });
     if (error) {
       if (!isRpcMissingError(error)) {
@@ -171,6 +220,10 @@ export async function getPublicMenu(options = {}) {
 
   // Con REVOKE SELECT anon su prodotti_menu_pubblico, la lettura diretta fallisce: usa RPC SECURITY DEFINER.
   if (tenantId) {
+    if (publicStorefrontMenuViaNestEnabled()) {
+      const nestMenu = await tryFetchMenuForTenantNest(tenantId);
+      if (nestMenu !== undefined) return nestMenu;
+    }
     const { data, error } = await supabase.rpc("get_public_menu_for_tenant", {
       p_tenant_id: tenantId,
     });
@@ -241,6 +294,16 @@ export function mergePublicCategoriesWithCatalog(menu, catalogRows) {
  */
 export async function getPublicCategoriesForTenant(tenantId) {
   if (!tenantId) return [];
+  if (publicStorefrontMenuViaNestEnabled()) {
+    try {
+      const { data } = await apiClient.get(
+        `/api/public/menu/categories/${encodeURIComponent(tenantId)}`,
+      );
+      if (Array.isArray(data)) return data;
+    } catch {
+      /* fallback Supabase */
+    }
+  }
   const { data, error } = await supabase.rpc("get_public_categories_for_tenant", {
     p_tenant_id: tenantId,
   });
@@ -261,6 +324,17 @@ export async function getPublicCategoriesForTenant(tenantId) {
  */
 export async function getPublicMenuIngredientNames(tenantId, productIds) {
   if (!tenantId || !productIds?.length) return {};
+  if (publicStorefrontMenuViaNestEnabled()) {
+    try {
+      const { data } = await apiClient.post("/api/public/menu/ingredient-names", {
+        tenantId,
+        productIds,
+      });
+      if (data && typeof data === "object" && !Array.isArray(data)) return data;
+    } catch {
+      /* fallback Supabase */
+    }
+  }
   const { data, error } = await supabase.rpc("get_public_menu_ingredient_names", {
     p_tenant_id: tenantId,
     p_product_ids: productIds,
