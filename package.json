@@ -18,6 +18,8 @@
     "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "check:live": "node scripts/check-live-index.mjs",
+    "sync:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-to-server.ps1",
+    "sync:server:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-to-server.ps1 -RebuildBackend",
     "deploy:hosting": "npm run ci:frontend && npx firebase deploy --only hosting",
     "deploy:hosting:ci": "npm run ci:frontend && npx --yes firebase deploy --only hosting --non-interactive",
     "deploy:full:ci": "npm run deploy:hosting:ci",
