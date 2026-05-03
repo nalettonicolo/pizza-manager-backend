@@ -91,7 +91,7 @@ Nest in ascolto su `127.0.0.1:3001` + Caddy sulla 443 resta il modello consiglia
 
 ## Prossimi passi (fuori da questa fase)
 
-- Taglio progressivo dipendenze Supabase: roadmap in `docs/MIGRAZIONE_MYSQL_E_BACKUP.md` e `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` (macro; non è solo cambio URL).
+- Taglio progressivo dipendenze Supabase: `docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md` (Postgres dedicato), `docs/MIGRAZIONE_MYSQL_E_BACKUP.md` (percorso MySQL), `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` (macro epic).
 - Endpoint reset password / invito utente lato Nest se il login resta solo Nest.
 
 *Documento operativo allineato al codice in `src/app/contexts/AuthContext.jsx`, `src/app/api/authApi.js`, `server/pizzeria-backend/src/auth/*`.*

@@ -2,6 +2,8 @@
 
 Guida operativa unificata (SQL workflow, deploy, checklist): **`docs/GUIDA_OPERATIVITA_SQL_MYSQL_DEPLOY.md`**.
 
+Per spostare il **database** da **Supabase Postgres (hosted)** a un **PostgreSQL dedicato** (stesso dialetto SQL, Prisma resta `postgresql`), vedi **`docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md`**. Il presente file resta focalizzato sul percorso **MySQL** e sulle implicazioni (cambio provider, niente RLS nativa uguale, ecc.).
+
 ## Perché farlo
 
 - **Backup pianificati** sotto il tuo controllo (mysqldump, Percona XtraBackup, replica).

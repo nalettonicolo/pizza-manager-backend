@@ -1,6 +1,6 @@
 # Guida operativa — SQL, MySQL on‑prem, deploy (PizzaManager)
 
-Questa guida raccoglie **tutti i passaggi** per lavorare in sicurezza su schema database, preparare un **server MySQL su PC industriale** (roadmap) ed eseguire un **deploy completo** del frontend. Per il solo stacco da Supabase vedi anche `docs/MIGRAZIONE_MYSQL_E_BACKUP.md`.
+Questa guida raccoglie **tutti i passaggi** per lavorare in sicurezza su schema database, preparare un **server MySQL su PC industriale** (roadmap) ed eseguire un **deploy completo** del frontend. Per il solo stacco da Supabase vedi anche `docs/MIGRAZIONE_MYSQL_E_BACKUP.md`. Per **PostgreSQL dedicato** al posto del solo motore hosted (senza cambiare dialetto: Prisma resta Postgres) vedi `docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md`.
 
 ---
 
