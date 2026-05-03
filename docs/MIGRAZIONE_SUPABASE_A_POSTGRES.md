@@ -3,6 +3,8 @@
 Obiettivo: usare **PostgreSQL sotto il tuo controllo** (es. server casa `ServerCasaNaletto`, porta 5432 in LAN) mantenendo **schema e dati** compatibili con quanto oggi gira su **Supabase Postgres**.  
 Questo percorso **non** richiede di cambiare Prisma da `postgresql` a MySQL: vedi differenza rispetto a `docs/MIGRAZIONE_MYSQL_E_BACKUP.md`.
 
+Per **eliminare del tutto** Supabase (hosted e client in SPA), roadmap e fasi: **`docs/STACCO_SUPABASE_TOTALE.md`**.
+
 **Supabase** = Postgres + **Auth** (`auth.*`) + **PostgREST** + **RLS** + **Realtime** + **Storage** + **Edge Functions**.  
 Spostare solo il **database** su un Postgres “vanilla” **non** sostuisce automaticamente Auth, Realtime e Storage: vanno pianificati per fasi (o usare **Supabase self‑hosted** come ponte).
 
