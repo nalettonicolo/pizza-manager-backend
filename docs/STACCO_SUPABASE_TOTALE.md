@@ -99,8 +99,9 @@ Supabase open source sul tuo server ti dà **indipendenza dal vendor hosted**, m
 - `docs/ARCHITETTURA_API_E_RUOLI.md` — mappa attuale Supabase vs Nest.  
 - `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` — governance e merge.  
 - `docs/CURSOR_WORKFLOW_SERVER_CASA.md` — aprire il repo sul server da Cursor (Remote SSH).  
+- **`docs/STACCO_SUPABASE_MILESTONE_PLAN.md`** — **piano a blocchi** (adminService, cassa, delivery, ordini pubblici, superadmin, Realtime, Storage, Edge).  
 - `@agents/supervisor.md` — validazione prima di cutover produzione.
 
 ---
 
-*Prossimo passo consigliato in sede: decisione formale su **fase 1–2** (DB + auth Nest) e assegnazione owner per **adminService** vs **cassa** come primi blocchi API.*
+*Prossimo passo operativo: scegliere la milestone successiva (consiglio **M3** delivery / pulizia, poi **M4–M5** ordini) e assegnare owner; dettaglio in `STACCO_SUPABASE_MILESTONE_PLAN.md`.*
