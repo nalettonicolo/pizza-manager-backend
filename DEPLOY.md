@@ -257,7 +257,7 @@ Koyeb mostra **“An error occurred while deploying your application”**. Contr
    Servizio → **Logs** (o **Deployments** → clic sull’errore → log). Il messaggio preciso indica la causa.
 
 2. **“The command to launch your application is not defined”**  
-   - In **Settings** del servizio verifica che non ci sia un campo **Run command** / **Start command** vuoto che sovrascrive il Dockerfile. Se c’è, lascialo vuoto o imposta `node dist/main.js`.  
+   - In **Settings** del servizio verifica che non ci sia un campo **Run command** / **Start command** vuoto che sovrascrive il Dockerfile. Se c’è, lascialo vuoto o imposta `node dist/src/main.js`.  
    - Verifica che la variabile **PORT** sia **8000** (l’app NestJS usa `process.env.PORT`).
 
 3. **“Your application failed to pass the initial health checks”**  
@@ -268,9 +268,9 @@ Koyeb mostra **“An error occurred while deploying your application”**. Contr
    - Controlla sempre i **deployment logs** per il messaggio esatto.  
    - Verifica che in locale il backend parta con `PORT=8000` (in `server/pizzeria-backend`: `$env:PORT=8000; npm run start:prod`).
 
-5. **"Cannot find module '/app/dist/main.js'"**  
-   L’immagine in esecuzione non contiene `dist/`. Su Koyeb è probabile che venga usata una **vecchia immagine in cache** (build precedente).  
-   - Nel **Dockerfile.koyeb** sono stati aggiunti controlli: il build fallisce se `dist/main.js` non esiste (così non si pubblica un’immagine senza dist).  
+5. **"Cannot find module '/app/dist/.../main.js'"**  
+   L’immagine in esecuzione non contiene `dist/` o il comando di avvio punta al path sbagliato. Su Koyeb è probabile che venga usata una **vecchia immagine in cache** (build precedente).  
+   - Nel **Dockerfile.koyeb** il build verifica `dist/src/main.js` (output Nest con il tsconfig attuale).  
    - **Cosa fare**: su Koyeb vai nel servizio → **Settings** (o **Build**) → cerca **Clear build cache** / **Rebuild without cache** e avvia un nuovo deploy. Poi fai **Redeploy**.  
    - Verifica che sul repo GitHub ci sia l’ultima versione del **Dockerfile.koyeb** (multi-stage con Node 20) e che il build su Koyeb **non** sia fallito (se fallisce, controlla i log del build).
 
@@ -303,8 +303,8 @@ Esegui questi passi dalla **root** del progetto (`PizzaManagerApp`).
 **Prima del build**
 
 1. **URL del backend**  
-   Crea o modifica `.env.production` nella root (puoi copiare da `.env.production.example`).  
-   Imposta **`VITE_API_URL`** con l’URL del servizio Koyeb (es. `https://pizzeria-backend-xxx.koyeb.app`), **senza** slash finale.  
+   Il file **`.env.production`** nella root è versionato ignorato dal git ma presente sul PC di chi fa deploy: definiscilo lì.  
+   Imposta **`VITE_API_URL`** con l’URL del backend Nest (es. Koyeb o `https://api.pizzamanager.it`), **senza** slash finale.  
    Copia da `.env` le altre variabili: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_MAPS_API_KEY` (se usata).
 
 2. **Firebase**  

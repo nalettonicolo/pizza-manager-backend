@@ -150,7 +150,7 @@ Avvio servizio (poi potrai usare `systemd`):
 npm run start:prod
 ```
 
-Per **systemd** user-mode o unit file dedicato: crea un servizio che esegue `node dist/main.js` dopo `npm run build` (documentazione Nest standard).
+Per **systemd** user-mode o unit file dedicato: dopo `npm run build` usa l’entrypoint reale (oggi `node dist/src/main.js`; verifica con `find dist -name main.js`). Vedi `infra/selfhost/pizzamanager-api.service.example`.
 
 ---
 

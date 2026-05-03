@@ -85,7 +85,7 @@ Nest in ascolto su `127.0.0.1:3001` + Caddy sulla 443 resta il modello consiglia
 - [ ] `CORS_ORIGIN` sul backend elenca l’origine reale della SPA.
 - [ ] Scelta consapevole `VITE_USE_NEST_AUTH` true/false in base a allineamento `core.users` e password.
 - [ ] Smoke manuale: login, area operativa (ordini/letture via Nest se attive), una lettura Supabase ancora usata (es. menu) senza errori RLS.
-- [ ] Servizio systemd (o altro supervisor) per `node dist/main` dopo reboot.
+- [ ] Servizio systemd (o altro supervisor) per `node dist/src/main.js` dopo reboot (verifica con `find dist -name main.js` se aggiorni Nest/tsconfig).
 
 ---
 

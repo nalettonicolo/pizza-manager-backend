@@ -3,6 +3,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "node dist/main.js"
+startCommand = "node dist/src/main.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10

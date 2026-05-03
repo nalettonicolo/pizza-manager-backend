@@ -5,7 +5,9 @@
 # 4) Sul repo: cd server/pizzeria-backend && npm ci && npm run build
 # 5) sudo systemctl daemon-reload && sudo systemctl enable --now pizzamanager-api
 #
-# Nest ascolta su PORT (default 3001 in questo progetto); Caddy/Nginx fanno reverse_proxy verso 127.0.0.1:3001.
+# Entrypoint: dopo `npm run build` verifica con:  find dist -name main.js
+# (con tsconfig attuale Nest emette dist/src/main.js, non dist/main.js).
+# Nest ascolta su PORT (es. 3001 in dev Windows; sul server imposta PORT in api.env); reverse proxy verso 127.0.0.1:$PORT.
 
 [Unit]
 Description=PizzaManager Nest API (pizzeria-backend)
@@ -18,7 +20,7 @@ User=pizzamanager
 Group=pizzamanager
 WorkingDirectory=/srv/pizzamanager/PizzaManagerApp/server/pizzeria-backend
 EnvironmentFile=-/etc/pizzamanager/api.env
-ExecStart=/usr/bin/node dist/main
+ExecStart=/usr/bin/node dist/src/main.js
 Restart=on-failure
 RestartSec=5
 
