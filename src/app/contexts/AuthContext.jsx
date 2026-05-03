@@ -8,8 +8,22 @@ import {
   normalizeLegacyAllAccessTrue,
   normalizeRuoloOperativo,
 } from "@/utils/operativeAreaAccess"
+import { PERMESSI_TUTTE_AREE } from "@/constants/testReparti"
+import { getNestJwt, clearNestJwt } from "@/app/api/client.js"
+import { nestAuthLogin, nestAuthMe, nestAuthLogout } from "@/app/api/authApi.js"
+import { isNestAuthEnabled } from "@/lib/nestAuthMode.js"
 
 const AuthContext = createContext()
+
+/** Enum Prisma `core.Ruolo` → stringhe ruolo usate in UI / router. */
+function mapCoreRuoloToApp(ruolo) {
+  const u = String(ruolo ?? "").toUpperCase()
+  if (u === "SUPERADMIN") return "superadmin"
+  if (u === "OWNER") return "owner"
+  if (u === "ADMIN") return "admin"
+  if (u === "OPERATORE") return "operatore"
+  return normalizeRuoloOperativo(ruolo)
+}
 
 /** getSession() — timeout più stretto per UI più reattiva (rete lenta può comunque fallire e ripetere login) */
 const GET_SESSION_TIMEOUT_MS = 6000
@@ -35,6 +49,8 @@ export function AuthProvider({ children }) {
   const [ruolo, setRuolo] = useState(null)
   const [tenantId, setTenantId] = useState(null)
   const [permessiAree, setPermessiAree] = useState(null) // aree operative calcolate: ruolo + accesso_* true (null = non staff / non caricato)
+  /** Nome tenant dall’API Nest (`/me`, login): usato da TenantContext se `public.tenants` non è leggibile senza sessione Supabase. */
+  const [nestTenantNome, setNestTenantNome] = useState(null)
   const [loading, setLoading] = useState(true)
   const retryPendingRef = useRef(false)
   const loadUserDataInProgressRef = useRef(false)
@@ -51,6 +67,37 @@ export function AuthProvider({ children }) {
   const forceLoadingFalse = useCallback(() => {
     retryPendingRef.current = false
     setLoading(false)
+  }, [])
+
+  const applyNestProfile = useCallback((profile) => {
+    if (!profile?.id) return
+    const ruoloNorm = mapCoreRuoloToApp(profile.ruolo)
+    const staffData = {
+      tenant_id: profile.tenantId,
+      attivo: true,
+      accesso_riepilogo: null,
+      accesso_cassa: null,
+      accesso_cucina: null,
+      accesso_bancone: null,
+      accesso_delivery: null,
+      accesso_pony: null,
+      accesso_pizzaiolo: null,
+    }
+    lastLoadedUserIdRef.current = profile.id
+    setTipoUtente("staff")
+    setRuolo(ruoloNorm)
+    setTenantId(profile.tenantId ?? null)
+    const mgmt =
+      ruoloNorm === "admin" ||
+      ruoloNorm === "owner" ||
+      ruoloNorm === "superadmin"
+    if (mgmt) {
+      setPermessiAree(PERMESSI_TUTTE_AREE)
+    } else {
+      const normalized = normalizeLegacyAllAccessTrue(staffData)
+      setPermessiAree(computePermessiAree(normalized, ruoloNorm))
+    }
+    setNestTenantNome(profile.tenantNome != null ? String(profile.tenantNome) : null)
   }, [])
 
   // ===============================
@@ -189,6 +236,56 @@ export function AuthProvider({ children }) {
   // ===============================
 
   useEffect(() => {
+    if (isNestAuthEnabled()) {
+      devLog("Auth", "init sessione Nest (JWT)", {
+        apiUrl: !!String(import.meta.env.VITE_API_URL ?? "").trim(),
+      })
+
+      let cancelled = false
+      const failsafeId = setTimeout(() => {
+        if (cancelled) return
+        devWarn("Auth", "failsafe Nest: loading=false")
+        forceLoadingFalse()
+      }, AUTH_LOADING_FAILSAFE_MS)
+
+      const initNest = async () => {
+        try {
+          const token = getNestJwt()
+          if (!token) return
+          const me = await nestAuthMe()
+          if (cancelled) return
+          setUser({ id: me.id, email: me.email })
+          latestUserIdRef.current = me.id
+          applyNestProfile(me)
+        } catch (e) {
+          if (!cancelled) {
+            devWarn("Auth", "Nest init fallito", e?.message ?? e)
+            clearNestJwt()
+            setUser(null)
+            setTipoUtente(null)
+            setRuolo(null)
+            setTenantId(null)
+            setPermessiAree(null)
+            setNestTenantNome(null)
+            latestUserIdRef.current = null
+            lastLoadedUserIdRef.current = null
+          }
+        } finally {
+          if (!cancelled) {
+            clearTimeout(failsafeId)
+            forceLoadingFalse()
+            devLog("Auth", "init Nest completato")
+          }
+        }
+      }
+
+      void initNest()
+      return () => {
+        cancelled = true
+        clearTimeout(failsafeId)
+      }
+    }
+
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? ""
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ""
     const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey)
@@ -286,6 +383,7 @@ export function AuthProvider({ children }) {
             setRuolo(null)
             setTenantId(null)
             setPermessiAree(null)
+            setNestTenantNome(null)
             forceLoadingFalse()
           }
         } catch (e) {
@@ -304,7 +402,7 @@ export function AuthProvider({ children }) {
       }
       listener?.subscription?.unsubscribe?.()
     }
-  }, [forceLoadingFalse, loadUserData])
+  }, [applyNestProfile, forceLoadingFalse, loadUserData])
 
   // ===============================
   // AUTH ACTIONS
@@ -312,6 +410,20 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     devLog("Auth", "login attempt", { email })
+    if (isNestAuthEnabled()) {
+      const result = await nestAuthLogin(email, password)
+      if (result.error) {
+        devWarn("Auth", "login Nest error", result.error.message, result.error)
+      } else if (result.data?.user) {
+        const u = result.data.user
+        setUser({ id: u.id, email: u.email })
+        latestUserIdRef.current = u.id
+        applyNestProfile(u)
+        devLog("Auth", "login Nest ok", { userId: u.id })
+      }
+      forceLoadingFalse()
+      return result
+    }
     const result = await supabase.auth.signInWithPassword({ email, password })
     if (result.error) {
       devWarn("Auth", "login error", result.error.message, result.error)
@@ -323,24 +435,38 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     devLog("Auth", "logout")
-    try {
-      /* scope local = pulisce storage su questo browser (sessione persistente) */
-      await supabase.auth.signOut({ scope: "local" })
-    } catch (e) {
-      devWarn("Auth", "signOut errore (prosegui pulizia stato locale)", e?.message ?? e, e)
+    if (isNestAuthEnabled()) {
+      nestAuthLogout()
+    } else {
+      try {
+        /* scope local = pulisce storage su questo browser (sessione persistente) */
+        await supabase.auth.signOut({ scope: "local" })
+      } catch (e) {
+        devWarn("Auth", "signOut errore (prosegui pulizia stato locale)", e?.message ?? e, e)
+      }
     }
     setUser(null)
     setTipoUtente(null)
     setRuolo(null)
     setTenantId(null)
     setPermessiAree(null)
+    setNestTenantNome(null)
     lastLoadedUserIdRef.current = null
     latestUserIdRef.current = null
     forceLoadingFalse()
   }
 
-  /** Dopo link reset password (flusso recovery Supabase). */
+  /** Dopo link reset password (flusso recovery Supabase). Con login Nest non disponibile finché non c’è endpoint dedicato. */
   const updatePassword = async (newPassword) => {
+    if (isNestAuthEnabled()) {
+      return {
+        data: null,
+        error: {
+          message:
+            "Reimposta password da questo schermo non è disponibile con login Nest. Usa il flusso dedicato sul backend quando sarà attivo.",
+        },
+      }
+    }
     return supabase.auth.updateUser({ password: newPassword })
   }
 
@@ -352,6 +478,7 @@ export function AuthProvider({ children }) {
         ruolo,
         tenantId,
         permessiAree,
+        nestTenantNome,
         loading,
         login,
         logout,

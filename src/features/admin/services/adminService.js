@@ -3,6 +3,27 @@ import { logSupabaseError } from "@/utils/logSupabaseError"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
 import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
+import {
+  nestOperativeReadsEnabled,
+  nestOperativeWritesEnabled,
+  nestOperativeOrdini,
+  nestOperativeCategorie,
+  nestOperativeIngredienti,
+  nestOperativeProdotti,
+  nestOperativeConfigurazioneCosti,
+  nestOperativeProdottoIngBatch,
+  nestOperativeCreateOrder,
+  nestOperativeGetOrderDetail,
+  nestOperativeUpdateOrderStato,
+  nestOperativeUpdateOrderTipoPagamento,
+  nestOperativeUpdateOrder,
+  nestOperativeReplaceOrderItems,
+  nestOperativeRuoliPizzeria,
+  nestOperativeRigheAggregateByOrdineIds,
+  nestOperativeTurniAperto,
+  nestOperativeTurniApri,
+  nestOperativeTurniChiudi,
+} from "@/app/api/operativeApi.js"
 
 ///////////////////////////////////////////////////////////
 // ===================== UTILITY ========================
@@ -91,6 +112,20 @@ export async function getRecentOrders(tenantId, limit = 5) {
  */
 export async function getOrders(tenantId, opts = {}) {
   const { stato, limit = 50, fromDate, toDate, todayOnly } = opts
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const rows = await nestOperativeOrdini(tenantId, {
+        stato,
+        limit,
+        fromDate,
+        toDate,
+        todayOnly,
+      })
+      return Array.isArray(rows) ? rows : []
+    } catch (e) {
+      console.warn("[adminService] getOrders Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   let q = supabase
     .from("Ordine")
     .select("*")
@@ -180,6 +215,13 @@ export async function getTenantVenditeInsights(tenantId, opts = {}) {
  * @returns {Promise<string>} ID ordine creato
  */
 export async function createOrder(tenantId, payload) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      return await nestOperativeCreateOrder(tenantId, payload)
+    } catch (e) {
+      console.warn("[adminService] createOrder Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const {
     totale,
     stato = "IN_PREPARAZIONE",
@@ -239,6 +281,14 @@ export async function createOrder(tenantId, payload) {
 
 /** Aggiorna lo stato di un ordine (es. IN_PREPARAZIONE → PRONTO). */
 export async function updateOrderStato(ordineId, stato) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      await nestOperativeUpdateOrderStato(ordineId, stato)
+      return
+    } catch (e) {
+      console.warn("[adminService] updateOrderStato Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const { error } = await supabase
     .from("Ordine")
     .update({ stato })
@@ -264,6 +314,17 @@ export async function updateOrderCucinaPrepStato(ordineId, cucinaPrepStato) {
 
 /** Aggiorna il tipo pagamento (es. "Da pagare" → "Contanti" alla riscossione). */
 export async function updateOrderTipoPagamento(ordineId, tipoPagamento) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      await nestOperativeUpdateOrderTipoPagamento(ordineId, tipoPagamento)
+      return
+    } catch (e) {
+      console.warn(
+        "[adminService] updateOrderTipoPagamento Nest fallback Supabase:",
+        e?.message ?? e
+      )
+    }
+  }
   const { error } = await supabase
     .from("Ordine")
     .update({ tipo_pagamento: tipoPagamento })
@@ -273,6 +334,14 @@ export async function updateOrderTipoPagamento(ordineId, tipoPagamento) {
 
 /** Aggiorna dati ordine (nome cliente, orario ritiro, note, tipo pagamento, indirizzo). Per modifica completa dalla cassa. */
 export async function updateOrder(ordineId, updates) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      await nestOperativeUpdateOrder(ordineId, updates)
+      return
+    } catch (e) {
+      console.warn("[adminService] updateOrder Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const row = {}
   if (updates.nome_cliente !== undefined) row.nome_cliente = updates.nome_cliente
   if (updates.telefono_ritiro !== undefined) row.telefono_ritiro = updates.telefono_ritiro
@@ -299,6 +368,14 @@ export async function updateOrder(ordineId, updates) {
  * Richiede sql_upgrade con la funzione; azzera cucina_prep_stato lato server.
  */
 export async function replaceOrderItems(ordineId, totale, items) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      await nestOperativeReplaceOrderItems(ordineId, totale, items)
+      return
+    } catch (e) {
+      console.warn("[adminService] replaceOrderItems Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const payload = (items || []).map((it) => ({
     prodotto_id: it.prodotto_id ?? it.prodottoId ?? it.id,
     quantita: Math.max(1, Number(it.quantita ?? it.qty ?? 1) || 1),
@@ -392,6 +469,19 @@ export async function insertMagazzinoMovimento(tenantId, payload) {
 
 /** Dettaglio ordine con righe (e nomi prodotto se disponibili). */
 export async function getOrderDetail(ordineId) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      const detail = await nestOperativeGetOrderDetail(ordineId)
+      if (detail != null && typeof detail === "object") {
+        return {
+          ...detail,
+          righe: Array.isArray(detail.righe) ? detail.righe : [],
+        }
+      }
+    } catch (e) {
+      console.warn("[adminService] getOrderDetail Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const { data: order, error: orderErr } = await supabase
     .from("Ordine")
     .select("*")
@@ -454,6 +544,17 @@ export async function enrichOrdineDetailIngredientiSummaries(tenantId, detail) {
 /** Restituisce per ogni ordineId il totale pizze (somma quantita righe). Utile per planning. */
 export async function getRigheAggregateByOrdineIds(ordineIds) {
   if (!ordineIds?.length) return {}
+  if (nestOperativeWritesEnabled()) {
+    try {
+      const agg = await nestOperativeRigheAggregateByOrdineIds(ordineIds)
+      return agg || {}
+    } catch (e) {
+      console.warn(
+        "[adminService] getRigheAggregateByOrdineIds Nest fallback Supabase:",
+        e?.message ?? e
+      )
+    }
+  }
   const { data: righe, error } = await supabase
     .from("RigaOrdine")
     .select("*")
@@ -938,6 +1039,14 @@ const AREA_COLUMNS = "accesso_riepilogo, accesso_cassa, accesso_cucina, accesso_
 
 // Ruoli pizzeria (vista ruoli_pizzeria + RPC)
 export async function getRuoliPizzeria(tenantId) {
+  if (nestOperativeWritesEnabled()) {
+    try {
+      const core = await nestOperativeRuoliPizzeria(tenantId)
+      if (Array.isArray(core) && core.length) return core
+    } catch (e) {
+      console.warn("[adminService] getRuoliPizzeria Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const selectWithNome =
     "user_id, email, ruolo, tenant_id, puo_modificare_parametri, attivo, nome_visualizzato, " + AREA_COLUMNS
   const selectWithoutNome = "user_id, email, ruolo, tenant_id, puo_modificare_parametri, attivo, " + AREA_COLUMNS
@@ -1122,6 +1231,14 @@ function mapStaffArchivioError(error) {
 ///////////////////////////////////////////////////////////
 
 export async function getCategories(tenantId) {
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const data = await nestOperativeCategorie(tenantId)
+      return sortByOrdine(data || [])
+    } catch (e) {
+      console.warn("[adminService] getCategories Nest fallback:", e?.message ?? e)
+    }
+  }
   const { data, error } = await supabase
     .from("categorie")
     .select("*")
@@ -1218,6 +1335,14 @@ async function selectIngredientiRowsByIds(tenantId, ingredienteIds) {
 }
 
 export async function getIngredients(tenantId) {
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const data = await nestOperativeIngredienti(tenantId)
+      return Array.isArray(data) ? data : []
+    } catch (e) {
+      console.warn("[adminService] getIngredients Nest fallback:", e?.message ?? e)
+    }
+  }
   const { data, error } = await supabase
     .from("Ingrediente")
     .select("*")
@@ -1378,6 +1503,13 @@ export async function updateIngredient(ingredienteId, updates) {
 ///////////////////////////////////////////////////////////
 
 export async function getConfigurazioneCosti(tenantId) {
+  if (nestOperativeReadsEnabled()) {
+    try {
+      return await nestOperativeConfigurazioneCosti(tenantId)
+    } catch (e) {
+      console.warn("[adminService] getConfigurazioneCosti Nest fallback:", e?.message ?? e)
+    }
+  }
   const { data, error } = await supabase
     .from("configurazione_costi")
     .select("*")
@@ -1656,6 +1788,14 @@ export async function getCategorieByIds(tenantId, ids) {
 }
 
 export async function getProductsByCategory(tenantId, categoryId) {
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const data = await nestOperativeProdotti(tenantId, categoryId)
+      return sortByOrdine(data || [])
+    } catch (e) {
+      console.warn("[adminService] getProductsByCategory Nest fallback:", e?.message ?? e)
+    }
+  }
   const { data, error } = await supabase
     .from("Prodotto")
     .select("*")
@@ -1681,6 +1821,19 @@ export async function getProductsByCategoryId(tenantId, categoryId) {
 /** Mappa prodottoId -> array di ingrediente_id (per sapere quali prodotti contengono un ingrediente). */
 export async function getProductIngredientIdsMap(tenantId, productIds) {
   if (!tenantId || !productIds?.length) return {}
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const batch = await nestOperativeProdottoIngBatch(tenantId, productIds)
+      const out = {}
+      for (const pid of [...new Set(productIds.filter(Boolean))]) {
+        const arr = batch[pid] || []
+        out[pid] = arr.map((ing) => ing.id).filter(Boolean)
+      }
+      return out
+    } catch (e) {
+      console.warn("[adminService] getProductIngredientIdsMap Nest fallback:", e?.message ?? e)
+    }
+  }
   try {
     const { data: rows, error } = await supabase
       .from("prodotto_ingrediente")
@@ -1707,6 +1860,19 @@ export async function getProductIngredientIdsMap(tenantId, productIds) {
  */
 export async function getProductIngredientiMap(tenantId, productIds) {
   if (!tenantId || !productIds?.length) return {}
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const batch = await nestOperativeProdottoIngBatch(tenantId, productIds)
+      const out = {}
+      for (const pid of [...new Set(productIds.filter(Boolean))]) {
+        const arr = batch[pid] || []
+        out[pid] = arr.map((ing) => ing.nome || "").filter(Boolean)
+      }
+      return out
+    } catch (e) {
+      console.warn("[adminService] getProductIngredientiMap Nest fallback:", e?.message ?? e)
+    }
+  }
   try {
     const { data: rows, error } = await supabase
       .from("prodotto_ingrediente")
@@ -1757,6 +1923,18 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
   if (!tenantId || !productIds?.length) return {}
   const uniqueIds = [...new Set(productIds.filter(Boolean))]
   const emptyMap = () => Object.fromEntries(uniqueIds.map((id) => [id, []]))
+  if (nestOperativeReadsEnabled()) {
+    try {
+      const batch = await nestOperativeProdottoIngBatch(tenantId, uniqueIds)
+      const out = {}
+      for (const id of uniqueIds) {
+        out[id] = Array.isArray(batch[id]) ? batch[id] : []
+      }
+      return out
+    } catch (e) {
+      console.warn("[adminService] getProductIngredientiBatch Nest fallback:", e?.message ?? e)
+    }
+  }
   try {
     let rows
     const { data: dataWithOrdine, error: errOrdine } = await supabase
@@ -2518,6 +2696,14 @@ export async function getReportData(
 /** Turno aperto per l’utente corrente sul tenant, o null. */
 export async function turniCassaAperto(tenantId) {
   if (!tenantId) return null
+  if (nestOperativeWritesEnabled()) {
+    try {
+      const d = await nestOperativeTurniAperto(tenantId)
+      return d ?? null
+    } catch (e) {
+      console.warn("[adminService] turniCassaAperto Nest fallback Supabase:", e?.message ?? e)
+    }
+  }
   const { data, error } = await supabase.rpc("turni_cassa_aperto", { p_tenant_id: tenantId })
   if (error) {
     logSupabaseError("admin.turniCassaAperto", error, { tenantId })
@@ -2529,6 +2715,13 @@ export async function turniCassaAperto(tenantId) {
 export async function turniCassaApri(tenantId, puntoVenditaId) {
   if (!tenantId || !puntoVenditaId) {
     throw new Error("tenant e punto vendita obbligatori")
+  }
+  if (nestOperativeWritesEnabled()) {
+    try {
+      return await nestOperativeTurniApri(tenantId, puntoVenditaId)
+    } catch (e) {
+      console.warn("[adminService] turniCassaApri Nest fallback Supabase:", e?.message ?? e)
+    }
   }
   const { data, error } = await supabase.rpc("turni_cassa_apri", {
     p_tenant_id: tenantId,
@@ -2550,6 +2743,13 @@ export async function turniCassaChiudi(tenantId, params) {
   const fondo = params?.fondoContatoEuro
   if (fondo == null || Number.isNaN(Number(fondo))) {
     throw new Error("fondo contato obbligatorio")
+  }
+  if (nestOperativeWritesEnabled()) {
+    try {
+      return await nestOperativeTurniChiudi(tenantId, params)
+    } catch (e) {
+      console.warn("[adminService] turniCassaChiudi Nest fallback Supabase:", e?.message ?? e)
+    }
   }
   const { data, error } = await supabase.rpc("turni_cassa_chiudi", {
     p_tenant_id: tenantId,

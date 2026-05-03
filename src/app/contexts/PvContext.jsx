@@ -1,5 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { devWarn } from "@/lib/devLog"
+import { isNestAuthEnabled } from "@/lib/nestAuthMode.js"
+import { getNestJwt } from "@/app/api/client.js"
+import { nestTenantPuntiVendita } from "@/app/api/tenantApi.js"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
 const PvContext = createContext()
@@ -20,6 +24,50 @@ export function PvProvider({ children }) {
   // CARICA PUNTI VENDITA
   // ======================================
 
+  const applyPvRows = useCallback(
+    (data) => {
+      if (!Array.isArray(data) || data.length === 0) {
+        setPvList([])
+        setActivePv(null)
+        return
+      }
+
+      setPvList(data)
+
+      if (ruolo !== "superadmin") {
+        const ruoloNorm = (ruolo && String(ruolo).toLowerCase().trim()) || ""
+        const saved = localStorage.getItem("active_pv")
+        const valid = saved && data.some((p) => String(p.id) === String(saved))
+
+        if (ruoloNorm === "admin" && data.length > 1) {
+          if (valid) {
+            setActivePv(String(saved))
+          } else {
+            setActivePv(null)
+            localStorage.removeItem("active_pv")
+          }
+        } else {
+          const nextId = valid ? saved : data[0].id
+          setActivePv(String(nextId))
+          if (!valid) {
+            localStorage.setItem("active_pv", String(nextId))
+          }
+        }
+        return
+      }
+
+      const saved = localStorage.getItem("active_pv")
+      if (saved && data.some((p) => String(p.id) === String(saved))) {
+        setActivePv(saved)
+      } else if (data.length === 1) {
+        const only = data[0].id
+        setActivePv(only)
+        localStorage.setItem("active_pv", String(only))
+      }
+    },
+    [ruolo]
+  )
+
   const loadPv = useCallback(async () => {
     if (!tenantId) {
       setLoading(false)
@@ -32,56 +80,41 @@ export function PvProvider({ children }) {
     pvLoadInFlightRef.current = true
 
     try {
+      if (isNestAuthEnabled() && getNestJwt()) {
+        try {
+          const rows = await nestTenantPuntiVendita()
+          if (Array.isArray(rows)) {
+            applyPvRows(rows)
+            return
+          }
+        } catch (e) {
+          devWarn(
+            "PvContext",
+            "GET /api/tenant/punti-vendita fallito, fallback Supabase",
+            e?.message ?? e
+          )
+        }
+      }
+
       const { data, error } = await supabase
         .from("punti_vendita")
         .select("*")
         .eq("tenant_id", tenantId)
 
       if (!error && data) {
-        setPvList(data)
-
-        if (ruolo !== "superadmin") {
-          if (data.length > 0) {
-            const ruoloNorm = (ruolo && String(ruolo).toLowerCase().trim()) || ""
-            const saved = localStorage.getItem("active_pv")
-            const valid = saved && data.some((p) => String(p.id) === String(saved))
-
-            if (ruoloNorm === "admin" && data.length > 1) {
-              if (valid) {
-                setActivePv(String(saved))
-              } else {
-                setActivePv(null)
-                localStorage.removeItem("active_pv")
-              }
-            } else {
-              const nextId = valid ? saved : data[0].id
-              setActivePv(String(nextId))
-              if (!valid) {
-                localStorage.setItem("active_pv", String(nextId))
-              }
-            }
-          }
-        } else {
-          const saved = localStorage.getItem("active_pv")
-          if (saved && data.some((p) => String(p.id) === String(saved))) {
-            setActivePv(saved)
-          } else if (data.length === 1) {
-            const only = data[0].id
-            setActivePv(only)
-            localStorage.setItem("active_pv", String(only))
-          }
-        }
+        applyPvRows(data)
       } else {
         if (error) {
           console.error("[PvContext] punti_vendita:", error.message || error)
         }
         setPvList([])
+        setActivePv(null)
       }
     } finally {
       pvLoadInFlightRef.current = false
       setLoading(false)
     }
-  }, [tenantId, ruolo])
+  }, [tenantId, applyPvRows])
 
   // ======================================
   // SET DB CONTEXT (RLS)

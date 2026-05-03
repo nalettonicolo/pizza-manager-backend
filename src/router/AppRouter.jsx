@@ -401,8 +401,8 @@ export default function AppRouter() {
       {isSaaS && (
         <Route
           element={
-            <ProtectedRoute allowedRoles={["admin"]} requireTenant>
-              <RoleLayout allowedRoles={["admin"]}>
+            <ProtectedRoute allowedRoles={["admin", "owner"]} requireTenant>
+              <RoleLayout allowedRoles={["admin", "owner"]}>
                 <AdminLayout />
               </RoleLayout>
             </ProtectedRoute>

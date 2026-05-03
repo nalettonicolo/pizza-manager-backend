@@ -43,6 +43,7 @@ export class AuthService {
       sub: user.id,
       tenantId: user.tenantId,
       ruolo: user.ruolo,
+      email: user.email,
     }
 
     return {
@@ -63,5 +64,27 @@ export class AuthService {
       where: { id: userId, deletedAt: null, attivo: true },
       include: { tenant: true },
     })
+  }
+
+  async me(payload: { sub?: string }) {
+    const userId = payload?.sub
+    if (!userId) {
+      throw new UnauthorizedException('Token non valido')
+    }
+    const user = await this.validateUser(userId)
+    if (!user) {
+      throw new UnauthorizedException('Utente non trovato o non attivo')
+    }
+    if (!user.tenant.attivo) {
+      throw new UnauthorizedException('Tenant non attivo')
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      nome: user.nome,
+      ruolo: user.ruolo,
+      tenantId: user.tenantId,
+      tenantNome: user.tenant.nome,
+    }
   }
 }

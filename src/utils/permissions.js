@@ -10,6 +10,7 @@ export function getHomeByRole(role) {
       return "/superadmin/dashboard"
 
     case "admin":
+    case "owner":
       return ADMIN_TENANT_HOME
 
     case "operatore":
@@ -33,6 +34,12 @@ export function getRolePermissions(role) {
       viewReports: true,
     },
     admin: {
+      manageTenants: false,
+      manageLicenses: false,
+      manageUsers: true,
+      viewReports: true,
+    },
+    owner: {
       manageTenants: false,
       manageLicenses: false,
       manageUsers: true,

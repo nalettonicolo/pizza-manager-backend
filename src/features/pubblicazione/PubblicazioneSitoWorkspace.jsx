@@ -456,7 +456,7 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
               Dopo aver applicato la migrazione Supabase <code>20260323120000_tenants_public_domain_and_rpc.sql</code>, la
               vetrina sul dominio cliente risolve automaticamente il tenant tramite <code>public_domain</code>. Variabili
               opzionali: <code>VITE_PUBLIC_DOMAIN_CNAME_TARGET</code>, <code>VITE_PUBLIC_SAAS_BASE_URL</code> (vedi{" "}
-              <code>.env.example</code>).
+              <code>.env.production</code>).
             </p>
           </section>
         </>

@@ -1,0 +1,16 @@
+# Copia in /etc/caddy/Caddyfile (o include da snippets) e adatta dominio + porta Nest.
+# Nest PizzaManager: prefisso API è /api (vedi main.ts → setGlobalPrefix('api')).
+#
+# Swagger (opzionale): https://TUO_DOMINIO/docs
+
+api.example.com {
+    encode gzip
+    reverse_proxy 127.0.0.1:3001
+
+    # Header utili se dietro altri proxy (opzionale)
+    # header {
+    #     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    #     X-Content-Type-Options "nosniff"
+    #     Referrer-Policy "strict-origin-when-cross-origin"
+    # }
+}
