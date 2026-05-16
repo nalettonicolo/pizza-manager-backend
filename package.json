@@ -26,7 +26,8 @@
     "deploy:push-then-hosting": "git push && npm run deploy:hosting",
     "deploy:push-then-hosting:ci": "git push && npm run deploy:hosting:ci",
     "deploy": "npm run deploy:hosting",
-    "publish:hosting": "node scripts/publish.mjs"
+    "publish:hosting": "node scripts/publish.mjs",
+    "keepalive:supabase": "node scripts/supabase-keepalive.mjs"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

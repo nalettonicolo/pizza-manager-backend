@@ -1,0 +1,35 @@
+# Mantiene attivo il progetto Supabase Free (pausa dopo ~7 giorni senza traffico API).
+# Esegue un ping leggero circa ogni 5 giorni di calendario (giorni 1, 6, 11, 16, 21, 26 alle 08:00 UTC).
+#
+# Secrets richiesti nel repo GitHub (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL          es. https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY     chiave anon (Settings → API nel progetto Supabase)
+
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # 08:00 UTC — giorni 1, 6, 11, 16, 21, 26 di ogni mese (~ogni 5 giorni)
+    - cron: "0 8 1,6,11,16,21,26 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: Ping Supabase API
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Keep-alive ping
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node scripts/supabase-keepalive.mjs

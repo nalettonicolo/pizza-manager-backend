@@ -99,6 +99,29 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 
 ---
 
+## Supabase Free — keep-alive (anti-pausa progetto)
+
+Su piano **Free**, Supabase può **mettere in pausa** il progetto dopo circa **7 giorni** senza traffico API. Nel repo c’è un ping automatico circa **ogni 5 giorni di calendario**.
+
+### GitHub Actions (consigliato)
+
+1. Nel repo GitHub: **Settings → Secrets and variables → Actions → New repository secret**
+   - `SUPABASE_URL` = stesso valore di `VITE_SUPABASE_URL` (es. `https://<ref>.supabase.co`, senza slash finale)
+   - `SUPABASE_ANON_KEY` = chiave **anon** del progetto
+2. Committa e pusha `.github/workflows/supabase-keepalive.yml` (cron: giorni **1, 6, 11, 16, 21, 26** alle **08:00 UTC**).
+3. Verifica in **Actions** che il workflow **Supabase keep-alive** parta (o lancialo con **Run workflow**).
+
+### Test manuale in locale
+
+```powershell
+cd D:\APP_PIZZERIA\PizzaManagerApp
+npm run keepalive:supabase
+```
+
+Legge `.env.production` / `.env` se le variabili non sono già in ambiente.
+
+---
+
 ## Roadmap non inclusa nel codice
 
 - **Versioning listino** con data effetto / rollback completo (DB dedicato).
@@ -120,10 +143,9 @@ Il deploy di schema e dati non si fa da terminale: apri **Supabase** → **SQL E
 - **Stacco totale da Supabase (indipendenza: solo Nest + Postgres, fasi e inventario codice):** `docs/STACCO_SUPABASE_TOTALE.md`
 - **Piano milestone (adminService, cassa, delivery, ordini pubblici, superadmin, Realtime, Storage, Edge):** `docs/STACCO_SUPABASE_MILESTONE_PLAN.md`
 - **Cursor / sync verso server casa:** `docs/CURSOR_WORKFLOW_SERVER_CASA.md` — da locale: `npm run sync:server` (push GitHub + pull sul server + **build Nest + systemctl restart**); solo pull: `npm run sync:server:pull`
-- **Punto della situazione (stack / deploy):** `PUNTO_SITUAZIONE_ENTERPRISE.md`
-- **Punto della situazione (visione webapp completa):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
+- **Punto della situazione (stack / deploy):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
 - **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
 
 ---
 
-*Ultima revisione documento: 2026-04-10*
+*Ultima revisione documento: 2026-05-16*
