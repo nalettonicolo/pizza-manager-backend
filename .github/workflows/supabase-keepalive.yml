@@ -12,6 +12,12 @@ on:
     # 08:00 UTC — giorni 1, 6, 11, 16, 21, 26 di ogni mese (~ogni 5 giorni)
     - cron: "0 8 1,6,11,16,21,26 * *"
   workflow_dispatch:
+  # Verifica dopo modifiche allo script/workflow (non sostituisce il cron)
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/supabase-keepalive.yml"
+      - "scripts/supabase-keepalive.mjs"
 
 permissions:
   contents: read
