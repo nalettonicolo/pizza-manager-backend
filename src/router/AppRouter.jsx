@@ -66,6 +66,7 @@ const SuperadminViewportStudioPage = lazy(() => import("@/features/superadmin/pa
 
 /* ================= ADMIN (lazy) ================= */
 const Report = lazy(() => import("@/features/admin/pages/Report"));
+const AdminOrdiniPage = lazy(() => import("@/features/admin/pages/AdminOrdiniPage"));
 const SettingsLayout = lazy(() => import("@/features/admin/pages/settings/SettingsLayout"));
 const DatiPizzeriaSection = lazy(() => import("@/features/admin/pages/settings/DatiPizzeriaSection"));
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
@@ -499,6 +500,7 @@ export default function AppRouter() {
               </Suspense>
             }
           />
+          <Route path="/admin/ordini" element={<Suspense fallback={<PageFallback />}><AdminOrdiniPage /></Suspense>} />
           <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
           <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />

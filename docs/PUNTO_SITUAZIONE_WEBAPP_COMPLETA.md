@@ -1,6 +1,6 @@
 # Punto della situazione — webapp PizzaManager (visione completa)
 
-Documento di sintesi: **cosa vuoi come prodotto**, **cosa c’è nel repo**, **cosa manca**. Allineato a `ARCHITETTURA_E_STATO.md`, `BACKLOG_E_STATO_SVILUPPO.md`, `ROADMAP_CASSA_ENTERPRISE.md`, `PUNTO_SITUAZIONE_ENTERPRISE.md`, aggiornato con sviluppi recenti (cassa enterprise, pagamenti online, rider, UX pubblico/operativo).
+Documento di sintesi: **cosa vuoi come prodotto**, **cosa c’è nel repo**, **cosa manca**. Allineato a `ARCHITETTURA_E_STATO.md`, `BACKLOG_E_STATO_SVILUPPO.md`, `ROADMAP_CASSA_ENTERPRISE.md`. Per stack, deploy e troubleshooting sintetico vedi §5–§8 più sotto. Aggiornato con sviluppi recenti (cassa enterprise, pagamenti online, rider, UX pubblico/operativo).
 
 ---
 
@@ -121,16 +121,58 @@ Webapp **ampia e coerente** (tenant, operativo, pubblico, superadmin, traccia en
 
 ---
 
-## 5. Riferimenti
+## 5. Routing pubblico (comportamento atteso)
+
+- **Dominio SaaS (`pizzamanager.it`, `app.*`, localhost):** **`/`** = landing marketing; dalla landing i CTA puntano a **`/home`** (home pizzeria); **`/negozio`** = menu pubblico (PublicStore quando applicabile).
+- **Domini storefront dedicati (vetrina cliente):** spesso **`/`** = PublicStore diretto.
+
+---
+
+## 6. Stack e deploy (sintesi)
+
+- **Frontend:** Vite + React; hosting tipico **Firebase** (`DEPLOY_COMANDI.md`).
+- **Dati principali:** **Supabase** (Postgres, schema `core` / oggetti in `public`, RLS/RPC dove previsto). Baseline SQL: `sql/schema_completo_pizzamanager.sql`; aggiornamenti: `sql/sql_upgrade.sql`.
+- **Auth:** Supabase Auth per sessione SPA; ruoli tenant in linea con schema e policy.
+- **API Node/Nest** in `server/pizzeria-backend`: **facoltativa** in base al flusso; base URL **`VITE_API_URL`**. Chi chiama cosa: **`docs/ARCHITETTURA_API_E_RUOLI.md`**.
+- **Variabili build tipiche SPA:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`, `VITE_GOOGLE_MAPS_API_KEY`, ecc.
+
+---
+
+## 7. Correzioni già applicate (riferimento rapido)
+
+| Problema | Soluzione / nota |
+|----------|-------------------|
+| 404 su realtime ordini (`select=…`) | Canale/tab Supabase corretto (es. `Ordine` vs nome tabella storico); vedi codice pagina ordine operativa. |
+| `permission denied` schema `public` / anon | Allineare GRANT/policy anon eseguendo baseline o patch in `sql/sql_upgrade.sql` / `schema_completo`. |
+| 401 su viste/tab Supabase da produzione | Build con `.env.production` completo (**`https://`** per URL Supabase su sito HTTPS; mixed content → `Failed to fetch` da browser). |
+| Colonna/manu `visibile_online` / menu pubblico | Schema + vista `prodotti_menu_pubblico`; SPA legge vista per menu anonimo. |
+| Branding/`logo_url` undefined in vetrina | Tenant pubblico passa branding coerente; componenti con fallback sicuro (`branding ?? {}`). |
+| Info tenant incompleta in storefront | Query tenant pubblico con campi previsti (`logo_url`, `indirizzo`, `orari_settimana`, ecc.). |
+
+---
+
+## 8. Prossimi passi suggeriti (ordine indicativo)
+
+1. **Supabase:** applicare su staging/produzione quanto in `sql/sql_upgrade.sql`; verificare RLS/policy coerenti con l’ambiente.
+2. **Route protette Nest (se API attiva):** tenant guard coerente, filtro `tenantId` sulle query.
+3. **Audit / soft-delete** dove definito dalla roadmap backend.
+4. **Billing Stripe** subscription/webhook quando in scope prodotto.
+5. **Google Maps:** chiave con referrer ristretto in produzione.
+
+**Comandi deploy:** sempre **`DEPLOY_COMANDI.md`** (frontend build/hosting; SQL su Supabase; backend se in uso).
+
+---
+
+## 9. Riferimenti
 
 | File | Contenuto |
 |------|-----------|
 | `docs/ARCHITETTURA_E_STATO.md` | Route vs implementazione |
+| `docs/ARCHITETTURA_API_E_RUOLI.md` | Supabase vs Nest, ruoli |
 | `docs/BACKLOG_E_STATO_SVILUPPO.md` | Backlog e ordine di lavoro |
 | `docs/ROADMAP_CASSA_ENTERPRISE.md` | Cassa → offline → fiscale |
-| `PUNTO_SITUAZIONE_ENTERPRISE.md` | Deploy, stack, correzioni note |
 | `DEPLOY_COMANDI.md` | Comandi per andare online |
 
 ---
 
-*Ultima revisione: 2026-04-10 — checklist implementazione §2.1*
+*Ultima revisione: 2026-05-15 — unify con punto situazione enterprise (stack/troubleshooting) in questo file*

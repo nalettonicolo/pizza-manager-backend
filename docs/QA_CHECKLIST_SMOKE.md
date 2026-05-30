@@ -4,7 +4,7 @@ Usala dopo deploy o prima di una release. Per ogni voce: **OK** / **KO** e breve
 
 **Come usarla:** account tenant admin reale o di staging; stesso dominio del deploy (es. `pizzamanager.it`). Dove serve il piano, usa un tenant con/senza servizio indicato.
 
-_Ultimo aggiornamento contenuti: 2026-04-03._
+_Ultimo aggiornamento contenuti: 2026-05-15 (unificata smoke operativa multi-reparto)._
 
 ---
 
@@ -137,6 +137,60 @@ _Ultimo aggiornamento contenuti: 2026-04-03._
 
 - [ ] Voci menu operativo visibili secondo **ruolo** e permessi.
 - [ ] Se `VITE_ENFORCE_SERVIZI_PLAN=true`: voci legate a moduli non in piano **nascoste** o disabilitate come da implementazione.
+
+---
+
+## Smoke operativa multi-reparto (cassa → cucina → bancone → delivery)
+
+Checklist aggiuntiva per regressioni su flussi multi-stato e più reparti. **Precondizioni:** tenant di test con dati base (categorie/prodotti/ingredienti); almeno 2 utenti (es. `cassa`, `delivery` o equivalente); planning e turni cassa attivi dove serve il caso.
+
+### 1) Cassa — checkout / modifica / annullo
+
+- [ ] Creare ordine **negozio** con almeno 2 righe prodotto.
+- [ ] Verificare salvataggio `tipo_ordine`, totale e righe su DB.
+- [ ] Modificare ordine (quantità, nota, tipo pagamento) e verificare persistenza.
+- [ ] Cambiare ordine da `delivery` a `negozio` (o viceversa dove previsto) e verificare coerenza UI reparti.
+- [ ] Annullare ordine e verificare esclusione da planning/contabilità ove applicabile.
+
+### 2) Cucina — prep → pronto
+
+- [ ] Aprire ordine in preparazione e segnare ingredienti prep.
+- [ ] Portare ordine in **PRONTO**.
+- [ ] Verificare presenza in Bancone e Delivery secondo regole (`tipo_ordine`, ecc.).
+
+### 3) Bancone — pronto → consegnato
+
+- [ ] Tappare alcuni chip ingredienti/bibite in Bancone.
+- [ ] Refresh pagina e verificare persistenza pick.
+- [ ] Cambiare set ordini (nuovo poll) e verificare pruning/messaggi reset dove previsti.
+- [ ] Segnare ordine come **CONSEGNATO** e verificare rimozione dalla lista attesa.
+
+### 4) Delivery — FSM consegna
+
+- [ ] Impostare **ASSEGNATO**, poi **IN_VIAGGIO**; eseguire **CONSEGNATO**.
+- [ ] Verificare transizione coerente (ordine + `stato_consegna`).
+- [ ] Nessuna divergenza evidente tra `stato` e `stato_consegna`.
+
+### 5) Planning slot e overnight
+
+- [ ] Validare slot tipo `18:00–02:00`, `20:00–00:00`, `00:00–04:00` dove in uso.
+- [ ] Verificare ordinamento slot e conteggi pizze per fascia.
+
+### 6) Turni cassa
+
+- [ ] Aprire turno cassa su punto vendita.
+- [ ] Creare ordine con turno attivo.
+- [ ] Chiudere turno e verificare riconciliazione base.
+
+### 7) Sicurezza tenant (smoke)
+
+- [ ] Utente tenant A non vede/modifica ordini tenant B.
+- [ ] Creazione ordine via RPC solo su tenant autorizzato.
+- [ ] Menu pubblico senza esposizione indebita di `tenant_id` nel payload client.
+
+### Evidenze minime
+
+- Screenshot per sezione; errori console/network; esito **PASS** / **FAIL** con note.
 
 ---
 

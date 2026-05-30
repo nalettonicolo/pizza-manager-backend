@@ -15,6 +15,7 @@ import { applyTenantFavicon } from "@/utils/tenantFavicon";
  * `servizioId` → opzionale filtro voci nav; nessun redirect forzato per piano (servizi non bloccanti).
  */
 const topNavItems = [
+  { to: "/admin/ordini", label: "Ordini", servizioId: null },
   { to: "/admin/manuale", label: "Manuale", servizioId: null },
   { to: "/admin/report", label: "Report", servizioId: "report_analisi" },
   { to: "/admin/fidelity", label: "Fidelity", servizioId: "fidelity_card" },
@@ -165,6 +166,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     return prefetchWhenIdle([
+      () => import("@/features/admin/pages/AdminOrdiniPage"),
       () => import("@/features/admin/pages/ManualeUtentePage"),
       () => import("@/features/admin/pages/menu/CategoriePage"),
       () => import("@/features/admin/pages/menu/IngredientiPage"),

@@ -12,6 +12,11 @@ import { PERMESSI_TUTTE_AREE } from "@/constants/testReparti"
 import { getNestJwt, clearNestJwt } from "@/app/api/client.js"
 import { nestAuthLogin, nestAuthMe, nestAuthLogout } from "@/app/api/authApi.js"
 import { isNestAuthEnabled } from "@/lib/nestAuthMode.js"
+import {
+  isAuthFetchNetworkFailure,
+  isSupabaseBuildConfigured,
+  supabaseLoginNetworkHelpMessage,
+} from "@/lib/supabaseEnv.js"
 
 const AuthContext = createContext()
 
@@ -286,17 +291,15 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? ""
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ""
-    const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey)
+    const supabaseConfigured = isSupabaseBuildConfigured()
 
     devLog("Auth", "init sessione", {
-      supabaseConfigurato: isSupabaseConfigured,
-      urlPresente: !!supabaseUrl,
-      keyPresente: !!supabaseKey,
+      supabaseConfigurato: supabaseConfigured,
+      urlPresente: Boolean(import.meta.env.VITE_SUPABASE_URL),
+      keyPresente: Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY),
     })
 
-    if (!isSupabaseConfigured) {
+    if (!supabaseConfigured) {
       devWarn("Auth", "Supabase non configurato (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY), loading=false")
       forceLoadingFalse()
       return
@@ -424,13 +427,45 @@ export function AuthProvider({ children }) {
       forceLoadingFalse()
       return result
     }
-    const result = await supabase.auth.signInWithPassword({ email, password })
-    if (result.error) {
-      devWarn("Auth", "login error", result.error.message, result.error)
-    } else {
-      devLog("Auth", "login ok", { userId: result.data?.user?.id })
+    if (!isSupabaseBuildConfigured()) {
+      devWarn("Auth", "login: Supabase non configurato nel bundle (VITE_SUPABASE_*).")
+      return {
+        data: { user: null, session: null },
+        error: { message: supabaseLoginNetworkHelpMessage() },
+      }
     }
-    return result
+
+    try {
+      const result = await supabase.auth.signInWithPassword({ email, password })
+
+      const errMsg = String(result.error?.message ?? "")
+      if (
+        result.error &&
+        (isAuthFetchNetworkFailure(result.error) || /failed to fetch/i.test(errMsg))
+      ) {
+        devWarn("Auth", "login Supabase errore di rete", errMsg || result.error, result.error)
+        return {
+          data: { user: null, session: null },
+          error: { message: supabaseLoginNetworkHelpMessage() },
+        }
+      }
+
+      if (result.error) {
+        devWarn("Auth", "login error", result.error.message, result.error)
+      } else {
+        devLog("Auth", "login ok", { userId: result.data?.user?.id })
+      }
+      return result
+    } catch (e) {
+      if (isAuthFetchNetworkFailure(e)) {
+        devWarn("Auth", "login Supabase eccezione rete", e?.message ?? e, e)
+        return {
+          data: { user: null, session: null },
+          error: { message: supabaseLoginNetworkHelpMessage() },
+        }
+      }
+      throw e
+    }
   }
 
   const logout = async () => {
