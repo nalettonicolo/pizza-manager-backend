@@ -1,9 +1,21 @@
 /**
- * Telemetria leggera checkout cassa (nessuna dipendenza esterna).
- * In dev: log strutturato su console. In prod: stesso canale; integrare Sentry/OTel in seguito.
+ * Telemetria checkout cassa: console + hook opzionale + Sentry (se DSN configurato).
  */
 
 const PREFIX = "[CassaTelemetry]"
+
+let sentryModulePromise = null
+
+function loadSentry() {
+  if (!sentryModulePromise) {
+    sentryModulePromise = import("@sentry/react").catch(() => null)
+  }
+  return sentryModulePromise
+}
+
+function hasSentryDsn() {
+  return Boolean(String(import.meta.env.VITE_SENTRY_DSN ?? "").trim())
+}
 
 export function markCheckoutStart() {
   const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()
@@ -37,4 +49,31 @@ export function markCheckoutEnd(ctx, meta) {
       /* ignore */
     }
   }
+  if (hasSentryDsn()) {
+    void reportCheckoutToSentry(payload)
+  }
+}
+
+async function reportCheckoutToSentry(payload) {
+  const Sentry = await loadSentry()
+  if (!Sentry) return
+  const tags = {
+    area: "cassa",
+    checkout_ok: String(payload.ok),
+  }
+  if (payload.tenantId) tags.tenant_id = payload.tenantId
+  if (payload.ordineId) tags.ordine_id = payload.ordineId
+
+  Sentry.withScope((scope) => {
+    scope.setTags(tags)
+    scope.setContext("cassa_checkout", {
+      duration_ms: payload.durationMs,
+      at: payload.at,
+    })
+    if (payload.ok) {
+      Sentry.captureMessage("cassa_checkout_ok", "info")
+    } else {
+      Sentry.captureMessage(payload.errorMessage || "cassa_checkout_err", "warning")
+    }
+  })
 }

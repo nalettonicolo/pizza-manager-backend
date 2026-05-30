@@ -60,6 +60,9 @@ import { roundTotalToFiveCents } from "@/utils/cassaArrotondamento"
 import { readFiscalConfigFromParametri, enqueueCorrispettivoAfterCheckoutIfConfigured } from "@/integrations/fiscal"
 import { runUnifiedPayByLinkSetup } from "@/integrations/payments"
 import { markCheckoutStart, markCheckoutEnd } from "@/utils/cassaTelemetry"
+import { isAuthFetchNetworkFailure } from "@/lib/supabaseEnv"
+import { queueOfflineCheckout } from "@/offline/syncQueue"
+import { useOfflineSync } from "@/hooks/useOfflineSync"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { ordineIsAnnullato } from "@/utils/incassiFromOrdini"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
@@ -313,6 +316,7 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 export default function CassaPage() {
   const navigate = useNavigate()
   const { tenantId, tenantData, refreshTenant } = useTenant()
+  const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline } = useOfflineSync(tenantId)
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
   const pvLoading = pvCtx?.loading ?? false
@@ -1918,6 +1922,7 @@ export default function CassaPage() {
     const noteSnap = checkoutNote.trim()
     const fidelitySaldoSnap = selectedFidelitySaldo
     let telemetryCtx = null
+    let pendingOfflinePayload = null
     try {
       setLoading(true)
       telemetryCtx = markCheckoutStart()
@@ -2034,12 +2039,10 @@ export default function CassaPage() {
       }
       bypassFuoriAreaCheckRef.current = false
 
-      const orderId = await createOrder(tenantId, {
+      pendingOfflinePayload = {
+        tenant_id: tenantId,
         totale: totalCheckout,
         stato: ORDER_STATUS,
-        puntoVenditaId: activePvId || undefined,
-        turnoOperatoriId:
-          turnoCassa?.id != null && Number.isFinite(Number(turnoCassa.id)) ? Number(turnoCassa.id) : undefined,
         items: cart.map((p) => ({
           prodotto_id: p.id,
           quantita: p.qty,
@@ -2047,6 +2050,28 @@ export default function CassaPage() {
           formatoNome: p.formatoNome ?? undefined,
           ingredientiCotturaSummary: p.ingredientiCotturaSummary ?? undefined,
         })),
+        note: noteForOrder,
+        tipoPagamento: tipoPagamentoFinale || undefined,
+        tipoOrdine: tipoOrdine || undefined,
+        nomeCliente: nomeCliente || undefined,
+        orarioRitiro: orarioRitiro || undefined,
+        indirizzoConsegna: indirizzoConsegna || undefined,
+        consegnaLng,
+        consegnaLat,
+        pagamentoDettaglio,
+        telefonoRitiro: telefonoRitiroNegozio || undefined,
+        punto_vendita_id: activePvId || undefined,
+        turno_operatori_id:
+          turnoCassa?.id != null && Number.isFinite(Number(turnoCassa.id)) ? Number(turnoCassa.id) : undefined,
+      }
+
+      const orderId = await createOrder(tenantId, {
+        totale: totalCheckout,
+        stato: ORDER_STATUS,
+        puntoVenditaId: activePvId || undefined,
+        turnoOperatoriId:
+          turnoCassa?.id != null && Number.isFinite(Number(turnoCassa.id)) ? Number(turnoCassa.id) : undefined,
+        items: pendingOfflinePayload.items,
         note: noteForOrder,
         tipoPagamento: tipoPagamentoFinale || undefined,
         tipoOrdine: tipoOrdine || undefined,
@@ -2230,6 +2255,30 @@ export default function CassaPage() {
       }
     } catch (err) {
       console.error("Errore checkout:", err)
+      const networkFail =
+        isAuthFetchNetworkFailure(err) ||
+        (typeof navigator !== "undefined" && !navigator.onLine)
+      if (networkFail && pendingOfflinePayload) {
+        try {
+          await queueOfflineCheckout(pendingOfflinePayload)
+          setCheckoutError(
+            "Rete assente: ordine accodato localmente. Verrà inviato automaticamente al ripristino della connessione.",
+          )
+          markCheckoutEnd(telemetryCtx, {
+            ok: false,
+            tenantId,
+            errorMessage: "offline_queued",
+          })
+          void logCassaAuditEvent(tenantId, {
+            ordineId: null,
+            eventType: "checkout_offline_queued",
+            payload: { totale: pendingOfflinePayload.totale },
+          })
+          return
+        } catch (queueErr) {
+          console.error("Coda offline fallita:", queueErr)
+        }
+      }
       setCheckoutError(err?.message ?? "Errore durante il checkout. Verifica la RPC create_order_with_items e le colonne note/tipo_pagamento.")
       markCheckoutEnd(telemetryCtx, {
         ok: false,

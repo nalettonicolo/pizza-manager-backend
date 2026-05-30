@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
-import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { useMagazzinoFornitoriStorage } from "@/features/admin/hooks/useMagazzinoFornitoriStorage";
 
 const emptyFornitore = () => ({
   id: newLocalId(),
@@ -37,15 +38,16 @@ const cellInput = {
 };
 
 export default function OrdiniFornitoriPage() {
-  const { data, setData, ready } = useTenantLocalJson("magazzino_fornitori", { fornitori: [] });
+  const { fornitori, addFornitore: persistFornitore, updateFornitore, removeFornitore, ready, backend } =
+    useMagazzinoFornitoriStorage();
   const [selectedId, setSelectedId] = useState(null);
   const [draft, setDraft] = useState(emptyFornitore);
   const [editingListino, setEditingListino] = useState(emptyListinoRow);
   const [showForm, setShowForm] = useState(false);
 
   const selected = useMemo(
-    () => data.fornitori.find((f) => f.id === selectedId) || null,
-    [data.fornitori, selectedId],
+    () => fornitori.find((f) => f.id === selectedId) || null,
+    [fornitori, selectedId],
   );
 
   if (!ready) {
@@ -53,17 +55,23 @@ export default function OrdiniFornitoriPage() {
   }
 
   function addFornitore() {
-    const row = { ...draft, nome: draft.nome.trim() || "Fornitore senza nome" };
-    setData((d) => ({ ...d, fornitori: [...d.fornitori, row] }));
-    setDraft(emptyFornitore());
-    setShowForm(false);
-    setSelectedId(row.id);
+    const row = { ...draft, nome: draft.nome.trim() || "Fornitore senza nome", listino: [] };
+    void persistFornitore(row).then((saved) => {
+      setDraft(emptyFornitore());
+      setShowForm(false);
+      setSelectedId(saved.id);
+    });
   }
 
-  function removeFornitore(id) {
+  function removeFornitoreHandler(id) {
     if (!window.confirm("Eliminare questo fornitore e il suo listino?")) return;
-    setData((d) => ({ ...d, fornitori: d.fornitori.filter((f) => f.id !== id) }));
+    void removeFornitore(id);
     if (selectedId === id) setSelectedId(null);
+  }
+
+  function patchSelectedFornitore(patchFn) {
+    if (!selected) return;
+    void updateFornitore(patchFn(selected));
   }
 
   function addListinoRow() {
@@ -74,22 +82,14 @@ export default function OrdiniFornitoriPage() {
       prezzoUnitario: Number(editingListino.prezzoUnitario) || 0,
       qtyMinimaRiordino: Number(editingListino.qtyMinimaRiordino) || 0,
     };
-    setData((d) => ({
-      ...d,
-      fornitori: d.fornitori.map((f) =>
-        f.id === selected.id ? { ...f, listino: [...f.listino, row] } : f,
-      ),
-    }));
+    patchSelectedFornitore((f) => ({ ...f, listino: [...f.listino, row] }));
     setEditingListino(emptyListinoRow());
   }
 
   function removeListinoRow(fId, rowId) {
-    setData((d) => ({
-      ...d,
-      fornitori: d.fornitori.map((f) =>
-        f.id === fId ? { ...f, listino: f.listino.filter((r) => r.id !== rowId) } : f,
-      ),
-    }));
+    const f = fornitori.find((x) => x.id === fId)
+    if (!f) return
+    void updateFornitore({ ...f, listino: f.listino.filter((r) => r.id !== rowId) })
   }
 
   return (
@@ -160,7 +160,7 @@ export default function OrdiniFornitoriPage() {
             </div>
           ) : null}
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {data.fornitori.map((f) => (
+            {fornitori.map((f) => (
               <li key={f.id} style={{ marginBottom: 8 }}>
                 <button
                   type="button"
@@ -184,7 +184,7 @@ export default function OrdiniFornitoriPage() {
               </li>
             ))}
           </ul>
-          {data.fornitori.length === 0 ? (
+          {fornitori.length === 0 ? (
             <p style={{ fontSize: 13, color: "#94a3b8" }}>Nessun fornitore. Aggiungi il primo con «Nuovo».</p>
           ) : null}
         </div>
@@ -199,7 +199,7 @@ export default function OrdiniFornitoriPage() {
                   <h2 style={{ margin: "0 0 4px 0", fontSize: 16, color: "#0f172a" }}>{selected.nome}</h2>
                   <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>{selected.note || "—"}</p>
                 </div>
-                <button type="button" className="btn-logout btn-logout-red" style={{ fontSize: 12 }} onClick={() => removeFornitore(selected.id)}>
+                <button type="button" className="btn-logout btn-logout-red" style={{ fontSize: 12 }} onClick={() => removeFornitoreHandler(selected.id)}>
                   Elimina
                 </button>
               </div>

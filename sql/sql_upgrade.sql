@@ -210,3 +210,112 @@ COMMENT ON COLUMN public.staff_archivio_dipendenti.data_cessazione IS
   'Data fine rapporto di lavoro (cessazione), se applicabile.';
 COMMENT ON COLUMN public.staff_archivio_dipendenti.scheda_disabilitata IS
   'Se true la scheda HR è considerata non attiva (es. archivio storico) senza eliminare i dati.';
+
+-- -----------------------------------------------------------------------------
+-- 2026-05-30 — Modulo 14: magazzino fornitori + DDT
+-- (contenuto: sql/modules/14_magazzino_fornitori_ddt.sql)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.magazzino_fornitori (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'grossista',
+  note TEXT DEFAULT '',
+  listino JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_magazzino_fornitori_tenant ON public.magazzino_fornitori(tenant_id, nome);
+
+CREATE TABLE IF NOT EXISTS public.magazzino_ddt (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  numero TEXT NOT NULL,
+  data_doc DATE NOT NULL,
+  fornitore TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_magazzino_ddt_tenant ON public.magazzino_ddt(tenant_id, data_doc DESC);
+
+ALTER TABLE public.magazzino_fornitori ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.magazzino_ddt ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "magazzino_fornitori_staff_all" ON public.magazzino_fornitori;
+CREATE POLICY "magazzino_fornitori_staff_all" ON public.magazzino_fornitori
+  FOR ALL
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "magazzino_ddt_staff_all" ON public.magazzino_ddt;
+CREATE POLICY "magazzino_ddt_staff_all" ON public.magazzino_ddt
+  FOR ALL
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_fornitori TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_ddt TO authenticated;
+
+-- -----------------------------------------------------------------------------
+-- 2026-05-30 — Fiscal outbox: claim batch per worker Edge (Blocco C1)
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.claim_fiscal_outbox_batch(p_limit INTEGER DEFAULT 20)
+RETURNS SETOF public.fiscal_outbox
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core
+AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE public.fiscal_outbox fo
+  SET
+    status = 'processing',
+    attempt_count = fo.attempt_count + 1,
+    updated_at = now()
+  WHERE fo.id IN (
+    SELECT f.id
+    FROM public.fiscal_outbox f
+    WHERE f.status IN ('pending', 'failed')
+      AND (f.next_retry_at IS NULL OR f.next_retry_at <= now())
+    ORDER BY f.created_at ASC
+    LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 20), 100))
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING fo.*;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.claim_fiscal_outbox_batch(INTEGER) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.complete_fiscal_outbox_item(
+  p_id UUID,
+  p_status TEXT,
+  p_provider_response JSONB DEFAULT NULL,
+  p_last_error TEXT DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.fiscal_outbox
+  SET
+    status = p_status,
+    provider_response = COALESCE(p_provider_response, provider_response),
+    last_error = p_last_error,
+    updated_at = now(),
+    acknowledged_at = CASE WHEN p_status IN ('sent', 'ack') THEN now() ELSE acknowledged_at END,
+    next_retry_at = CASE
+      WHEN p_status = 'failed' THEN now() + interval '5 minutes' * power(2, least(attempt_count, 6))
+      ELSE next_retry_at
+    END
+  WHERE id = p_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.complete_fiscal_outbox_item(UUID, TEXT, JSONB, TEXT) TO service_role;
+

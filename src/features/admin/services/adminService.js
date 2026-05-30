@@ -279,6 +279,116 @@ export async function createOrder(tenantId, payload) {
   return data
 }
 
+/** True se le tabelle fornitori/DDT magazzino sono esposte a PostgREST. */
+export async function magazzinoFornitoriTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("magazzino_fornitori").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function magazzinoDdtTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("magazzino_ddt").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+function mapDbFornitoreToUi(row) {
+  return {
+    id: row.id,
+    nome: row.nome || "",
+    tipo: row.tipo || "grossista",
+    note: row.note || "",
+    listino: Array.isArray(row.listino) ? row.listino : [],
+  }
+}
+
+export async function listMagazzinoFornitori(tenantId) {
+  const { data, error } = await supabase
+    .from("magazzino_fornitori")
+    .select("id, nome, tipo, note, listino")
+    .eq("tenant_id", tenantId)
+    .order("nome", { ascending: true })
+  if (error) throw error
+  return (data || []).map(mapDbFornitoreToUi)
+}
+
+export async function upsertMagazzinoFornitore(tenantId, fornitore) {
+  const payload = {
+    tenant_id: tenantId,
+    nome: fornitore.nome || "Fornitore",
+    tipo: fornitore.tipo || "grossista",
+    note: fornitore.note || "",
+    listino: fornitore.listino || [],
+    updated_at: new Date().toISOString(),
+  }
+  if (fornitore.id) {
+    const { data, error } = await supabase
+      .from("magazzino_fornitori")
+      .update(payload)
+      .eq("id", fornitore.id)
+      .eq("tenant_id", tenantId)
+      .select("id, nome, tipo, note, listino")
+      .single()
+    if (error) throw error
+    return mapDbFornitoreToUi(data)
+  }
+  const { data, error } = await supabase
+    .from("magazzino_fornitori")
+    .insert(payload)
+    .select("id, nome, tipo, note, listino")
+    .single()
+  if (error) throw error
+  return mapDbFornitoreToUi(data)
+}
+
+export async function deleteMagazzinoFornitore(tenantId, id) {
+  const { error } = await supabase.from("magazzino_fornitori").delete().eq("id", id).eq("tenant_id", tenantId)
+  if (error) throw error
+}
+
+function mapDbDdtToUi(row) {
+  return {
+    id: row.id,
+    numero: row.numero,
+    data: row.data_doc,
+    fornitore: row.fornitore || "",
+    note: row.note || "",
+  }
+}
+
+export async function listMagazzinoDdt(tenantId, opts = {}) {
+  const { limit = 200 } = opts
+  const { data, error } = await supabase
+    .from("magazzino_ddt")
+    .select("id, numero, data_doc, fornitore, note")
+    .eq("tenant_id", tenantId)
+    .order("data_doc", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map(mapDbDdtToUi)
+}
+
+export async function insertMagazzinoDdt(tenantId, row) {
+  const { data, error } = await supabase
+    .from("magazzino_ddt")
+    .insert({
+      tenant_id: tenantId,
+      numero: row.numero,
+      data_doc: row.data,
+      fornitore: row.fornitore || "",
+      note: row.note || "",
+    })
+    .select("id, numero, data_doc, fornitore, note")
+    .single()
+  if (error) throw error
+  return mapDbDdtToUi(data)
+}
+
+export async function deleteMagazzinoDdt(tenantId, id) {
+  const { error } = await supabase.from("magazzino_ddt").delete().eq("id", id).eq("tenant_id", tenantId)
+  if (error) throw error
+}
+
 /** Aggiorna lo stato di un ordine (es. IN_PREPARAZIONE → PRONTO). */
 export async function updateOrderStato(ordineId, stato) {
   if (nestOperativeWritesEnabled()) {

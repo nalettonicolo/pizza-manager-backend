@@ -31,6 +31,7 @@ const magazzinoSidebarItems = [
   { to: "/admin/magazzino", label: "Panoramica" },
   { to: "/admin/magazzino/ordini-fornitori", label: "Ordini fornitori" },
   { to: "/admin/magazzino/ddt", label: "DDT" },
+  { to: "/admin/magazzino/movimenti-db", label: "Movimenti (DB)" },
 ];
 
 const contabilitaSidebarItems = [

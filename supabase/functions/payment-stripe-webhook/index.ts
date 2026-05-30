@@ -9,18 +9,23 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   const whSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") || ""
+  const isProd = Boolean(Deno.env.get("DENO_DEPLOYMENT_ID") || Deno.env.get("SUPABASE_URL")?.includes(".supabase.co"))
 
   const body = await req.text()
   const sig = req.headers.get("stripe-signature") || ""
 
   let event: Stripe.Event
   try {
-    if (whSecret) {
-      const stripe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
-      event = stripe.webhooks.constructEvent(body, sig, whSecret)
-    } else {
+    if (!whSecret) {
+      if (isProd) {
+        console.error("STRIPE_WEBHOOK_SECRET mancante in produzione")
+        return new Response("Webhook non configurato", { status: 503 })
+      }
       event = JSON.parse(body) as Stripe.Event
       console.warn("STRIPE_WEBHOOK_SECRET mancante: evento non verificato (solo dev)")
+    } else {
+      const stripe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
+      event = stripe.webhooks.constructEvent(body, sig, whSecret)
     }
   } catch (e) {
     console.error("webhook signature", e)

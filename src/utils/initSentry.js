@@ -1,6 +1,6 @@
 /**
  * Inizializzazione opzionale Sentry (solo se `import.meta.env.VITE_SENTRY_DSN` è valorizzato).
- * Non inviare PII né `tenant_id` senza consenso/privacy assessment: usare `beforeSend` in produzione.
+ * Filtra PII evidenti; non inviare email/nome cliente in beforeSend.
  */
 export async function initSentry() {
   const dsn =
@@ -16,8 +16,28 @@ export async function initSentry() {
     Sentry.init({
       dsn,
       environment: env,
-      // Estendere con integrations (tracing/replay) e beforeSend filtri privacy quando serve.
+      tracesSampleRate: import.meta.env.PROD ? 0.1 : 0,
+      beforeSend(event) {
+        if (event.user?.email) delete event.user.email
+        if (event.user?.username) delete event.user.username
+        return event
+      },
     })
+
+    if (typeof window !== "undefined" && typeof window.__CASSA_TELEMETRY_HOOK__ !== "function") {
+      window.__CASSA_TELEMETRY_HOOK__ = (payload) => {
+        Sentry.addBreadcrumb({
+          category: "cassa",
+          message: payload.ok ? "checkout_ok" : "checkout_err",
+          level: payload.ok ? "info" : "warning",
+          data: {
+            duration_ms: payload.durationMs,
+            tenant_id: payload.tenantId,
+            ordine_id: payload.ordineId,
+          },
+        })
+      }
+    }
   } catch (e) {
     console.warn("[initSentry] @sentry/react non disponibile", e)
   }
