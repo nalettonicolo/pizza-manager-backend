@@ -1,5 +1,5 @@
-ï»¿-- =============================================================================
--- PizzaManager â€” SCHEMA SQL COMPLETO (baseline unificato)
+-- =============================================================================
+-- PizzaManager — SCHEMA SQL COMPLETO (baseline unificato)
 -- =============================================================================
 -- Contenuto: ex supabase/migrations/*.sql consolidate in un unico file, in ordine:
 --   1) 20260220171734_remote_schema.sql (snapshot Supabase)
@@ -8,9 +8,9 @@
 --   4) delivery / turni cassa / ordine / audit / Stripe / rider / vista Ordine / policy anon
 --
 -- Modifiche successive al baseline: solo sql/sql_upgrade.sql (idempotente).
--- Cartella supabase/migrations/ non contiene piÃ¹ file SQL (usare sql_upgrade o rigenerare snapshot).
+-- Cartella supabase/migrations/ non contiene più file SQL (usare sql_upgrade o rigenerare snapshot).
 --
--- In coda: blocco "CONSOLIDAMENTO sql/modules" (contabilitÃ , magazzino, fiscal/payment,
+-- In coda: blocco "CONSOLIDAMENTO sql/modules" (contabilità, magazzino, fiscal/payment,
 -- 14_magazzino_fornitori_ddt, RPC claim fiscal outbox, estensioni core.punti_vendita,
 -- vista Ordine / ingredienti prep_cucina, delivery_mark_consegnato).
 -- I file sotto sql/modules/ restano copie di lavoro; fonte operativa unica: questo file + sql_upgrade.
@@ -252,7 +252,7 @@ DECLARE
   v_order_id uuid;
 BEGIN
 
-  -- 1ï¸âƒ£ Crea ordine
+  -- 1?? Crea ordine
   INSERT INTO core.ordini (
     tenant_id,
     totale,
@@ -265,7 +265,7 @@ BEGIN
   )
   RETURNING id INTO v_order_id;
 
-  -- 2ï¸âƒ£ Inserisci order_items (validando tenant)
+  -- 2?? Inserisci order_items (validando tenant)
   INSERT INTO core.order_items (
     tenant_id,
     ordine_id,
@@ -308,17 +308,17 @@ declare
     v_pos_id uuid;
 begin
 
-    -- 1ï¸âƒ£ Create tenant
+    -- 1?? Create tenant
     insert into core.tenants (name, domain)
     values (p_tenant_name, p_domain)
     returning id into v_tenant_id;
 
-    -- 2ï¸âƒ£ Create subscription
+    -- 2?? Create subscription
     insert into core.subscriptions (tenant_id, plan)
     values (v_tenant_id, p_plan)
     returning id into v_subscription_id;
 
-    -- 3ï¸âƒ£ Create default roles
+    -- 3?? Create default roles
 
     insert into core.roles (tenant_id, name, is_system, is_superadmin)
     values (v_tenant_id, 'SuperAdmin', true, true)
@@ -332,13 +332,13 @@ begin
     values (v_tenant_id, 'Operatore', true)
     returning id into v_operator_role_id;
 
-    -- 4ï¸âƒ£ Create default POS
+    -- 4?? Create default POS
 
     insert into core.points_of_sale (tenant_id, name, address)
     values (v_tenant_id, 'Sede Principale', 'Da configurare')
     returning id into v_pos_id;
 
-    -- 5ï¸âƒ£ Create user profile
+    -- 5?? Create user profile
 
     insert into core.user_profiles (
         user_id,
@@ -353,7 +353,7 @@ begin
         p_owner_full_name
     );
 
-    -- 6ï¸âƒ£ Assign SuperAdmin role to owner
+    -- 6?? Assign SuperAdmin role to owner
 
     insert into core.user_roles (
         user_id,
@@ -1393,11 +1393,11 @@ begin
   values (p_tenant_id, 'Pizzaiolo', 'Operatore cucina', true)
   returning id into v_pizzaiolo;
 
-  -- Admin â†’ tutti i permessi
+  -- Admin ? tutti i permessi
   insert into public.ruoli_permessi (ruolo_id, permesso_id)
   select v_admin, id from public.permessi;
 
-  -- Manager â†’ subset
+  -- Manager ? subset
   insert into public.ruoli_permessi (ruolo_id, permesso_id)
   select v_manager, id
   from public.permessi
@@ -1408,7 +1408,7 @@ begin
     'dashboard.analytics'
   );
 
-  -- Pizzaiolo â†’ solo ordini
+  -- Pizzaiolo ? solo ordini
   insert into public.ruoli_permessi (ruolo_id, permesso_id)
   select v_pizzaiolo, id
   from public.permessi
@@ -1471,7 +1471,7 @@ BEGIN
     -- ==========================
     IF TG_OP = 'INSERT' THEN
 
-        -- Se qualcuno prova a forzare un tenant diverso â†’ blocca
+        -- Se qualcuno prova a forzare un tenant diverso ? blocca
         IF NEW.tenant_id IS NOT NULL
            AND NEW.tenant_id IS DISTINCT FROM v_current_tenant THEN
 
@@ -1687,7 +1687,7 @@ BEGIN
     RAISE EXCEPTION 'Totale ordine non valido: %', p_totale;
   END IF;
 
-  -- Inserisce lâ€™ordine
+  -- Inserisce l’ordine
   INSERT INTO ordini (
     utente_id,
     ruolo_creazione,
@@ -1944,7 +1944,7 @@ CREATE OR REPLACE FUNCTION "public"."set_numero_ordine"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
-    -- Se numero_ordine Ã¨ giÃ  valorizzato non lo tocca
+    -- Se numero_ordine è già valorizzato non lo tocca
     IF NEW.numero_ordine IS NULL THEN
         NEW.numero_ordine := genera_numero_ordine(NEW.punto_vendita_id);
     END IF;
@@ -6114,7 +6114,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 -- ---------- END: supabase/migrations/20260220171734_remote_schema.sql ----------
 
 -- ---------- BEGIN: supabase/migrations/20260405120000_superadmin_registratore_state.sql ----------
--- Registratore cassa Super Admin â€” stato persistente (JSON) per utente, RLS solo superadmin.
+-- Registratore cassa Super Admin — stato persistente (JSON) per utente, RLS solo superadmin.
 -- Esegui dopo public.utenti_ruoli (ruolo superadmin).
 
 CREATE TABLE IF NOT EXISTS public.superadmin_registratore_state (
@@ -6166,7 +6166,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.superadmin_registratore_state TO 
 -- Registratore Super Admin: revisione monotona (multi-scheda, ultima scrittura vince al save)
 -- + audit append-only (nessun UPDATE/DELETE da client).
 
--- 1) Colonna revision (idempotente su DB giÃ  migrati senza colonna)
+-- 1) Colonna revision (idempotente su DB già migrati senza colonna)
 ALTER TABLE public.superadmin_registratore_state
   ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 1;
 
@@ -6266,7 +6266,7 @@ CREATE TRIGGER tr_superadmin_registratore_audit_aiu
 -- ---------- BEGIN: supabase/migrations/20260406100000_post_remote_schema_unified.sql ----------
 -- Incrementale post-baseline (unica migration consolidata). Delta manuale corrente: sql/sql_upgrade.sql
 -- =============================================================================
--- PizzaManager â€” Tutte le migration incrementali unificate (post remote_schema)
+-- PizzaManager — Tutte le migration incrementali unificate (post remote_schema)
 -- Copia speculare: supabase/migrations/20260406100000_post_remote_schema_unified.sql
 -- Fonte unica per: SQL Editor manuale + supabase db push (dopo il baseline).
 --
@@ -6279,7 +6279,7 @@ CREATE TRIGGER tr_superadmin_registratore_audit_aiu
 --   6) Fidelity Card + parametri consegna/domicilio
 --
 -- Prerequisito: eseguire prima supabase/migrations/20260220171734_remote_schema.sql
---   (o DB giÃ  allineato a quello snapshot).
+--   (o DB già allineato a quello snapshot).
 --
 -- I marcatori -- >>> BEGIN / <<< END indicano la provenienza storica dei blocchi
 -- (file migration originali rimossi; non rieseguire quei path come file separati).
@@ -6287,16 +6287,16 @@ CREATE TRIGGER tr_superadmin_registratore_audit_aiu
 
 -- >>> BEGIN: supabase/migrations/20260402100000_pizzamanager_unified_incremental.sql
 -- =============================================================================
--- PizzaManager â€” SQL UNIFICATO incrementale (idempotente)
--- Generato: consolidamento migrazioni 202502â€“202603 (storico); nuovi delta: sql/sql_upgrade.sql
+-- PizzaManager — SQL UNIFICATO incrementale (idempotente)
+-- Generato: consolidamento migrazioni 202502–202603 (storico); nuovi delta: sql/sql_upgrade.sql
 --
 -- Ordine: dopo il dump Supabase (supabase/migrations/20260220171734_remote_schema.sql)
---         oppure su DB giÃ  allineato. Sicuro da rieseguire (IF NOT EXISTS / blocchi DO).
+--         oppure su DB già allineato. Sicuro da rieseguire (IF NOT EXISTS / blocchi DO).
 --
 -- Non include il dump remoto completo: resta il file separato remote_schema.
 -- =============================================================================
 -- ============================================
--- PIZZAMANAGER â€“ RLS e indici enterprise
+-- PIZZAMANAGER – RLS e indici enterprise
 -- Eseguire su Supabase (schema public o core)
 -- ============================================
 
@@ -6331,7 +6331,7 @@ CREATE INDEX IF NOT EXISTS idx_prodotti_tenant_id ON prodotti(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_ingredienti_tenant_id ON ingredienti(tenant_id);
 
 -- ============================================
--- RLS (Row Level Security) â€“ esempio
+-- RLS (Row Level Security) – esempio
 -- Sblocca RLS sulle tabelle e crea policy per tenant
 -- ============================================
 
@@ -6344,15 +6344,15 @@ CREATE INDEX IF NOT EXISTS idx_ingredienti_tenant_id ON ingredienti(tenant_id);
 --   FOR ALL
 --   USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
--- Nota: con backend Node/Nest che fa le query, spesso RLS non Ã¨ usato e lâ€™isolamento
--- Ã¨ garantito dal middleware che inietta sempre tenantId nelle query.
+-- Nota: con backend Node/Nest che fa le query, spesso RLS non è usato e l’isolamento
+-- è garantito dal middleware che inietta sempre tenantId nelle query.
 -- Se usi Supabase Client dal frontend, abilita RLS e imposta app.current_tenant_id.
 
 
 -- ============================================================
--- PIZZAMANAGER â€“ FULL DATABASE ENTERPRISE
--- Multi-tenant SaaS â€“ Schema: core
--- Idempotente â€“ Sicuro da rieseguire
+-- PIZZAMANAGER – FULL DATABASE ENTERPRISE
+-- Multi-tenant SaaS – Schema: core
+-- Idempotente – Sicuro da rieseguire
 -- ============================================================
 
 -- ============================================================
@@ -6492,7 +6492,7 @@ CREATE TABLE IF NOT EXISTS core.prodotti (
 );
 
 -- ============================================================
--- PRODOTTO â†” INGREDIENTE
+-- PRODOTTO ? INGREDIENTE
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS core.prodotto_ingrediente (
@@ -6536,8 +6536,8 @@ CREATE TABLE IF NOT EXISTS core.riga_ordine (
 );
 
 -- ============================================================
--- AGGIUNGI deleted_at SE MANCA (DB giÃ  esistenti / vecchie run)
--- CosÃ¬ gli indici parziali WHERE deleted_at IS NULL funzionano.
+-- AGGIUNGI deleted_at SE MANCA (DB già esistenti / vecchie run)
+-- Così gli indici parziali WHERE deleted_at IS NULL funzionano.
 -- ============================================================
 
 ALTER TABLE core.tenants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
@@ -6565,7 +6565,7 @@ CREATE INDEX IF NOT EXISTS idx_riga_ordine_tenant ON core.riga_ordine(tenant_id)
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_created ON core.audit_logs(tenant_id, created_at);
 
 -- ============================================================
--- RLS â€“ ISOLAMENTO MULTI-TENANT
+-- RLS – ISOLAMENTO MULTI-TENANT
 -- ============================================================
 
 ALTER TABLE core.tenants ENABLE ROW LEVEL SECURITY;
@@ -6783,13 +6783,13 @@ BEGIN
   COMMENT ON COLUMN core.tenants.codice_univoco_sdi IS 'Codice destinatario / SDI (fatturazione elettronica)';
   COMMENT ON COLUMN core.tenants.addebito_automatico_mensile IS 'Se true: addebito online automatico a cadenza mensile (es. primo del mese da data attivazione)';
   COMMENT ON COLUMN core.tenants.data_attivazione_abbonamento IS 'Data di riferimento per il ciclo di addebito mensile';
-  COMMENT ON COLUMN core.tenants.sconto_percentuale IS 'Sconto concordato sul canone (0â€“100)';
+  COMMENT ON COLUMN core.tenants.sconto_percentuale IS 'Sconto concordato sul canone (0–100)';
 END $$;
 
 
--- Super Admin usa `public.tenants`, che nel dump remoto Ã¨ una VISTA su `admin.tenants`.
+-- Super Admin usa `public.tenants`, che nel dump remoto è una VISTA su `admin.tenants`.
 -- La migrazione 20260322120000 aggiungeva le colonne solo su `core.tenants`: PostgREST
--- non le vedeva su `public.tenants` â†’ errore schema cache (es. addebito_automatico_mensile).
+-- non le vedeva su `public.tenants` ? errore schema cache (es. addebito_automatico_mensile).
 
 DO $$
 DECLARE
@@ -6815,7 +6815,7 @@ BEGIN
   SET slug = 'tenant-' || replace(t.id::text, '-', '')
   WHERE t.slug IS NULL OR btrim(t.slug) = '';
 
-  -- Stesso slug su piÃ¹ righe: suffisso deterministico da id (senza alterare la prima riga del gruppo).
+  -- Stesso slug su più righe: suffisso deterministico da id (senza alterare la prima riga del gruppo).
   UPDATE admin.tenants t
   SET slug = t.slug || '-' || substr(replace(t.id::text, '-', ''), 1, 8)
   WHERE t.id IN (
@@ -6835,18 +6835,18 @@ BEGIN
   COMMENT ON COLUMN admin.tenants.codice_univoco_sdi IS 'Codice destinatario / SDI (fatturazione elettronica)';
   COMMENT ON COLUMN admin.tenants.addebito_automatico_mensile IS 'Se true: addebito online automatico a cadenza mensile';
   COMMENT ON COLUMN admin.tenants.data_attivazione_abbonamento IS 'Data di riferimento per il ciclo di addebito mensile';
-  COMMENT ON COLUMN admin.tenants.sconto_percentuale IS 'Sconto concordato sul canone (0â€“100)';
+  COMMENT ON COLUMN admin.tenants.sconto_percentuale IS 'Sconto concordato sul canone (0–100)';
 
   SELECT c.relkind INTO relkind
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND c.relname = 'tenants';
 
-  -- CREATE OR REPLACE VIEW non puÃ² riallineare colonne se la vista esistente ha ordine/nomi diversi
-  -- (es. slug giÃ  in posizione 3 in produzione vs dump con solo piano) â†’ 42P16.
+  -- CREATE OR REPLACE VIEW non può riallineare colonne se la vista esistente ha ordine/nomi diversi
+  -- (es. slug già in posizione 3 in produzione vs dump con solo piano) ? 42P16.
   -- Ricreazione completa: DROP + CREATE. CASCADE solo se dipendenze da altre viste (raro su tenants).
   IF relkind = 'r' THEN
-    RAISE NOTICE 'public.tenants Ã¨ una tabella (relkind=r): non ricreare vista; verifica PostgREST.';
+    RAISE NOTICE 'public.tenants è una tabella (relkind=r): non ricreare vista; verifica PostgREST.';
   ELSIF relkind = 'v' OR relkind IS NULL THEN
     DROP VIEW IF EXISTS public.tenants CASCADE;
 
@@ -6935,7 +6935,7 @@ BEGIN
   WHERE n.nspname = 'public' AND c.relname = 'tenants';
 
   IF relkind = 'r' THEN
-    RAISE NOTICE 'public.tenants Ã¨ una tabella: salta ricreazione vista.';
+    RAISE NOTICE 'public.tenants è una tabella: salta ricreazione vista.';
     RETURN;
   END IF;
 
@@ -7016,10 +7016,10 @@ END $$;
 
 
 -- Dopo DROP/CREATE di public.tenants le migrazioni 20260322140000 / 20260322180000
--- concedevano solo a service_role â†’ PostgREST (anon/authenticated) riceve
+-- concedevano solo a service_role ? PostgREST (anon/authenticated) riceve
 -- "permission denied for view tenants".
 -- Con vista SECURITY INVOKER servono privilegi su public.tenants e sulla base admin.tenants,
--- piÃ¹ USAGE sullo schema admin.
+-- più USAGE sullo schema admin.
 
 DO $$
 BEGIN
@@ -7060,7 +7060,7 @@ BEGIN
   WHERE n.nspname = 'public' AND c.relname = 'tenants';
 
   IF relkind = 'r' THEN
-    RAISE NOTICE 'public.tenants Ã¨ una tabella: salta ricreazione vista.';
+    RAISE NOTICE 'public.tenants è una tabella: salta ricreazione vista.';
     RETURN;
   END IF;
 
@@ -7159,9 +7159,9 @@ BEGIN
 END $$;
 
 
--- La vista public.tenants con CASE su `piano` (â†’ core.piano_saas) NON Ã¨ aggiornabile automaticamente:
+-- La vista public.tenants con CASE su `piano` (? core.piano_saas) NON è aggiornabile automaticamente:
 -- UPDATE da app/PostgREST su colonne operative (logo_url, orari, ecc.) falliscono.
--- Vista semplice su admin.tenants (solo riferimenti a colonne) â†’ UPDATE/INSERT consentiti al ruolo con GRANT.
+-- Vista semplice su admin.tenants (solo riferimenti a colonne) ? UPDATE/INSERT consentiti al ruolo con GRANT.
 
 DO $$
 DECLARE
@@ -7178,7 +7178,7 @@ BEGIN
   WHERE n.nspname = 'public' AND c.relname = 'tenants';
 
   IF relkind = 'r' THEN
-    RAISE NOTICE 'public.tenants Ã¨ una tabella: salta.';
+    RAISE NOTICE 'public.tenants è una tabella: salta.';
     RETURN;
   END IF;
 
@@ -7246,7 +7246,7 @@ BEGIN
   WHERE n.nspname = 'public' AND c.relname = 'tenants';
 
   IF relkind = 'r' THEN
-    RAISE NOTICE 'public.tenants Ã¨ una tabella: salta ricreazione vista.';
+    RAISE NOTICE 'public.tenants è una tabella: salta ricreazione vista.';
     RETURN;
   END IF;
 
@@ -7372,7 +7372,7 @@ COMMENT ON FUNCTION public.get_public_menu_for_tenant(UUID) IS
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_public_menu_for_tenant(UUID) TO authenticated;
 
--- Categorie catalogo admin (core.categorie) per vetrina: allinea tab al nome/ordine reali anche se categoria_nome nel menu Ã¨ assente
+-- Categorie catalogo admin (core.categorie) per vetrina: allinea tab al nome/ordine reali anche se categoria_nome nel menu è assente
 CREATE OR REPLACE FUNCTION public.get_public_categories_for_tenant(p_tenant_id UUID)
 RETURNS TABLE (
   id UUID,
@@ -7444,7 +7444,7 @@ COMMENT ON FUNCTION public.get_public_menu_ingredient_names(UUID, UUID[]) IS
 GRANT EXECUTE ON FUNCTION public.get_public_menu_ingredient_names(UUID, UUID[]) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_public_menu_ingredient_names(UUID, UUID[]) TO authenticated;
 
--- URL del sito vetrina del cliente (es. Google Sites, sito istituzionale) â€” separato dal dominio PizzaManager.
+-- URL del sito vetrina del cliente (es. Google Sites, sito istituzionale) — separato dal dominio PizzaManager.
 
 DO $$
 BEGIN
@@ -7454,7 +7454,7 @@ BEGIN
   END IF;
 
   ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS sito_web_cliente text;
-  COMMENT ON COLUMN admin.tenants.sito_web_cliente IS 'URL completo del sito web del cliente (marketing, Google Sites, ecc.); non Ã¨ usato per la risoluzione tenant';
+  COMMENT ON COLUMN admin.tenants.sito_web_cliente IS 'URL completo del sito web del cliente (marketing, Google Sites, ecc.); non è usato per la risoluzione tenant';
 END $$;
 
 DO $$
@@ -7471,7 +7471,7 @@ BEGIN
   WHERE n.nspname = 'public' AND c.relname = 'tenants';
 
   IF relkind = 'r' THEN
-    RAISE NOTICE 'public.tenants Ã¨ una tabella: salta ricreazione vista.';
+    RAISE NOTICE 'public.tenants è una tabella: salta ricreazione vista.';
     RETURN;
   END IF;
 
@@ -7502,13 +7502,13 @@ END $$;
 
 
 -- =============================================================================
--- PizzaManager â€” SQL incrementale unificato (idempotente)
+-- PizzaManager — SQL incrementale unificato (idempotente)
 --
 -- PM-SQL-REF: UNIFIED-INCR-v1-2026-03-22
 -- PM-SQL-FP:   E7A4C91B2D804E6F9A1C5E8B3F0D2A74
 --
--- Uso: database giÃ  inizializzato (es. dopo schema bootstrap). Esegui in
--- Supabase â†’ SQL Editor. Non sostituisce sql/schema_completo_pizzamanager.sql.
+-- Uso: database già inizializzato (es. dopo schema bootstrap). Esegui in
+-- Supabase ? SQL Editor. Non sostituisce sql/schema_completo_pizzamanager.sql.
 --
 -- Contiene: visibile_online, viste public, colonne accesso aree, GRANT anon,
 --           pattern RLS/policy idempotenti dove applicabile.
@@ -7516,7 +7516,7 @@ END $$;
 
 
 -- -----------------------------------------------------------------------------
--- 1) core.prodotti â€” visibilitÃ  menu online
+-- 1) core.prodotti — visibilità menu online
 -- -----------------------------------------------------------------------------
 ALTER TABLE core.prodotti ADD COLUMN IF NOT EXISTS visibile_online BOOLEAN DEFAULT true;
 ALTER TABLE core.prodotti ADD COLUMN IF NOT EXISTS prep_cucina BOOLEAN NOT NULL DEFAULT false;
@@ -7592,7 +7592,7 @@ GRANT SELECT ON public.prodotti_menu_pubblico TO authenticated;
 
 
 -- -----------------------------------------------------------------------------
--- 4) public.utenti_ruoli â€” permessi aree operative (Admin â†’ Ruoli)
+-- 4) public.utenti_ruoli — permessi aree operative (Admin ? Ruoli)
 -- -----------------------------------------------------------------------------
 ALTER TABLE public.utenti_ruoli
   ADD COLUMN IF NOT EXISTS accesso_riepilogo BOOLEAN DEFAULT true,
@@ -7615,7 +7615,7 @@ ALTER TABLE public.utenti_ruoli
   ADD COLUMN IF NOT EXISTS nome_visualizzato TEXT;
 
 COMMENT ON COLUMN public.utenti_ruoli.nome_visualizzato IS
-  'Nome o etichetta del dipendente in sede (es. Anna), distinto dallâ€™account email; usabile per turni e report.';
+  'Nome o etichetta del dipendente in sede (es. Anna), distinto dall’account email; usabile per turni e report.';
 
 -- -----------------------------------------------------------------------------
 -- 5) Vista ruoli_pizzeria
@@ -7660,7 +7660,7 @@ GRANT SELECT ON public.prodotti_menu_pubblico TO authenticated;
 
 
 -- -----------------------------------------------------------------------------
--- 7) RLS â€” attivazione idempotente (senza sovrascrivere policy esistenti)
+-- 7) RLS — attivazione idempotente (senza sovrascrivere policy esistenti)
 -- -----------------------------------------------------------------------------
 ALTER TABLE public.utenti_ruoli ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clienti ENABLE ROW LEVEL SECURITY;
@@ -7671,11 +7671,11 @@ ALTER TABLE public.clienti ENABLE ROW LEVEL SECURITY;
 --   CREATE POLICY "nome_policy" ON public.utenti_ruoli FOR ... TO authenticated USING (...);
 --
 -- Le policy complete (anche con public.tenant_admins) sono in
--- sql/schema_completo_pizzamanager.sql â€” non duplicarle qui se il DB Ã¨ giÃ  allineato.
+-- sql/schema_completo_pizzamanager.sql — non duplicarle qui se il DB è già allineato.
 
 
 -- -----------------------------------------------------------------------------
--- 8) OPZIONALE â€” superadmin in utenti_ruoli (sostituisci UUID e tenant)
+-- 8) OPZIONALE — superadmin in utenti_ruoli (sostituisci UUID e tenant)
 -- -----------------------------------------------------------------------------
 -- INSERT INTO public.utenti_ruoli (user_id, ruolo, tenant_id, attivo)
 -- VALUES (
@@ -7697,7 +7697,7 @@ ALTER TABLE public.clienti ENABLE ROW LEVEL SECURITY;
 
 -- >>> BEGIN: supabase/migrations/20260403130000_staff_password_note_tenant_admin.sql
 -- Nota password accesso dipendenti: solo tenant admin (tenant_admins), non leggibile dagli altri utenti.
--- Non Ã¨ la password reale in auth.users: Ã¨ un archivio opzionale che il titolare aggiorna quando crea/resetta lâ€™accesso.
+-- Non è la password reale in auth.users: è un archivio opzionale che il titolare aggiorna quando crea/resetta l’accesso.
 
 CREATE TABLE IF NOT EXISTS public.staff_password_note (
   user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
@@ -7805,16 +7805,16 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_auth_user();
 
-COMMENT ON FUNCTION public.handle_new_auth_user() IS 'Crea/aggiorna public.clienti da raw_user_meta_data (tenant_id, nome, â€¦) o match anagrafica_clienti se esiste.';
+COMMENT ON FUNCTION public.handle_new_auth_user() IS 'Crea/aggiorna public.clienti da raw_user_meta_data (tenant_id, nome, …) o match anagrafica_clienti se esiste.';
 
 -- <<< END: supabase/migrations/20260403150000_clienti_auth_trigger_and_columns.sql
 
 -- >>> BEGIN: supabase/migrations/20260404120000_staff_password_superadmin_ruoli_pizzeria.sql
 -- Super Admin: lettura ruoli di qualsiasi tenant (vista ruoli_pizzeria) e gestione staff_password_note.
--- Il Super Admin Ã¨ identificato da public.utenti_ruoli (ruolo = 'superadmin', attivo).
+-- Il Super Admin è identificato da public.utenti_ruoli (ruolo = 'superadmin', attivo).
 
 -- -----------------------------------------------------------------------------
--- 1) Vista ruoli_pizzeria: include tutte le righe se l'utente corrente Ã¨ superadmin
+-- 1) Vista ruoli_pizzeria: include tutte le righe se l'utente corrente è superadmin
 -- -----------------------------------------------------------------------------
 DROP VIEW IF EXISTS public.ruoli_pizzeria CASCADE;
 
@@ -7894,33 +7894,33 @@ COMMENT ON TABLE public.staff_password_note IS 'Nota password accesso staff (arc
 
 -- >>> BEGIN: sql/PM_LATEST_IMPLEMENTATIONS.sql
 -- =============================================================================
--- PizzaManager â€” Ultime implementazioni SQL (consolidato)
+-- PizzaManager — Ultime implementazioni SQL (consolidato)
 -- Data riferimento: 2026-04 (agg. replace_order_items + note dipendenti 2026-04-11)
 --
 -- Contenuto (idempotente dove possibile):
---   1) public.staff_password_note â€” archivio note password staff (Admin Ruoli)
---   2) RLS staff_password_note â€” tenant_admins OPPURE superadmin (utenti_ruoli)
---   3) Vista public.ruoli_pizzeria â€” superadmin vede tutti i tenant
---   4) subscriptions â€” ciclo_fatturazione_giorni + sconto_annuale_percent (public e/o core)
---   5) core.ordini â€” colonne cassa / ordine cliente (note, pagamento, tipo, ritiroâ€¦)
---   6) core.riga_ordine â€” formato_nome, ingredienti_cottura_summary (comanda / cassa)
---   7) public.create_order_with_items â€” RPC allineata a adminService (Supabase JS)
---   8) public.replace_order_items â€” sostituisce righe ordine (modifica cassa; adminService.replaceOrderItems)
+--   1) public.staff_password_note — archivio note password staff (Admin Ruoli)
+--   2) RLS staff_password_note — tenant_admins OPPURE superadmin (utenti_ruoli)
+--   3) Vista public.ruoli_pizzeria — superadmin vede tutti i tenant
+--   4) subscriptions — ciclo_fatturazione_giorni + sconto_annuale_percent (public e/o core)
+--   5) core.ordini — colonne cassa / ordine cliente (note, pagamento, tipo, ritiro…)
+--   6) core.riga_ordine — formato_nome, ingredienti_cottura_summary (comanda / cassa)
+--   7) public.create_order_with_items — RPC allineata a adminService (Supabase JS)
+--   8) public.replace_order_items — sostituisce righe ordine (modifica cassa; adminService.replaceOrderItems)
 --
--- App (senza DDL qui): Admin Magazzino/ContabilitÃ  usa ancora localStorage per tenant;
---   parametri_operativi (JSON su tenants) â€” comanda / cassa (CassaImpostazioniPage + printComanda.js):
---   comanda_copie, comanda_font_size (px 8â€“28), comanda_titolo_scale, comanda_qty_scale,
+-- App (senza DDL qui): Admin Magazzino/Contabilità usa ancora localStorage per tenant;
+--   parametri_operativi (JSON su tenants) — comanda / cassa (CassaImpostazioniPage + printComanda.js):
+--   comanda_copie, comanda_font_size (px 8–28), comanda_titolo_scale, comanda_qty_scale,
 --   comanda_dettaglio_scale, comanda_line_height, comanda_margin_mm, comanda_width_mm,
 --   comanda_font_family (system|sans|mono|serif), comanda_mostra_id_ordine, comanda_mostra_pagamento,
 --   comanda_mostra_dest_stampanti, comanda_stampanti[], comanda_stampa_auto;
---   piÃ¹ ritiro_ogni_min, pizze_ogni_15_min, consegne_ogni_min, â€¦
+--   più ritiro_ogni_min, pizze_ogni_15_min, consegne_ogni_min, …
 --
 -- Prerequisiti tipici: public.utenti_ruoli, public.tenant_admins, auth.users,
 --   core.tenants (FK su staff_password_note). Esegui su Supabase (SQL Editor) o CLI.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- 1â€“2) Tabella + RLS staff_password_note (admin tenant + superadmin piattaforma)
+-- 1–2) Tabella + RLS staff_password_note (admin tenant + superadmin piattaforma)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.staff_password_note (
   user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
@@ -7973,7 +7973,7 @@ CREATE POLICY "staff_password_note_tenant_admin_all" ON public.staff_password_no
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.staff_password_note TO authenticated;
 
 COMMENT ON TABLE public.staff_password_note IS
-  'Nota password accesso staff (archivio titolare). RLS: tenant_admins del tenant o superadmin (utenti_ruoli). Non Ã¨ la password Auth.';
+  'Nota password accesso staff (archivio titolare). RLS: tenant_admins del tenant o superadmin (utenti_ruoli). Non è la password Auth.';
 
 -- -----------------------------------------------------------------------------
 -- 3) Vista ruoli_pizzeria: superadmin vede tutti gli staff; altri solo il proprio tenant
@@ -8024,7 +8024,7 @@ BEGIN
     COMMENT ON COLUMN public.subscriptions.ciclo_fatturazione_giorni IS
       'Codice ciclo: 30 = 1 mese di calendario, 365 = 12 mesi di calendario (non giorni fissi).';
     COMMENT ON COLUMN public.subscriptions.sconto_annuale_percent IS
-      'Sconto % sul totale 12 mensilitÃ  se ciclo annuale; NULL se mensile.';
+      'Sconto % sul totale 12 mensilità se ciclo annuale; NULL se mensile.';
   END IF;
 
   IF to_regclass('core.subscriptions') IS NOT NULL THEN
@@ -8035,12 +8035,12 @@ BEGIN
     COMMENT ON COLUMN core.subscriptions.ciclo_fatturazione_giorni IS
       'Codice ciclo: 30 = 1 mese di calendario, 365 = 12 mesi di calendario (non giorni fissi).';
     COMMENT ON COLUMN core.subscriptions.sconto_annuale_percent IS
-      'Sconto % sul totale 12 mensilitÃ  se ciclo annuale; NULL se mensile.';
+      'Sconto % sul totale 12 mensilità se ciclo annuale; NULL se mensile.';
   END IF;
 END $$;
 
 -- -----------------------------------------------------------------------------
--- 5â€“6) Ordini e righe: campi usati da Cassa (createOrder) e stampa comanda
+-- 5–6) Ordini e righe: campi usati da Cassa (createOrder) e stampa comanda
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -8183,7 +8183,7 @@ COMMENT ON FUNCTION public.create_order_with_items(
   'Crea ordine + righe (cassa). p_items: prodotto_id, quantita, prezzo, formato_nome, ingredienti_cottura_summary.';
 
 -- -----------------------------------------------------------------------------
--- 7b) public.replace_order_items â€” modifica righe ordine dalla cassa
+-- 7b) public.replace_order_items — modifica righe ordine dalla cassa
 --     Allineata a sql/sql_upgrade.sql e src/features/admin/services/adminService.js (replaceOrderItems).
 -- -----------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.replace_order_items(UUID, NUMERIC, JSONB);
@@ -8319,7 +8319,7 @@ COMMENT ON FUNCTION public.replace_order_items(UUID, NUMERIC, JSONB) IS
 
 -- >>> BEGIN: sql/PM_FIDELITY_IMPLEMENTATIONS_UNIFIED.sql
 -- =============================================================================
--- PizzaManager â€” Fidelity Card + canale domicilio
+-- PizzaManager — Fidelity Card + canale domicilio
 --
 -- Contenuto:
 --   1) Tabelle public.fidelity_saldi, public.fidelity_movimenti + RLS + GRANT
@@ -8427,7 +8427,7 @@ SET parametri_operativi =
   );
 
 -- =============================================================================
--- Fine. Dopo l'esecuzione: Dashboard Supabase â†’ Settings â†’ API â†’ Reload schema
+-- Fine. Dopo l'esecuzione: Dashboard Supabase ? Settings ? API ? Reload schema
 --   se PostgREST non espone subito tabelle/colonne nuove.
 -- =============================================================================
 
@@ -8598,7 +8598,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -8666,7 +8666,7 @@ COMMENT ON FUNCTION public.create_order_with_items(
 -- ---------- END: supabase/migrations/20260406110000_delivery_area_polygon.sql ----------
 
 -- ---------- BEGIN: supabase/migrations/20260406115500_turni_operatori_base_if_missing.sql ----------
--- Base tabella turni cassa (se il dump remote_schema non Ã¨ mai stato applicato).
+-- Base tabella turni cassa (se il dump remote_schema non è mai stato applicato).
 -- Eseguire prima di 20260406120000_cassa_turni_rpc.sql.
 
 CREATE SEQUENCE IF NOT EXISTS public.turni_operatori_id_seq
@@ -8737,7 +8737,7 @@ BEGIN
   END IF;
 END $$;
 
--- FK verso punti_vendita solo se Ã¨ tabella base (relkind 'r'): su alcuni DB Ã¨ una VIEW â†’ niente FK.
+-- FK verso punti_vendita solo se è tabella base (relkind 'r'): su alcuni DB è una VIEW ? niente FK.
 DO $$
 BEGIN
   IF EXISTS (
@@ -9215,7 +9215,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna ÃƒÆ’Ã‚Â¨ fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna ÃƒÂ¨ fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -9405,7 +9405,7 @@ CREATE TRIGGER ordine_instead_of_update_trigger
 -- ---------- END: supabase/migrations/20260406140000_ordine_turno_operatori.sql ----------
 
 -- ---------- BEGIN: supabase/migrations/20260406150000_cassa_ordine_audit.sql ----------
--- Audit operazioni cassa (append-only) per tracciabilitÃ  enterprise.
+-- Audit operazioni cassa (append-only) per tracciabilità enterprise.
 -- Richiede public.utenti_ruoli con staff sul tenant.
 
 CREATE TABLE IF NOT EXISTS public.cassa_ordine_audit (
@@ -9659,7 +9659,7 @@ $rf$;
 GRANT EXECUTE ON FUNCTION public.stripe_refund_allowed(UUID, UUID) TO service_role;
 
 COMMENT ON FUNCTION public.stripe_refund_allowed(UUID, UUID) IS
-  'Solo Edge (service_role): verifica se l''utente puÃ² rimborsare l''ordine.';
+  'Solo Edge (service_role): verifica se l''utente può rimborsare l''ordine.';
 
 -- Ricrea create_order_with_items con web_cliente_user_id
 DO $drop$
@@ -9785,7 +9785,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -9882,7 +9882,7 @@ COMMENT ON FUNCTION public.create_order_with_items(
   UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
   DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER
 ) IS
-  'Crea ordine + righe. web_cliente_user_id valorizzato se auth.uid() Ã¨ cliente del tenant.';
+  'Crea ordine + righe. web_cliente_user_id valorizzato se auth.uid() è cliente del tenant.';
 
 -- Vista Ordine: online_payment
 CREATE OR REPLACE FUNCTION public.ordine_instead_of_update()
@@ -9994,7 +9994,7 @@ BEGIN
   UPDATE core.ordini o
   SET
     stato = 'IN_PREPARAZIONE'::core.stato_ordine,
-    tipo_pagamento = 'Carta (Stripe â€” pagato)',
+    tipo_pagamento = 'Carta (Stripe — pagato)',
     online_payment = COALESCE(o.online_payment, '{}'::jsonb) || jsonb_build_object(
       'provider', 'stripe',
       'stripe_payment_intent_id', p_payment_intent_id,
@@ -10205,17 +10205,17 @@ GRANT EXECUTE ON FUNCTION public.edge_get_ordine_payment_context(UUID) TO servic
 -- ---------- END: supabase/migrations/20260407130000_online_payment_stripe.sql ----------
 
 -- ---------- BEGIN: supabase/migrations/20260408120000_rider_delivery_enterprise.sql ----------
--- Rider / consegne enterprise â€” copia allineata a sql/modules/11_rider_delivery_enterprise.sql
+-- Rider / consegne enterprise — copia allineata a sql/modules/11_rider_delivery_enterprise.sql
 -- Modifiche: editare il modulo 11 e riallineare questo file.
 
 -- =============================================================================
--- 11) Rider / consegne enterprise â€” anagrafica rider, turni, percorsi, eventi
+-- 11) Rider / consegne enterprise — anagrafica rider, turni, percorsi, eventi
 -- =============================================================================
 -- Regola A (logistica): il flag bloccato_cucina su consegna_percorso_ordine indica
--- ordini non riordinabili al ricalcolo percorso (es. giÃ  in forno).
+-- ordini non riordinabili al ricalcolo percorso (es. già in forno).
 --
 -- Dipendenze: core.tenants, core.ordini, core.punti_vendita (opzionale), core.users (opzionale)
--- Prerequisiti progetto: sql/modules/03_ordini_extensions.sql (tipo_ordine, stato_consegna, coordinate, â€¦)
+-- Prerequisiti progetto: sql/modules/03_ordini_extensions.sql (tipo_ordine, stato_consegna, coordinate, …)
 -- =============================================================================
 
 -- --- Enum stato logistica delivery (affianca stato_consegna TEXT legacy) ----------
@@ -10236,7 +10236,7 @@ BEGIN
 END $$;
 
 COMMENT ON TYPE core.stato_delivery IS
-  'Ciclo consegna rider (affianca core.ordini.stato_consegna TEXT per compatibilitÃ ).';
+  'Ciclo consegna rider (affianca core.ordini.stato_consegna TEXT per compatibilità).';
 
 -- --- Rider -------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS core.rider (
@@ -10307,7 +10307,7 @@ CREATE TABLE IF NOT EXISTS core.consegna_percorso (
 CREATE INDEX IF NOT EXISTS idx_consegna_percorso_tenant_rider
   ON core.consegna_percorso (tenant_id, rider_id, creato_at DESC);
 
-COMMENT ON TABLE core.consegna_percorso IS 'Piano di consegna (ricalcoli â†’ nuova riga o versione).';
+COMMENT ON TABLE core.consegna_percorso IS 'Piano di consegna (ricalcoli ? nuova riga o versione).';
 COMMENT ON COLUMN core.consegna_percorso.geometria IS 'Polyline/geojson o risposta provider (opzionale).';
 
 -- --- Ordini nel percorso (sequenza + blocco cucina) --------------------------
@@ -10399,7 +10399,7 @@ BEGIN
   COMMENT ON COLUMN core.ordini.turno_rider_id IS 'Turno rider di riferimento (opzionale).';
   COMMENT ON COLUMN core.ordini.percorso_attivo_id IS 'Ultimo percorso attivo noto per l''ordine.';
   COMMENT ON COLUMN core.ordini.stato_delivery IS 'Stato logistica (enum); affianca stato_consegna TEXT legacy.';
-  COMMENT ON COLUMN core.ordini.assegnato_rider_at IS 'Quando l''ordine Ã¨ stato assegnato al rider.';
+  COMMENT ON COLUMN core.ordini.assegnato_rider_at IS 'Quando l''ordine è stato assegnato al rider.';
   COMMENT ON COLUMN core.ordini.ritiro_bancone_rider_at IS 'Quando il rider ha ritirato la merce al bancone.';
   COMMENT ON COLUMN core.ordini.consegna_effettiva_at IS 'Consegna al cliente completata.';
 END $$;
@@ -10695,7 +10695,7 @@ CREATE TRIGGER ordine_instead_of_update_trigger
 
 -- ---------- BEGIN: supabase/migrations/20260409120000_anon_select_core_prodotti_menu_pubblico.sql ----------
 -- Menu pubblico: la vista public.prodotti_menu_pubblico legge core.prodotti.
--- Con RLS solo "isolate_by_tenant", il ruolo anon non passa â†’ 403 su REST.
+-- Con RLS solo "isolate_by_tenant", il ruolo anon non passa ? 403 su REST.
 -- Policy di sola lettura sui soli prodotti pubblicabili (allineata al WHERE della vista).
 
 DROP POLICY IF EXISTS anon_select_prodotti_menu_pubblico ON core.prodotti;
@@ -10791,7 +10791,7 @@ CREATE POLICY "magazzino_movimenti_staff_all" ON public.magazzino_movimenti
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_movimenti TO authenticated;
 
 COMMENT ON TABLE public.magazzino_movimenti IS
-  'Movimenti di carico/scarico; prodotto_id opzionale se il movimento Ã¨ aggregato o non legato al listino.';
+  'Movimenti di carico/scarico; prodotto_id opzionale se il movimento è aggregato o non legato al listino.';
 
 -- --- 12 fiscal_outbox + payment_link_intents (stesso contenuto sql/modules/12_*.sql) ---
 CREATE TABLE IF NOT EXISTS public.fiscal_outbox (
@@ -10836,7 +10836,7 @@ CREATE INDEX IF NOT EXISTS idx_fiscal_outbox_ordine
   WHERE ordine_id IS NOT NULL;
 
 COMMENT ON TABLE public.fiscal_outbox IS
-  'Coda fiscal: corrispettivi RT, chiusure, SDI, export. Adapter esterni mappano payload_canonical â†’ fornitore.';
+  'Coda fiscal: corrispettivi RT, chiusure, SDI, export. Adapter esterni mappano payload_canonical ? fornitore.';
 
 COMMENT ON COLUMN public.fiscal_outbox.payload_canonical IS
   'Payload interno stabile (importi, righe, aliquote, riferimenti ordine) prima del mapping verso il provider.';
@@ -11041,7 +11041,7 @@ CREATE TRIGGER ordine_instead_of_update_trigger
 -- =============================================================================
 
 -- =============================================================================
--- RLS core + public hardening (allineato a sql/sql_upgrade.sql â€” 2026-04-11)
+-- RLS core + public hardening (allineato a sql/sql_upgrade.sql — 2026-04-11)
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.pm_core_tenant_access(p_tenant uuid)
@@ -11102,7 +11102,7 @@ END;
 $fn$;
 
 COMMENT ON FUNCTION public.pm_core_tenant_access(uuid) IS
-  'RLS core: true se auth.uid() Ã¨ superadmin, staff/cliente del tenant, o rider (core.rider.auth_user_id).';
+  'RLS core: true se auth.uid() è superadmin, staff/cliente del tenant, o rider (core.rider.auth_user_id).';
 
 REVOKE ALL ON FUNCTION public.pm_core_tenant_access(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.pm_core_tenant_access(uuid) TO authenticated;
@@ -11563,7 +11563,7 @@ BEGIN
 
       v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
       IF v_inside IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
+        RAISE EXCEPTION 'L''indirizzo di consegna è fuori dall''area coperta dal locale.';
       END IF;
     END IF;
   END IF;
@@ -11662,7 +11662,7 @@ COMMENT ON FUNCTION public.create_order_with_items(
   UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
   DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT
 ) IS
-  'Crea ordine + righe. Hardening tenant + cliente web; web_cliente_user_id se auth Ã¨ cliente del tenant; telefono_ritiro opzionale.';
+  'Crea ordine + righe. Hardening tenant + cliente web; web_cliente_user_id se auth è cliente del tenant; telefono_ritiro opzionale.';
 
 -- Delivery: transizione CONSEGNATO atomica
 CREATE OR REPLACE FUNCTION public.delivery_mark_consegnato(
@@ -11836,7 +11836,7 @@ CREATE TRIGGER prodotto_ingrediente_delete_trigger
   FOR EACH ROW EXECUTE FUNCTION public.prodotto_ingrediente_delete();
 
 -- =============================================================================
--- CONSOLIDAMENTO 2026-05-30 (ex sql/sql_upgrade.sql â€” svuotato dopo merge)
+-- CONSOLIDAMENTO 2026-05-30 (ex sql/sql_upgrade.sql — svuotato dopo merge)
 -- =============================================================================
 -- Ingredienti prep_cucina + vista/trigger; staff HR; magazzino fornitori/DDT; fiscal worker RPC.
 -- =============================================================================
@@ -11927,7 +11927,7 @@ ALTER TABLE public.staff_archivio_dipendenti
 COMMENT ON COLUMN public.staff_archivio_dipendenti.data_cessazione IS
   'Data fine rapporto di lavoro (cessazione), se applicabile.';
 COMMENT ON COLUMN public.staff_archivio_dipendenti.scheda_disabilitata IS
-  'Se true la scheda HR Ã¨ considerata non attiva (es. archivio storico) senza eliminare i dati.';
+  'Se true la scheda HR è considerata non attiva (es. archivio storico) senza eliminare i dati.';
 
 -- --- 14 magazzino_fornitori + magazzino_ddt (sql/modules/14_magazzino_fornitori_ddt.sql) ---
 
@@ -11974,8 +11974,8 @@ CREATE POLICY "magazzino_ddt_staff_all" ON public.magazzino_ddt
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_fornitori TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.magazzino_ddt TO authenticated;
 
-COMMENT ON TABLE public.magazzino_fornitori IS 'Fornitori magazzino con listino righe in JSON (descrizione, prezzo, unitÃ ).';
-COMMENT ON TABLE public.magazzino_ddt IS 'DDT in entrata; riferimento per contabilitÃ  fatture.';
+COMMENT ON TABLE public.magazzino_fornitori IS 'Fornitori magazzino con listino righe in JSON (descrizione, prezzo, unità).';
+COMMENT ON TABLE public.magazzino_ddt IS 'DDT in entrata; riferimento per contabilità fatture.';
 
 -- --- Fiscal outbox worker RPC (Blocco C1) ---
 
@@ -12035,5 +12035,434 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.complete_fiscal_outbox_item(UUID, TEXT, JSONB, TEXT) TO service_role;
+
+
+-- ---------- BEGIN CONSOLIDAMENTO 2026-05-30-b (idempotency + contabilità estesa) ----------
+
+-- =============================================================================
+-- 15) Idempotency create_order_with_items (coda offline cassa)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.order_idempotency_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  idempotency_key TEXT NOT NULL,
+  ordine_id UUID NOT NULL REFERENCES core.ordini(id) ON DELETE CASCADE,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT order_idempotency_tenant_key UNIQUE (tenant_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_idempotency_ordine
+  ON public.order_idempotency_keys(ordine_id);
+
+ALTER TABLE public.order_idempotency_keys ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "order_idempotency_staff_select" ON public.order_idempotency_keys;
+CREATE POLICY "order_idempotency_staff_select" ON public.order_idempotency_keys
+  FOR SELECT
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+GRANT SELECT ON public.order_idempotency_keys TO authenticated;
+
+COMMENT ON TABLE public.order_idempotency_keys IS
+  'Chiavi idempotenza per create_order_with_items (retry offline senza ordini duplicati).';
+
+-- Ricrea RPC con parametro p_idempotency_key (ultimo argomento, default NULL).
+DO $drop$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT format(
+      '%I.%I(%s)',
+      ns.nspname,
+      p.proname,
+      pg_catalog.pg_get_function_identity_arguments(p.oid)
+    ) AS sig
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace ns ON ns.oid = p.pronamespace
+    WHERE p.proname = 'create_order_with_items'
+      AND ns.nspname IN ('public', 'core')
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || r.sig || ' CASCADE';
+  END LOOP;
+END
+$drop$;
+
+CREATE OR REPLACE FUNCTION public.create_order_with_items(
+  p_tenant_id UUID,
+  p_totale NUMERIC,
+  p_stato TEXT DEFAULT 'IN_PREPARAZIONE',
+  p_items JSONB DEFAULT '[]'::JSONB,
+  p_note TEXT DEFAULT NULL,
+  p_tipo_pagamento TEXT DEFAULT NULL,
+  p_tipo_ordine TEXT DEFAULT NULL,
+  p_nome_cliente TEXT DEFAULT NULL,
+  p_orario_ritiro TEXT DEFAULT NULL,
+  p_indirizzo_consegna TEXT DEFAULT NULL,
+  p_consegna_lng DOUBLE PRECISION DEFAULT NULL,
+  p_consegna_lat DOUBLE PRECISION DEFAULT NULL,
+  p_pagamento_dettaglio JSONB DEFAULT NULL,
+  p_punto_vendita_id UUID DEFAULT NULL,
+  p_turno_operatori_id INTEGER DEFAULT NULL,
+  p_telefono_ritiro TEXT DEFAULT NULL,
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin
+AS $fn$
+DECLARE
+  v_ordine_id UUID;
+  v_numero INTEGER;
+  v_item JSONB;
+  v_stato core.stato_ordine;
+  v_po jsonb;
+  v_ring jsonb;
+  v_inside boolean;
+  v_is_staff_cassa boolean;
+  v_has_tenant_access boolean;
+  v_is_web_cliente boolean;
+  v_turno_pv uuid;
+  v_web_cliente uuid;
+  v_idem_key TEXT;
+BEGIN
+  IF p_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'tenant_obbligatorio';
+  END IF;
+
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'non_autenticato';
+  END IF;
+
+  v_has_tenant_access := false;
+  IF to_regproc('public.pm_core_tenant_access(uuid)') IS NOT NULL THEN
+    SELECT public.pm_core_tenant_access(p_tenant_id) INTO v_has_tenant_access;
+  ELSE
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.utenti_ruoli ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.tenant_id = p_tenant_id
+        AND COALESCE(ur.attivo, true) = true
+    ) INTO v_has_tenant_access;
+  END IF;
+
+  IF NOT COALESCE(v_has_tenant_access, false) THEN
+    RAISE EXCEPTION 'tenant_non_autorizzato';
+  END IF;
+
+  v_idem_key := NULLIF(trim(COALESCE(p_idempotency_key, '')), '');
+  IF v_idem_key IS NOT NULL THEN
+    SELECT oik.ordine_id INTO v_ordine_id
+    FROM public.order_idempotency_keys oik
+    WHERE oik.tenant_id = p_tenant_id
+      AND oik.idempotency_key = v_idem_key;
+    IF FOUND THEN
+      RETURN v_ordine_id;
+    END IF;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.clienti c
+    WHERE c.id = auth.uid()
+      AND c.tenant_id = p_tenant_id
+  ) INTO v_is_web_cliente;
+
+  IF v_is_web_cliente THEN
+    IF lower(trim(COALESCE(p_tipo_ordine, ''))) NOT IN ('', 'delivery', 'negozio') THEN
+      RAISE EXCEPTION 'tipo_ordine_non_valido';
+    END IF;
+    IF upper(trim(COALESCE(p_stato, 'IN_PREPARAZIONE'))) NOT IN ('IN_PREPARAZIONE') THEN
+      RAISE EXCEPTION 'stato_ordine_non_valido';
+    END IF;
+  END IF;
+
+  SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero
+  FROM core.ordini
+  WHERE tenant_id = p_tenant_id;
+
+  BEGIN
+    v_stato := COALESCE(NULLIF(trim(p_stato), ''), 'IN_PREPARAZIONE')::core.stato_ordine;
+  EXCEPTION
+    WHEN invalid_text_representation THEN
+      v_stato := 'IN_PREPARAZIONE'::core.stato_ordine;
+  END;
+
+  v_web_cliente := NULL;
+  IF EXISTS (
+    SELECT 1
+    FROM public.clienti c
+    WHERE c.id = auth.uid()
+      AND c.tenant_id = p_tenant_id
+  ) THEN
+    v_web_cliente := auth.uid();
+  END IF;
+
+  v_po := NULL;
+  IF to_regclass('admin.tenants') IS NOT NULL THEN
+    SELECT t.parametri_operativi INTO v_po
+    FROM admin.tenants t
+    WHERE t.id = p_tenant_id
+    LIMIT 1;
+  END IF;
+  IF v_po IS NULL AND to_regclass('core.tenants') IS NOT NULL THEN
+    SELECT t.parametri_operativi INTO v_po
+    FROM core.tenants t
+    WHERE t.id = p_tenant_id
+    LIMIT 1;
+  END IF;
+
+  v_ring := NULL;
+  IF v_po IS NOT NULL
+     AND (v_po->'consegna_area_poligono'->>'type') = 'Polygon'
+     AND jsonb_typeof(v_po->'consegna_area_poligono'->'coordinates') = 'array'
+     AND jsonb_array_length(v_po->'consegna_area_poligono'->'coordinates') >= 1
+  THEN
+    v_ring := v_po->'consegna_area_poligono'->'coordinates'->0;
+  END IF;
+
+  IF lower(trim(COALESCE(p_tipo_ordine, ''))) = 'delivery'
+     AND v_ring IS NOT NULL
+     AND jsonb_typeof(v_ring) = 'array'
+     AND jsonb_array_length(v_ring) >= 4
+  THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.utenti_ruoli ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.tenant_id = p_tenant_id
+        AND COALESCE(ur.attivo, true) = true
+        AND (
+          lower(trim(COALESCE(ur.ruolo, ''))) = 'cassa'
+          OR COALESCE(ur.accesso_cassa, false) = true
+        )
+    ) INTO v_is_staff_cassa;
+
+    IF NOT v_is_staff_cassa THEN
+      IF p_consegna_lng IS NULL OR p_consegna_lat IS NULL THEN
+        RAISE EXCEPTION 'Per la consegna a domicilio servono coordinate valide dell''indirizzo (verifica su mappa).';
+      END IF;
+
+      v_inside := public.pm_point_in_ring(p_consegna_lng, p_consegna_lat, v_ring);
+      IF v_inside IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'L''indirizzo di consegna Ã¨ fuori dall''area coperta dal locale.';
+      END IF;
+    END IF;
+  END IF;
+
+  IF p_turno_operatori_id IS NOT NULL THEN
+    IF to_regclass('public.turni_operatori') IS NULL THEN
+      RAISE EXCEPTION 'turni_operatori non disponibile sul database';
+    END IF;
+    SELECT t.punto_vendita_id INTO v_turno_pv
+    FROM public.turni_operatori t
+    WHERE t.id = p_turno_operatori_id
+      AND t.tenant_id = p_tenant_id
+      AND t.user_id = auth.uid()
+      AND t.stato = 'aperto'
+      AND t.chiuso_il IS NULL;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'turno_non_valido';
+    END IF;
+    IF p_punto_vendita_id IS NOT NULL AND v_turno_pv IS DISTINCT FROM p_punto_vendita_id THEN
+      RAISE EXCEPTION 'turno_punto_vendita_mismatch';
+    END IF;
+  END IF;
+
+  INSERT INTO core.ordini (
+    tenant_id,
+    numero,
+    stato,
+    totale,
+    note,
+    tipo_pagamento,
+    tipo_ordine,
+    nome_cliente,
+    telefono_ritiro,
+    orario_ritiro,
+    indirizzo_consegna,
+    consegna_lng,
+    consegna_lat,
+    pagamento_dettaglio,
+    punto_vendita_id,
+    turno_operatori_id,
+    web_cliente_user_id
+  )
+  VALUES (
+    p_tenant_id,
+    v_numero,
+    v_stato,
+    p_totale,
+    NULLIF(trim(COALESCE(p_note, '')), ''),
+    NULLIF(trim(COALESCE(p_tipo_pagamento, '')), ''),
+    NULLIF(trim(COALESCE(p_tipo_ordine, '')), ''),
+    NULLIF(trim(COALESCE(p_nome_cliente, '')), ''),
+    NULLIF(trim(COALESCE(p_telefono_ritiro, '')), ''),
+    NULLIF(trim(COALESCE(p_orario_ritiro, '')), ''),
+    NULLIF(trim(COALESCE(p_indirizzo_consegna, '')), ''),
+    p_consegna_lng,
+    p_consegna_lat,
+    p_pagamento_dettaglio,
+    p_punto_vendita_id,
+    p_turno_operatori_id,
+    v_web_cliente
+  )
+  RETURNING id INTO v_ordine_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB))
+  LOOP
+    INSERT INTO core.riga_ordine (
+      tenant_id,
+      ordine_id,
+      prodotto_id,
+      quantita,
+      prezzo,
+      formato_nome,
+      ingredienti_cottura_summary
+    )
+    VALUES (
+      p_tenant_id,
+      v_ordine_id,
+      (v_item->>'prodotto_id')::UUID,
+      GREATEST(1, COALESCE((v_item->>'quantita')::INTEGER, 1)),
+      COALESCE((v_item->>'prezzo')::NUMERIC, 0),
+      NULLIF(trim(COALESCE(v_item->>'formato_nome', '')), ''),
+      NULLIF(trim(COALESCE(v_item->>'ingredienti_cottura_summary', '')), '')
+    );
+  END LOOP;
+
+  IF v_idem_key IS NOT NULL THEN
+    INSERT INTO public.order_idempotency_keys (tenant_id, idempotency_key, ordine_id, created_by)
+    VALUES (p_tenant_id, v_idem_key, v_ordine_id, auth.uid())
+    ON CONFLICT (tenant_id, idempotency_key) DO NOTHING;
+
+    SELECT oik.ordine_id INTO v_ordine_id
+    FROM public.order_idempotency_keys oik
+    WHERE oik.tenant_id = p_tenant_id
+      AND oik.idempotency_key = v_idem_key;
+  END IF;
+
+  RETURN v_ordine_id;
+END;
+$fn$;
+
+GRANT EXECUTE ON FUNCTION public.create_order_with_items(
+  UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
+  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT, TEXT
+) TO authenticated;
+
+COMMENT ON FUNCTION public.create_order_with_items(
+  UUID, NUMERIC, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
+  DOUBLE PRECISION, DOUBLE PRECISION, JSONB, UUID, INTEGER, TEXT, TEXT
+) IS
+  'Crea ordine + righe. p_idempotency_key opzionale: retry sicuro senza duplicati (coda offline).';
+
+
+-- =============================================================================
+-- 16) ContabilitÃ  tenant: fatture passive, spese, pagamenti fatture
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.contabilita_fatture (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  numero TEXT NOT NULL,
+  data_doc DATE NOT NULL,
+  fornitore TEXT DEFAULT '',
+  riferimento_ddt TEXT DEFAULT '',
+  importo NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contabilita_fatture_tenant
+  ON public.contabilita_fatture(tenant_id, data_doc DESC);
+
+CREATE TABLE IF NOT EXISTS public.contabilita_spese (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  ambito TEXT NOT NULL CHECK (ambito IN ('locale', 'personale')),
+  data_spesa DATE NOT NULL,
+  categoria TEXT NOT NULL DEFAULT 'altro',
+  importo NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contabilita_spese_tenant
+  ON public.contabilita_spese(tenant_id, ambito, data_spesa DESC);
+
+CREATE TABLE IF NOT EXISTS public.contabilita_pagamenti_fatture (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  fattura_numero TEXT NOT NULL,
+  scadenza DATE NOT NULL,
+  tipo_pagamento TEXT NOT NULL DEFAULT 'bonifico',
+  pagato BOOLEAN NOT NULL DEFAULT false,
+  note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contabilita_pagamenti_tenant
+  ON public.contabilita_pagamenti_fatture(tenant_id, scadenza DESC);
+
+ALTER TABLE public.contabilita_fatture ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contabilita_spese ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contabilita_pagamenti_fatture ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "contabilita_fatture_staff_all" ON public.contabilita_fatture;
+CREATE POLICY "contabilita_fatture_staff_all" ON public.contabilita_fatture
+  FOR ALL
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "contabilita_spese_staff_all" ON public.contabilita_spese;
+CREATE POLICY "contabilita_spese_staff_all" ON public.contabilita_spese
+  FOR ALL
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "contabilita_pagamenti_staff_all" ON public.contabilita_pagamenti_fatture;
+CREATE POLICY "contabilita_pagamenti_staff_all" ON public.contabilita_pagamenti_fatture
+  FOR ALL
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contabilita_fatture TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contabilita_spese TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contabilita_pagamenti_fatture TO authenticated;
+
+COMMENT ON TABLE public.contabilita_fatture IS 'Fatture passive collegate ai DDT magazzino.';
+COMMENT ON TABLE public.contabilita_spese IS 'Spese struttura (ambito locale o personale).';
+COMMENT ON TABLE public.contabilita_pagamenti_fatture IS 'Scadenze e stato pagamento fatture fornitori.';
+
+CREATE TABLE IF NOT EXISTS public.contabilita_foodcost_manuali (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES core.tenants(id) ON DELETE CASCADE,
+  ingrediente TEXT NOT NULL,
+  costo_al_kg NUMERIC(12, 4) NOT NULL DEFAULT 0,
+  peso_teorico_g NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  prezzo_vendita NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contabilita_foodcost_tenant
+  ON public.contabilita_foodcost_manuali(tenant_id, created_at DESC);
+
+ALTER TABLE public.contabilita_foodcost_manuali ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "contabilita_foodcost_staff_all" ON public.contabilita_foodcost_manuali;
+CREATE POLICY "contabilita_foodcost_staff_all" ON public.contabilita_foodcost_manuali
+  FOR ALL
+  USING (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.utenti_ruoli WHERE user_id = auth.uid()));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contabilita_foodcost_manuali TO authenticated;
+
+COMMENT ON TABLE public.contabilita_foodcost_manuali IS 'Analisi food cost manuali per ingrediente (oltre al calcolo automatico da listino).';
 
 -- ---------- END CONSOLIDAMENTO 2026-05-30 ----------

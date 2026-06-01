@@ -99,6 +99,7 @@ const FoodCostPage = lazy(() => import("@/features/admin/pages/contabilita/FoodC
 const SpeseLocalePage = lazy(() => import("@/features/admin/pages/contabilita/SpeseLocalePage"));
 const SpesePersonalePage = lazy(() => import("@/features/admin/pages/contabilita/SpesePersonalePage"));
 const GestioneIncassiPage = lazy(() => import("@/features/admin/pages/contabilita/GestioneIncassiPage"));
+const FiscalOutboxMonitorPage = lazy(() => import("@/features/admin/pages/fiscal/FiscalOutboxMonitorPage"));
 const FidelityCardPage = lazy(() => import("@/features/admin/pages/FidelityCardPage"));
 
 /* ================= OPERATIVE (lazy) ================= */
@@ -477,6 +478,7 @@ export default function AppRouter() {
             }
           />
           <Route path="/admin/contabilita/incassi" element={<Suspense fallback={<PageFallback />}><GestioneIncassiPage /></Suspense>} />
+          <Route path="/admin/fiscal-outbox" element={<Suspense fallback={<PageFallback />}><FiscalOutboxMonitorPage /></Suspense>} />
           <Route path="/admin/manuale" element={<Suspense fallback={<PageFallback />}><ManualeUtentePage /></Suspense>} />
           <Route path="/admin/guida" element={<Navigate to="/admin/manuale" replace />} />
           <Route path="/admin/pubblicazione" element={<Navigate to="/admin/manuale" replace />} />

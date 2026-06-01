@@ -38,7 +38,7 @@ const cellInput = {
 };
 
 export default function OrdiniFornitoriPage() {
-  const { fornitori, addFornitore: persistFornitore, updateFornitore, removeFornitore, ready, backend } =
+  const { fornitori, addFornitore: persistFornitore, updateFornitore, removeFornitore, ready } =
     useMagazzinoFornitoriStorage();
   const [selectedId, setSelectedId] = useState(null);
   const [draft, setDraft] = useState(emptyFornitore);

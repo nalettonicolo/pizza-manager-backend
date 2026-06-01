@@ -1,4 +1,4 @@
-import { corsHeaders, jsonResponse } from "../_shared/cors"
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts"
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

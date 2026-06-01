@@ -1,45 +1,38 @@
 import { useState } from "react";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
-import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { useContabilitaPagamentiStorage } from "@/features/admin/hooks/useContabilitaPagamentiStorage";
 
 export default function PagamentiFatturePage() {
-  const { data, setData, ready } = useTenantLocalJson("contabilita_pagamenti", { righe: [] });
+  const { righe, addRiga, togglePagato, removeRiga, ready, backend, loadErr } = useContabilitaPagamentiStorage();
 
   const [fatturaNumero, setFatturaNumero] = useState("");
   const [scadenza, setScadenza] = useState(() => new Date().toISOString().slice(0, 10));
   const [tipoPagamento, setTipoPagamento] = useState("bonifico");
   const [pagato, setPagato] = useState(false);
   const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   if (!ready) {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
   }
 
-  function add() {
-    if (!fatturaNumero.trim()) return;
-    const row = {
-      id: newLocalId(),
-      fatturaNumero: fatturaNumero.trim(),
-      scadenza,
-      tipoPagamento,
-      pagato,
-      note: note.trim(),
-    };
-    setData((d) => ({ ...d, righe: [row, ...d.righe] }));
-    setFatturaNumero("");
-    setNote("");
-    setPagato(false);
-  }
-
-  function togglePagato(id) {
-    setData((d) => ({
-      ...d,
-      righe: d.righe.map((r) => (r.id === id ? { ...r, pagato: !r.pagato } : r)),
-    }));
-  }
-
-  function remove(id) {
-    setData((d) => ({ ...d, righe: d.righe.filter((r) => r.id !== id) }));
+  async function add() {
+    if (!fatturaNumero.trim() || busy) return;
+    setBusy(true);
+    try {
+      await addRiga({
+        fatturaNumero: fatturaNumero.trim(),
+        scadenza,
+        tipoPagamento,
+        pagato,
+        note: note.trim(),
+      });
+      setFatturaNumero("");
+      setNote("");
+      setPagato(false);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -52,9 +45,12 @@ export default function PagamentiFatturePage() {
           <li>Data scadenza / termine pagamento</li>
           <li>Tipo pagamento (bonifico, RID, contanti, carta, altro)</li>
           <li>Flag di controllo «pagato» aggiornabile in un clic</li>
+          {backend === "db" ? <li>Persistenza: database Supabase (tabella contabilita_pagamenti_fatture)</li> : null}
         </ul>
       }
     >
+      {loadErr ? <p style={{ marginBottom: 12, fontSize: 13, color: "#b45309" }}>Fallback locale: {loadErr}</p> : null}
+
       <div
         style={{
           display: "grid",
@@ -109,8 +105,8 @@ export default function PagamentiFatturePage() {
             style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
           />
         </div>
-        <button type="button" className="btn-primary" onClick={add}>
-          Aggiungi scadenza
+        <button type="button" className="btn-primary" onClick={() => void add()} disabled={busy}>
+          {busy ? "Salvataggio…" : "Aggiungi scadenza"}
         </button>
       </div>
 
@@ -125,7 +121,7 @@ export default function PagamentiFatturePage() {
           </tr>
         </thead>
         <tbody>
-          {data.righe.map((r) => (
+          {righe.map((r) => (
             <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
               <td style={{ padding: "10px 8px", fontWeight: 600 }}>{r.fatturaNumero}</td>
               <td style={{ padding: "10px 8px" }}>{r.scadenza}</td>
@@ -133,7 +129,7 @@ export default function PagamentiFatturePage() {
               <td style={{ padding: "10px 8px" }}>
                 <button
                   type="button"
-                  onClick={() => togglePagato(r.id)}
+                  onClick={() => void togglePagato(r.id)}
                   style={{
                     padding: "6px 12px",
                     borderRadius: 6,
@@ -147,7 +143,11 @@ export default function PagamentiFatturePage() {
                 </button>
               </td>
               <td style={{ padding: "10px 8px" }}>
-                <button type="button" style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }} onClick={() => remove(r.id)}>
+                <button
+                  type="button"
+                  style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }}
+                  onClick={() => void removeRiga(r.id)}
+                >
                   Elimina
                 </button>
               </td>
@@ -155,7 +155,7 @@ export default function PagamentiFatturePage() {
           ))}
         </tbody>
       </table>
-      {data.righe.length === 0 ? (
+      {righe.length === 0 ? (
         <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessun pagamento programmato.</p>
       ) : null}
     </AdminModuleShell>

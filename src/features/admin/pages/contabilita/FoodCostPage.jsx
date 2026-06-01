@@ -1,8 +1,8 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
-import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
 import { useTenant } from "@/app/contexts/TenantContext";
+import { useContabilitaFoodcostManualStorage } from "@/features/admin/hooks/useContabilitaFoodcostManualStorage";
 import {
   updateTenantSettings,
   getCategories,
@@ -28,7 +28,7 @@ function marginePctManuale(costoAlKg, pesoG, prezzoVendita) {
 
 export default function FoodCostPage() {
   const { tenantId, tenantData, refreshTenant } = useTenant();
-  const { data, setData, ready } = useTenantLocalJson("contabilita_foodcost", { righe: [] });
+  const { righe: righeManuali, addRiga, removeRiga, ready, backend, loadErr } = useContabilitaFoodcostManualStorage();
   const [ingrediente, setIngrediente] = useState("");
   const [costoAlKg, setCostoAlKg] = useState("");
   const [pesoTeoricoG, setPesoTeoricoG] = useState("");
@@ -40,8 +40,7 @@ export default function FoodCostPage() {
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState(null);
   const [menuRows, setMenuRows] = useState([]);
-
-  const righeManuali = useMemo(() => data.righe || [], [data.righe]);
+  const [manualBusy, setManualBusy] = useState(false);
 
   useEffect(() => {
     const raw = tenantData?.parametri_operativi?.foodcost_margine_percent;
@@ -141,25 +140,27 @@ export default function FoodCostPage() {
   }
 
   function addManuale() {
-    if (!ingrediente.trim()) return;
-    const row = {
-      id: newLocalId(),
+    if (!ingrediente.trim() || manualBusy) return;
+    setManualBusy(true);
+    void addRiga({
       ingrediente: ingrediente.trim(),
       costoAlKg: Number(costoAlKg) || 0,
       pesoTeoricoG: Number(pesoTeoricoG) || 0,
       prezzoVendita: Number(prezzoVendita) || 0,
       note: note.trim(),
-    };
-    setData((d) => ({ ...d, righe: [row, ...(d.righe || [])] }));
-    setIngrediente("");
-    setCostoAlKg("");
-    setPesoTeoricoG("");
-    setPrezzoVendita("");
-    setNote("");
+    })
+      .then(() => {
+        setIngrediente("");
+        setCostoAlKg("");
+        setPesoTeoricoG("");
+        setPrezzoVendita("");
+        setNote("");
+      })
+      .finally(() => setManualBusy(false));
   }
 
   function removeManuale(id) {
-    setData((d) => ({ ...d, righe: (d.righe || []).filter((r) => r.id !== id) }));
+    void removeRiga(id);
   }
 
   return (
@@ -294,8 +295,12 @@ export default function FoodCostPage() {
 
       <h2 style={{ fontSize: 16, marginBottom: 12, color: "#0f172a" }}>Analisi manuale per ingrediente (facoltativo)</h2>
       <p style={{ margin: "0 0 16px", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
-        Righe salvate in questo browser (€/kg e peso teorico). Utile per simulazioni non legate a una voce di menù.
+        Simulazioni non legate a una voce di menù (€/kg e peso teorico).
+        {backend === "db" ? " Persistenza: database Supabase." : " Fallback localStorage fino ad applicazione SQL modulo 16."}
       </p>
+      {loadErr ? (
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: "#b45309" }}>Fallback locale: {loadErr}</p>
+      ) : null}
 
       <div
         style={{

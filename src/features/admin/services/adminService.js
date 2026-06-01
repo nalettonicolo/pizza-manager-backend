@@ -238,6 +238,7 @@ export async function createOrder(tenantId, payload) {
     puntoVenditaId = null,
     turnoOperatoriId = null,
     telefonoRitiro = "",
+    idempotencyKey = null,
   } = payload
 
   const rpcArgs = {
@@ -272,6 +273,13 @@ export async function createOrder(tenantId, payload) {
       : null
   rpcArgs.p_telefono_ritiro =
     typeof telefonoRitiro === "string" && telefonoRitiro.trim() ? telefonoRitiro.trim() : null
+  const idem =
+    typeof idempotencyKey === "string" && idempotencyKey.trim()
+      ? idempotencyKey.trim()
+      : typeof payload.idempotency_key === "string" && payload.idempotency_key.trim()
+        ? payload.idempotency_key.trim()
+        : null
+  if (idem) rpcArgs.p_idempotency_key = idem
 
   const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
 
@@ -538,6 +546,256 @@ export async function insertContabilitaMovimento(tenantId, payload) {
 
 export async function deleteContabilitaMovimento(id) {
   const { error } = await supabase.from("contabilita_movimenti").delete().eq("id", id)
+  if (error) throw error
+}
+
+function mapDbFatturaToUi(row) {
+  return {
+    id: row.id,
+    numero: row.numero || "",
+    data: row.data_doc,
+    fornitore: row.fornitore || "",
+    riferimentoDdt: row.riferimento_ddt || "",
+    importo: Number(row.importo),
+    note: row.note || "",
+  }
+}
+
+export async function contabilitaFattureTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("contabilita_fatture").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function listContabilitaFatture(tenantId, opts = {}) {
+  const { limit = 500 } = opts
+  const { data, error } = await supabase
+    .from("contabilita_fatture")
+    .select("id, numero, data_doc, fornitore, riferimento_ddt, importo, note, created_at")
+    .eq("tenant_id", tenantId)
+    .order("data_doc", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map(mapDbFatturaToUi)
+}
+
+export async function insertContabilitaFattura(tenantId, row) {
+  const { data, error } = await supabase
+    .from("contabilita_fatture")
+    .insert({
+      tenant_id: tenantId,
+      numero: row.numero,
+      data_doc: row.data,
+      fornitore: row.fornitore ?? "",
+      riferimento_ddt: row.riferimentoDdt ?? "",
+      importo: row.importo ?? 0,
+      note: row.note ?? "",
+    })
+    .select("id, numero, data_doc, fornitore, riferimento_ddt, importo, note")
+    .single()
+  if (error) throw error
+  return mapDbFatturaToUi(data)
+}
+
+export async function deleteContabilitaFattura(id) {
+  const { error } = await supabase.from("contabilita_fatture").delete().eq("id", id)
+  if (error) throw error
+}
+
+function mapDbSpesaToUi(row) {
+  return {
+    id: row.id,
+    data: row.data_spesa,
+    categoria: row.categoria || "altro",
+    importo: Number(row.importo),
+    note: row.note || "",
+  }
+}
+
+export async function contabilitaSpeseTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("contabilita_spese").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function listContabilitaSpese(tenantId, ambito, opts = {}) {
+  const { limit = 500 } = opts
+  const { data, error } = await supabase
+    .from("contabilita_spese")
+    .select("id, ambito, data_spesa, categoria, importo, note, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("ambito", ambito)
+    .order("data_spesa", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map(mapDbSpesaToUi)
+}
+
+export async function insertContabilitaSpesa(tenantId, ambito, row) {
+  const { data, error } = await supabase
+    .from("contabilita_spese")
+    .insert({
+      tenant_id: tenantId,
+      ambito,
+      data_spesa: row.data,
+      categoria: row.categoria ?? "altro",
+      importo: row.importo ?? 0,
+      note: row.note ?? "",
+    })
+    .select("id, data_spesa, categoria, importo, note")
+    .single()
+  if (error) throw error
+  return mapDbSpesaToUi(data)
+}
+
+export async function deleteContabilitaSpesa(id) {
+  const { error } = await supabase.from("contabilita_spese").delete().eq("id", id)
+  if (error) throw error
+}
+
+function mapDbPagamentoFatturaToUi(row) {
+  return {
+    id: row.id,
+    fatturaNumero: row.fattura_numero || "",
+    scadenza: row.scadenza,
+    tipoPagamento: row.tipo_pagamento || "bonifico",
+    pagato: Boolean(row.pagato),
+    note: row.note || "",
+  }
+}
+
+export async function contabilitaPagamentiTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("contabilita_pagamenti_fatture").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function listContabilitaPagamentiFatture(tenantId, opts = {}) {
+  const { limit = 500 } = opts
+  const { data, error } = await supabase
+    .from("contabilita_pagamenti_fatture")
+    .select("id, fattura_numero, scadenza, tipo_pagamento, pagato, note, created_at")
+    .eq("tenant_id", tenantId)
+    .order("scadenza", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map(mapDbPagamentoFatturaToUi)
+}
+
+export async function insertContabilitaPagamentoFattura(tenantId, row) {
+  const { data, error } = await supabase
+    .from("contabilita_pagamenti_fatture")
+    .insert({
+      tenant_id: tenantId,
+      fattura_numero: row.fatturaNumero,
+      scadenza: row.scadenza,
+      tipo_pagamento: row.tipoPagamento ?? "bonifico",
+      pagato: Boolean(row.pagato),
+      note: row.note ?? "",
+    })
+    .select("id, fattura_numero, scadenza, tipo_pagamento, pagato, note")
+    .single()
+  if (error) throw error
+  return mapDbPagamentoFatturaToUi(data)
+}
+
+export async function updateContabilitaPagamentoFattura(id, patch) {
+  const payload = {}
+  if (patch.pagato != null) payload.pagato = Boolean(patch.pagato)
+  if (patch.note != null) payload.note = patch.note
+  const { data, error } = await supabase
+    .from("contabilita_pagamenti_fatture")
+    .update(payload)
+    .eq("id", id)
+    .select("id, fattura_numero, scadenza, tipo_pagamento, pagato, note")
+    .single()
+  if (error) throw error
+  return mapDbPagamentoFatturaToUi(data)
+}
+
+export async function deleteContabilitaPagamentoFattura(id) {
+  const { error } = await supabase.from("contabilita_pagamenti_fatture").delete().eq("id", id)
+  if (error) throw error
+}
+
+export async function listFiscalOutbox(tenantId, opts = {}) {
+  const { limit = 100, status = null } = opts
+  let q = supabase
+    .from("fiscal_outbox")
+    .select(
+      "id, kind, status, ordine_id, idempotency_key, attempt_count, last_error, provider_key, created_at, updated_at",
+    )
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  if (status) q = q.eq("status", status)
+  const { data, error } = await q
+  if (error) throw error
+  return data || []
+}
+
+export async function retryFiscalOutboxItem(id) {
+  const { error } = await supabase
+    .from("fiscal_outbox")
+    .update({ status: "pending", last_error: null, next_retry_at: null })
+    .eq("id", id)
+  if (error) throw error
+}
+
+export async function fiscalOutboxTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("fiscal_outbox").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+function mapDbFoodcostManualeToUi(row) {
+  return {
+    id: row.id,
+    ingrediente: row.ingrediente || "",
+    costoAlKg: Number(row.costo_al_kg),
+    pesoTeoricoG: Number(row.peso_teorico_g),
+    prezzoVendita: Number(row.prezzo_vendita),
+    note: row.note || "",
+  }
+}
+
+export async function contabilitaFoodcostTableReachable(tenantId) {
+  if (!tenantId) return false
+  const { error } = await supabase.from("contabilita_foodcost_manuali").select("id").eq("tenant_id", tenantId).limit(1)
+  return !error
+}
+
+export async function listContabilitaFoodcostManuali(tenantId, opts = {}) {
+  const { limit = 200 } = opts
+  const { data, error } = await supabase
+    .from("contabilita_foodcost_manuali")
+    .select("id, ingrediente, costo_al_kg, peso_teorico_g, prezzo_vendita, note, created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map(mapDbFoodcostManualeToUi)
+}
+
+export async function insertContabilitaFoodcostManuale(tenantId, row) {
+  const { data, error } = await supabase
+    .from("contabilita_foodcost_manuali")
+    .insert({
+      tenant_id: tenantId,
+      ingrediente: row.ingrediente,
+      costo_al_kg: row.costoAlKg ?? 0,
+      peso_teorico_g: row.pesoTeoricoG ?? 0,
+      prezzo_vendita: row.prezzoVendita ?? 0,
+      note: row.note ?? "",
+    })
+    .select("id, ingrediente, costo_al_kg, peso_teorico_g, prezzo_vendita, note")
+    .single()
+  if (error) throw error
+  return mapDbFoodcostManualeToUi(data)
+}
+
+export async function deleteContabilitaFoodcostManuale(id) {
+  const { error } = await supabase.from("contabilita_foodcost_manuali").delete().eq("id", id)
   if (error) throw error
 }
 

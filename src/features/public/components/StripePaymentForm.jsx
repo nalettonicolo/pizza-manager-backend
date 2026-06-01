@@ -23,7 +23,7 @@ function InnerPay({ onSuccess, onError, returnUrl }) {
         onError(error.message || "Pagamento non completato")
         return
       }
-      onSuccess()
+      await onSuccess?.()
     } finally {
       setBusy(false)
     }

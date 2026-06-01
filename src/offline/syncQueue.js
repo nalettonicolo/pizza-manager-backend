@@ -56,6 +56,7 @@ async function flushOne(action) {
     p_punto_vendita_id: p.punto_vendita_id ?? p.puntoVenditaId ?? null,
     p_turno_operatori_id: p.turno_operatori_id ?? p.turnoOperatoriId ?? null,
     p_telefono_ritiro: p.telefono_ritiro ?? p.telefonoRitiro ?? null,
+    p_idempotency_key: p.idempotency_key ?? p.idempotencyKey ?? action.idempotency_key ?? null,
   })
   if (error) throw error
   await removePendingAction(action.id)

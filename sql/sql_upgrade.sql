@@ -3,8 +3,7 @@
 -- =============================================================================
 --
 -- Stato:
--- - Patch consolidate fino al 2026-05-30 in sql/schema_completo_pizzamanager.sql
---   (coda: CONSOLIDAMENTO 2026-05-30).
+-- - Patch 15/16 consolidate in schema_completo (CONSOLIDAMENTO 2026-05-30-b).
 -- - Questo file deve contenere SOLO nuove modifiche non ancora consolidate.
 --
 -- Regole operative:
@@ -12,11 +11,7 @@
 -- 2) Dopo applicazione e verifica su Supabase/staging, consolidare in schema_completo.
 -- 3) Poi svuotare di nuovo questo file mantenendo il template.
 --
--- Template blocco patch:
--- -----------------------------------------------------------------------------
--- -- YYYY-MM-DD - titolo breve
--- DO $$
--- BEGIN
---   -- SQL idempotente
--- END $$;
--- -----------------------------------------------------------------------------
+-- Per applicare le patch già pronte (prima installazione o DB non aggiornato):
+--   sql/modules/15_order_idempotency.sql
+--   sql/modules/16_contabilita_estesa.sql
+-- =============================================================================

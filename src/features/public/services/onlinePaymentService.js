@@ -67,3 +67,30 @@ export async function requestStripeRefundForOrdine(ordineId, amountCent = null) 
   }
   return json
 }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Attende conferma webhook Stripe su ordine (online_payment.status = succeeded).
+ * @param {string} ordineId
+ * @param {{ maxAttempts?: number, intervalMs?: number }} opts
+ */
+export async function pollStripeOrdinePaymentConfirmed(ordineId, opts = {}) {
+  const maxAttempts = opts.maxAttempts ?? 15
+  const intervalMs = opts.intervalMs ?? 2000
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const { data, error } = await supabase
+      .from("Ordine")
+      .select("online_payment")
+      .eq("id", ordineId)
+      .maybeSingle()
+    if (error) throw error
+    const op = data?.online_payment ?? data?.onlinePayment ?? {}
+    const status = String(op?.status ?? "").toLowerCase()
+    if (status === "succeeded") return op
+    await sleep(intervalMs)
+  }
+  throw new Error(
+    "Pagamento ricevuto da Stripe ma la conferma sul server è in ritardo. Controlla «I miei ordini» tra poco o contatta il locale.",
+  )
+}

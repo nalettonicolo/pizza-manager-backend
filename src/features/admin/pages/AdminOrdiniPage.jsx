@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
@@ -65,6 +66,8 @@ function isAnnullato(o) {
 export default function AdminOrdiniPage() {
   const { tenantId } = useTenant();
   const { loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const deepLinkOrdineId = searchParams.get("ordine");
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +140,7 @@ export default function AdminOrdiniPage() {
     };
   }, [filteredOrders]);
 
-  const openDetail = async (ordineId) => {
+  const openDetail = useCallback(async (ordineId) => {
     if (!ordineId || !tenantId) return;
     setDetailLoading(true);
     setDetailOrder({});
@@ -157,7 +160,12 @@ export default function AdminOrdiniPage() {
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!deepLinkOrdineId || authLoading || !tenantId) return;
+    void openDetail(deepLinkOrdineId);
+  }, [deepLinkOrdineId, authLoading, tenantId, openDetail]);
 
   if (authLoading || loading) return <Loader />;
   if (error) return <ErrorState message={error} />;

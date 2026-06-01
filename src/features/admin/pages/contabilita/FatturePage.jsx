@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
-import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { useMagazzinoDdtStorage } from "@/features/admin/hooks/useMagazzinoDdtStorage";
+import { useContabilitaFattureStorage } from "@/features/admin/hooks/useContabilitaFattureStorage";
 
 export default function FatturePage() {
-  const { data: ddt } = useTenantLocalJson("magazzino_ddt", { righe: [] });
-  const { data, setData, ready } = useTenantLocalJson("contabilita_fatture", { fatture: [] });
+  const { righe: ddtRighe, ready: ddtReady } = useMagazzinoDdtStorage();
+  const { fatture, addFattura, removeFattura, ready, backend, loadErr } = useContabilitaFattureStorage();
 
   const [numero, setNumero] = useState("");
   const [dataFatt, setDataFatt] = useState(() => new Date().toISOString().slice(0, 10));
@@ -13,32 +14,32 @@ export default function FatturePage() {
   const [riferimentoDdt, setRiferimentoDdt] = useState("");
   const [importo, setImporto] = useState("");
   const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const ddtNumeri = useMemo(() => ddt.righe.map((r) => r.numero).filter(Boolean), [ddt.righe]);
+  const ddtNumeri = useMemo(() => ddtRighe.map((r) => r.numero).filter(Boolean), [ddtRighe]);
 
-  if (!ready) {
+  if (!ready || !ddtReady) {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
   }
 
-  function add() {
-    if (!numero.trim()) return;
-    const row = {
-      id: newLocalId(),
-      numero: numero.trim(),
-      data: dataFatt,
-      fornitore: fornitore.trim(),
-      riferimentoDdt: riferimentoDdt.trim(),
-      importo: Number(importo) || 0,
-      note: note.trim(),
-    };
-    setData((d) => ({ ...d, fatture: [row, ...d.fatture] }));
-    setNumero("");
-    setImporto("");
-    setNote("");
-  }
-
-  function remove(id) {
-    setData((d) => ({ ...d, fatture: d.fatture.filter((x) => x.id !== id) }));
+  async function add() {
+    if (!numero.trim() || busy) return;
+    setBusy(true);
+    try {
+      await addFattura({
+        numero: numero.trim(),
+        data: dataFatt,
+        fornitore: fornitore.trim(),
+        riferimentoDdt: riferimentoDdt.trim(),
+        importo: Number(importo) || 0,
+        note: note.trim(),
+      });
+      setNumero("");
+      setImporto("");
+      setNote("");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -50,9 +51,19 @@ export default function FatturePage() {
         <p style={{ margin: 0 }}>
           Usa lo stesso identificativo del DDT nel campo riferimento, oppure scegli dalla lista se hai già caricato i DDT in{" "}
           <Link to="/admin/magazzino/ddt">Magazzino</Link>.
+          {backend === "db" ? (
+            <>
+              {" "}
+              Persistenza: <strong>database Supabase</strong>.
+            </>
+          ) : null}
         </p>
       }
     >
+      {loadErr ? (
+        <p style={{ marginBottom: 12, fontSize: 13, color: "#b45309" }}>Fallback locale: {loadErr}</p>
+      ) : null}
+
       <div style={{ marginBottom: 16 }}>
         <label style={{ fontSize: 12, color: "#64748b", display: "block", marginBottom: 4 }}>Suggerimenti DDT</label>
         <select
@@ -130,8 +141,8 @@ export default function FatturePage() {
             style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
           />
         </div>
-        <button type="button" className="btn-primary" onClick={add}>
-          Aggiungi fattura
+        <button type="button" className="btn-primary" onClick={() => void add()} disabled={busy}>
+          {busy ? "Salvataggio…" : "Aggiungi fattura"}
         </button>
       </div>
 
@@ -147,7 +158,7 @@ export default function FatturePage() {
           </tr>
         </thead>
         <tbody>
-          {data.fatture.map((r) => (
+          {fatture.map((r) => (
             <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
               <td style={{ padding: "10px 8px", fontWeight: 600 }}>{r.numero}</td>
               <td style={{ padding: "10px 8px" }}>{r.data}</td>
@@ -155,7 +166,11 @@ export default function FatturePage() {
               <td style={{ padding: "10px 8px" }}>{r.riferimentoDdt || "—"}</td>
               <td style={{ padding: "10px 8px" }}>€ {Number(r.importo).toFixed(2)}</td>
               <td style={{ padding: "10px 8px" }}>
-                <button type="button" style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }} onClick={() => remove(r.id)}>
+                <button
+                  type="button"
+                  style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }}
+                  onClick={() => void removeFattura(r.id)}
+                >
                   Elimina
                 </button>
               </td>
@@ -163,7 +178,7 @@ export default function FatturePage() {
           ))}
         </tbody>
       </table>
-      {data.fatture.length === 0 ? (
+      {fatture.length === 0 ? (
         <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessuna fattura.</p>
       ) : null}
     </AdminModuleShell>

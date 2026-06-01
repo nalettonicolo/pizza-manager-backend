@@ -1,6 +1,6 @@
 import { useState } from "react";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
-import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { useContabilitaSpeseStorage } from "@/features/admin/hooks/useContabilitaSpeseStorage";
 
 const CATEGORIE = [
   { value: "stipendio", label: "Stipendi" },
@@ -10,36 +10,34 @@ const CATEGORIE = [
 ];
 
 export default function SpesePersonalePage() {
-  const { data, setData, ready } = useTenantLocalJson("contabilita_spese_personale", { spese: [] });
+  const { spese, addSpesa, removeSpesa, ready, backend, loadErr } = useContabilitaSpeseStorage(
+    "personale",
+    "contabilita_spese_personale",
+  );
   const [dataSpesa, setDataSpesa] = useState(() => new Date().toISOString().slice(0, 10));
   const [categoria, setCategoria] = useState("stipendio");
   const [importo, setImporto] = useState("");
   const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   if (!ready) {
     return <p className="text-gray-400 text-sm">Caricamento…</p>;
   }
 
-  function add() {
+  async function add() {
     const imp = Number(importo);
-    if (!imp || imp <= 0) return;
-    const row = {
-      id: newLocalId(),
-      data: dataSpesa,
-      categoria,
-      importo: imp,
-      note: note.trim(),
-    };
-    setData((d) => ({ ...d, spese: [row, ...d.spese] }));
-    setImporto("");
-    setNote("");
+    if (!imp || imp <= 0 || busy) return;
+    setBusy(true);
+    try {
+      await addSpesa({ data: dataSpesa, categoria, importo: imp, note: note.trim() });
+      setImporto("");
+      setNote("");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function remove(id) {
-    setData((d) => ({ ...d, spese: d.spese.filter((x) => x.id !== id) }));
-  }
-
-  const totale = data.spese.reduce((s, x) => s + x.importo, 0);
+  const totale = spese.reduce((s, x) => s + x.importo, 0);
 
   return (
     <AdminModuleShell
@@ -47,9 +45,19 @@ export default function SpesePersonalePage() {
       lead="Costi legati al personale: stipendi, adempimenti fiscali (es. F24), corsi e altro."
       specTitle="Voci tipiche"
       specChildren={
-        <p style={{ margin: 0 }}>Compensi, contributi, trattenute, formazione obbligatoria o specialistica.</p>
+        <p style={{ margin: 0 }}>
+          Compensi, contributi, trattenute, formazione obbligatoria o specialistica.
+          {backend === "db" ? (
+            <>
+              {" "}
+              Persistenza: <strong>database Supabase</strong>.
+            </>
+          ) : null}
+        </p>
       }
     >
+      {loadErr ? <p style={{ marginBottom: 12, fontSize: 13, color: "#b45309" }}>Fallback locale: {loadErr}</p> : null}
+
       <div
         style={{
           display: "grid",
@@ -100,8 +108,8 @@ export default function SpesePersonalePage() {
             style={{ width: "100%", marginTop: 4, padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
           />
         </div>
-        <button type="button" className="btn-primary" onClick={add}>
-          Registra spesa
+        <button type="button" className="btn-primary" onClick={() => void add()} disabled={busy}>
+          {busy ? "Salvataggio…" : "Registra spesa"}
         </button>
       </div>
 
@@ -120,14 +128,18 @@ export default function SpesePersonalePage() {
           </tr>
         </thead>
         <tbody>
-          {data.spese.map((r) => (
+          {spese.map((r) => (
             <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
               <td style={{ padding: "10px 8px" }}>{r.data}</td>
               <td style={{ padding: "10px 8px" }}>{CATEGORIE.find((c) => c.value === r.categoria)?.label ?? r.categoria}</td>
               <td style={{ padding: "10px 8px" }}>€ {r.importo.toFixed(2)}</td>
               <td style={{ padding: "10px 8px", color: "#64748b" }}>{r.note || "—"}</td>
               <td style={{ padding: "10px 8px" }}>
-                <button type="button" style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }} onClick={() => remove(r.id)}>
+                <button
+                  type="button"
+                  style={{ color: "#b91c1c", border: "none", background: "none", cursor: "pointer" }}
+                  onClick={() => void removeSpesa(r.id)}
+                >
                   Elimina
                 </button>
               </td>
@@ -135,7 +147,7 @@ export default function SpesePersonalePage() {
           ))}
         </tbody>
       </table>
-      {data.spese.length === 0 ? (
+      {spese.length === 0 ? (
         <p style={{ padding: 16, color: "#94a3b8", fontSize: 14 }}>Nessuna spesa personale.</p>
       ) : null}
     </AdminModuleShell>

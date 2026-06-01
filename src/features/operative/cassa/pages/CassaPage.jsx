@@ -316,7 +316,7 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 export default function CassaPage() {
   const navigate = useNavigate()
   const { tenantId, tenantData, refreshTenant } = useTenant()
-  const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline } = useOfflineSync(tenantId)
+  const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline, flushing: offlineFlushing } = useOfflineSync(tenantId)
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
   const pvLoading = pvCtx?.loading ?? false
@@ -2672,6 +2672,42 @@ export default function CassaPage() {
           >
             Vai ai turni
           </button>
+        </div>
+      ) : null}
+      {offlinePendingCount > 0 ? (
+        <div
+          role="status"
+          style={{
+            marginBottom: 12,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: isOnline ? "#eff6ff" : "#fffbeb",
+            border: `1px solid ${isOnline ? "#93c5fd" : "#fcd34d"}`,
+            color: isOnline ? "#1e40af" : "#92400e",
+            fontSize: 14,
+            lineHeight: 1.45,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span>
+            <strong>Coda offline:</strong> {offlinePendingCount}{" "}
+            {offlinePendingCount === 1 ? "ordine in attesa" : "ordini in attesa"} di invio al server.
+            {!isOnline ? " Connessione assente — verranno sincronizzati al ripristino." : null}
+          </span>
+          {isOnline ? (
+            <button
+              type="button"
+              className="cassa-toolbar-compact-btn"
+              style={{ fontWeight: 700 }}
+              disabled={offlineFlushing}
+              onClick={() => void flushOfflineQueue()}
+            >
+              {offlineFlushing ? "Invio…" : "Invia ora"}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {foodcostMismatchCount > 0 && !foodcostAlertDismissed ? (

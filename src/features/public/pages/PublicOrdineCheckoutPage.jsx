@@ -24,7 +24,7 @@ import {
 import { resolveMatchingPuntiVendita } from "@/utils/resolvePvForDelivery"
 import { OnlinePaymentPlaceholder, describePaymentProvider } from "@/features/public/components/OnlinePaymentPlaceholder"
 import StripePaymentForm from "@/features/public/components/StripePaymentForm"
-import { createStripePaymentIntentForOrdine } from "@/features/public/services/onlinePaymentService"
+import { createStripePaymentIntentForOrdine, pollStripeOrdinePaymentConfirmed } from "@/features/public/services/onlinePaymentService"
 
 const PARAMETRI_OPERATIVI_VUOTI = {}
 
@@ -556,9 +556,20 @@ export default function PublicOrdineCheckoutPage() {
                 <StripePaymentForm
                   publishableKey={tenant?.stripe_publishable_key}
                   clientSecret={stripeCheckout.clientSecret}
-                  onSuccess={() => {
-                    clearCart()
-                    navigate(`/cliente/ordini?nuovo=${encodeURIComponent(stripeCheckout.orderId)}`)
+                  onSuccess={async () => {
+                    const oid = stripeCheckout?.orderId
+                    if (!oid) return
+                    setSubmitting(true)
+                    setError(null)
+                    try {
+                      await pollStripeOrdinePaymentConfirmed(oid)
+                      clearCart()
+                      navigate(`/cliente/ordini?nuovo=${encodeURIComponent(oid)}`)
+                    } catch (e) {
+                      setError(e?.message || "Conferma pagamento in attesa")
+                    } finally {
+                      setSubmitting(false)
+                    }
                   }}
                   onError={(msg) => setError(msg)}
                 />

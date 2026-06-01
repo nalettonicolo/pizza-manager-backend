@@ -42,6 +42,7 @@ const contabilitaSidebarItems = [
   { to: "/admin/contabilita/spese-locale", label: "Spese gestione locale" },
   { to: "/admin/contabilita/spese-personale", label: "Spese gestione personale" },
   { to: "/admin/contabilita/incassi", label: "Gestione incassi" },
+  { to: "/admin/fiscal-outbox", label: "Coda fiscale" },
 ];
 
 const menuSidebarItems = [
