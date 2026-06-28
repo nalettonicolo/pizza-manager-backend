@@ -4,7 +4,6 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { usePublicCart } from "@/app/contexts/PublicCartContext"
 import { getPublicTenantInfo } from "@/features/services/publicService"
-import { createOrder } from "@/features/admin/services/adminService"
 import Loader from "@/components/feedback/Loader"
 import {
   getTodayOrari,
@@ -13,6 +12,12 @@ import {
   getWebVetrinaSlotQuarterFilter,
   isSlotAllowedForWebDeliveryFull,
 } from "@/features/operative/cassa/utils/planningUtils"
+import {
+  maxPizzePerSlot,
+  cartPizzeCount,
+  isSlotFull,
+  filterSlotsExcludingFull,
+} from "@/features/operative/cassa/utils/slotCapacityUtils"
 import { maybeNotifyNewWebOrder } from "@/utils/webOrderNotifications"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
@@ -24,7 +29,8 @@ import {
 import { resolveMatchingPuntiVendita } from "@/utils/resolvePvForDelivery"
 import { OnlinePaymentPlaceholder, describePaymentProvider } from "@/features/public/components/OnlinePaymentPlaceholder"
 import StripePaymentForm from "@/features/public/components/StripePaymentForm"
-import { createStripePaymentIntentForOrdine, pollStripeOrdinePaymentConfirmed } from "@/features/public/services/onlinePaymentService"
+import { createStripePaymentIntentForOrdine, finalizeStripeCheckoutOrdine } from "@/features/public/services/onlinePaymentService"
+import { createOrder, fetchVetrinaSlotCaricoOggi } from "@/features/admin/services/adminService"
 
 const PARAMETRI_OPERATIVI_VUOTI = {}
 
@@ -58,6 +64,7 @@ export default function PublicOrdineCheckoutPage() {
   const [slotTick, setSlotTick] = useState(0)
   /** Checkout online: dopo creazione ordine, clientSecret per Stripe Elements */
   const [stripeCheckout, setStripeCheckout] = useState(null)
+  const [slotCarico, setSlotCarico] = useState({})
 
   useEffect(() => {
     let c = false
@@ -98,6 +105,27 @@ export default function PublicOrdineCheckoutPage() {
   }, [tenant?.id, authTenantId])
 
   useEffect(() => {
+    if (!tenant?.id || !authTenantId || tenant.id !== authTenantId) return
+    let cancelled = false
+    void fetchVetrinaSlotCaricoOggi(tenant.id)
+      .then((data) => {
+        if (!cancelled) setSlotCarico(data || {})
+      })
+      .catch(() => {
+        if (!cancelled) setSlotCarico({})
+      })
+    const refresh = setInterval(() => {
+      void fetchVetrinaSlotCaricoOggi(tenant.id).then((data) => {
+        if (!cancelled) setSlotCarico(data || {})
+      })
+    }, 60 * 1000)
+    return () => {
+      cancelled = true
+      clearInterval(refresh)
+    }
+  }, [tenant?.id, authTenantId])
+
+  useEffect(() => {
     const id = setInterval(() => setSlotTick((n) => n + 1), 60 * 1000)
     return () => clearInterval(id)
   }, [])
@@ -120,14 +148,16 @@ export default function PublicOrdineCheckoutPage() {
   const slots = useMemo(() => {
     void slotTick
     const now = new Date()
+    let raw = []
     if (!calendarClosed) {
-      return buildPublicCheckoutDeliverySlots(orariOggi, now, parametri)
+      raw = buildPublicCheckoutDeliverySlots(orariOggi, now, parametri)
+    } else if (ordiniVetrinaConsentiti) {
+      raw = buildPublicCheckoutDeliverySlotsClosedCalendar(now, parametri)
     }
-    if (ordiniVetrinaConsentiti) {
-      return buildPublicCheckoutDeliverySlotsClosedCalendar(now, parametri)
-    }
-    return []
-  }, [calendarClosed, ordiniVetrinaConsentiti, orariOggi, slotTick, parametri])
+    const cartPizze = cartPizzeCount(items)
+    const maxPerSlot = maxPizzePerSlot(parametri)
+    return filterSlotsExcludingFull(raw, slotCarico, cartPizze, maxPerSlot)
+  }, [calendarClosed, ordiniVetrinaConsentiti, orariOggi, slotTick, parametri, slotCarico, items])
 
   useEffect(() => {
     setSelectedSlot((prev) => {
@@ -254,6 +284,11 @@ export default function PublicOrdineCheckoutPage() {
       setError(
         "La fascia scelta non è più disponibile: serve almeno un intervallo di preparazione (non si può prenotare il quarto d’ora subito dopo l’orario attuale). Aggiorna le fasce e riprova.",
       )
+      return
+    }
+    const maxPerSlot = maxPizzePerSlot(parametri)
+    if (isSlotFull(selectedSlot.key, slotCarico, cartPizzeCount(items), maxPerSlot)) {
+      setError("La fascia oraria selezionata è al completo (capacità forno). Scegli un’altra fascia.")
       return
     }
     if (!coords) {
@@ -507,21 +542,26 @@ export default function PublicOrdineCheckoutPage() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {slots.map((s) => {
                 const sel = selectedSlot?.key === s.key
+                const full = isSlotFull(s.key, slotCarico, cartPizzeCount(items), maxPizzePerSlot(parametri))
                 return (
                   <button
                     key={s.key}
                     type="button"
-                    onClick={() => setSelectedSlot(s)}
+                    disabled={full}
+                    onClick={() => !full && setSelectedSlot(s)}
                     style={{
                       padding: "10px 14px",
                       borderRadius: 8,
                       border: sel ? "2px solid #0f766e" : "1px solid #cbd5e1",
-                      background: sel ? "#ecfdf5" : "#fff",
-                      cursor: "pointer",
+                      background: full ? "#f1f5f9" : sel ? "#ecfdf5" : "#fff",
+                      color: full ? "#94a3b8" : undefined,
+                      cursor: full ? "not-allowed" : "pointer",
                       fontWeight: sel ? 700 : 500,
                     }}
+                    title={full ? "Fascia al completo (capacità forno)" : undefined}
                   >
                     {s.label}
+                    {full ? " · pieno" : ""}
                   </button>
                 )
               })}
@@ -562,7 +602,7 @@ export default function PublicOrdineCheckoutPage() {
                     setSubmitting(true)
                     setError(null)
                     try {
-                      await pollStripeOrdinePaymentConfirmed(oid)
+                      await finalizeStripeCheckoutOrdine(oid)
                       clearCart()
                       navigate(`/cliente/ordini?nuovo=${encodeURIComponent(oid)}`)
                     } catch (e) {

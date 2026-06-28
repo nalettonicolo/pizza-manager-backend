@@ -421,6 +421,60 @@ export async function markDeliveryConsegnatoAtomic(ordineId) {
   if (error) throw error
 }
 
+/** Delivery: CONSEGNATO con firma/foto/note (proof of delivery). */
+export async function markDeliveryConsegnatoWithProof(ordineId, prove = []) {
+  if (!ordineId) throw new Error("ordineId mancante")
+  const { error } = await supabase.rpc("delivery_mark_consegnato_with_proof", {
+    p_ordine_id: ordineId,
+    p_prove: prove,
+  })
+  if (error) throw error
+}
+
+/** Carico pizze per fascia oggi (checkout vetrina / capacity forno). */
+export async function fetchVetrinaSlotCaricoOggi(tenantId) {
+  if (!tenantId) return {}
+  const { data, error } = await supabase.rpc("vetrina_slot_carico_oggi", { p_tenant_id: tenantId })
+  if (error) throw error
+  return data && typeof data === "object" ? data : {}
+}
+
+/** Delivery: ASSEGNATO | IN_VIAGGIO | RICHIESTA | PROBLEMA (+ sync stato_delivery). */
+export async function deliveryUpdateStatoConsegna(ordineId, stato) {
+  if (!ordineId) throw new Error("ordineId mancante")
+  const { error } = await supabase.rpc("delivery_update_stato_consegna", {
+    p_ordine_id: ordineId,
+    p_stato: stato,
+  })
+  if (error) throw error
+}
+
+export async function listNotificheOutbox(tenantId, limit = 100) {
+  if (!tenantId) return []
+  const { data, error } = await supabase.rpc("staff_list_notifiche_outbox", {
+    p_tenant_id: tenantId,
+    p_limit: limit,
+  })
+  if (error) throw error
+  const items = data?.items
+  return Array.isArray(items) ? items : []
+}
+
+export async function retryNotificheOutboxItem(id) {
+  const { error } = await supabase.rpc("staff_retry_notifiche_outbox", { p_id: id })
+  if (error) throw error
+}
+
+export async function notificheOutboxTableReachable(tenantId) {
+  if (!tenantId) return false
+  try {
+    await listNotificheOutbox(tenantId, 1)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Aggiorna solo lo stato preparazione cucina (JSON: { doneByRiga: { [rigaId]: [ingredienteId] } }). */
 export async function updateOrderCucinaPrepStato(ordineId, cucinaPrepStato) {
   const { error } = await supabase
@@ -746,6 +800,18 @@ export async function fiscalOutboxTableReachable(tenantId) {
   if (!tenantId) return false
   const { error } = await supabase.from("fiscal_outbox").select("id").eq("tenant_id", tenantId).limit(1)
   return !error
+}
+
+/** Export JSON righe pending via RPC (modulo 22) per adapter fiscale esterno. */
+export async function exportFiscalOutboxPendingJson(tenantId, limit = 50) {
+  if (!tenantId) return { items: [] }
+  const { data, error } = await supabase.rpc("fiscal_outbox_export_pending_json", {
+    p_tenant_id: tenantId,
+    p_limit: limit,
+  })
+  if (error) throw error
+  const items = data?.items
+  return { items: Array.isArray(items) ? items : [] }
 }
 
 function mapDbFoodcostManualeToUi(row) {
@@ -3043,6 +3109,7 @@ export async function getReportData(
   const ordineIds = orders.map((o) => o.id).filter(Boolean)
   const topProdotti = await computeTopProdottiVenduti(tenantId, ordineIds, 5)
   const topProdotto = topProdotti[0]?.nome ?? "-"
+  const macroVendite = await getVenditeMacroCategorieInPeriod(tenantId, range.start, range.end)
 
   return {
     orders,
@@ -3052,6 +3119,7 @@ export async function getReportData(
     fatturato: totalRevenue,
     topProdotti,
     topProdotto,
+    macroVendite,
     periodoInizio: range.start,
     periodoFine: range.end,
   }
@@ -3197,17 +3265,25 @@ export async function updateTenantSettings(tenantId, updates) {
   const { error } = await supabase.from("tenants").update(payload).eq("id", tenantId)
   if (error) {
     if (error.code === "PGRST204") {
-      for (const key of optional) delete payload[key]
+      const details = String(error.details || error.message || "")
+      const missingFromError = optional.filter((key) => {
+        const re = new RegExp(`\\b${key}\\b`, "i")
+        return re.test(details)
+      })
+      const missing = missingFromError.length ? missingFromError : optional
+      for (const key of missing) delete payload[key]
       const retry = await supabase.from("tenants").update(payload).eq("id", tenantId)
       if (retry.error) {
         logSupabaseError("admin.updateTenantSettings.retry", retry.error, { tenantId })
         throw retry.error
       }
-      return
+      const droppedFields = missing.filter((key) => Object.prototype.hasOwnProperty.call(updates, key))
+      return { droppedFields }
     }
     logSupabaseError("admin.updateTenantSettings", error, { tenantId })
     throw error
   }
+  return { droppedFields: [] }
 }
 
 /** Salva la chiave segreta Stripe (sk_…) lato database — solo ruolo admin tenant. */
@@ -3226,4 +3302,35 @@ export async function fetchTenantStripeSecretConfigured(tenantId) {
   })
   if (error) throw error
   return !!data
+}
+
+export async function fetchTenantStripeWebhookConfigured(tenantId) {
+  const { data, error } = await supabase.rpc("tenant_stripe_webhook_configured", {
+    p_tenant_id: tenantId,
+  })
+  if (error) throw error
+  return !!data
+}
+
+export async function saveTenantStripeWebhookSecret(tenantId, secret) {
+  const { error } = await supabase.rpc("save_tenant_stripe_webhook_secret", {
+    p_tenant_id: tenantId,
+    p_secret: String(secret || "").trim(),
+  })
+  if (error) throw error
+}
+
+/** @returns {Promise<{ provider: string|null, stripe_publishable_configured: boolean, stripe_secret_configured: boolean, stripe_webhook_configured: boolean, ready: boolean }>} */
+export async function fetchTenantOnlinePaymentSetupStatus(tenantId) {
+  const { data, error } = await supabase.rpc("tenant_online_payment_setup_status", {
+    p_tenant_id: tenantId,
+  })
+  if (error) throw error
+  return data && typeof data === "object" ? data : {}
+}
+
+export function getStripeWebhookUrl() {
+  const base = import.meta.env.VITE_SUPABASE_URL
+  if (!base) return ""
+  return `${String(base).replace(/\/$/, "")}/functions/v1/payment-stripe-webhook`
 }

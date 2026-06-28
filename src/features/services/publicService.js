@@ -166,6 +166,16 @@ async function resolveSaaSPublicTenant(resolved = {}) {
     if (!error && data) return data;
   }
 
+  // Fallback anteprima SaaS: primo tenant attivo (es. unica pizzeria live senza slug "demo")
+  const { data: activeTenant, error: activeErr } = await supabase
+    .from("tenants")
+    .select("*")
+    .eq("attivo", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!activeErr && activeTenant) return activeTenant;
+
   return null;
 }
 

@@ -17,7 +17,15 @@ function isSchemaNotExposedError(err) {
 /** Tabella assente in PostgREST (es. solo core.subscriptions, niente public.subscriptions). */
 function isTableNotInSchemaCacheError(err) {
   const m = String(err?.message ?? err ?? "");
-  return /could not find the table/i.test(m);
+  const code = String(err?.code ?? "");
+  const status = Number(err?.status ?? 0);
+  return (
+    /could not find the table/i.test(m) ||
+    /relation .* does not exist/i.test(m) ||
+    code === "PGRST205" ||
+    code === "42P01" ||
+    status === 404
+  );
 }
 
 /** Colonna assente / cache PostgREST non aggiornata dopo migrazione SQL (non usare per “table not found”). */
@@ -84,6 +92,45 @@ const TENANT_SELECT_NO_SITO_WEB =
 
 const TENANT_SELECT_LEGACY = "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at";
 
+const TENANT_SELECT_CACHE_KEY = "sa_tenants_select_cache_v1";
+const SUBSCRIPTIONS_PUBLIC_KEY = "sa_public_subscriptions_available_v1";
+
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function readStorage(key) {
+  if (!canUseStorage()) return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* ignore quota/privacy mode */
+  }
+}
+
+let TENANT_SELECT_CACHE = (() => {
+  const v = readStorage(TENANT_SELECT_CACHE_KEY);
+  if (v === TENANT_SELECT_FULL || v === TENANT_SELECT_NO_SITO_WEB || v === TENANT_SELECT_LEGACY) return v;
+  // Default conservativo: evita 400 quando la view public.tenants non espone tutte le colonne.
+  return TENANT_SELECT_LEGACY;
+})();
+
+let PUBLIC_SUBSCRIPTIONS_AVAILABLE = (() => {
+  const v = readStorage(SUBSCRIPTIONS_PUBLIC_KEY);
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return true;
+})();
+
 /** Log per ogni tentativo fallito (solo dev o con VITE_DEBUG_SUPABASE=true). In produzione i fallback select sono attesi. */
 const VERBOSE_TENANTS_LIST =
   import.meta.env.DEV || import.meta.env.VITE_DEBUG_SUPABASE === "true";
@@ -110,12 +157,17 @@ async function fetchTenantsList(selectCols, { quiet = false } = {}) {
  * Elenco di tutti i tenant (solo superadmin).
  */
 export async function getTenants() {
-  const attempts = [TENANT_SELECT_FULL, TENANT_SELECT_NO_SITO_WEB, TENANT_SELECT_LEGACY];
+  const attempts = [TENANT_SELECT_CACHE, TENANT_SELECT_FULL, TENANT_SELECT_NO_SITO_WEB, TENANT_SELECT_LEGACY].filter(
+    (v, i, arr) => arr.indexOf(v) === i,
+  );
   const quiet = !VERBOSE_TENANTS_LIST;
   let lastErr = null;
   for (const cols of attempts) {
     try {
-      return await fetchTenantsList(cols, { quiet });
+      const rows = await fetchTenantsList(cols, { quiet });
+      TENANT_SELECT_CACHE = cols;
+      writeStorage(TENANT_SELECT_CACHE_KEY, cols);
+      return rows;
     } catch (e) {
       lastErr = e;
     }
@@ -217,11 +269,24 @@ export async function updateTenantPublicDomain(id, patch) {
         : String(patch.sito_web_cliente).trim();
   }
   if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from("tenants").update(row).eq("id", id);
-  if (error) {
-    logSupabaseError("superadmin.updateTenantPublicDomain", error, { id });
-    throw error;
+  let { error } = await supabase.from("tenants").update(row).eq("id", id);
+  if (!error) return;
+
+  if (isMissingColumnOrSchemaCacheError(error)) {
+    const details = String(error.details || error.message || "");
+    const retryRow = { ...row };
+    if (/\bsito_web_cliente\b/i.test(details)) delete retryRow.sito_web_cliente;
+    if (/\bpublic_domain\b/i.test(details)) delete retryRow.public_domain;
+    if (/\bpublic_domain_status\b/i.test(details)) delete retryRow.public_domain_status;
+    if (/\bpublic_domain_requested_at\b/i.test(details)) delete retryRow.public_domain_requested_at;
+    if (Object.keys(retryRow).length > 0) {
+      const retry = await supabase.from("tenants").update(retryRow).eq("id", id);
+      error = retry.error;
+      if (!error) return;
+    }
   }
+  logSupabaseError("superadmin.updateTenantPublicDomain", error, { id });
+  throw error;
 }
 
 /** Piano UI → valore enum DB (core.piano_saas: FREE, PRO, ENTERPRISE) */
@@ -286,10 +351,19 @@ function computeProssimoRinnovoIl(dataAttivazione, cicloGiorni) {
 }
 
 async function upsertSubscriptionRow(subRow, opts) {
-  let r = await supabase.from("subscriptions").upsert(subRow, opts).select().single();
+  let r = { error: { status: 404 } };
+  if (PUBLIC_SUBSCRIPTIONS_AVAILABLE) {
+    r = await supabase.from("subscriptions").upsert(subRow, opts).select().single();
+    if (isTableNotInSchemaCacheError(r.error)) {
+      PUBLIC_SUBSCRIPTIONS_AVAILABLE = false;
+      writeStorage(SUBSCRIPTIONS_PUBLIC_KEY, "false");
+    }
+  }
   if (!r.error) return;
 
   if (isTableNotInSchemaCacheError(r.error)) {
+    PUBLIC_SUBSCRIPTIONS_AVAILABLE = false;
+    writeStorage(SUBSCRIPTIONS_PUBLIC_KEY, "false");
     const subCoreOnly = fromCore("subscriptions");
     if (subCoreOnly) {
       let rc = await subCoreOnly.upsert(subRow, opts).select().single();
@@ -380,7 +454,7 @@ export async function getSubscriptionRow(tenantId) {
     return null;
   };
 
-  const pub = await tryTable(() => supabase.from("subscriptions"));
+  const pub = PUBLIC_SUBSCRIPTIONS_AVAILABLE ? await tryTable(() => supabase.from("subscriptions")) : null;
   if (pub) return pub;
   if (fromCore("subscriptions")) {
     return await tryTable(() => fromCore("subscriptions"));
@@ -480,11 +554,16 @@ async function fetchSubscriptionsRows(order) {
       sconto_annuale_percent: r.sconto_annuale_percent ?? null,
     }));
 
-  let pub = await supabase.from("subscriptions").select(colsFull).order("created_at", order);
-  if (!pub.error) return withDefaults(pub.data);
-  if (!isTableNotInSchemaCacheError(pub.error) && isMissingColumnOrSchemaCacheError(pub.error)) {
-    pub = await supabase.from("subscriptions").select(colsBasic).order("created_at", order);
+  if (PUBLIC_SUBSCRIPTIONS_AVAILABLE) {
+    let pub = await supabase.from("subscriptions").select(colsFull).order("created_at", order);
     if (!pub.error) return withDefaults(pub.data);
+    if (isTableNotInSchemaCacheError(pub.error)) {
+      PUBLIC_SUBSCRIPTIONS_AVAILABLE = false;
+      writeStorage(SUBSCRIPTIONS_PUBLIC_KEY, "false");
+    } else if (isMissingColumnOrSchemaCacheError(pub.error)) {
+      pub = await supabase.from("subscriptions").select(colsBasic).order("created_at", order);
+      if (!pub.error) return withDefaults(pub.data);
+    }
   }
 
   const subCore = fromCore("subscriptions");

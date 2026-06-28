@@ -41,21 +41,21 @@ export const SERVIZI_ROADMAP_STEPS = [
   {
     id: "gestione_consegne",
     titolo: "Gestione consegne",
-    stato: "todo",
-    percentuale: 63,
+    stato: "wip",
+    percentuale: 72,
     resto:
-      "Assegnazione rider con ottimizzazione percorso (VRP leggero) e SLA stimato lato cliente.\nStati consegna granulari (assegnato, in ritiro, in viaggio, consegnato, problema) + `stato_consegna` in DB.\nNotifiche multicanale (SMS, email, push) con template e preferenze opt‑in.\nApp rider dedicata o PWA con geolocalizzazione e proof of delivery (firma/foto).\nMappa live per sala comando; heatmap ritardi.\nIntegrazione aggregator (Glovo, Uber Eats) tramite API normalizzate.\nContratti di servizio: timeout, rimborsi automatici, escalation.\nMetriche NPS post‑consegna e analisi causa ritardo.",
-    nota: "Poligono server-side, coordinate su ordine, dashboard delivery; UX rider e notifiche multicanale ancora da completare.",
+      "Assegnazione rider con ottimizzazione percorso (VRP leggero) e SLA stimato lato cliente.\nNotifiche multicanale (SMS, push) con template e preferenze opt‑in.\nMappa live per sala comando; heatmap ritardi.\nIntegrazione aggregator (Glovo, Uber Eats) tramite API normalizzate.\nContratti di servizio: timeout, rimborsi automatici, escalation.\nMetriche NPS post‑consegna e analisi causa ritardo.",
+    nota: "Poligono server-side, coordinate su ordine, dashboard delivery, RPC stati atomici (ASSEGNATO/IN_VIAGGIO/CONSEGNATO), vista rider PWA `/operative/rider`.",
   },
   {
     id: "ordini_online",
     titolo: "Ordini online (cliente)",
     stato: "wip",
-    percentuale: 65,
+    percentuale: 72,
     resto:
-      "Account obbligatorio + conferma email; checkout con poligono PV, promozioni, fidelity+promo, `create_order_with_items`.\nPagamenti online (Stripe/SumUp): sviluppo end-to-end solo quando sarà disponibile un gateway reale collegabile (Edge Function, webhook, 3DS, rimborsi).\nAnti‑frode: velocity limits, CAPTCHA, lista blocchi indirizzi.\nSEO + Core Web Vitals; PWA.\nNotifiche nuovo ordine al locale: non prioritarie se attiva stampa comanda automatica; altrimenti email/Edge.\nWebhook ordine con firma HMAC; rate limit API pubblica.\nLoad test weekend.",
+      "Pagamenti online (Stripe/SumUp): produzione con webhook e rimborsi.\nAnti‑frode: velocity limits, CAPTCHA, lista blocchi indirizzi.\nSEO + Core Web Vitals; PWA.\nWebhook ordine con firma HMAC; rate limit API pubblica.\nLoad test weekend.",
     nota:
-      "Carrello, checkout, PV/poligoni, promozioni, blocco ordini cassa, policy HTML; filtro slot vetrina (quarto d’ora) configurabile in Parametri operativi; indirizzo sede con PlaceAutocompleteElement (Places API New). Pagamenti carta in attesa gateway reale; notifiche sostituibili da stampa comanda automatica.",
+      "Carrello, checkout, profilo, storico ordini, fidelity cliente, notifiche web → notifiche_outbox + worker Edge; Stripe E2E in staging.",
   },
   {
     id: "tablet_ruoli",

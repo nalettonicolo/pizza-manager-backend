@@ -19,8 +19,13 @@ export default function Login() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const forceClienteMode =
+    new URLSearchParams(location.search).get("cliente") === "1" ||
+    location.pathname === "/preview" ||
+    location.pathname === "/negozio"
 
   useEffect(() => {
     if (loading) return
@@ -31,13 +36,13 @@ export default function Login() {
 
     const saas = getIsSaaSClient()
 
-    if (saas && tipoUtente === "cliente") {
+    if (saas && tipoUtente === "cliente" && !forceClienteMode) {
       setError("Gli account cliente si usano dal sito della tua pizzeria (menu online), non da PizzaManager.")
       void supabase.auth.signOut()
       return
     }
 
-    if (!saas && tipoUtente === "staff") {
+    if (!saas && tipoUtente === "staff" && !forceClienteMode) {
       window.location.replace(getSaaSLoginUrl())
       return
     }
@@ -63,7 +68,7 @@ export default function Login() {
 
     devLog("Login", "fallback redirect → /")
     navigate("/", { replace: true })
-  }, [user, ruolo, tipoUtente, loading, navigate, location.state, location.search])
+  }, [user, ruolo, tipoUtente, loading, navigate, location.state, location.search, location.pathname, forceClienteMode])
 
   const isSaaS = getIsSaaSClient()
 
@@ -124,7 +129,7 @@ export default function Login() {
             </div>
             <h1 className="login-brand-title">{isSaaS ? "PizzaManager" : "Accedi"}</h1>
             <p className="login-brand-sub">
-              {isSaaS
+              {isSaaS && !forceClienteMode
                 ? "Accesso per staff e operatori della piattaforma. Account cliente: usa il sito della tua pizzeria."
                 : "Accedi con l’account cliente per questa pizzeria. Il personale accede da PizzaManager."}
             </p>
@@ -152,17 +157,37 @@ export default function Login() {
               <label className="login-label" htmlFor="login-password">
                 Password
               </label>
-              <input
-                id="login-password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="login-input"
-                required
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="login-input"
+                  style={{ paddingRight: 44 }}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Nascondi password" : "Mostra password"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    fontSize: 18,
+                  }}
+                >
+                  {showPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -177,7 +202,7 @@ export default function Login() {
           </form>
 
           <div className="login-footer-links">
-            {!isSaaS ? (
+            {!isSaaS || forceClienteMode ? (
               <>
                 <Link to="/registrazione" className="login-back">
                   Crea account

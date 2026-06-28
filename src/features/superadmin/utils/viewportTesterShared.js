@@ -9,6 +9,15 @@ export const VIEWPORT_PRESETS = [
   { id: "desktop-hd", label: "Desktop HD", w: 1280, h: 720 },
 ]
 
+/** Anteprima tenant su SaaS: aggiungi ?tenant=<uuid> al path. */
+export function withTenantQuery(path, tenantId) {
+  const base = sanitizeSuperadminPreviewPath(path)
+  const id = String(tenantId || "").trim()
+  if (!id) return base
+  const sep = base.includes("?") ? "&" : "?"
+  return `${base}${sep}tenant=${encodeURIComponent(id)}`
+}
+
 export const QUICK_PATHS = [
   { path: "/preview", label: "Anteprima vetrina" },
   { path: "/negozio", label: "Negozio pubblico" },

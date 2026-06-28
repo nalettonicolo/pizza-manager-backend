@@ -1,0 +1,17 @@
+{
+  "name": "PizzaManager Rider",
+  "short_name": "Rider",
+  "description": "Consegne a domicilio — PizzaManager",
+  "start_url": "/operative/rider",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

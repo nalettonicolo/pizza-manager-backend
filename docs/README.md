@@ -12,6 +12,7 @@ Indice degli artifact in questa cartella. I comandi operative di deploy vivono n
 | [ARCHITETTURA_E_STATO.md](./ARCHITETTURA_E_STATO.md) | Route/admin/operativo vs implementazione |
 | [ARCHITETTURA_API_E_RUOLI.md](./ARCHITETTURA_API_E_RUOLI.md) | Supabase vs API Nest (`VITE_API_URL`), ruoli |
 | [BACKLOG_E_STATO_SVILUPPO.md](./BACKLOG_E_STATO_SVILUPPO.md) | Backlog e ordine di lavoro |
+| [MACROFASI_SVILUPPO.md](./MACROFASI_SVILUPPO.md) | Piano macrofasi 1–5 e Definition of Done |
 | [ROADMAP_CASSA_ENTERPRISE.md](./ROADMAP_CASSA_ENTERPRISE.md) | Cassa stabile → offline → fiscale IT |
 
 ---

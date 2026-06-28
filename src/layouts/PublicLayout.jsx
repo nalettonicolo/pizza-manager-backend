@@ -18,6 +18,7 @@ export default function PublicLayout() {
   const isLanding = isSaaS && pathname === "/"
   /** Pagina vendita online: nav centrale (landing la mostra solo su `/`). */
   const isVetrinaPage = pathname === "/negozio" || pathname === "/preview"
+  const customerAuthQuery = search ? `${search}${search.includes("?") ? "&" : "?"}cliente=1` : "?cliente=1"
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [tenantName, setTenantName] = useState("")
   const [publicTenantId, setPublicTenantId] = useState(null)
@@ -204,7 +205,7 @@ export default function PublicLayout() {
         ) : null}
         <div className="public-layout-header-trailing">
           <Link
-            to="/login"
+            to={isVetrinaPage ? `/login${customerAuthQuery}` : "/login"}
             className="public-layout-btn public-layout-btn--outline"
             onMouseEnter={prefetchLogin}
             onFocus={prefetchLogin}
@@ -213,12 +214,12 @@ export default function PublicLayout() {
           </Link>
           {isVetrinaPage && !vetrinaOrdiniOnlineEnabled ? null : (
             <Link
-              to={isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
+              to={isVetrinaPage ? `/registrazione${search || ""}` : isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
               className="public-layout-btn public-layout-btn--primary"
               onMouseEnter={isSaaS ? undefined : prefetchRegistrazione}
               onFocus={isSaaS ? undefined : prefetchRegistrazione}
             >
-              {isSaaS ? "Registrati ora" : "Crea account"}
+              {isVetrinaPage ? "Crea account" : isSaaS ? "Registrati ora" : "Crea account"}
             </Link>
           )}
         </div>

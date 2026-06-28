@@ -71,6 +71,7 @@ export default function Report() {
   if (!report) return null;
 
   const topList = Array.isArray(report.topProdotti) ? report.topProdotti : [];
+  const macro = report.macroVendite || {};
   const periodoLabel =
     report.periodoInizio && report.periodoFine
       ? `${new Date(report.periodoInizio).toLocaleDateString("it-IT")} — ${new Date(report.periodoFine).toLocaleDateString("it-IT")}`
@@ -81,6 +82,14 @@ export default function Report() {
       "metrica,valore",
       `totale_ordini,${report.totaleOrdini ?? 0}`,
       `fatturato_euro,${Number(report.fatturato ?? 0).toFixed(2)}`,
+      "",
+      "macro_categoria,pezzi",
+      `pizze,${macro.pizze ?? 0}`,
+      `fritti,${macro.fritti ?? 0}`,
+      `dolci,${macro.dolci ?? 0}`,
+      `bibite,${macro.bibite ?? 0}`,
+      `altro,${macro.altro ?? 0}`,
+      `totale_pezzi,${macro.totalePezzi ?? 0}`,
       "",
       "posizione,prodotto,quantita",
       ...topList.map((row, idx) => `${idx + 1},"${String(row.nome || "").replace(/"/g, '""')}",${row.quantita ?? 0}`),
@@ -127,6 +136,27 @@ export default function Report() {
           <h3 style={styles.cardTitle}>Fatturato</h3>
           <p style={styles.cardValue}>{formatPrice(report.fatturato, "0.00")} €</p>
         </div>
+      </div>
+
+      <div style={styles.cardWide}>
+        <h3 style={styles.cardTitle}>Vendite per macro-categoria</h3>
+        <ul style={styles.rankList}>
+          {[
+            ["Pizze", macro.pizze],
+            ["Fritti", macro.fritti],
+            ["Dolci", macro.dolci],
+            ["Bibite", macro.bibite],
+            ["Altro", macro.altro],
+          ].map(([label, qty]) => (
+            <li key={label} style={styles.rankItem}>
+              <span style={styles.rankName}>{label}</span>
+              <span style={styles.rankQty}>{qty ?? 0} pz</span>
+            </li>
+          ))}
+        </ul>
+        <p style={{ ...styles.empty, marginTop: 8 }}>
+          Totale pezzi nel periodo: <strong>{macro.totalePezzi ?? 0}</strong>
+        </p>
       </div>
 
       <div style={styles.cardWide}>

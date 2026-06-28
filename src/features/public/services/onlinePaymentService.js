@@ -68,7 +68,41 @@ export async function requestStripeRefundForOrdine(ordineId, amountCent = null) 
   return json
 }
 
+/**
+ * Conferma pagamento su Stripe + marca ordine (non dipende solo dal webhook).
+ * @param {string} ordineId
+ */
+export async function confirmStripePaymentForOrdine(ordineId) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error("Sessione scaduta: effettua di nuovo l’accesso.")
+
+  const res = await fetch(functionsUrl("payment-stripe-confirm"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ ordine_id: ordineId }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(json.error || `Conferma pagamento non riuscita (${res.status})`)
+  }
+  return json
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Conferma attiva su Edge, poi polling DB come rete di sicurezza.
+ */
+export async function finalizeStripeCheckoutOrdine(ordineId, opts = {}) {
+  await confirmStripePaymentForOrdine(ordineId)
+  return pollStripeOrdinePaymentConfirmed(ordineId, opts)
+}
 
 /**
  * Attende conferma webhook Stripe su ordine (online_payment.status = succeeded).

@@ -149,6 +149,8 @@ max_indexes = 5
 
 [auth]
 enabled = true
+# ATTENZIONE: `npx supabase config push` sovrascrive TUTTA la config Auth remota (site_url, MFA, …).
+# In produzione usare: npm run supabase:auth:apply  (solo Management API, campi mirati).
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
 site_url = "http://127.0.0.1:3000"
@@ -226,10 +228,26 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Template email Auth (allineati a no-reply@pizzamanager.it)
+[auth.email.template.invite]
+subject = "Invito account PizzaManager"
+content_path = "./supabase/templates/auth/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Conferma il tuo account PizzaManager"
+content_path = "./supabase/templates/auth/confirm_signup.html"
+
+[auth.email.template.recovery]
+subject = "Reimposta la password del tuo account"
+content_path = "./supabase/templates/auth/reset_password.html"
+
+[auth.email.template.magic_link]
+subject = "Link di accesso rapido PizzaManager"
+content_path = "./supabase/templates/auth/magic_link.html"
+
+[auth.email.template.email_change]
+subject = "Conferma cambio email account"
+content_path = "./supabase/templates/auth/change_email.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

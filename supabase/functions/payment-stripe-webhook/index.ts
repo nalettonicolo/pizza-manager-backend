@@ -1,5 +1,17 @@
-import { createClient } from "@supabase/supabase-js"
-import Stripe from "stripe"
+import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
+import Stripe from "npm:stripe@17.5.0"
+
+function extractPaymentIntentId(event: Stripe.Event): string | null {
+  const obj = event.data?.object as { id?: string } | undefined
+  if (!obj?.id) return null
+  if (event.type.startsWith("payment_intent.")) return obj.id
+  if (event.type === "charge.refunded") {
+    const ch = event.data.object as Stripe.Charge
+    const pi = ch.payment_intent
+    return typeof pi === "string" ? pi : (pi as Stripe.PaymentIntent | null)?.id ?? null
+  }
+  return null
+}
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -8,15 +20,21 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  const whSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") || ""
+  const globalWhSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") || ""
   const isProd = Boolean(Deno.env.get("DENO_DEPLOYMENT_ID") || Deno.env.get("SUPABASE_URL")?.includes(".supabase.co"))
 
   const body = await req.text()
   const sig = req.headers.get("stripe-signature") || ""
 
+  const admin = createClient(supabaseUrl, serviceKey)
+
   let event: Stripe.Event
+  const stripeProbe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
+
   try {
-    if (!whSecret) {
+    let verifySecret = globalWhSecret
+
+    if (!verifySecret) {
       if (isProd) {
         console.error("STRIPE_WEBHOOK_SECRET mancante in produzione")
         return new Response("Webhook non configurato", { status: 503 })
@@ -24,15 +42,42 @@ Deno.serve(async (req) => {
       event = JSON.parse(body) as Stripe.Event
       console.warn("STRIPE_WEBHOOK_SECRET mancante: evento non verificato (solo dev)")
     } else {
-      const stripe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
-      event = stripe.webhooks.constructEvent(body, sig, whSecret)
+      try {
+        event = stripeProbe.webhooks.constructEvent(body, sig, verifySecret)
+      } catch {
+        let parsed: Stripe.Event
+        try {
+          parsed = JSON.parse(body) as Stripe.Event
+        } catch {
+          throw new Error("Payload webhook non valido")
+        }
+        const piId = extractPaymentIntentId(parsed)
+        if (piId) {
+          const { data: tenantId } = await admin.rpc("get_tenant_id_by_stripe_payment_intent", {
+            p_payment_intent_id: piId,
+          })
+          if (tenantId) {
+            const { data: tenantWh } = await admin.rpc("get_stripe_webhook_secret_for_tenant_edge", {
+              p_tenant_id: tenantId,
+            })
+            if (tenantWh && typeof tenantWh === "string") {
+              verifySecret = tenantWh
+              event = stripeProbe.webhooks.constructEvent(body, sig, verifySecret)
+            } else {
+              throw new Error("Firma webhook non valida")
+            }
+          } else {
+            throw new Error("Firma webhook non valida")
+          }
+        } else {
+          throw new Error("Firma webhook non valida")
+        }
+      }
     }
   } catch (e) {
     console.error("webhook signature", e)
     return new Response(`Webhook error: ${(e as Error).message}`, { status: 400 })
   }
-
-  const admin = createClient(supabaseUrl, serviceKey)
 
   try {
     switch (event.type) {

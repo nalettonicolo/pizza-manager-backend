@@ -8,12 +8,14 @@ import {
   readFidelityAbilitaClientiDomicilio,
 } from "@/utils/fidelityProgramConfig"
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
+import { getClienteFidelityProfile } from "@/features/public/services/clienteAuthService"
 
 export default function ClienteDashboardPage() {
   const { user, logout } = useAuth()
   const [nomePizzeria, setNomePizzeria] = useState("")
   const [mostraFidelityDomicilio, setMostraFidelityDomicilio] = useState(false)
   const [vetrinaTenant, setVetrinaTenant] = useState(null)
+  const [fidelity, setFidelity] = useState(null)
 
   useEffect(() => {
     getPublicTenantInfo().then((t) => {
@@ -44,6 +46,17 @@ export default function ClienteDashboardPage() {
     }
   }, [user?.id])
 
+  useEffect(() => {
+    if (!user?.id) return
+    let c = false
+    getClienteFidelityProfile().then(({ data }) => {
+      if (!c && data) setFidelity(data)
+    })
+    return () => {
+      c = true
+    }
+  }, [user?.id])
+
   const parametriVetrina =
     vetrinaTenant?.parametri_operativi && typeof vetrinaTenant.parametri_operativi === "object"
       ? vetrinaTenant.parametri_operativi
@@ -59,7 +72,30 @@ export default function ClienteDashboardPage() {
       <p style={{ fontSize: 14, marginBottom: 20 }}>
         Accesso come <strong>{user?.email}</strong>
       </p>
-      {mostraFidelityDomicilio ? (
+      {fidelity?.attivo ? (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: 14,
+            borderRadius: 10,
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            fontSize: 14,
+            lineHeight: 1.5,
+            color: "#14532d",
+          }}
+        >
+          <strong>Programma fedeltà</strong>
+          <p style={{ margin: "8px 0 0", fontSize: 22, fontWeight: 700 }}>
+            {Number(fidelity.punti ?? 0)} punti
+          </p>
+          {fidelity.codice_carta ? (
+            <p style={{ margin: "6px 0 0", color: "#166534", fontSize: 13 }}>
+              Tessera: <strong>{fidelity.codice_carta}</strong>
+            </p>
+          ) : null}
+        </div>
+      ) : mostraFidelityDomicilio ? (
         <div
           style={{
             marginBottom: 20,

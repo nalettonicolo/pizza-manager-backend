@@ -6,8 +6,11 @@ import {
   createEmptyService,
   formatEuroMonth,
   loadServicesCatalog,
+  mergeCatalogWithDefaults,
+  normalizeService,
   saveServicesCatalog,
 } from "@/features/superadmin/catalog/servicesStorage";
+import { fetchSaCatalogFromDb, persistSaCatalogToDb } from "@/features/superadmin/catalog/catalogRemoteSync";
 import { exportServiziCatalogCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
 import { applyServiziCsvToCatalog, parseServiziCsv } from "@/features/superadmin/utils/parseServiziCsv";
 import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
@@ -51,7 +54,18 @@ export default function ServiziCatalogo() {
   const [listQuery, setListQuery] = useState("");
 
   useEffect(() => {
+    void fetchSaCatalogFromDb().then((remote) => {
+      if (!remote?.services?.length) return;
+      setServices(mergeCatalogWithDefaults(remote.services.map(normalizeService).filter(Boolean)));
+    });
+  }, []);
+
+  useEffect(() => {
     saveServicesCatalog(services);
+    const timer = setTimeout(() => {
+      void persistSaCatalogToDb({ services });
+    }, 800);
+    return () => clearTimeout(timer);
   }, [services]);
 
   const servicesFiltered = useMemo(() => {

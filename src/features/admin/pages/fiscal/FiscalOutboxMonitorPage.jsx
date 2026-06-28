@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenant } from "@/app/contexts/TenantContext";
 import {
+  exportFiscalOutboxPendingJson,
   fiscalOutboxTableReachable,
   listFiscalOutbox,
   retryFiscalOutboxItem,
@@ -93,6 +94,21 @@ export default function FiscalOutboxMonitorPage() {
     }
   }
 
+  async function handleExportPendingJson() {
+    if (!tenantId) return;
+    try {
+      const { items } = await exportFiscalOutboxPendingJson(tenantId, 100);
+      const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `fiscal-outbox-pending-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setErr(e?.message || "Export JSON non riuscito");
+    }
+  }
+
   return (
     <AdminModuleShell
       title="Coda fiscale"
@@ -127,6 +143,9 @@ export default function FiscalOutboxMonitorPage() {
         </select>
         <button type="button" className="btn-secondary" onClick={() => void load()} disabled={loading}>
           Aggiorna
+        </button>
+        <button type="button" className="btn-secondary" onClick={() => void handleExportPendingJson()} disabled={!dbOk}>
+          Esporta pending (JSON)
         </button>
         <span style={{ fontSize: 13, color: "#64748b" }}>
           In coda: {counts.pending} · Falliti: {counts.failed} · OK: {counts.sent}

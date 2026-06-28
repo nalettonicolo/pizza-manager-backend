@@ -6,6 +6,7 @@ import {
   ZOOM_OPTIONS,
   sanitizeSuperadminPreviewPath,
   buildViewportStudioUrl,
+  withTenantQuery,
 } from "@/features/superadmin/utils/viewportTesterShared"
 
 export default function SuperadminViewportTesterPage() {
@@ -20,6 +21,7 @@ export default function SuperadminViewportTesterPage() {
   const [rotated, setRotated] = useState(false)
   const [zoom, setZoom] = useState(0.75)
   const [iframeKey, setIframeKey] = useState(0)
+  const [tenantPreviewId, setTenantPreviewId] = useState("")
 
   useEffect(() => {
     if (hydratedFromUrl.current) return
@@ -64,7 +66,10 @@ export default function SuperadminViewportTesterPage() {
   const frameW = rotated ? baseH : baseW
   const frameH = rotated ? baseW : baseH
 
-  const safePath = useMemo(() => sanitizeSuperadminPreviewPath(pathInput), [pathInput])
+  const safePath = useMemo(
+    () => withTenantQuery(pathInput, tenantPreviewId),
+    [pathInput, tenantPreviewId],
+  )
 
   const iframeSrc = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : ""
@@ -149,6 +154,16 @@ export default function SuperadminViewportTesterPage() {
             value={pathInput}
             onChange={(e) => setPathInput(e.target.value)}
             placeholder="/preview"
+            style={inputStyle}
+            spellCheck={false}
+            autoComplete="off"
+          />
+          <label style={{ ...labelStyle, marginTop: 12 }}>Tenant (opzionale, UUID per anteprima SaaS)</label>
+          <input
+            type="text"
+            value={tenantPreviewId}
+            onChange={(e) => setTenantPreviewId(e.target.value)}
+            placeholder="es. 95c0b10f-b677-4131-abd9-e60e8cf9e3bf"
             style={inputStyle}
             spellCheck={false}
             autoComplete="off"

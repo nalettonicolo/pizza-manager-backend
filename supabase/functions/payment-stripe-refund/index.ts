@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js"
-import Stripe from "stripe"
+import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
+import Stripe from "npm:stripe@17.5.0"
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts"
 
 Deno.serve(async (req) => {

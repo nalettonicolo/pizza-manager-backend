@@ -15,8 +15,25 @@ Sei esperto **Supabase / PostgreSQL** per PizzaManager (schema `core` + `public`
 - **RLS** attivo dove la tabella è esposta; evitare “apri tutto” a `authenticated` senza `USING`.
 - **Nessun accesso globale** ai dati di altri tenant tramite policy permissive.
 
+## Applicazione immediata (obbligatoria)
+
+Ogni patch creata o modificata va **applicata al DB remoto nella stessa sessione** (non lasciare moduli solo nel repo).
+
+| Step | Azione |
+|------|--------|
+| 1 | Scrivere/aggiornare `sql/modules/NN_*.sql` (solo **additivo** e idempotente) |
+| 2 | Aggiornare elenco moduli in `sql/sql_upgrade.sql` |
+| 3 | `npm run sql:apply -- sql/modules/NN_*.sql` oppure MCP `apply_migration` |
+| 4 | Verificare con `execute_sql` (esistenza oggetti) |
+| 5 | Solo se richiesto: consolidare in `schema_completo_pizzamanager.sql` |
+
+**Mai senza esplicita richiesta utente:** `DROP TABLE`, `TRUNCATE`, `DELETE` massivi, rimozione colonne con dati. Preferire `CREATE OR REPLACE FUNCTION`, `ADD COLUMN IF NOT EXISTS`, nuove policy RLS.
+
+Progetto: `flfhrwzlrftuhkrfwzse` (PizzaManagerApp).
+
 ## Output atteso
 
 - **SQL completo** (idempotente dove possibile: `IF NOT EXISTS`, `DROP … IF EXISTS` controllati).
+- **Conferma deploy** remoto (oggetti verificati via MCP).
 - Note su **ordine di applicazione** se ci sono dipendenze.
 - Indicazione di **verifica post-deploy**: `sql/scripts/verify_database_inventory_readonly.sql`, `sql/scripts/smoke_rls_cross_tenant.sql`, checklist in `sql/scripts/README_VERIFY_RLS.md` (exposed schemas Dashboard, JWT).

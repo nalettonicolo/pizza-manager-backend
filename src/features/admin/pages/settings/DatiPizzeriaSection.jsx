@@ -285,9 +285,16 @@ export default function DatiPizzeriaSection() {
       if (settings.stripe_publishable_key !== undefined) payload.stripe_publishable_key = settings.stripe_publishable_key || null;
       if (settings.sumup_merchant_public_id !== undefined)
         payload.sumup_merchant_public_id = settings.sumup_merchant_public_id || null;
-      await updateTenantSettings(tenantId, payload);
+      const res = await updateTenantSettings(tenantId, payload);
       if (refreshTenant) await refreshTenant();
-      alert("Dati pizzeria salvati.");
+      const dropped = Array.isArray(res?.droppedFields) ? res.droppedFields : [];
+      if (dropped.length) {
+        alert(
+          `Salvataggio parziale: alcuni campi non esistono ancora nel database (${dropped.join(", ")}). Applica gli SQL di upgrade schema e riprova.`,
+        );
+      } else {
+        alert("Dati pizzeria salvati.");
+      }
     } catch (err) {
       console.error(err);
       alert("Errore durante il salvataggio. " + (err?.message || ""));
@@ -429,6 +436,9 @@ export default function DatiPizzeriaSection() {
           <strong>SumUp</strong>: inserisci il merchant/public id richiesto dalla tua integrazione.
           <br />
           Il provider selezionato viene usato dalla vetrina per proporre il checkout online.
+          <br />
+          Guida webhook e checklist:{" "}
+          <a href="/admin/settings/pagamenti-online">Impostazioni → Pagamenti online</a>.
         </div>
         <div className="dashboard-settings-fields">
           <label>

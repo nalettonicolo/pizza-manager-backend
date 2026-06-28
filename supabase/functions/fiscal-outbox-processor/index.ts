@@ -1,8 +1,8 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
+import { processFiscalOutboxBatch } from "../_shared/fiscal/processBatch.ts"
 
 /**
- * Worker stub: claim fiscal_outbox batch e marca sent/failed (adapter RT reale → vendor).
- * Invocare con service role (cron o manuale Super Admin).
+ * Worker fiscal outbox: export file + adapter RT/SDI (stub fino a FISCAL_RT_API_*).
  */
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -23,53 +23,13 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: claimErr.message }), { status: 500 })
   }
 
-  const processed: string[] = []
-  const failed: string[] = []
-
-  for (const row of rows || []) {
-    try {
-      if (row.kind === "export_file") {
-        await admin.rpc("complete_fiscal_outbox_item", {
-          p_id: row.id,
-          p_status: "sent",
-          p_provider_response: { mode: "export_file", note: "stub_ok" },
-          p_last_error: null,
-        })
-      } else if (row.kind === "noop_test") {
-        await admin.rpc("complete_fiscal_outbox_item", {
-          p_id: row.id,
-          p_status: "ack",
-          p_provider_response: { noop: true },
-          p_last_error: null,
-        })
-      } else {
-        await admin.rpc("complete_fiscal_outbox_item", {
-          p_id: row.id,
-          p_status: "failed",
-          p_provider_response: null,
-          p_last_error: "adapter_rt_non_configurato",
-        })
-        failed.push(row.id)
-        continue
-      }
-      processed.push(row.id)
-    } catch (e) {
-      console.error("process row", row.id, e)
-      await admin.rpc("complete_fiscal_outbox_item", {
-        p_id: row.id,
-        p_status: "failed",
-        p_provider_response: null,
-        p_last_error: String((e as Error).message || e),
-      })
-      failed.push(row.id)
-    }
-  }
+  const { processed, failed } = await processFiscalOutboxBatch(admin, rows || [])
 
   return new Response(
     JSON.stringify({
       claimed: (rows || []).length,
-      processed: processed.length,
-      failed: failed.length,
+      processed,
+      failed,
     }),
     { headers: { "Content-Type": "application/json" } },
   )

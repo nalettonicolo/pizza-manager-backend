@@ -19,7 +19,8 @@ export default function ClienteVerificaEmailPage() {
         type: "signup",
         email: user.email,
         options: {
-          emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/` : undefined,
+          emailRedirectTo:
+            typeof window !== "undefined" ? `${window.location.origin}/cliente/dashboard` : undefined,
         },
       })
       if (error) throw error

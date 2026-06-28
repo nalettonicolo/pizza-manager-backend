@@ -143,6 +143,57 @@ Quando un tenant ha il **menu / vetrina sul proprio dominio** (non solo su `pizz
 
 ---
 
+### 4.7d Supabase Authentication — SMTP custom (`no-reply@pizzamanager.it`)
+
+L’SMTP integrato Supabase (sandbox) **non** va in produzione: invia solo a email del team e con limiti bassi. Per registrazione cliente, conferma email e reset password serve **SMTP custom** sul dominio `pizzamanager.it`.
+
+**Valori consigliati (produzione):**
+
+| Campo | Valore |
+| --- | --- |
+| Mittente (From) | `no-reply@pizzamanager.it` |
+| Nome mittente | `PizzaManager Accounts` |
+| Reply-To (nel testo template o footer) | `support@pizzamanager.it` |
+| Porta | `587` (STARTTLS) oppure `465` (SSL) — come da provider |
+
+**Passi in Supabase Dashboard** (progetto `flfhrwzlrftuhkrfwzse`):
+
+1. **Authentication** → **SMTP** (o **Project Settings** → **Auth** → **SMTP**).
+2. Attiva **Enable custom SMTP**.
+3. Compila host, porta, user, password dal provider scelto (vedi sotto).
+4. **Sender email:** `no-reply@pizzamanager.it` · **Sender name:** `PizzaManager Accounts`.
+5. Salva e invia **email di test** dalla stessa schermata.
+6. **Authentication** → **Rate limits** → alza `emails sent` (dopo SMTP custom il default è ~30/h; portalo a un valore adeguato, es. 100–500/h).
+7. **Authentication** → **Providers** → **Email** → lascia **Confirm email** attivo se i clienti devono confermare l’account prima di ordinare (coerente con `ClienteVerificaEmailPage`).
+8. **Authentication** → **Email templates** (opzionale): oggetto/corpo in italiano; in fondo al messaggio indica «Per assistenza: support@pizzamanager.it».
+
+**Automazione template (repo, senza `config push`):** i file HTML sono in `supabase/templates/auth/`. Per applicarli al progetto linkato senza toccare `site_url` né SMTP:
+
+```bash
+npm run supabase:auth:email-templates
+```
+
+Per ripristinare URL produzione + template in un colpo solo: `npm run supabase:auth:apply`. **Non usare** `npx supabase config push` sul progetto produzione: il `config.toml` locale è per `supabase start` (127.0.0.1).
+
+**Provider SMTP (scegline uno):**
+
+- **Google Workspace** (se `pizzamanager.it` è su Google): host `smtp.gmail.com`, porta `587`, user = indirizzo completo, password = **App Password** (2FA obbligatoria). In Admin Google verifica che `no-reply@` esista o sia alias.
+- **Microsoft 365:** host `smtp.office365.com`, porta `587`, user/password dell’account o SMTP relay autorizzato.
+- **Resend / Brevo / SendGrid** (consigliato per volume transazionale): crea dominio `pizzamanager.it`, copia host/user/password SMTP dalla dashboard, aggiungi record **SPF**, **DKIM** (e **DMARC** se possibile) nel DNS del dominio.
+
+**DNS (obbligatorio per non finire in spam):** dal pannello del provider email copia i record TXT/CNAME indicati e pubblicali sul DNS di `pizzamanager.it`. Attendi propagazione (fino a 24–48 h), poi ritesta.
+
+**Checklist post-configurazione:**
+
+1. Registrazione cliente su `https://pizzamanager.it/registrazione?tenant=…` → arriva mail da `PizzaManager Accounts <no-reply@pizzamanager.it>`.
+2. Link conferma → redirect a `/cliente/dashboard` (già in `clienteAuthService.js`).
+3. **Password dimenticata** da dominio tenant → mail con link a `https://<dominio-tenant>/reimposta-password` (URL in Redirect URLs, §4.7c).
+4. Se la mail non parte: controlla log **Authentication** → **Logs** e credenziali SMTP; con Resend/Brevo verifica dominio «verified».
+
+**Riferimento codice:** `src/features/public/services/clienteAuthService.js` (`signUpCliente`, `requestClientePasswordReset`).
+
+---
+
 ### 4.8 Abbonamenti (`/superadmin/licenses`)
 
 - Tabella subscription: cliente, piano enum, stato, `rinnovo_il`.

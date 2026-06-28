@@ -27,6 +27,14 @@ const PIANO_OPTIONS = [
   { value: "ENTERPRISE", label: "Enterprise" },
 ];
 
+const MODAL_TABS = [
+  { id: "anagrafica", label: "Anagrafica" },
+  { id: "servizi", label: "Contratto e servizi" },
+  { id: "fiscale", label: "Fiscale e contatti" },
+  { id: "canone", label: "Canone servizio" },
+  { id: "account", label: "Account attivi" },
+];
+
 function slugify(s) {
   return s
     .trim()
@@ -65,6 +73,9 @@ function emptyModal(mode, services, reloadInclusioniFromPiano) {
     parametriOperativiBase: {},
     abbonamentoCicloGiorni: 30,
     abbonamentoScontoAnnualePercent: "",
+    sito_web_cliente: "",
+    public_domain: "",
+    public_domain_status: "none",
   };
 }
 
@@ -110,7 +121,22 @@ function tenantToModal(t, mode, services, reloadInclusioniFromPiano) {
     parametriOperativiBase: po,
     abbonamentoCicloGiorni: 30,
     abbonamentoScontoAnnualePercent: "",
+    sito_web_cliente: t.sito_web_cliente ?? "",
+    public_domain: t.public_domain ?? "",
+    public_domain_status: t.public_domain_status ?? "none",
   };
+}
+
+function extractHostname(rawUrl) {
+  const v = String(rawUrl || "").trim();
+  if (!v) return "";
+  const candidate = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  try {
+    const u = new URL(candidate);
+    return String(u.hostname || "").trim().toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 function CellEllipsis({ children, title }) {
@@ -137,6 +163,7 @@ export default function Tenants() {
   const [error, setError] = useState(null);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [modalTab, setModalTab] = useState("anagrafica");
   const [listQuery, setListQuery] = useState("");
   /** Modale Modifica cliente: staff + note archivio password (stessa tabella che vede Admin → Ruoli). */
   const [archivio, setArchivio] = useState({
@@ -228,7 +255,7 @@ export default function Tenants() {
         if (cancelled) return;
         setArchivio({
           loading: false,
-          error: err?.message ?? "Impossibile caricare ruoli o note password.",
+          error: err?.message ?? "Impossibile caricare account o password archiviate.",
           ruoli: [],
           drafts: {},
           savingUserId: null,
@@ -248,7 +275,7 @@ export default function Tenants() {
     try {
       await upsertStaffPasswordNote(tid, userId, text);
     } catch (err) {
-      setError(err?.message ?? "Salvataggio nota password non riuscito.");
+      setError(err?.message ?? "Salvataggio password archivio non riuscito.");
       setArchivio((a) => ({ ...a, savingUserId: null }));
       return;
     }
@@ -256,10 +283,12 @@ export default function Tenants() {
   };
 
   const openCreate = () => {
+    setModalTab("anagrafica");
     setModal(emptyModal("create", catalogServices, reloadInclusioniFromPiano));
   };
 
   const openEdit = (t) => {
+    setModalTab("anagrafica");
     const base = tenantToModal(t, "edit", catalogServices, reloadInclusioniFromPiano);
     setModal(base);
     void getSubscriptionRow(t.id).then((sub) => {
@@ -278,7 +307,10 @@ export default function Tenants() {
     });
   };
 
-  const closeModal = () => setModal(null);
+  const closeModal = () => {
+    setModal(null);
+    setModalTab("anagrafica");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -321,6 +353,9 @@ export default function Tenants() {
         sconto_percentuale: modal.sconto_percentuale,
         prova_valida_fino: modal.prova_valida_fino || null,
         parametri_operativi: nextPo,
+        sito_web_cliente: modal.sito_web_cliente || null,
+        public_domain: modal.public_domain || extractHostname(modal.sito_web_cliente) || null,
+        public_domain_status: modal.public_domain_status || "none",
         abbonamento_ciclo_giorni: ciclo,
         abbonamento_sconto_annuale_percent:
           ciclo === 365 && String(modal.abbonamentoScontoAnnualePercent ?? "").trim() !== ""
@@ -499,7 +534,7 @@ export default function Tenants() {
       </div>
 
       {modal && (
-        <div className="sa-modal-overlay" onClick={closeModal} role="presentation">
+        <div className="sa-modal-overlay" role="presentation">
           <div
             className="dashboard-box sa-modal-panel"
             onClick={(e) => e.stopPropagation()}
@@ -510,10 +545,24 @@ export default function Tenants() {
               {modal.mode === "create" ? "Nuovo cliente" : "Modifica cliente"}
             </h2>
             <p className="sa-modal-subtitle">
-              Dati anagrafici, livello contratto (subscription), listino servizi e fatturazione.
+              Struttura cliente a finestre: anagrafica, servizi, fiscale, canone e account attivi.
             </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+              {MODAL_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={modalTab === t.id ? "btn-primary-dashboard" : "sa-btn-ghost"}
+                  onClick={() => setModalTab(t.id)}
+                  style={{ padding: "8px 12px" }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <form onSubmit={handleSubmit} className="sa-modal-form">
-              <section className="sa-form-section">
+              {modalTab === "anagrafica" ? (
+                <section className="sa-form-section">
                 <h3 className="sa-form-section-title">Anagrafica e contratto</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
                   <div>
@@ -563,6 +612,31 @@ export default function Tenants() {
                       style={inputStyle}
                     />
                   </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={labelStyle}>URL sito cliente</label>
+                    <input
+                      type="text"
+                      value={modal.sito_web_cliente}
+                      onChange={(e) => setModalField("sito_web_cliente", e.target.value)}
+                      style={inputStyle}
+                      placeholder="https://francypizza.pizzamanager.it"
+                      autoComplete="off"
+                    />
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                      URL completo della vetrina cliente. Se il dominio pubblico è vuoto, al salvataggio viene derivato da qui.
+                    </p>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={labelStyle}>Hostname pubblico (routing tenant)</label>
+                    <input
+                      type="text"
+                      value={modal.public_domain}
+                      onChange={(e) => setModalField("public_domain", e.target.value)}
+                      style={inputStyle}
+                      placeholder="francypizza.pizzamanager.it"
+                      autoComplete="off"
+                    />
+                  </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
                   <input
@@ -576,8 +650,12 @@ export default function Tenants() {
                   </label>
                 </div>
               </section>
+              ) : null}
 
-              <TenantServiziPlanFields
+              {modalTab === "servizi" ? (
+                <section className="sa-form-section">
+                  <h3 className="sa-form-section-title">Contratto e servizi inclusi</h3>
+                  <TenantServiziPlanFields
                 modal={modal}
                 catalogServices={catalogServices}
                 commercialPlans={commercialPlans}
@@ -586,8 +664,11 @@ export default function Tenants() {
                 setModal={setModal}
                 reloadInclusioniFromPiano={reloadInclusioniFromPiano}
               />
+                </section>
+              ) : null}
 
-              <section className="sa-form-section">
+              {modalTab === "fiscale" ? (
+                <section className="sa-form-section">
                 <h3 className="sa-form-section-title">Dati fiscali e contatti</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
                   <div>
@@ -634,15 +715,14 @@ export default function Tenants() {
                   </div>
                 </div>
               </section>
+              ) : null}
 
-              {modal.mode === "edit" && modal.id ? (
+              {modalTab === "account" && modal.mode === "edit" && modal.id ? (
                 <section className="sa-form-section">
-                  <h3 className="sa-form-section-title">Archivio password staff (Ruoli)</h3>
+                  <h3 className="sa-form-section-title">Account attivi cliente</h3>
                   <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
-                    Stesse <strong>note opzionali</strong> che il titolare vede in <strong>Admin → Ruoli</strong> dopo aver
-                    inserito la propria password: non sono le credenziali Supabase, solo promemoria (es. password date al
-                    dipendente). Dopo il salvataggio il locale le trova allo sblocco dell&apos;archivio in Ruoli. Per
-                    gestire solo le note puoi usare anche la{" "}
+                    In questa finestra puoi vedere gli account attivi e aggiornare la password archivio (nota operativa). Per
+                    gestione avanzata resta disponibile la{" "}
                     <Link to={`/superadmin/tenants/${modal.id}/archivio-password`} style={{ fontWeight: 600 }}>
                       pagina dedicata «Archivio password»
                     </Link>
@@ -671,9 +751,9 @@ export default function Tenants() {
                         >
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{labelFromEmailPrefix(r.email)}</div>
                           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
-                            {r.email} · ruolo: {r.ruolo}
+                            {r.email} · ruolo: {r.ruolo} · Utente attivo sul tenant
                           </div>
-                          <label style={labelStyle}>Nota password (archivio)</label>
+                          <label style={labelStyle}>Password archivio (nota interna)</label>
                           <textarea
                             value={archivio.drafts[r.user_id] ?? ""}
                             onChange={(e) =>
@@ -694,7 +774,7 @@ export default function Tenants() {
                               disabled={archivio.savingUserId === r.user_id}
                               onClick={() => saveArchivioNote(r.user_id, archivio.drafts[r.user_id] ?? "")}
                             >
-                              {archivio.savingUserId === r.user_id ? "Salvataggio…" : "Salva nota"}
+                              {archivio.savingUserId === r.user_id ? "Salvataggio…" : "Salva password"}
                             </button>
                           </div>
                         </li>
@@ -704,7 +784,8 @@ export default function Tenants() {
                 </section>
               ) : null}
 
-              <section className="sa-form-section">
+              {modalTab === "canone" ? (
+                <section className="sa-form-section">
                 <h3 className="sa-form-section-title">Abbonamento e pagamento</h3>
                 <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.55, maxWidth: 720 }}>
                   Il <strong>prossimo rinnovo</strong> (pagina Abbonamenti) si calcola dalla{" "}
@@ -797,6 +878,7 @@ export default function Tenants() {
                   </div>
                 </div>
               </section>
+              ) : null}
 
               <div className="sa-modal-actions">
                 <button type="button" onClick={closeModal} className="sa-btn-ghost">

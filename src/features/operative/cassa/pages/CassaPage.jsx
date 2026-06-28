@@ -109,38 +109,14 @@ import { applyPromoCalendarioToProducts, fidelitySkippedByPromoCalendario } from
 import { normalizeRuoloOperativo } from "@/utils/operativeAreaAccess"
 import { computeFidelityRedeemPuntiCost } from "@/utils/fidelityRedeem"
 import { productMatchesMenuSearch } from "@/utils/menuProductSearch"
+import {
+  iconTipoPagamentoLista,
+  labelTipoPagamentoLista,
+  tipoPagamentoInAttesa,
+} from "@/features/operative/cassa/utils/cassaPaymentDisplay"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
 const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Link (carta da casa)", "Altro"]
-
-/** Pagamenti ancora da incassare (in cassa o da remoto). */
-function tipoPagamentoInAttesa(tipoPagamento) {
-  const t = String(tipoPagamento || "").toLowerCase()
-  return t.includes("da pagare") || t.includes("link") || t.includes("carta da casa")
-}
-
-function iconTipoPagamentoLista(tipoPagamento) {
-  const t = String(tipoPagamento || "").toLowerCase()
-  if (t.includes("misto")) return "🔀"
-  if (t.includes("link") || t.includes("carta da casa")) return "🔗"
-  if (t.includes("contanti")) return "💵"
-  if (t.includes("carta") && !t.includes("casa")) return "💳"
-  if (t.includes("satispay")) return "📱"
-  if (t.includes("bonifico")) return "🏦"
-  if (t.includes("voucher") || t.includes("buono")) return "🎟️"
-  if (t.includes("altro")) return "🧾"
-  if (t.includes("da pagare")) return "⏳"
-  return "📋"
-}
-
-function labelTipoPagamentoLista(tipoPagamento) {
-  const t = String(tipoPagamento || "").toLowerCase()
-  if (t.includes("link") || t.includes("carta da casa")) return "Link"
-  if (t.includes("da pagare")) return "Da pag."
-  if (t.includes("misto")) return "Misto"
-  if (t.includes("altro")) return "Altro"
-  return String(tipoPagamento || "—").trim() || "—"
-}
 const MAX_MISTO_RIGHE = 15
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 
@@ -316,7 +292,7 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 export default function CassaPage() {
   const navigate = useNavigate()
   const { tenantId, tenantData, refreshTenant } = useTenant()
-  const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline, flushing: offlineFlushing } = useOfflineSync(tenantId)
+  const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline, flushing: offlineFlushing, lastFlush } = useOfflineSync(tenantId)
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
   const pvLoading = pvCtx?.loading ?? false
@@ -738,13 +714,21 @@ export default function CassaPage() {
   }, [tenantId, user?.email, loadCategories, loadOrdini])
 
   useEffect(() => {
-    if (!tenantId || !ordiniOggi.length) {
+    if (!tenantId) {
       setPizzePerOrdine({})
       return
     }
-    const ids = ordiniOggi.map((o) => o.id).filter(Boolean)
+    const ids = (ordiniOggi || [])
+      .filter((o) => orderCreatedLocalDateKey(o) === todayStr)
+      .filter((o) => !ordineIsAnnullato(o))
+      .map((o) => o.id)
+      .filter(Boolean)
+    if (!ids.length) {
+      setPizzePerOrdine({})
+      return
+    }
     getRigheAggregateByOrdineIds(ids).then(setPizzePerOrdine).catch(() => setPizzePerOrdine({}))
-  }, [tenantId, ordiniOggi])
+  }, [tenantId, ordiniOggi, todayStr])
 
   const openOrdineDetail = useCallback(async (ordineId) => {
     if (!tenantId || !ordineId) return
@@ -2592,6 +2576,7 @@ export default function CassaPage() {
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
           onEditPizza={openModificaPizzaFromCart}
           pizzePerSlotFromOrders={pizzePerSlotRiepilogo}
+          maxPizzeFornoPerSlot={maxPizzeFornoUnico}
           fidelityAbilitato={fidelityServizioOk}
           fidelityQuery={fidelityQuery}
           onFidelityQueryChange={(v) => {
@@ -2707,6 +2692,11 @@ export default function CassaPage() {
             >
               {offlineFlushing ? "Invio…" : "Invia ora"}
             </button>
+          ) : null}
+          {lastFlush?.errors?.length ? (
+            <span style={{ fontSize: 13, color: "#b91c1c", width: "100%" }}>
+              Ultimo tentativo: {lastFlush.errors.join(" · ")}
+            </span>
           ) : null}
         </div>
       ) : null}

@@ -1,11 +1,17 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
-import { useOutletContext } from "react-router-dom"
+import { Link, useOutletContext } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
-import { getOrders, updateOrder, markDeliveryConsegnatoAtomic } from "@/features/admin/services/adminService"
+import {
+  getOrders,
+  markDeliveryConsegnatoWithProof,
+  deliveryUpdateStatoConsegna,
+} from "@/features/admin/services/adminService"
 import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import { sortOrdersByNearestNeighbor } from "@/features/operative/delivery/utils/deliveryRouteUtils"
+import ConsegnaProofDialog from "@/features/operative/delivery/components/ConsegnaProofDialog"
 
 const STATO_PRONTO = "PRONTO"
 const POLL_MS = 10000
@@ -108,6 +114,9 @@ export default function DeliveryDashboard(props) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(null)
+  const [proofOrdine, setProofOrdine] = useState(null)
+  const [proofBusy, setProofBusy] = useState(false)
+  const [riderPos, setRiderPos] = useState(null)
   const loadSeqRef = useRef(0)
 
   const loadOrders = useCallback(
@@ -157,10 +166,20 @@ export default function DeliveryDashboard(props) {
     return () => clearInterval(t)
   }, [loadOrders])
 
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const watch = navigator.geolocation.watchPosition(
+      (pos) => setRiderPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: false, maximumAge: 60000 },
+    )
+    return () => navigator.geolocation.clearWatch(watch)
+  }, [])
+
   const setAssegnato = async (ordineId) => {
     if (!ordineId) return
     try {
-      await updateOrder(ordineId, { stato_consegna: "ASSEGNATO" })
+      await deliveryUpdateStatoConsegna(ordineId, "ASSEGNATO")
       await loadOrders({ silent: true })
     } catch (err) {
       logDeliveryError("setAssegnato", err)
@@ -170,7 +189,7 @@ export default function DeliveryDashboard(props) {
   const setInViaggio = async (ordineId) => {
     if (!ordineId) return
     try {
-      await updateOrder(ordineId, { stato_consegna: "IN_VIAGGIO" })
+      await deliveryUpdateStatoConsegna(ordineId, "IN_VIAGGIO")
       await loadOrders({ silent: true })
     } catch (err) {
       logDeliveryError("setInViaggio", err)
@@ -179,23 +198,38 @@ export default function DeliveryDashboard(props) {
 
   const markConsegnato = async (ordineId) => {
     if (!ordineId) return
+    const ord = orders.find((o) => o.id === ordineId)
+    setProofOrdine(ord || { id: ordineId })
+  }
+
+  const confirmProof = async (prove) => {
+    if (!proofOrdine?.id) return
+    setProofBusy(true)
     try {
-      await markDeliveryConsegnatoAtomic(ordineId)
-      setOrders((prev) => prev.filter((o) => o.id !== ordineId))
+      await markDeliveryConsegnatoWithProof(proofOrdine.id, prove)
+      setOrders((prev) => prev.filter((o) => o.id !== proofOrdine.id))
+      setProofOrdine(null)
     } catch (err) {
-      logDeliveryError("markConsegnato", err)
+      logDeliveryError("markConsegnatoWithProof", err)
       const msg = String(err?.message ?? err ?? "")
       if (/non_autorizzato/i.test(msg)) {
         window.alert(
           "Operazione non consentita per il tuo profilo. Serve un ruolo Delivery/Pony/Cassa o i permessi «Accesso delivery» / «Accesso cassa» in Admin → Dipendenti (Ruolo operativo). Gli account di test multi-reparto sono abilitati dopo l’aggiornamento SQL su Supabase.",
         )
       }
+    } finally {
+      setProofBusy(false)
     }
   }
 
+  const displayOrders = useMemo(() => {
+    if (quadTest) return orders
+    return sortOrdersByNearestNeighbor(orders, riderPos)
+  }, [orders, quadTest, riderPos])
+
   const bySlot = useMemo(
-    () => groupDeliveryBySlot(orders, PLANNING_GRID_SLOT_MINUTES),
-    [orders],
+    () => groupDeliveryBySlot(displayOrders, PLANNING_GRID_SLOT_MINUTES),
+    [displayOrders],
   )
   const slotOrder = useMemo(() => sortedSlotKeys(bySlot), [bySlot])
 
@@ -344,7 +378,11 @@ export default function DeliveryDashboard(props) {
             <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
               Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
               segnano l’ordine pronto. Stato consegna su DB: <code>stato_consegna</code> (flusso:{" "}
-              <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>). Rider dedicato in roadmap.
+              <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>).
+              {riderPos ? " Ordine suggerito per vicinanza GPS." : null}{" "}
+              <Link to="/operative/delivery/mappa" style={{ color: "#1565c0", fontWeight: 600 }}>
+                Mappa live
+              </Link>
               {operatoreLabel ? ` · ${operatoreLabel}` : ""}
             </p>
           )}
@@ -385,8 +423,15 @@ export default function DeliveryDashboard(props) {
           })}
         </div>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>{orders.map((ord) => renderOrderCard(ord, false))}</ul>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>{displayOrders.map((ord) => renderOrderCard(ord, false))}</ul>
       )}
+      <ConsegnaProofDialog
+        open={Boolean(proofOrdine)}
+        ordineNumero={proofOrdine?.numero}
+        busy={proofBusy}
+        onCancel={() => !proofBusy && setProofOrdine(null)}
+        onConfirm={(prove) => void confirmProof(prove)}
+      />
     </div>
   )
 }

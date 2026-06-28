@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/promozioniCalendario.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "test:unit": "vitest run",
     "test:vitest": "vitest",
     "test:all": "npm run test && npm run test:unit",
@@ -27,7 +27,14 @@
     "deploy:push-then-hosting:ci": "git push && npm run deploy:hosting:ci",
     "deploy": "npm run deploy:hosting",
     "publish:hosting": "node scripts/publish.mjs",
-    "keepalive:supabase": "node scripts/supabase-keepalive.mjs"
+    "keepalive:supabase": "node scripts/supabase-keepalive.mjs",
+    "supabase:auth:status": "node scripts/supabase-auth-remote.mjs status",
+    "supabase:auth:restore": "node scripts/supabase-auth-remote.mjs restore-production",
+    "supabase:auth:email-templates": "node scripts/supabase-auth-remote.mjs push-email-templates",
+    "supabase:auth:apply": "node scripts/supabase-auth-remote.mjs apply-all",
+    "supabase:auth:sync-redirects": "node scripts/supabase-auth-remote.mjs sync-redirects --from-db",
+    "sql:apply": "node scripts/apply-sql-module.mjs",
+    "supabase:functions:deploy:notifiche": "npx supabase functions deploy notifiche-outbox-processor --no-verify-jwt"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

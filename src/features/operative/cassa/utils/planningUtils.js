@@ -389,7 +389,7 @@ export function groupOrdersBySlot(ordini, slotMinutes) {
 export function groupOrdersBySlotOrarioRitiro(ordini, slotMinutes) {
   const map = {}
   for (const o of ordini || []) {
-    const key = orarioRitiroToSlotKey(o.orario_ritiro ?? o.orarioRitiro, slotMinutes)
+    const key = ordineToSlotKey(o, slotMinutes)
     if (key == null) continue
     map[key] = (map[key] || 0) + 1
   }
@@ -400,7 +400,7 @@ export function groupOrdersBySlotOrarioRitiro(ordini, slotMinutes) {
 export function groupOrdiniBySlotOrarioRitiro(ordini, slotMinutes) {
   const map = {}
   for (const o of ordini || []) {
-    const key = orarioRitiroToSlotKey(o.orario_ritiro ?? o.orarioRitiro, slotMinutes)
+    const key = ordineToSlotKey(o, slotMinutes)
     if (key == null) continue
     if (!map[key]) map[key] = []
     map[key].push(o)
@@ -421,13 +421,19 @@ export function groupPizzeBySlot(ordini, pizzePerOrdine, slotMinutes) {
   return map
 }
 
-/** Converte orario_ritiro "HH:mm" (o varianti da locale) nel key della fascia (come buildSlotsInOpeningHours). */
-function orarioRitiroToSlotKey(orarioRitiroStr, slotMinutes) {
-  if (!orarioRitiroStr || typeof orarioRitiroStr !== "string") return null
-  const trimmed = orarioRitiroStr
-    .trim()
-    .replace(/\u202f/g, "")
-    .replace(/\s/g, "")
+/** Converte orario_ritiro "HH:mm" (o varianti / ISO) nel key della fascia (come buildSlotsInOpeningHours). */
+export function orarioRitiroToSlotKey(orarioRitiroStr, slotMinutes) {
+  if (orarioRitiroStr == null || orarioRitiroStr === "") return null
+  if (orarioRitiroStr instanceof Date && !Number.isNaN(orarioRitiroStr.getTime())) {
+    return slotKeyForDate(orarioRitiroStr, slotMinutes)
+  }
+  const raw = String(orarioRitiroStr).trim()
+  if (!raw) return null
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const parsed = new Date(raw)
+    if (!Number.isNaN(parsed.getTime())) return slotKeyForDate(parsed, slotMinutes)
+  }
+  const trimmed = raw.replace(/\u202f/g, "").replace(/\s/g, "")
   let h
   let m
   const dotOrComma = trimmed.match(/^(\d{1,2})[.:](\d{2})(?::\d{2})?/)
@@ -445,11 +451,29 @@ function orarioRitiroToSlotKey(orarioRitiroStr, slotMinutes) {
   return slotKeyForDate(d, slotMinutes)
 }
 
+/** Fascia slot per ordine: orario_ritiro in DB, altrimenti ora creazione (come lista ordini cassa). */
+export function ordineToSlotKey(o, slotMinutes) {
+  if (!o) return null
+  const orario =
+    o.orario_ritiro ??
+    o.orarioRitiro ??
+    o.orario_consegna ??
+    o.orarioConsegna ??
+    ""
+  let key = orarioRitiroToSlotKey(orario, slotMinutes)
+  if (key != null) return key
+  const raw = o.createdAt ?? o.created_at ?? o.updatedAt ?? o.updated_at
+  if (raw == null) return null
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return null
+  return slotKeyForDate(d, slotMinutes)
+}
+
 /** Raggruppa pizze per fascia usando orario_ritiro (come in Riepilogo: ritiro/consegna a quell'ora). */
 export function groupPizzeBySlotOrarioRitiro(ordini, pizzePerOrdine, slotMinutes) {
   const map = {}
   for (const o of ordini || []) {
-    const key = orarioRitiroToSlotKey(o.orario_ritiro ?? o.orarioRitiro, slotMinutes)
+    const key = ordineToSlotKey(o, slotMinutes)
     if (key == null) continue
     const oid = o.id != null ? String(o.id) : ""
     const pizze = oid ? (pizzePerOrdine?.[oid] ?? pizzePerOrdine?.[o.id] ?? 0) : 0

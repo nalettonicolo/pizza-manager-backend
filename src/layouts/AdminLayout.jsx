@@ -43,6 +43,7 @@ const contabilitaSidebarItems = [
   { to: "/admin/contabilita/spese-personale", label: "Spese gestione personale" },
   { to: "/admin/contabilita/incassi", label: "Gestione incassi" },
   { to: "/admin/fiscal-outbox", label: "Coda fiscale" },
+  { to: "/admin/notifiche-outbox", label: "Coda notifiche" },
 ];
 
 const menuSidebarItems = [
@@ -62,6 +63,7 @@ const menuSidebarItems = [
 
 const settingsSidebarItems = [
   { to: "/admin/settings/dati-pizzeria", label: "Dati pizzeria" },
+  { to: "/admin/settings/pagamenti-online", label: "Pagamenti online" },
   { to: "/admin/settings/layout", label: "Layout" },
   { to: "/admin/settings/orari", label: "Giorni e orari" },
   { to: "/admin/settings/area-consegna", label: "Area di consegna" },

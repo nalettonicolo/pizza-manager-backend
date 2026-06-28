@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { useTenantLocalJson } from "@/features/admin/hooks/useTenantLocalJson";
+import { importLocalIfDbEmpty } from "@/features/admin/hooks/importLocalIfDbEmpty";
 import {
   magazzinoDdtTableReachable,
   listMagazzinoDdt,
@@ -20,6 +21,7 @@ export function useMagazzinoDdtStorage() {
   const [backend, setBackend] = useState(null);
   const [ready, setReady] = useState(false);
   const [loadErr, setLoadErr] = useState(null);
+  const [migratedCount, setMigratedCount] = useState(0);
   const probedRef = useRef(false);
 
   useEffect(() => {
@@ -39,8 +41,17 @@ export function useMagazzinoDdtStorage() {
         const dbOk = await magazzinoDdtTableReachable(tenantId);
         if (cancelled) return;
         if (dbOk) {
-          const rows = await listMagazzinoDdt(tenantId);
+          let rows = await listMagazzinoDdt(tenantId);
           if (cancelled) return;
+          const { imported } = await importLocalIfDbEmpty({
+            localItems: localData.righe,
+            dbItems: rows,
+            importItem: (row) => insertMagazzinoDdt(tenantId, row),
+            onClearedLocal: () => setLocalData({ righe: [] }),
+          });
+          if (imported > 0) rows = await listMagazzinoDdt(tenantId);
+          if (cancelled) return;
+          if (imported > 0) setMigratedCount(imported);
           setRighe(rows);
           setBackend("db");
         } else {
@@ -88,5 +99,5 @@ export function useMagazzinoDdtStorage() {
     [backend, tenantId, setLocalData],
   );
 
-  return { righe, addRow, removeRow, ready, backend, loadErr };
+  return { righe, addRow, removeRow, ready, backend, loadErr, migratedCount };
 }

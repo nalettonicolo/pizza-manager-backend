@@ -544,8 +544,32 @@ export default function IngredientiPage() {
       <div className="dashboard-title-row">
         <h1 className="dashboard-page-title">Ingredienti</h1>
         <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Cerca ingredienti..." />
-        <button type="button" className="btn-primary-dashboard" onClick={() => setCsvModalOpen(true)} style={{ marginRight: 8 }}>
-          CSV
+        <button
+          type="button"
+          className="btn-primary-dashboard"
+          onClick={() => csvFileInputRef.current?.click()}
+          disabled={csvImporting}
+          style={{ marginRight: 8, opacity: csvImporting ? 0.7 : 1 }}
+        >
+          {csvImporting ? "Import CSV…" : "Importa CSV"}
+        </button>
+        <input
+          ref={csvFileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={handleCsvFileChange}
+          style={{ display: "none" }}
+          id={csvFileInputId}
+          aria-hidden
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          className="btn-primary-dashboard"
+          onClick={() => setCsvModalOpen(true)}
+          style={{ marginRight: 8, background: "#555" }}
+        >
+          Guida CSV
         </button>
         <button type="button" className="btn-primary-dashboard" onClick={() => setModalOpen(true)}>
           Inserisci
@@ -702,13 +726,17 @@ export default function IngredientiPage() {
         </div>
       </Modal>
 
-      <Modal open={csvModalOpen} onClose={() => setCsvModalOpen(false)} title="CSV">
+      <Modal open={csvModalOpen} onClose={() => setCsvModalOpen(false)} title="Formato CSV ingredienti">
         <div
           className="dashboard-box"
           style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16, marginBottom: 0, overflowX: "hidden" }}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <span style={{ fontWeight: 600 }}>Inserisci CSV</span>
+            <span style={{ fontWeight: 600 }}>Import rapido</span>
+            <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
+              Usa il pulsante <strong>Importa CSV</strong> in alto: si apre una sola finestra di selezione file.
+            </p>
+            <span style={{ fontWeight: 600, marginTop: 8 }}>Struttura file</span>
             <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.35 }}>
               Carica un file CSV in <strong>Formato B (foglio con spunte)</strong>. Prima riga:
             </p>
@@ -735,25 +763,17 @@ export default function IngredientiPage() {
               presenti vengono aggiornate; se assenti (file vecchi) categoria, colore e attivo non si toccano.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <input
-                  ref={csvFileInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleCsvFileChange}
-                  style={{ display: "none" }}
-                  id={csvFileInputId}
-                  aria-label="Seleziona file CSV ingredienti"
-                />
-                <button
-                  type="button"
-                  onClick={() => csvFileInputRef.current?.click()}
-                  className="btn-primary-dashboard"
-                  style={{ opacity: csvImporting ? 0.7 : 1, pointerEvents: csvImporting ? "none" : "auto" }}
-                >
-                  {csvImporting ? "Caricamento..." : "Scegli file CSV"}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCsvModalOpen(false)
+                  csvFileInputRef.current?.click()
+                }}
+                className="btn-primary-dashboard"
+                style={{ opacity: csvImporting ? 0.7 : 1, pointerEvents: csvImporting ? "none" : "auto" }}
+              >
+                {csvImporting ? "Caricamento..." : "Seleziona file CSV"}
+              </button>
               <button
                 type="button"
                 className="btn-primary-dashboard"

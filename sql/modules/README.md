@@ -19,4 +19,5 @@ Esegui **in ordine numerico** su Supabase SQL Editor (o equivalente) se il datab
 | `14_magazzino_fornitori_ddt.sql` | Fornitori magazzino + DDT in entrata |
 | `15_order_idempotency.sql` | Idempotency `create_order_with_items` (coda offline cassa) |
 | `16_contabilita_estesa.sql` | Fatture passive, spese locale/personale, pagamenti fatture, food cost manuali |
+| `17_stripe_online_confirm.sql` | Webhook secret per tenant, stato setup, lookup PI per webhook |
 Lo schema di riferimento completo è in **`sql/schema_completo_pizzamanager.sql`** (consolidato dalle ex migration). Le **nuove** modifiche incrementali vanno in **`sql/sql_upgrade.sql`** (indice patch) fino a consolidamento.

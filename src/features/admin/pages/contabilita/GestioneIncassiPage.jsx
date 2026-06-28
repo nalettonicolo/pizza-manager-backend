@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import AdminModuleShell from "@/features/admin/components/AdminModuleShell";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { importLocalIfDbEmpty } from "@/features/admin/hooks/importLocalIfDbEmpty";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import {
@@ -50,6 +51,7 @@ export default function GestioneIncassiPage() {
   const [storageBackend, setStorageBackend] = useState(null);
   const [storageProbeDone, setStorageProbeDone] = useState(false);
   const [storageLoadErr, setStorageLoadErr] = useState(null);
+  const [migratedCount, setMigratedCount] = useState(0);
   const [autoSyncBusy, setAutoSyncBusy] = useState(false);
   const probedRef = useRef(false);
 
@@ -76,7 +78,24 @@ export default function GestioneIncassiPage() {
         const dbOk = await contabilitaMovimentiTableReachable(tenantId);
         if (cancelled) return;
         if (dbOk) {
-          const rows = await listContabilitaMovimenti(tenantId);
+          let rows = await listContabilitaMovimenti(tenantId);
+          if (cancelled) return;
+          const { imported } = await importLocalIfDbEmpty({
+            localItems: data.movimenti,
+            dbItems: rows,
+            importItem: (m) =>
+              insertContabilitaMovimento(tenantId, {
+                data: m.data,
+                descrizione: m.descrizione ?? "",
+                importo: m.importo,
+                tipo: m.tipo,
+              }),
+            onClearedLocal: () => setData({ movimenti: [] }),
+          });
+          if (imported > 0) {
+            setMigratedCount(imported);
+            rows = await listContabilitaMovimenti(tenantId);
+          }
           if (cancelled) return;
           setMovimenti(rows.map(mapDbRowToUi));
           setStorageBackend("db");
@@ -294,6 +313,11 @@ export default function GestioneIncassiPage() {
         ) : (
           <strong>Persistenza: solo questo browser (localStorage). Esegui sql/sql_upgrade.sql su Supabase per attivare il DB.</strong>
         )}
+        {migratedCount > 0 ? (
+          <span style={{ display: "block", marginTop: 8, color: "#166534" }}>
+            Importati {migratedCount} movimenti dal browser su Supabase.
+          </span>
+        ) : null}
       </div>
 
       <div

@@ -4,7 +4,7 @@ import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
 import { useMagazzinoDdtStorage } from "@/features/admin/hooks/useMagazzinoDdtStorage";
 
 export default function DdtPage() {
-  const { righe, addRow: persistRow, removeRow, ready, backend, loadErr } = useMagazzinoDdtStorage();
+  const { righe, addRow: persistRow, removeRow, ready, backend, loadErr, migratedCount } = useMagazzinoDdtStorage();
   const [numero, setNumero] = useState("");
   const [dataDoc, setDataDoc] = useState(() => new Date().toISOString().slice(0, 10));
   const [fornitore, setFornitore] = useState("");
@@ -61,6 +61,7 @@ export default function DdtPage() {
       {backend === "db" ? (
         <p style={{ fontSize: 13, color: "#166534", margin: "0 0 12px" }} role="status">
           Dati salvati su Supabase (multi-dispositivo).
+          {migratedCount > 0 ? ` Importati ${migratedCount} DDT dal browser.` : ""}
         </p>
       ) : (
         <p style={{ fontSize: 13, color: "#92400e", margin: "0 0 12px" }} role="status">

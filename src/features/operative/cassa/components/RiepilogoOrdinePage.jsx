@@ -64,6 +64,8 @@ export default function RiepilogoOrdinePage({
   onRemove,
   onEditPizza,
   pizzePerSlotFromOrders = {},
+  /** Tetto pizze/forno per fascia 15 min (allineato al planning). Se omesso, calcolo da parametri canale. */
+  maxPizzeFornoPerSlot = null,
   /** Fedeltà (solo ritiro in negozio, se servizio attivo) */
   fidelityAbilitato = false,
   fidelityQuery = "",
@@ -88,7 +90,11 @@ export default function RiepilogoOrdinePage({
       : Number(parametri.ritiro_ogni_min) || 15
   const pizzeOgni15 = Number(parametri.pizze_ogni_15_min) || 8
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
-  const maxPizzePerSlot = Math.max(1, Math.round((pizzeOgni15 * capacityWindowMin) / 15))
+  const maxPizzeCanale = Math.max(1, Math.round((pizzeOgni15 * capacityWindowMin) / 15))
+  const maxPizzePerSlot =
+    maxPizzeFornoPerSlot != null && Number(maxPizzeFornoPerSlot) > 0
+      ? Number(maxPizzeFornoPerSlot)
+      : maxPizzeCanale
 
   const orariOggi = useMemo(() => getTodayOrari(orariSettimana), [orariSettimana])
   const slots = useMemo(
@@ -471,7 +477,7 @@ export default function RiepilogoOrdinePage({
           ) : (
             <>Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. </>
           )}
-          Capacità stimata: max {maxPizzePerSlot} pizze ogni {PLANNING_GRID_SLOT_MINUTES} min (parametro pizze ogni 15 min). In ogni fascia il numero è il <strong>totale pizze già impegnate oggi</strong> per quell’orario <strong>consegna + ritiro in negozio</strong> (carico forno unico).
+          Capacità forno: max {maxPizzePerSlot} pizze ogni {PLANNING_GRID_SLOT_MINUTES} min. In ogni fascia vedi le pizze <strong>già prenotate oggi</strong> (consegna + ritiro). Se selezioni una fascia, il conteggio include anche le pizze di <strong>questo ordine</strong>.
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>
@@ -484,9 +490,11 @@ export default function RiepilogoOrdinePage({
         )}
         <div style={styles.slotsGrid}>
           {slots.map((slot) => {
-            const count = pizzePerSlot[slot.key] ?? 0
-            const color = slotColor(count, maxPizzePerSlot, sogliaGiallo)
+            const booked = pizzePerSlot[slot.key] ?? 0
             const isSelected = selectedSlot?.key === slot.key
+            const withCart = isSelected ? booked + totalPizzeOrdine : booked
+            const color = slotColor(withCart, maxPizzePerSlot, sogliaGiallo)
+            const full = withCart >= maxPizzePerSlot
             return (
               <button
                 key={slot.key}
@@ -495,13 +503,20 @@ export default function RiepilogoOrdinePage({
                 style={{
                   ...styles.slotBox,
                   backgroundColor: color,
-                  borderColor: isSelected ? "#1565c0" : (count >= maxPizzePerSlot ? "#c62828" : "#81c784"),
+                  borderColor: isSelected ? "#1565c0" : full ? "#c62828" : "#81c784",
                   borderWidth: isSelected ? 3 : 2,
                   cursor: "pointer",
                 }}
               >
                 <div style={styles.slotTime}>{slot.label}</div>
-                <div style={styles.slotCount}>{count} {count === 1 ? "pizza già prenotata" : "pizze già prenotate"}</div>
+                <div style={styles.slotCount}>
+                  {booked} {booked === 1 ? "pizza prenotata" : "pizze prenotate"}
+                  {isSelected && totalPizzeOrdine > 0 ? (
+                    <span style={{ display: "block", fontSize: 11, marginTop: 2, fontWeight: 600 }}>
+                      +{totalPizzeOrdine} in questo ordine → {withCart} totali
+                    </span>
+                  ) : null}
+                </div>
                 {isSelected && <div style={{ fontSize: 11, marginTop: 4, color: "#1565c0", fontWeight: 600 }}>✓</div>}
               </button>
             )

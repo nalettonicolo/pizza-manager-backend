@@ -14,4 +14,13 @@
 -- Per applicare le patch già pronte (prima installazione o DB non aggiornato):
 --   sql/modules/15_order_idempotency.sql
 --   sql/modules/16_contabilita_estesa.sql
+--   sql/modules/17_stripe_online_confirm.sql   ← pagamenti online Stripe
+--   sql/modules/18_clienti_geolocalizzazione_note.sql  ← lat/lng + note consegna clienti
+--   sql/modules/19_cliente_update_proprio_profilo.sql  ← RPC modifica profilo cliente
+--   sql/modules/20_cliente_ordini_propri.sql  ← storico ordini cliente (RPC)
+--   sql/modules/21_fase4_fidelity_notifiche.sql  ← fidelity cliente + notifiche ordine web
+--   sql/modules/22_fase5_sa_catalog_snapshot.sql  ← catalogo SA su DB + export fiscal outbox
+--   sql/modules/23_notifiche_worker_delivery_stati.sql  ← worker notifiche + stati delivery
+--   sql/modules/24_notifiche_canale_parametri.sql  ← canale notifica da parametri_operativi
+--   sql/modules/25_ordini_web_capacity_antifraud_delivery_proof.sql  ← Stripe IN_ATTESA, capacity, proof delivery
 -- =============================================================================

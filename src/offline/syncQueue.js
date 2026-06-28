@@ -13,6 +13,10 @@ import {
 const MAX_ATTEMPTS = 5
 const BASE_DELAY_MS = 2000
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /** @param {object} params checkout payload (tenant_id, totale, items, …) */
 export async function queueOfflineCheckout(params) {
   const idempotencyKey =
@@ -75,16 +79,23 @@ export async function flushOfflineQueue(tenantId) {
   let flushed = 0
   const errors = []
   for (const action of pending.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
-    try {
-      await flushOne(action)
-      flushed += 1
-    } catch (e) {
-      const attempts = (action.attempts || 0) + 1
-      const msg = e?.message || String(e)
-      await updatePendingAction(action.id, { attempts, last_error: msg })
-      errors.push(msg)
-      if (attempts >= MAX_ATTEMPTS) {
-        /* lascia in coda per review manuale */
+    let attempts = action.attempts || 0
+    let done = false
+    while (!done && attempts < MAX_ATTEMPTS) {
+      try {
+        await flushOne(action)
+        flushed += 1
+        done = true
+      } catch (e) {
+        attempts += 1
+        const msg = e?.message || String(e)
+        await updatePendingAction(action.id, { attempts, last_error: msg })
+        if (attempts >= MAX_ATTEMPTS) {
+          errors.push(msg)
+          done = true
+        } else {
+          await sleep(offlineRetryDelayMs(attempts - 1))
+        }
       }
     }
   }

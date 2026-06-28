@@ -8,6 +8,11 @@ import {
 } from "@/features/admin/services/adminService";
 import PromozioniCalendarioEditor from "@/features/admin/components/PromozioniCalendarioEditor";
 import { sortByOrdine } from "@/utils/sortByOrdine";
+import {
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_PARAM_KEYS,
+  notificationAdapterReadiness,
+} from "@/integrations/notifications";
 
 function serializePromozioniCalendario(list) {
   if (!Array.isArray(list)) return [];
@@ -136,6 +141,10 @@ export default function ParametriSection() {
         ? String(raw.rider_partenza_buffer_min)
         : "5",
     rider_ricalcolo_automatico: raw.rider_ricalcolo_automatico === true,
+    notifica_ordine_web_canale: raw.notifica_ordine_web_canale || NOTIFICATION_CHANNELS.EMAIL,
+    notifica_ordine_web_email: raw.notifica_ordine_web_email ?? "",
+    notifica_ordine_web_telefono_sms: raw.notifica_ordine_web_telefono_sms ?? "",
+    notifica_ordine_web_telefono_whatsapp: raw.notifica_ordine_web_telefono_whatsapp ?? "",
   };
 
   const setParam = (key, value) => {
@@ -191,6 +200,10 @@ export default function ParametriSection() {
         rider_partenza_buffer_min:
           p.rider_partenza_buffer_min === "" ? 5 : Math.min(60, Math.max(0, Number(p.rider_partenza_buffer_min) || 5)),
         rider_ricalcolo_automatico: p.rider_ricalcolo_automatico === true,
+        [NOTIFICATION_PARAM_KEYS.ordine_web_canale]: String(p.notifica_ordine_web_canale || NOTIFICATION_CHANNELS.EMAIL),
+        [NOTIFICATION_PARAM_KEYS.ordine_web_email]: String(p.notifica_ordine_web_email || "").trim(),
+        [NOTIFICATION_PARAM_KEYS.ordine_web_telefono_sms]: String(p.notifica_ordine_web_telefono_sms || "").trim(),
+        [NOTIFICATION_PARAM_KEYS.ordine_web_telefono_whatsapp]: String(p.notifica_ordine_web_telefono_whatsapp || "").trim(),
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
@@ -330,10 +343,80 @@ export default function ParametriSection() {
               style={{ marginTop: 4 }}
             />
             <span>
-              Stampa comanda automatica in sala per nuovi ordini web (se attiva, non vengono accodate notifiche email/webhook
+              Stampa comanda automatica in sala per nuovi ordini web (se attiva, non vengono accodate notifiche
               opzionali — configura comunque la stampa in cassa).
             </span>
           </label>
+          {!p.stampa_comanda_ordine_web_automatica ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              <h4 style={{ margin: "0 0 10px", fontSize: 14 }}>Notifica staff (coda — adapter da completare)</h4>
+              <p style={{ margin: "0 0 10px", color: "#64748b" }}>
+                Percorso alternativo alla stampa. Gli invii automatici email/SMS/WhatsApp sono predisposti nel codice
+                ma richiedono ancora le API del provider scelto dal locale. Vedi{" "}
+                <code>docs/NOTIFICHE_INTEGRAZIONE.md</code>.
+              </p>
+              <label style={{ display: "block", marginBottom: 10 }}>
+                Canale preferito
+                <select
+                  value={p.notifica_ordine_web_canale}
+                  onChange={(e) => setParam("notifica_ordine_web_canale", e.target.value)}
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                >
+                  <option value={NOTIFICATION_CHANNELS.EMAIL}>Email (SMTP — da implementare)</option>
+                  <option value={NOTIFICATION_CHANNELS.SMS}>SMS (gateway — da implementare)</option>
+                  <option value={NOTIFICATION_CHANNELS.WHATSAPP}>WhatsApp API (da implementare)</option>
+                  <option value={NOTIFICATION_CHANNELS.IN_APP}>Solo in-app (cucina/cassa/delivery)</option>
+                </select>
+              </label>
+              <label style={{ display: "block", marginBottom: 10 }}>
+                Email staff (override, opzionale)
+                <input
+                  type="email"
+                  value={p.notifica_ordine_web_email}
+                  onChange={(e) => setParam("notifica_ordine_web_email", e.target.value)}
+                  placeholder="Default: email fatturazione tenant"
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                />
+              </label>
+              <label style={{ display: "block", marginBottom: 10 }}>
+                Telefono SMS staff
+                <input
+                  type="tel"
+                  value={p.notifica_ordine_web_telefono_sms}
+                  onChange={(e) => setParam("notifica_ordine_web_telefono_sms", e.target.value)}
+                  placeholder="+39..."
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                />
+              </label>
+              <label style={{ display: "block", marginBottom: 10 }}>
+                Telefono WhatsApp staff
+                <input
+                  type="tel"
+                  value={p.notifica_ordine_web_telefono_whatsapp}
+                  onChange={(e) => setParam("notifica_ordine_web_telefono_whatsapp", e.target.value)}
+                  placeholder="+39..."
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                />
+              </label>
+              <ul style={{ margin: 0, paddingLeft: 18, color: "#64748b", fontSize: 12 }}>
+                {Object.entries(notificationAdapterReadiness()).map(([key, v]) => (
+                  <li key={key}>
+                    {v.label}: {v.ready ? "pronto" : "da integrare"} — {v.note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
             <input
               type="checkbox"

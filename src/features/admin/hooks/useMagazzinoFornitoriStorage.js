@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { importLocalIfDbEmpty } from "@/features/admin/hooks/importLocalIfDbEmpty";
 import {
   magazzinoFornitoriTableReachable,
   listMagazzinoFornitori,
@@ -39,7 +40,15 @@ export function useMagazzinoFornitoriStorage() {
         const dbOk = await magazzinoFornitoriTableReachable(tenantId);
         if (cancelled) return;
         if (dbOk) {
-          const rows = await listMagazzinoFornitori(tenantId);
+          let rows = await listMagazzinoFornitori(tenantId);
+          if (cancelled) return;
+          const { imported } = await importLocalIfDbEmpty({
+            localItems: localData.fornitori,
+            dbItems: rows,
+            importItem: (f) => upsertMagazzinoFornitore(tenantId, { ...f, id: undefined }),
+            onClearedLocal: () => setLocalData({ fornitori: [] }),
+          });
+          if (imported > 0) rows = await listMagazzinoFornitori(tenantId);
           if (cancelled) return;
           setFornitori(rows);
           setBackend("db");

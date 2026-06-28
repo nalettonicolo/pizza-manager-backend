@@ -15,7 +15,7 @@ export function clampAvanzamentoPercentuale(v) {
 }
 
 /** @param {unknown} s */
-function normalizeService(s) {
+export function normalizeService(s) {
   if (!s || typeof s !== "object") return null;
   const id = typeof s.id === "string" ? s.id.trim() : "";
   const nome = typeof s.nome === "string" ? s.nome.trim() : "";

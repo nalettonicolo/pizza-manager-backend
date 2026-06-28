@@ -19,7 +19,7 @@ Obiettivo: far usare all’assistente i **tool MCP** di Supabase (liste tabelle,
 
 1. **Documentazione ufficiale:** [Model context protocol (MCP) — Supabase](https://supabase.com/docs/guides/getting-started/mcp) (rischi, `read_only`, `project_ref`, gruppi `features`).
 2. **Project ref:** Dashboard Supabase → **Settings → General** → *Reference ID*.
-3. **Configurazione in Cursor:** **Settings → Cursor Settings → Tools & MCP** → aggiungi server. Puoi usare l’URL hosted con parametri dalla doc Supabase, oppure copiare **`.cursor/mcp.json.example`** in **`.cursor/mcp.json`**, sostituire `SOSTITUISCI_PROJECT_REF` e lasciare **`read_only=true`** per diagnostica.
+3. **Configurazione in Cursor:** **Settings → Cursor Settings → Tools & MCP** → aggiungi server. Puoi usare l’URL hosted con parametri dalla doc Supabase, oppure copiare **`.cursor/mcp.json.example`** in **`.cursor/mcp.json`**, sostituire `SOSTITUISCI_PROJECT_REF`. Per applicare migration SQL dalla chat usare **`read_only=false`**; per sola diagnostica `read_only=true`.
 4. **`.cursor/mcp.json` è in `.gitignore`** — non committare segreti o URL con credenziali.
 5. **OAuth / login:** al primo utilizzo Cursor può aprire il browser per autorizzare l’accesso all’organizzazione Supabase.
 

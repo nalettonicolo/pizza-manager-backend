@@ -16,8 +16,11 @@ import {
   formatEuro,
   formatEuroMonth,
   loadServicesCatalog,
+  mergeCatalogWithDefaults,
+  normalizeService,
   sumMonthlyFromInclusioni,
 } from "@/features/superadmin/catalog/servicesStorage";
+import { fetchSaCatalogFromDb, persistSaCatalogToDb } from "@/features/superadmin/catalog/catalogRemoteSync";
 import { exportPianiCsv } from "@/features/superadmin/utils/exportSuperadminCsv";
 import { mergePianiImport, parsePianiCsv } from "@/features/superadmin/utils/parsePianiCsv";
 import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
@@ -61,8 +64,22 @@ export default function Piani() {
   const [planSearch, setPlanSearch] = useState("");
 
   useEffect(() => {
+    void fetchSaCatalogFromDb().then((remote) => {
+      if (!remote?.plans?.length) return;
+      const sv = remote.services?.length
+        ? mergeCatalogWithDefaults(remote.services.map(normalizeService).filter(Boolean))
+        : loadServicesCatalog();
+      setPiani(remote.plans.map((p) => normalizePlan(p, sv)));
+    });
+  }, []);
+
+  useEffect(() => {
     savePlansToStorage(piani);
-  }, [piani]);
+    const timer = setTimeout(() => {
+      void persistSaCatalogToDb({ plans: piani, services });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [piani, services]);
 
   useEffect(() => {
     setPiani((prev) => prev.map((p) => normalizePlan(p, services)));

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { importLocalIfDbEmpty } from "@/features/admin/hooks/importLocalIfDbEmpty";
 import {
   contabilitaFattureTableReachable,
   listContabilitaFatture,
@@ -37,7 +38,15 @@ export function useContabilitaFattureStorage() {
         const dbOk = await contabilitaFattureTableReachable(tenantId);
         if (cancelled) return;
         if (dbOk) {
-          const rows = await listContabilitaFatture(tenantId);
+          let rows = await listContabilitaFatture(tenantId);
+          if (cancelled) return;
+          const { imported } = await importLocalIfDbEmpty({
+            localItems: localData.fatture,
+            dbItems: rows,
+            importItem: (row) => insertContabilitaFattura(tenantId, row),
+            onClearedLocal: () => setLocalData({ fatture: [] }),
+          });
+          if (imported > 0) rows = await listContabilitaFatture(tenantId);
           if (cancelled) return;
           setFatture(rows);
           setBackend("db");

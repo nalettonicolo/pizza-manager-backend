@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import { useTenantLocalJson, newLocalId } from "@/features/admin/hooks/useTenantLocalJson";
+import { importLocalIfDbEmpty } from "@/features/admin/hooks/importLocalIfDbEmpty";
 import {
   contabilitaFoodcostTableReachable,
   listContabilitaFoodcostManuali,
@@ -37,7 +38,15 @@ export function useContabilitaFoodcostManualStorage() {
         const dbOk = await contabilitaFoodcostTableReachable(tenantId);
         if (cancelled) return;
         if (dbOk) {
-          const rows = await listContabilitaFoodcostManuali(tenantId);
+          let rows = await listContabilitaFoodcostManuali(tenantId);
+          if (cancelled) return;
+          const { imported } = await importLocalIfDbEmpty({
+            localItems: localData.righe,
+            dbItems: rows,
+            importItem: (row) => insertContabilitaFoodcostManuale(tenantId, row),
+            onClearedLocal: () => setLocalData({ righe: [] }),
+          });
+          if (imported > 0) rows = await listContabilitaFoodcostManuali(tenantId);
           if (cancelled) return;
           setRighe(rows);
           setBackend("db");

@@ -137,6 +137,30 @@
   box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12);
 }
 
+/* Suggerimenti Google Places (Autocomplete classico) sopra card login e mappa */
+.login-page .pac-container {
+  z-index: 10000;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  font-family: inherit;
+}
+
+.login-field:has(.login-input--places) {
+  position: relative;
+  z-index: 2;
+}
+
+.login-textarea {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.45;
+  font-family: inherit;
+}
+
+.login-registrazione-mappa {
+  cursor: crosshair;
+}
+
 .login-error {
   margin: 0;
   padding: 10px 12px;
@@ -196,6 +220,11 @@
   padding-top: 22px;
   border-top: 1px solid var(--login-border);
   text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 14px;
 }
 
 .login-back {
@@ -204,6 +233,8 @@
   color: var(--login-muted);
   text-decoration: none;
   transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
 }
 
 .login-back:hover {

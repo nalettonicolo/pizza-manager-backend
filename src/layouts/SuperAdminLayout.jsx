@@ -7,6 +7,7 @@ import "@/styles/superadmin-enterprise.css";
 
 const PIATTAFORMA_ITEMS_BASE = [
   { to: "/superadmin/guide", label: "Documentazione" },
+  { to: "/superadmin/auth-email-templates", label: "Template email Auth" },
   { to: "/superadmin/sviluppo", label: "Roadmap" },
   { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
   { to: "/superadmin/test-layout", label: "Test viewport layout" },
@@ -117,6 +118,7 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"),
       () => import("@/features/superadmin/pages/SuperadminViewportTesterPage"),
       () => import("@/features/superadmin/pages/SuperadminViewportStudioPage"),
+      () => import("@/features/superadmin/pages/SuperadminAuthEmailTemplatesPage"),
     ]);
   }, []);
 

@@ -63,12 +63,16 @@ const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
 const SuperadminViewportTesterPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportTesterPage"));
 const SuperadminViewportStudioPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportStudioPage"));
+const SuperadminAuthEmailTemplatesPage = lazy(
+  () => import("@/features/superadmin/pages/SuperadminAuthEmailTemplatesPage"),
+);
 
 /* ================= ADMIN (lazy) ================= */
 const Report = lazy(() => import("@/features/admin/pages/Report"));
 const AdminOrdiniPage = lazy(() => import("@/features/admin/pages/AdminOrdiniPage"));
 const SettingsLayout = lazy(() => import("@/features/admin/pages/settings/SettingsLayout"));
 const DatiPizzeriaSection = lazy(() => import("@/features/admin/pages/settings/DatiPizzeriaSection"));
+const PagamentiOnlinePage = lazy(() => import("@/features/admin/pages/settings/PagamentiOnlinePage"));
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
 const OrariSection = lazy(() => import("@/features/admin/pages/settings/OrariSection"));
 const ParametriSection = lazy(() => import("@/features/admin/pages/settings/ParametriSection"));
@@ -100,6 +104,7 @@ const SpeseLocalePage = lazy(() => import("@/features/admin/pages/contabilita/Sp
 const SpesePersonalePage = lazy(() => import("@/features/admin/pages/contabilita/SpesePersonalePage"));
 const GestioneIncassiPage = lazy(() => import("@/features/admin/pages/contabilita/GestioneIncassiPage"));
 const FiscalOutboxMonitorPage = lazy(() => import("@/features/admin/pages/fiscal/FiscalOutboxMonitorPage"));
+const NotificheOutboxMonitorPage = lazy(() => import("@/features/admin/pages/notifiche/NotificheOutboxMonitorPage"));
 const FidelityCardPage = lazy(() => import("@/features/admin/pages/FidelityCardPage"));
 
 /* ================= OPERATIVE (lazy) ================= */
@@ -111,6 +116,8 @@ const CassaStampantiRepartiPage = lazy(() => import("@/features/operative/cassa/
 const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"));
 const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"));
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"));
+const DeliveryCommandMapPage = lazy(() => import("@/features/operative/delivery/pages/DeliveryCommandMapPage"));
+const RiderPwaPage = lazy(() => import("@/features/operative/delivery/pages/RiderPwaPage"));
 const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pages/Dashboard"));
 const OperativeTurniPage = lazy(() => import("@/features/operative/pages/OperativeTurniPage"));
 const RepartiQuadTestPage = lazy(() => import("@/features/operative/pages/RepartiQuadTestPage"));
@@ -137,8 +144,8 @@ const isSupportHost = host === "support.pizzamanager.it";
 /** Allineato a `isSaaSHostname` (saasHost): include Firebase Hosting e VITE_FULL_APP_HOSTNAMES. */
 const isSaaS = isSaaSHostname(host);
 
-/** Vetrina cliente (registrazione, password): anche in localhost per sviluppo. */
-const showPublicClientAuthRoutes = !isSaaS || isLocal;
+/** Rotte auth cliente sempre disponibili (landing SaaS può non linkarle, ma preview/vetrina sì). */
+const showPublicClientAuthRoutes = true;
 
 /* =========================================================
    HOST RESOLVER
@@ -375,6 +382,14 @@ export default function AppRouter() {
             <Route path="/superadmin/settings" element={<Suspense fallback={<PageFallback />}><Settings /></Suspense>} />
             <Route path="/superadmin/guide" element={<Suspense fallback={<PageFallback />}><SuperadminGuideHub /></Suspense>} />
             <Route path="/superadmin/guide/:docSlug" element={<Suspense fallback={<PageFallback />}><SuperadminGuideDocPage /></Suspense>} />
+            <Route
+              path="/superadmin/auth-email-templates"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminAuthEmailTemplatesPage />
+                </Suspense>
+              }
+            />
             <Route path="/superadmin/sviluppo" element={<Suspense fallback={<PageFallback />}><SviluppoPage /></Suspense>} />
             <Route
               path="/superadmin/registratore-cassa"
@@ -479,6 +494,7 @@ export default function AppRouter() {
           />
           <Route path="/admin/contabilita/incassi" element={<Suspense fallback={<PageFallback />}><GestioneIncassiPage /></Suspense>} />
           <Route path="/admin/fiscal-outbox" element={<Suspense fallback={<PageFallback />}><FiscalOutboxMonitorPage /></Suspense>} />
+          <Route path="/admin/notifiche-outbox" element={<Suspense fallback={<PageFallback />}><NotificheOutboxMonitorPage /></Suspense>} />
           <Route path="/admin/manuale" element={<Suspense fallback={<PageFallback />}><ManualeUtentePage /></Suspense>} />
           <Route path="/admin/guida" element={<Navigate to="/admin/manuale" replace />} />
           <Route path="/admin/pubblicazione" element={<Navigate to="/admin/manuale" replace />} />
@@ -510,6 +526,7 @@ export default function AppRouter() {
           <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
             <Route index element={<Navigate to="dati-pizzeria" replace />} />
             <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />
+            <Route path="pagamenti-online" element={<Suspense fallback={<PageFallback />}><PagamentiOnlinePage /></Suspense>} />
             <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
             <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
             <Route path="area-consegna" element={<Suspense fallback={<PageFallback />}><AreaConsegnaSection /></Suspense>} />
@@ -545,6 +562,8 @@ export default function AppRouter() {
           <Route path="/operative/bancone" element={<Suspense fallback={<PageFallback />}><Bancone /></Suspense>} />
           <Route path="/operative/pizzaioli" element={<Suspense fallback={<PageFallback />}><PizzaioloDashboard /></Suspense>} />
           <Route path="/operative/delivery" element={<Suspense fallback={<PageFallback />}><DeliveryDashboard /></Suspense>} />
+          <Route path="/operative/delivery/mappa" element={<Suspense fallback={<PageFallback />}><DeliveryCommandMapPage /></Suspense>} />
+          <Route path="/operative/rider" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
           <Route path="/operative/pony" element={<Navigate to="/operative/delivery" replace />} />
           <Route
             path="/operative/pizzaiolo-ingresso"

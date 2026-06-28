@@ -15,6 +15,19 @@ Contesto: **repo già avanzato** (React + Vite, Supabase, eventuale `VITE_API_UR
 - **Sicurezza prioritaria**: policy RLS, `auth.uid()`, niente bypass client-side; se si tocca lo schema, aggiornare anche `sql_upgrade.sql` e allineare `schema_completo` quando richiesto dal team.
 - **Coerenza**: seguire pattern esistenti in `src/features/admin/services/adminService.js`, layout admin/operativo/superadmin, convenzioni import del repo.
 
+## SQL: applicazione immediata su Supabase
+
+Ogni nuova patch SQL va **applicata subito** al progetto remoto (`flfhrwzlrftuhkrfwzse`) nella stessa sessione, non solo committata nel repo.
+
+1. **File**: `sql/modules/NN_descrizione.sql` (idempotente: `IF NOT EXISTS`, `CREATE OR REPLACE`, `ADD COLUMN IF NOT EXISTS`).
+2. **Riferimento**: aggiornare l’elenco in `sql/sql_upgrade.sql` (commento moduli pendenti).
+3. **Deploy DB**: MCP `apply_migration` oppure `npm run sql:apply -- sql/modules/NN_*.sql` — **subito dopo** aver scritto il modulo.
+4. **Verifica**: query read-only post-deploy (esistenza tabella/RPC/colonna) prima di chiudere il task.
+5. **Vietato senza richiesta esplicita dell’utente**: `DROP TABLE`, `TRUNCATE`, `DELETE` massivi, `DROP COLUMN` su dati produttivi. Solo aggiunte e sostituzioni sicure di funzioni/policy.
+6. **Consolidamento**: dopo verifica, allineare `schema_completo` quando il team lo richiede.
+
+MCP Supabase: `.cursor/mcp.json` con `read_only=false` per consentire `apply_migration`.
+
 ## Invocazione profili agente (chat)
 
 Usa **file contesto** con `@`:
