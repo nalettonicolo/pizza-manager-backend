@@ -24,15 +24,29 @@ permissions:
 
 jobs:
   ping:
-    name: Ping Supabase API
+    name: Ping API Supabase
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Verifica secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::Manca il secret SUPABASE_URL. Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::warning::Secret SUPABASE_ANON_KEY assente: il ping userà solo auth/health."
+          fi
+          echo "SUPABASE_URL impostata (${#SUPABASE_URL} caratteri)."
 
       - name: Keep-alive ping
         env:

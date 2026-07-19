@@ -4,10 +4,15 @@
  * Usabile in locale, CI (GitHub Actions) o cron esterno.
  *
  * Env: SUPABASE_URL (o VITE_SUPABASE_URL) e opzionale SUPABASE_ANON_KEY (o VITE_SUPABASE_ANON_KEY).
+ * In CI: secrets SUPABASE_URL + SUPABASE_ANON_KEY (Settings → Actions secrets).
  */
 
 import fs from "node:fs";
 import path from "node:path";
+
+const MAX_ATTEMPTS = 3;
+const RETRY_MS = 4_000;
+const REQ_TIMEOUT_MS = 25_000;
 
 /** @param {string} file */
 function loadEnvFile(file) {
@@ -53,9 +58,13 @@ function fail(msg, code = 1) {
   process.exit(code);
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 if (!baseUrl) {
   fail(
-    "Manca SUPABASE_URL (o VITE_SUPABASE_URL). Esempio: https://<ref>.supabase.co",
+    "Manca SUPABASE_URL (o VITE_SUPABASE_URL). In GitHub: Settings → Secrets → Actions → SUPABASE_URL = https://<ref>.supabase.co",
   );
 }
 
@@ -73,57 +82,91 @@ try {
   fail(`URL non valido: ${baseUrl}`);
 }
 
-/** @param {string} path @param {Record<string, string>} [headers] */
-async function get(path, headers = {}) {
+/**
+ * @param {string} reqPath
+ * @param {Record<string, string>} [headers]
+ * @returns {Promise<{ status: number, ok: boolean, snippet: string, error?: string }>}
+ */
+async function get(reqPath, headers = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), REQ_TIMEOUT_MS);
   try {
-    const res = await fetch(`${baseUrl}${path}`, {
+    const res = await fetch(`${baseUrl}${reqPath}`, {
       method: "GET",
       headers: { Accept: "application/json", ...headers },
       signal: controller.signal,
     });
     const text = await res.text().catch(() => "");
     return { status: res.status, ok: res.ok, snippet: text.slice(0, 120) };
+  } catch (e) {
+    const msg = e?.name === "AbortError" ? "timeout" : String(e?.message || e);
+    return { status: 0, ok: false, snippet: "", error: msg };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-const results = [];
-
-const health = await get("/auth/v1/health");
-results.push({ name: "auth/health", ...health });
-
-if (anonKey) {
-  const rest = await get("/rest/v1/", {
-    apikey: anonKey,
-    Authorization: `Bearer ${anonKey}`,
-  });
-  results.push({ name: "rest/v1", ...rest });
+/** Qualsiasi risposta HTTP dal progetto conta come attività (anche 401/404). */
+function isUsefulResponse(r) {
+  return r && Number(r.status) > 0 && Number(r.status) < 600;
 }
 
-const anyReachable = results.some((r) => r.status > 0 && r.status < 500);
-const authOk = health.status >= 200 && health.status < 400;
+async function pingOnce() {
+  const results = [];
+  const authHeaders = anonKey
+    ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` }
+    : {};
+
+  const health = await get("/auth/v1/health", authHeaders);
+  results.push({ name: "auth/health", ...health });
+
+  if (anonKey) {
+    const rest = await get("/rest/v1/", {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+    });
+    results.push({ name: "rest/v1", ...rest });
+  } else {
+    // Senza anon key: ping root Auth (può rispondere 401 ma conferma che il progetto è su)
+    results.push({ name: "rest/v1", status: 0, ok: false, error: "no_anon_key" });
+  }
+
+  return results;
+}
 
 console.log(
   `[supabase-keepalive] ${new Date().toISOString()} → ${hostname}`,
 );
-for (const r of results) {
-  console.log(
-    `  ${r.name}: HTTP ${r.status}${r.ok ? " (ok)" : ""}`,
-  );
-}
-
-if (!anyReachable) {
-  fail(
-    "Nessuna risposta utile da Supabase (progetto in pausa, URL errato o rete).",
-  );
-}
-
-if (!authOk) {
+if (!anonKey) {
   console.warn(
-    "[supabase-keepalive] auth/health non 2xx — il progetto risponde; verifica stato in Dashboard.",
+    "[supabase-keepalive] SUPABASE_ANON_KEY assente: userò solo auth/health. In CI aggiungi anche il secret anon.",
+  );
+}
+
+let lastResults = [];
+let success = false;
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  lastResults = await pingOnce();
+  for (const r of lastResults) {
+    const extra = r.error ? ` (${r.error})` : r.ok ? " (ok)" : "";
+    console.log(`  [try ${attempt}/${MAX_ATTEMPTS}] ${r.name}: HTTP ${r.status}${extra}`);
+  }
+  if (lastResults.some(isUsefulResponse)) {
+    success = true;
+    break;
+  }
+  if (attempt < MAX_ATTEMPTS) {
+    console.warn(
+      `[supabase-keepalive] Nessuna risposta utile — retry tra ${RETRY_MS}ms (progetto in pausa o rete).`,
+    );
+    await sleep(RETRY_MS);
+  }
+}
+
+if (!success) {
+  fail(
+    "Nessuna risposta utile da Supabase dopo i retry (progetto in pausa, URL/secret errati o rete). Verifica Dashboard e secrets SUPABASE_URL / SUPABASE_ANON_KEY.",
   );
 }
 
