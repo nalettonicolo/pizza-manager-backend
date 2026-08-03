@@ -35,4 +35,5 @@
 --   sql/modules/35_revoke_anon_auth_required_rpcs.sql  ← REVOKE anon su RPC che richiedono login
 --   sql/modules/36_realtime_ordini_publication.sql  ← Realtime core.ordini (cucina/bancone)
 --   sql/modules/37_storage_consegna_prove.sql  ← bucket Storage privato firma/foto delivery
+--   sql/modules/38_advisor_residuals_turni_search_path.sql  ← policy turni_operatori + search_path pm_storage
 -- =============================================================================

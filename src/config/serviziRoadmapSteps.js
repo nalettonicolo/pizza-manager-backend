@@ -55,7 +55,7 @@ export const SERVIZI_ROADMAP_STEPS = [
     resto:
       "Smoke Stripe live su tenant produzione + rimborsi.\nCAPTCHA opzionale oltre velocity/blocklist.\nSEO + Core Web Vitals; PWA cliente.\nWebhook ordine con firma HMAC verso partner.\nLoad test weekend.",
     nota:
-      "Carrello, checkout, profilo, storico, fidelity; Stripe IN_ATTESA sbloccato (mod. 25); capacity forno checkout+RPC; antifraud 8/ora + blocklist; notifiche → outbox (adapter SMTP/SMS da completare).",
+      "Carrello, checkout, profilo, storico, fidelity; Stripe IN_ATTESA (mod. 25); capacity forno; antifraud 8/ora + blocklist; stampa comanda web auto Francy; pagamenti ancora in modalità test sul tenant.",
   },
   {
     id: "tablet_ruoli",
@@ -91,7 +91,7 @@ export const SERVIZI_ROADMAP_STEPS = [
     percentuale: 43,
     resto:
       "RBAC fine: risorsa + azione + condizione (es. solo propri ordini).\nDeleghe temporanee e approvazioni a due mani per azioni sensibili.\nAudit log immutabile (append‑only) con export e retention legale.\nSSO SAML/OIDC per gruppi multi‑locale.\nReview accessi trimestrale e report utenti inattivi.\nSeparazione compiti SoD (chi crea fattura non può approvare pagamento).\nIntegrazione SCIM per provisioning utenti da HR.",
-    nota: "Ruoli pizzeria e aree operative; manca matrice fine. Backlog hardening: audit ordini sensibili, allineamento RLS, test E2E critici.",
+    nota: "Ruoli pizzeria e aree operative; hardening grant RPC (34–35) + policy turni (38); manca matrice RBAC fine e SoD.",
   },
   {
     id: "menu_listini",

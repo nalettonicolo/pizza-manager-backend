@@ -19,11 +19,11 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 
 - **Modulo SQL 25**: web `IN_ATTESA` Stripe, capacity forno (`vetrina_slot_carico_oggi` + assert), antifraud (8/ora + blocklist), proof delivery (`consegna_prova`), stub `api_oauth_clients`.
 - **Checkout vetrina**: blocco fasce piene; Stripe checkout path sbloccato lato RPC.
-- **Delivery**: proof firma/foto, mappa live `/operative/delivery/mappa`, sort nearest-neighbor, rider PWA.
-- **Notifiche / fiscale**: adapter pattern Edge (stub SMTP/SMS/WA e RT/SDI); coda outbox come log.
+- **Delivery**: proof firma/foto su Storage `consegna-prove` (mod. 37), mappa live Realtime, sort nearest-neighbor, rider PWA.
+- **Notifiche / fiscale**: adapter pattern Edge (stub SMTP/SMS/WA e RT/SDI); coda outbox come log; claim fiscal solo `service_role`.
 - **CI keep-alive Supabase**: retry e check secret (workflow verde).
 - **Macrofasi 1–5**: core completato (vedi `MACROFASI_SVILUPPO.md`); **Fase 6** = produzione hard + adapter reali.
-- **2026-08-03**: hardening RPC grants (34–35); Realtime ordini (36) su cucina/bancone/pizzaiolo/delivery; magazzino fornitori/DDT DB; stampa comanda web Francy; guide DNS host in Go-live; SA gate privacy.
+- **2026-08-03**: hardening RPC (34–35); Realtime ordini (36); magazzino hub DB; stampa comanda web Francy; guide DNS; SA gate + Sala QA; proof Storage (37); advisor residui (38); deploy hosting produzione.
 
 ---
 
@@ -35,6 +35,7 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 | **Registratore telematico / SDI** | Vendor RT + commercialista — adapter stub pronto. |
 | **POS certificati (PAX/Ingenico)** | SDK/protocolli e ambiente hardware di test. |
 | **SMTP Auth cliente** | Config Dashboard Supabase (`no-reply@pizzamanager.it`). |
+| **Auth HIBP (leaked passwords)** | Piano Supabase **Pro+** (API Free rifiuta il toggle). |
 | **Supporto SLA / Account manager** | Organizzazione commerciale, non repository. |
 | **Dominio reale Francy** | Registrar + hostname + Firebase custom domain (guide in Go-live). |
 
@@ -44,10 +45,11 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 
 | Epic | Stato | Prossimo passo tecnico tipico |
 |------|------|-------------------------------|
-| **Ordini online** | WIP ~84% | Smoke Stripe **live** + verifica stampa comanda web. |
-| **Consegne** | WIP ~84% | Proof su Storage (mod. 37); VRP più ricco se serve. |
-| **Tablet / Realtime** | WIP ~72% | Realtime attivo; audit azione e kiosk. |
+| **Ordini online** | WIP ~84% | Smoke Stripe **live** (stampa comanda web già ON Francy). |
+| **Consegne** | WIP ~84% | VRP più ricco / signed URL retention se serve (Storage già OK). |
+| **Tablet / Realtime** | WIP ~72% | Audit azione e modalità kiosk (Realtime già attivo). |
 | **Magazzino** | WIP ~78% | Giacenza valorizzata / inventari (fornitori-DDT già DB). |
+| **Sicurezza DB** | Avanzato | Advisor 106→43; HIBP su Pro+; rumore 0028/0029 intenzionale. |
 | **API pubbliche** | Todo ~42% | Nest OAuth token su `api_oauth_clients`. |
 | **Fiscale IT** | Parziale | Completare `rt-sdi.ts` quando vendor scelto. |
 
@@ -70,7 +72,7 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 | `docs/GO_LIVE_ORDINI_WEB.md` | Produzione oggi senza adapter. |
 | `src/config/serviziRoadmapSteps.js` | Percentuali UI Super Admin. |
 | `src/content/dnsHostGuides.js` | Guide DNS per registrar. |
-| Canvas Cursor | `punto-situazione-supervisore.canvas.tsx` |
+| Canvas Cursor | `punto-situazione-supervisore` · `supabase-advisor-analisi` |
 
 ---
 

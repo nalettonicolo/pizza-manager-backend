@@ -33,29 +33,30 @@ Dettaglio storico: commit recenti + `docs/GO_LIVE_ORDINI_WEB.md`.
 
 ## Fase 6 — Produzione hard (in corso)
 
-### Fatto (sessione 2026-08-03)
+### Fatto (agg. 2026-08-03 pomeriggio)
 
 | Filo | Stato |
 |------|--------|
 | Hardening grant RPC (mod. 34–35) + search_path `pm_*` | ✅ |
+| Residui advisor (mod. **38**: policy `turni_operatori`, search_path storage) | ✅ |
+| Segreti Stripe / `edge_*` / fiscal: solo `service_role` | ✅ verificato |
 | **B** Realtime `core.ordini` (mod. 36) + Cucina/Bancone/Pizzaiolo/Delivery/Mappa | ✅ |
 | **C** Magazzino fornitori/DDT su Supabase (tabelle ok, UI hub aggiornata) | ✅ |
 | Proof delivery → Storage `consegna-prove` (mod. 37) | ✅ |
 | **A** Stampa comanda web automatica su Francy | ✅ |
 | **A** Stripe **live** smoke | ⏸ solo chiavi **test** su Francy |
-| Guide DNS per host (Register, Aruba, …) + CTA sito esterno | ✅ (codice; deploy hosting fermo) |
-| SA gate privacy + Sala QA multi-finestra | ✅ (codice; deploy hosting fermo) |
+| Guide DNS per host (Register, Aruba, …) + CTA sito esterno | ✅ in produzione |
+| SA gate privacy + Sala QA multi-finestra | ✅ in produzione |
+| Deploy hosting + push GitHub (`f005920` + delta 38) | ✅ |
+
+Advisor sicurezza: **106 → 43** WARN (42 rumore atteso vetrina/staff; 1 HIBP richiede piano Pro+).
 
 ### Prossimi (ordine)
 
 1. **Stripe live** su Francy (quando ci sono `pk_live` / `sk_live` / `whsec`) + smoke pagamento  
 2. Go-live **dominio reale** Francy (DNS + Firebase custom domain + Auth redirects)  
 3. Adapter SMTP / RT-SDI (quando ci sono credenziali vendor)  
-4. Auth: leaked password protection (Dashboard Supabase)
-
-### Vincolo operativo
-
-Deploy Firebase Hosting **solo su richiesta esplicita**.
+4. Auth HIBP leaked passwords (upgrade Supabase Pro+ → toggle Dashboard)
 
 ---
 
