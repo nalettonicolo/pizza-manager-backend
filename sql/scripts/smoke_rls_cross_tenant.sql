@@ -46,3 +46,17 @@ SELECT schemaname, tablename, policyname
 FROM pg_policies
 WHERE schemaname = 'admin'
 ORDER BY tablename, policyname;
+
+-- Support presence: il client autenticato non deve avere privilegi DML diretti.
+-- Atteso: SELECT soltanto; INSERT/UPDATE/DELETE = false.
+SELECT
+  has_table_privilege('authenticated', 'public.support_presence', 'SELECT') AS puo_leggere,
+  has_table_privilege('authenticated', 'public.support_presence', 'INSERT') AS puo_inserire,
+  has_table_privilege('authenticated', 'public.support_presence', 'UPDATE') AS puo_aggiornare,
+  has_table_privilege('authenticated', 'public.support_presence', 'DELETE') AS puo_cancellare;
+
+-- Modulo 30: p_tenant_id è ignorato. Con JWT staff del tenant A, anche passando
+-- UUID del tenant B, la riga (se scritta) deve avere tenant_id = A.
+-- select public.upsert_support_presence('/operative/cassa', 'Cassa', 'UUID_TENANT_B'::uuid);
+-- select tenant_id from public.support_presence where user_id = auth.uid();
+-- atteso: tenant A (mai B). Super Admin senza membership staff → nessun insert.

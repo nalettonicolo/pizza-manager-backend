@@ -1,8 +1,23 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
-    }
-  }
+      "@/*": ["./src/*"]
+    },
+    "jsx": "react-jsx",
+    "checkJs": false,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext"
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "server",
+    "supabase",
+    "scripts",
+    "coverage",
+    "**/*.test.js",
+    "**/*.spec.ts"
+  ]
 }

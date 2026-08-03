@@ -1,0 +1,195 @@
+/* Ingresso privacy Super Admin — layout dedicato, senza barra console */
+
+.sa-gate {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(230, 126, 34, 0.18), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 100%, rgba(211, 84, 0, 0.12), transparent 50%),
+    linear-gradient(165deg, #1a120c 0%, #2c1810 45%, #1f1410 100%);
+  color: #f8fafc;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.sa-gate-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sa-gate-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sa-gate-logo {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.sa-gate-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.sa-gate-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sa-gate-email {
+  font-size: 0.85rem;
+  color: rgba(248, 250, 252, 0.75);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sa-gate-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.sa-gate-logout:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sa-gate-logout:active {
+  opacity: 0.85;
+}
+
+.sa-gate-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px 64px;
+  text-align: center;
+}
+
+.sa-gate-kicker {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f5b041;
+}
+
+.sa-gate-title {
+  margin: 0 0 12px;
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.sa-gate-lede {
+  margin: 0 0 36px;
+  max-width: 420px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: rgba(248, 250, 252, 0.72);
+}
+
+.sa-gate-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 260px));
+  gap: 20px;
+  width: 100%;
+  max-width: 560px;
+  justify-content: center;
+}
+
+@media (max-width: 560px) {
+  .sa-gate-cards {
+    grid-template-columns: 1fr;
+    max-width: 320px;
+  }
+}
+
+.sa-gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 20px 24px;
+  border-radius: 18px;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  touch-action: manipulation;
+}
+
+.sa-gate-card:hover {
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(245, 176, 65, 0.45);
+}
+
+.sa-gate-card:active {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.sa-gate-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  margin-bottom: 4px;
+}
+
+.sa-gate-card--preview .sa-gate-icon {
+  background: linear-gradient(145deg, #e67e22, #d35400);
+  color: #fff;
+}
+
+.sa-gate-card--admin .sa-gate-icon {
+  background: linear-gradient(145deg, #f5b041, #e67e22);
+  color: #1a120c;
+}
+
+.sa-gate-card-label {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.sa-gate-card-desc {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: rgba(248, 250, 252, 0.65);
+  max-width: 200px;
+}

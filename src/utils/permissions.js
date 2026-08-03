@@ -7,7 +7,7 @@ import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome"
 export function getHomeByRole(role) {
   switch (role) {
     case "superadmin":
-      return "/superadmin/dashboard"
+      return "/superadmin/ingresso"
 
     case "admin":
     case "owner":

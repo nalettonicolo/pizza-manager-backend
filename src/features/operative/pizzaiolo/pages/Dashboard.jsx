@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { useState, useCallback, useMemo, useRef } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
@@ -22,11 +22,12 @@ import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/pla
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
-/** Polling ordini: batch ingredienti + refresh silenzioso → meno latenza percepita */
-const POLL_MS = 10000
+/** Polling di sicurezza se Realtime non arriva */
+const POLL_FALLBACK_MS = 30000
 
 function googleMapsUrl(indirizzo) {
   if (!indirizzo || !indirizzo.trim()) return null
@@ -109,11 +110,11 @@ export default function PizzaioloDashboard() {
     }
   }, [tenantId])
 
-  useEffect(() => {
-    loadOrders()
-    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
-    return () => clearInterval(t)
-  }, [loadOrders])
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: () => loadOrders({ silent: true }),
+    pollMs: POLL_FALLBACK_MS,
+  })
 
   const ordiniVisibili = useMemo(
     () => sortOrdiniByOrario(filterOrdiniVisibili(orders, minutiVisibili)),

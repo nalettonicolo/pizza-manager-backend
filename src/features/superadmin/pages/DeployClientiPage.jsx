@@ -144,24 +144,169 @@ export default function DeployClientiPage() {
     <div className="dashboard-settings-page superadmin-deploy-page">
       <h1 className="dashboard-page-title">Deploy siti clienti</h1>
 
+      {/* Analisi + modello semplificato (fonte operativa per Super Admin) */}
+      <section
+        aria-label="Analisi e consigli deploy"
+        style={{
+          marginBottom: 28,
+          padding: "20px 22px",
+          borderRadius: 12,
+          border: "1px solid #fdba74",
+          background: "#fff7ed",
+          boxShadow: "0 6px 20px rgba(15, 23, 42, 0.06)",
+        }}
+      >
+        <p
+          style={{
+            margin: "0 0 8px",
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "#9a3412",
+          }}
+        >
+          Analisi situazione · consigli operativi
+        </p>
+        <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#0f172a", fontWeight: 800, lineHeight: 1.35 }}>
+          Un solo sito piattaforma, tanti locali: non serve un deploy per ogni cliente
+        </h2>
+
+        <p style={{ margin: "0 0 14px", fontSize: 14, lineHeight: 1.65, color: "#334155" }}>
+          Oggi PizzaManager è <strong>un&apos;unica webapp</strong> pubblicata su Firebase (es.{" "}
+          <a href="https://pizzamanager.it" target="_blank" rel="noopener noreferrer" style={{ color: "#c0392b", fontWeight: 600 }}>
+            pizzamanager.it
+          </a>
+          ). Ogni pizzeria non ha un build separato: il browser apre lo stesso codice e il sistema riconosce il locale
+          dallo <strong>hostname</strong> (dominio proprio) o dallo <strong>slug</strong> su piattaforma. Per questo la
+          pagina storica “deploy cliente” risultava macchinosa: mescolava go-live DNS, checklist locali e comandi{" "}
+          <code>npm run deploy</code> come se ogni tenant richiedesse una pubblicazione dedicata.
+        </p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ padding: 14, borderRadius: 10, background: "#fff", border: "1px solid #fed7aa" }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 800, color: "#9a3412" }}>COSA FUNZIONA GIÀ</p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.55, color: "#334155" }}>
+              <li>Un deploy frontend aggiorna <em>tutti</em> i clienti contemporaneamente.</li>
+              <li>Dominio e stato go-live sono salvati sul tenant (<code>public_domain</code>).</li>
+              <li>Esiste già la pagina dedicata «Pubblicazione dominio» per DNS / Firebase.</li>
+            </ul>
+          </div>
+          <div style={{ padding: 14, borderRadius: 10, background: "#fff", border: "1px solid #fecaca" }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 800, color: "#b91c1c" }}>COSA È MACCHINOSO</p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.55, color: "#334155" }}>
+              <li>Due pagine simili (Deploy siti + Pubblicazione dominio) con istruzioni che si sovrappongono.</li>
+              <li>Checklist solo in questo browser (localStorage), non condivisa col team.</li>
+              <li>Confusione tra «sito web marketing» e «dominio menu» del locale.</li>
+              <li>Comandi repo e DNS mescolati nello stesso flusso go-live.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "#0f172a", fontWeight: 800 }}>
+          Modello consigliato (semplice)
+        </h3>
+        <ol style={{ margin: "0 0 14px", paddingLeft: 20, fontSize: 14, lineHeight: 1.75, color: "#1e293b" }}>
+          <li>
+            <strong>Aggiornamenti prodotto</strong> — una volta sola:{" "}
+            <code>npm run deploy:full:ci</code> (o pipeline CI). Vale per tutta la piattaforma.
+          </li>
+          <li>
+            <strong>Nuovo cliente online</strong> — solo tre passi:
+            <br />
+            (A) slug attivo in anagrafica → anteprima su piattaforma;
+            <br />
+            (B) dominio proprio: CNAME verso Firebase + salvataggio in{" "}
+            <Link to="/superadmin/pubblicazione-sito" style={{ color: "#c0392b", fontWeight: 700 }}>
+              Pubblicazione dominio
+            </Link>
+            ;
+            <br />
+            (C) Redirect Auth Supabase per quel dominio (reset password / login).
+          </li>
+          <li>
+            <strong>Non rifare il deploy</strong> quando aggiungi un dominio: aggiungi l&apos;host in Firebase Hosting
+            e aggiorna il record DNS. Il codice è già lo stesso.
+          </li>
+          <li>
+            <strong>Un solo campo “dominio menu”</strong> — usa <em>dominio pubblico</em> per il menu/ordini; tieni
+            «sito web cliente» solo se è un sito marketing esterno diverso.
+          </li>
+        </ol>
+
+        <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "#0f172a", fontWeight: 800 }}>
+          Prossimi miglioramenti (roadmap tecnica)
+        </h3>
+        <ul style={{ margin: "0 0 12px", paddingLeft: 20, fontSize: 13, lineHeight: 1.65, color: "#475569" }}>
+          <li>
+            Unificare questa pagina con Pubblicazione dominio in un’unica «Go-live cliente» (stato DNS + link smoke
+            test).
+          </li>
+          <li>Checklist go-live salvata su database (condivisa), non solo in questo PC.</li>
+          <li>
+            Wildcard <code>*.pizzamanager.it</code> + automazione CNAME/custom domain Firebase (meno passaggi manuali).
+          </li>
+          <li>Script/checklist Auth Redirect URLs per ogni nuovo hostname.</li>
+        </ul>
+
+        <p
+          style={{
+            margin: 0,
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "#ecfdf5",
+            border: "1px solid #a7f3d0",
+            fontSize: 13,
+            color: "#14532d",
+            lineHeight: 1.55,
+          }}
+        >
+          <strong>In pratica oggi:</strong> per pubblicare codice → un deploy piattaforma. Per far uscire un locale sul
+          suo dominio → Pubblicazione dominio + DNS + Auth. Sotto restano elenco clienti e checklist di verifica
+          go-live (utile, ma non sostituisce i passi DNS).
+        </p>
+      </section>
+
       <p style={{ maxWidth: "100%", fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 24 }}>
-        Da questa area gestisci la pubblicazione del sistema/menu sul dominio del cliente. La pipeline completamente
-        automatica tenant-by-tenant e in evoluzione; oggi la procedura operativa resta guidata (checklist + deploy
-        piattaforma).
+        Usa l&apos;elenco sotto per scegliere il cliente, controllare slug / dominio e completare la checklist di
+        verifica. La configurazione tecnica del dominio resta in{" "}
+        <Link
+          to="/superadmin/pubblicazione-sito"
+          style={{ color: "#c0392b", fontWeight: 700 }}
+        >
+          Pubblicazione dominio
+        </Link>
+        .
       </p>
 
       <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
-        <h2 className="dashboard-settings-section-title">Come fare deploy sul sito cliente</h2>
+        <h2 className="dashboard-settings-section-title">Flusso go-live (senza macchinismi)</h2>
         <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.65 }}>
-          Flusso consigliato per andare online in sicurezza su un tenant:
+          Separare sempre <strong>aggiornamento piattaforma</strong> e <strong>attivazione dominio cliente</strong>:
         </p>
         <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.8, color: "#334155" }}>
-          <li>Seleziona il cliente dalla tabella e verifica lo slug/URL pubblico atteso.</li>
-          <li>Completa la checklist di verifica (anagrafica, DNS, menu, legali, smoke test).</li>
-          <li>Esegui deploy frontend dalla root del progetto con <code>npm run deploy</code>.</li>
-          <li>Per backend usa <code>git commit</code> + <code>git push</code> (trigger deploy automatico piattaforma).</li>
-          <li>Apri l&apos;URL cliente e verifica home, menu, login, privacy/cookie/termini.</li>
-          <li>Registra esito con timestamp interno e lascia la checklist completa al 100%.</li>
+          <li>
+            Seleziona il cliente e verifica slug (URL piattaforma) e dominio pubblico, se già impostato.
+          </li>
+          <li>
+            Apri{" "}
+            <Link to="/superadmin/pubblicazione-sito" style={{ fontWeight: 700, color: "#c0392b" }}>
+              Pubblicazione dominio
+            </Link>{" "}
+            → salva hostname → configura CNAME verso Firebase.
+          </li>
+          <li>Completa la checklist di verifica sotto (menu, legali, smoke test).</li>
+          <li>
+            Solo se hai cambiato il codice prodotto: un deploy globale (
+            <code>npm run deploy:full:ci</code>), non «per questo cliente».
+          </li>
         </ol>
         <div
           style={{
@@ -174,7 +319,8 @@ export default function DeployClientiPage() {
             fontSize: 13,
           }}
         >
-          Nota: gli <strong>aggiornamenti automatici del sistema</strong> sono sempre inclusi nel deploy cliente.
+          Nota: un deploy piattaforma aggiorna automaticamente l&apos;esperienza di <strong>tutti</strong> i clienti
+          già online.
         </div>
       </section>
 
@@ -339,11 +485,11 @@ export default function DeployClientiPage() {
       <section className="dashboard-box dashboard-settings-section" style={sectionCardStyle}>
         <h2 className="dashboard-settings-section-title">Procedura operativa attuale</h2>
         <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.75, color: "#334155" }}>
-          <li>Verifica anagrafica tenant, host pubblico e configurazione menu.</li>
-          <li>Conferma DNS del dominio cliente verso l&apos;hosting della piattaforma.</li>
-          <li>Esegui deploy frontend (build + hosting) dalla root del progetto.</li>
-          <li>Controlla il tenant online: home, menu pubblico, privacy/cookie/termini.</li>
-          <li>Registra esito e timestamp nel processo interno.</li>
+          <li>Verifica anagrafica e slug (URL su piattaforma).</li>
+          <li>Configura dominio menu in Pubblicazione dominio + DNS CNAME verso Firebase.</li>
+          <li>Aggiungi Redirect URL Auth Supabase per quel hostname.</li>
+          <li>Smoke test: home, menu, login, privacy/cookie/termini.</li>
+          <li>Deploy codice solo se hai rilasciato nuove funzioni piattaforma (globale, non per-tenant).</li>
         </ul>
       </section>
 

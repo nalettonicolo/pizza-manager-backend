@@ -103,7 +103,7 @@ export default function ConsegnaProofDialog({ open, ordineNumero, onCancel, onCo
       >
         <h2 style={{ margin: "0 0 8px", fontSize: 17 }}>Conferma consegna #{ordineNumero ?? "—"}</h2>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
-          Firma del cliente (opzionale) e foto di prova. I dati restano nel registro consegne del locale.
+          Firma del cliente (opzionale) e foto di prova. Immagini salvate nello Storage del locale (non in chiaro nel DB).
         </p>
         <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Firma</p>
         <canvas

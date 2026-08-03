@@ -41,6 +41,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres?schema=public
           JWT_SECRET: ci-jwt-secret-at-least-32-characters-long
 
+      - name: Lint
+        run: npm run lint
+
       - name: Unit tests
         run: npm test
 
@@ -70,3 +73,28 @@ jobs:
           VITE_USE_NEST_AUTH: "false"
           VITE_PUBLIC_TENANT_VIA_NEST: "false"
           VITE_PUBLIC_STOREFRONT_VIA_NEST: "false"
+
+  security-dependencies:
+    name: Runtime dependency security gate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [".", "server/pizzeria-backend"]
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.directory == '.' && 'package-lock.json' || 'server/pizzeria-backend/package-lock.json' }}
+
+      - name: Install
+        run: npm ci
+
+      - name: Block critical runtime vulnerabilities
+        run: npm audit --omit=dev --audit-level=critical

@@ -38,8 +38,15 @@ const cellInput = {
 };
 
 export default function OrdiniFornitoriPage() {
-  const { fornitori, addFornitore: persistFornitore, updateFornitore, removeFornitore, ready } =
-    useMagazzinoFornitoriStorage();
+  const {
+    fornitori,
+    addFornitore: persistFornitore,
+    updateFornitore,
+    removeFornitore,
+    ready,
+    backend,
+    loadErr,
+  } = useMagazzinoFornitoriStorage();
   const [selectedId, setSelectedId] = useState(null);
   const [draft, setDraft] = useState(emptyFornitore);
   const [editingListino, setEditingListino] = useState(emptyListinoRow);
@@ -114,6 +121,20 @@ export default function OrdiniFornitoriPage() {
         </ul>
       }
     >
+      {backend === "db" ? (
+        <p style={{ fontSize: 13, color: "#166534", margin: "0 0 12px" }} role="status">
+          Dati salvati su Supabase (multi-dispositivo).
+        </p>
+      ) : (
+        <p style={{ fontSize: 13, color: "#92400e", margin: "0 0 12px" }} role="status">
+          Storage locale di emergenza — le tabelle magazzino su Supabase non risultano raggiungibili.
+        </p>
+      )}
+      {loadErr ? (
+        <p style={{ fontSize: 13, color: "#b91c1c", margin: "0 0 12px" }} role="alert">
+          {loadErr}
+        </p>
+      ) : null}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 24, alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 280px", minWidth: 260 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>

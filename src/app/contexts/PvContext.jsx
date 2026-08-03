@@ -9,7 +9,7 @@ import { useTenant } from "@/app/contexts/TenantContext"
 const PvContext = createContext()
 
 export function PvProvider({ children }) {
-  const { user, ruolo, loading: authLoading } = useAuth()
+  const { user, ruolo, loading: authLoading, isSupportTenantMode } = useAuth()
   const { tenantId, tenantData } = useTenant()
 
   const [activePv, setActivePv] = useState(null)
@@ -34,12 +34,15 @@ export function PvProvider({ children }) {
 
       setPvList(data)
 
-      if (ruolo !== "superadmin") {
+      // Super Admin in Sala QA: stesso auto-pick del personale (senza PV la cassa resta “vuota”).
+      const autoPickPv = ruolo !== "superadmin" || isSupportTenantMode
+
+      if (autoPickPv) {
         const ruoloNorm = (ruolo && String(ruolo).toLowerCase().trim()) || ""
         const saved = localStorage.getItem("active_pv")
         const valid = saved && data.some((p) => String(p.id) === String(saved))
 
-        if (ruoloNorm === "admin" && data.length > 1) {
+        if (ruoloNorm === "admin" && data.length > 1 && !isSupportTenantMode) {
           if (valid) {
             setActivePv(String(saved))
           } else {
@@ -65,7 +68,7 @@ export function PvProvider({ children }) {
         localStorage.setItem("active_pv", String(only))
       }
     },
-    [ruolo]
+    [ruolo, isSupportTenantMode]
   )
 
   const loadPv = useCallback(async () => {
@@ -82,7 +85,7 @@ export function PvProvider({ children }) {
     try {
       if (isNestAuthEnabled() && getNestJwt()) {
         try {
-          const rows = await nestTenantPuntiVendita()
+          const rows = await nestTenantPuntiVendita(tenantId)
           if (Array.isArray(rows)) {
             applyPvRows(rows)
             return

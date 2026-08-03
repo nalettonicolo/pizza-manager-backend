@@ -29,8 +29,8 @@ import {
   getCategories,
   getProductsByCategory,
   getProductIngredienti,
-  getProductIngredientiMap,
-  getProductIngredientIdsMap,
+  getCachedProductIngredienti,
+  getProductIngredientiBatch,
   getIngredients,
   getRuoliPizzeria,
   createOrder,
@@ -609,15 +609,21 @@ export default function CassaPage() {
     const ids = (sorted || []).map((p) => p.id).filter(Boolean)
     const po = tenantData?.parametri_operativi
     try {
-      const [withPrezzoRaw, map, idsMap] = await Promise.all([
+      const [withPrezzoRaw, detailBatch] = await Promise.all([
         enrichProductsWithPrezzoCalcolato(tenantId, sorted),
-        ids.length ? getProductIngredientiMap(tenantId, ids) : Promise.resolve({}),
-        ids.length ? getProductIngredientIdsMap(tenantId, ids) : Promise.resolve({}),
+        ids.length ? getProductIngredientiBatch(tenantId, ids) : Promise.resolve({}),
       ])
       const withPrezzo = applyPromoCalendarioToProducts(withPrezzoRaw, po, new Date())
+      const map = {}
+      const idsMap = {}
+      for (const pid of ids) {
+        const arr = detailBatch?.[pid] || []
+        map[pid] = arr.map((ing) => ing?.nome || "").filter(Boolean)
+        idsMap[pid] = arr.map((ing) => ing?.id).filter(Boolean)
+      }
       setProducts(withPrezzo)
-      setProductIngredientiMap(map || {})
-      setProductIngredientIdsMap(idsMap || {})
+      setProductIngredientiMap(map)
+      setProductIngredientIdsMap(idsMap)
     } catch (e) {
       console.warn("Caricamento prodotti / ingredienti cassa:", e)
       try {
@@ -1607,34 +1613,51 @@ export default function CassaPage() {
   }, [])
 
   const addToCart = useCallback(
-    async (product) => {
+    (product) => {
       if (!tenantId) return
       const catNome = (categories.find((c) => c.id === activeCategory)?.nome || "").toLowerCase()
       const modificaCassaDisponibile = !["fritti", "dolci", "bibite"].includes(catNome)
-      const ingList = await getProductIngredienti(tenantId, product.id)
-      if (ingList?.length > 0) {
-        const defaultModifiche = {}
-        ingList.forEach((ing) => {
-          defaultModifiche[ing.id] = {
-            variante: "normale",
-            cottura: ing.vaInCottura ? "in_cottura" : "fine_cottura",
+
+      const applyIngList = (ingList) => {
+        if (ingList?.length > 0) {
+          const defaultModifiche = {}
+          ingList.forEach((ing) => {
+            defaultModifiche[ing.id] = {
+              variante: "normale",
+              cottura: ing.vaInCottura ? "in_cottura" : "fine_cottura",
+            }
+          })
+          const defaultPayload = {
+            ingredientiModifiche: defaultModifiche,
+            extraIngredienti: [],
+            ingredientiCotturaSummary: buildComandaIngredientiSummary(
+              ingList,
+              defaultModifiche,
+              [],
+            ),
           }
-        })
-        const defaultPayload = {
-          ingredientiModifiche: defaultModifiche,
-          extraIngredienti: [],
-          ingredientiCotturaSummary: buildComandaIngredientiSummary(
-            ingList,
-            defaultModifiche,
-            [],
-          ),
+          addToCartWithIngredienti(product, defaultPayload, modificaCassaDisponibile)
+          return
         }
-        addToCartWithIngredienti(product, defaultPayload, modificaCassaDisponibile)
+        addToCartWithIngredienti(product, null, modificaCassaDisponibile)
+      }
+
+      // Tap istantaneo: ingredienti già in cache dal load categoria (niente await rete).
+      const cached = getCachedProductIngredienti(tenantId, product.id)
+      if (cached !== undefined) {
+        applyIngList(cached)
         return
       }
-      addToCartWithIngredienti(product, null, modificaCassaDisponibile)
+      if (Object.prototype.hasOwnProperty.call(productIngredientIdsMap, product.id)) {
+        const ids = productIngredientIdsMap[product.id]
+        if (!ids?.length) {
+          applyIngList([])
+          return
+        }
+      }
+      void getProductIngredienti(tenantId, product.id).then(applyIngList)
     },
-    [tenantId, addToCartWithIngredienti, categories, activeCategory]
+    [tenantId, addToCartWithIngredienti, categories, activeCategory, productIngredientIdsMap],
   )
 
   const closePizzaModal = useCallback(() => {

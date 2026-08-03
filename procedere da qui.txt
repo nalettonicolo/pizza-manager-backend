@@ -1,114 +1,66 @@
-- SISTEMA TUTTO CIO' OVVIAMENTE IO TI MANDO I LINK RIFERITI AL MIO DOMINIO MA DOVRA' ESSERE OPERATIVO PER TUTTI I CLIENTI: 
-- ORA CHE HO ESEGUITO @sql/sql_upgrade.sql INTEGRALO NELLLO @sql/schema_completo_pizzamanager.sql POI SVUOTA IL CONTENUTO DI @sql/sql_upgrade.sql IN MODO DA AVERE SOLO LE NUOVE IMPLEMENTAZIONI. 
-- VERIFICARE PERCHE' SULLA PAGINA https://pizzamanager.it/preview LE CATEGORIE DEL MENù DICONO ALTRO E NON LE CATEGORIE PRESENTI E CREATE DA ADMIN TENANT,
-- SULLA PAGINA https://pizzamanager.it/admin/menu/listini VOGLIO CHE MI PERMETTI DI STAMPARLO O ESPORTALO IN PDF
-- SULLA PAGINA https://pizzamanager.it/admin/dipendenti CREA ANCHE UNA FUNZIONE PER AGGIUNGERE I DIPENDENTI, SERVIRA' PER ARCHIVIARE LE BUSTE PAGHE DI OGNI DIPENDENTE, I DATI PERSONALI, I CORSI TUTTO PER AVERE UN PUNTO CENTRALIZZATO.
-- SULLA PAGINA https://pizzamanager.it/admin/settings/dati-pizzeria  Vetrina web — normativa e pagamenti online
-Testi privacy/cookie con segnaposto tipo {{nome_attivita}}, {{piva}}, {{pec}}, {{indirizzo}}, {{email}}. Se lasci vuoti, restano i testi predefiniti dell'app. VOGLIO UN TESTO PIU' PROFESSIONALE
-- SPIEGAMI MEGLIO IL DISCORSO VETRINA SOPRATUTTO L'AREA SUMUP, STRIPE, E LA PRIVACY POLICY E POLICY COOKIE
-- https://pizzamanager.it/admin/settings/layout SE CARICO LOGO A DESTRA DEL CAMPO LOGO VEDI SE RIUSCIAMO A CARICARE O ESTRARRE DAL LOGO IL SIMBOLO CHE IDENTIFICA L'ATTIVITà IN MODO DA METTERLO AFFIANCO AL NOME DELLA SCHEDA DEL BROWSER
-- https://pizzamanager.it/admin/settings/area-consegna MAPPA VUOTA, SPIEGA MEGLIO COSA FA E COSA NO. NON è CHIARO Punti vendita
-Per ogni sede imposta il marcatore e il poligono; puoi generare un cerchio con la stima in alto, poi modificare i vertici. Se manca l'area della sede, vale il poligono globale di questa pagina.
+================================================================================
+PROCEDERE DA QUI — stato operativo (aggiornato 2026-08-02)
+Dominio: https://pizzamanager.it — tutto multi-tenant.
+Programma completo: docs/PROGRAMMA_AFFIDABILITA.md
+================================================================================
 
-Sede principale
-Usa coordinate da Dati pizzeria
-Genera area da stima moto (~24 km/h × 15 min → ~6.0 km)
-Rimuovi area per questa sede
-La stima usa i valori nella sezione Area globale (salva prima se li hai modificati). Poi adatta il poligono alla rete stradale.
-- https://pizzamanager.it/admin/manuale QUI CI SONO I RIMANDI A DEI FILE CON IL NOME DEL FILE DEL PROGETTO, NON E' PROFESSIONALE PER UN CLIENTE. MIGLIORA L'ESPERIENZA TESTI.
-- VERIFICA https://pizzamanager.it/superadmin/licenses Le righe sono ricavate dai dati cliente: in database non risultano ancora record in subscriptions (controlla policy RLS o esegui il salvataggio da Clienti).
-- SPIEGA MEGLIO https://pizzamanager.it/superadmin/pubblicazione-sito?tenant=95c0b10f-b677-4131-abd9-e60e8cf9e3bf     Inserisci l'hostname che deve aprire la webapp (deve coincidere con il dominio aggiunto in Firebase Hosting e con il record DNS). Esempi: menu.tuonome.it, ordini.ristorante.it.
+COME LAVORARE
+- Una feature alla volta (agenti product → … → security → supervisor).
+- SQL: sql/modules/NN_*.sql → sql_upgrade → npm run sql:apply → copia in
+  supabase/migrations/YYYYMMDDHHMMSS_*.sql
+- Deploy SPA: npm run deploy:full:ci | Backend: solo server/pizzeria-backend (Nest)
+- Express: server/legacy-express/ = NON SUPPORTATO
 
-Dominio pubblico
-AAA.IT
-Salvataggio come: aaa.it
+--------------------------------------------------------------------------------
+FASE A — FONDAMENTA (IN CORSO) — fatto oggi
+--------------------------------------------------------------------------------
+[x] Presence: tenant solo da identità (moduli 26/30) applicati sul DB remoto
+[x] SECURITY DEFINER: SET search_path batch (modulo 31) + verify notices (32)
+[x] Nest hardening: Helmet, CORS prod, Swagger opt-in, Throttler (+ login/public)
+[x] Express archiviato; supabase/.temp fuori dal tracking
+[x] Migrazioni versionate avviate (supabase/migrations 29–31)
+[x] Matrice ruoli×tenant: sql/scripts/matrice_ruoli_tenant_azioni.sql
+[x] npm audit frontend: high risolte (restano 2 moderate react-router → upgrade v7
+    pianificato, no --force in questo ciclo)
+[ ] npm audit Nest: completare audit fix controllato + regressione build
+[ ] CI RLS con JWT tenant A/B (automatico)
+[ ] Backup/restore staging documentato e provato
+[ ] Gate deploy: schema compatibile con codice (checklist in PROGRAMMA_AFFIDABILITA)
 
-Sito web del cliente (opzionale)
-URL del sito vetrina esterno del locale (es. Google Sites, sito istituzionale). Non è il dominio PizzaManager: serve solo per riferimento e collegamenti dalla guida.
+--------------------------------------------------------------------------------
+FASE B — DATI (prossimo dopo chiusura A)
+--------------------------------------------------------------------------------
+- Uscire da localStorage per: magazzino, contabilità, bozze cassa condivise, HR
+- Audit log accessi/supporto SA; classificazione dati
 
-AAA.IT
-Stato pubblicazione
+--------------------------------------------------------------------------------
+FASE C — OPERATIVO PREMIUM
+--------------------------------------------------------------------------------
+- Split CassaPage / adminService
+- E2E cassa/cucina/bancone/delivery; planning capacità reale
+- Slot orari riepilogo con carico pizze prenotate (critico prodotto)
 
-DNS / Firebase in configurazione
-- https://pizzamanager.it/superadmin/test-layout NON FUNZIONA COME RICHIESTO. 
-- SE HO SELEZIONATO UN CLIENTE A DOMICILIO E POI CLICCO SULLA X PER DESELEZIONARLO IL CARRELLO SI DEVE SVUOTARE IN MANIERA AUTOMATICA, RESTA NOME DEL CLIENTE L'ORDINE APERTO MA NON CONFERMATO, SE RICHIAMO QUEL CLIENTE VEDRO' L'ORDINE INCOMPLETO, STESSA COSA SE HO ASSOCIATO IL CLIENTE CREATO DA ME AL CLIENTE CHE SI è REGISTRATO ONLINE E DA CASA IN AUTONOMIA HA CREATO PARZIALMENTE L'ORDINE E NON CONCLUSO DEVO VEDERLO. ATTENZIONE CHE SE PER MOTIVI DI ORARIO O ALTRI MOTIVI IL CLIENTE DA DOMICILIO MI DICE RITIRO IN NEGOZIO IO POSSO MODFICARLO, SE SONO AL TELEFONO POSSO CLICCARE SUL TASTO IN NEGOZIO A DX DEL NOME CLIENTE, SE INVECE HO GIA' PRESO ORDINE A DOMICILIO E IL CLIENTE MI RICHIAMA PER MODIFICARE IL RITIRO CREIAMO UN TASTO DENTRO L'ORDINE.
-- IN FASE DI RIEPILGO ORDINE PRIMA DELLA CONFERMA PERSISTONO I PROBLEMI DI ORARI, NEL SENSO IO HO GIA' DELLE PIZZE PRENOTATE MA SULLE SLOT ORARIE NON LE VEDO. QUESTO MI CREA GROSSI PROBLEMI IN QUANTO NON SO QUANTE PIZZE HO IN UNA FASCIA ORARIA E POTREBBE RECARMI DANNI DI IMMAGINE PERCHE' FAREI RITARDI STRATOSFERICI.
-- SULLA COLONNA ORDINI A SX DEL MENU IN PAGINA CASSA ATTENZIONE ALLE ICONE DEI TIPI DI PAGAMENTO PRESENTI NEGLI ORDINI, HO 2 TIPOLOGIE DI PAGAMENTO DIVERSE SEGNATE E LA STESSA ICONA.
-- SULLA BARRA DI RICERCA DELLE PIZZE SE INSERISCO IL NOME DI UN INGREDIENTE DEVO VEDERE TUTTE LE PIZZE CHE CONTENGONO QUELL'INGREDIENTE, QUESTA COSA VALE ANCHE PER IL CLIENTE A CASA.
-- SULLA HOMEPAGE DELLA PIZZERIA SE IL CLIENTE NON HA ORDINI ONLINE INCLUSI NEL PIANO DI ABBONAMENTO AL CLIENTE FINALE NON INTERESSA, QUINDI RIMUOVI LA VOCE AGGIUNGI ANCHE SE DISABILITATA, RIMUOVI LA SEZIONE REGISTRATI, PERMETTI LA VISUALIZZAZIONE DEL MENU.
-- SE CLICCO PLANNING E POI CLICCO SOPRA UN ORDINE FAMMI VEDERE IL RIEPILOGO. 
-- QUI https://pizzamanager.it/admin/menu/ingredienti SE CLICCO CARICA CSV MI VIENE CHIESTO 2 VOLTE DI CARICARE IL FILE. COSA INUTILE. 
-- CERCHIAMO DI RENDERE PIU' PROFESSIONALE E VELOCE IL CARICAMENTO DEGLI INGREDIENTI, SE ABILITATO FOODCOST I PREZZI DEGLI INGREDIENTI DEVONO COMBACIARE CON IL LISTINO. IN CASO CONTRARIO PERCHE' UN PRODOTTO HA SUBITO UN AUMENTO SEGNALALO METTENDO UN ERRORE SU UN MODALE POPUP IN MODO CHE ADMIN TENANT E CASSA ASSOCIATA A QUEL TENANT VEDANO QUESTO ERRORE.
-- SE CARICO UN INGREDIENTE E DICHIARO CHE VA A FINE COTTURA SUL CSV O SULLA PAGINA DEDICATA POI QUANDO LO AGGIUNGO ALLA PIZZA DEVE RISPETTARE DI DEFAULT L'IMPOSTAZIONE DATA, POI IL CLIENTE PUò CHIEDERE DI CAMBIARE CON L'APPOSITO MENU' GIA' CREATO. 
-- LATENZA DI CARICAMENTO TRA LE PAGINE RISOLVI E VELOCIZZA
-- SU https://pizzamanager.it/operative/pizzaiolo-ingresso RIMUOVI COLONNA A SX DELLA PAGINA, LASCIA AL MOMENTO SOLO I 2 TASTI SCHERMATA PIZZAIOLI O TEST (4SCHERMATE), SUL SITO DEL CLIENTE CI SARA' SOLO L'ACCESSO DIRETTO ALL'AREA OPERATIVA DEDICATA,(STESSA COSA PER CUCINA, BANCONE E I VARI PONY/DELIVERY)
-- SULLA SCHERMATA DI CUCINA RISOLVIAMO IL CONFLITTO HO DETTO CHE SE UN INGREDIENTE VIENE CLASSIFICATO DA PREPARARE IMPOSTATO IN FASE DI CARICAMENTO, E POI DOBBIAMO ASSOCIARE UN INGREDIENTE AL TIPO DI PREPARAZIONE E CONSERVAZIONE. NEL SENSO CHE SE è CONGELATO LO ASSOCIAMO AD UNA CASELLA DI COLORE BLU, SE AFFETTATO CELLA COLORE VERDE, SE BIBITE CELLA COLORE BIANCO, SE FRITTO CELLA DI COLORE GIALLA, SE INGREDIENTI COMUNI CELLA DI COLORE ROSA, PERò LASCEREI LA POSSIBILITA' DI PERSONALIZZARE IL COLORE DELLE CELLE ED EVENTUALMENTE DI CREARNI DI NUOVI. 
-- RICORDIAMOCI SE CUCINA HA PREPARATO INGREDIENTE E CLICCA SOPRA DAL SUO TABLET SPARISCE E NEL TABLET BANCONE DIVENTA IN GRIGETTO, IN MODO CHE IL BANCONE SE SI TIRA FUORI GLI INGREDIENTI NECESSARI AGLI ORDINI IN FORNO CI CLICCA SOPRA E LA CELLA PRENDE DI NUOVO COLORE OVVIAMENTE SOLO DELLE COSE CHE NON SONO ANDATE IN COTTURA. 
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+FASE D — SCALA
+--------------------------------------------------------------------------------
+- Release train, observability, feature flag per tenant, KPI
 
-ROADMAP SVILUPPO — PASSO PASSO (ordine consigliato; per ogni feature: @agents/product.md → @agents/architecture.md → @agents/database.md se serve → @agents/code.md / @agents/ui.md → @agents/copywriter.md su ogni stringa/microcopy visibile — **vetrina/pubblico**, **admin tenant** e **superadmin** (tono coerente, no gergo tecnico verso l’utente) → @agents/test.md → @agents/security.md → @agents/supervisor.md)
+--------------------------------------------------------------------------------
+BACKLOG PRODOTTO RESIDUO (non blocca Fase A, ma resta aperto)
+--------------------------------------------------------------------------------
+CASSA: slot capacità; domicilio↔ritiro; planning click→riepilogo; merge cliente online
+ADMIN: dipendenti+documenti; food cost mismatch; favicon da logo; copy area consegna
+OPERATIVO: ingressi reparto minimali; cucina↔bancone colori/stato DB; delivery atomico
+UX: zero gergo tecnico su admin/cliente; a11y tooling
 
-FASE 0 — Baseline repository e SQL
-1) Consolidare le patch già applicate: integrare il contenuto attuale di sql/sql_upgrade.sql in sql/schema_completo_pizzamanager.sql dove manca, poi lasciare in sql_upgrade solo migrazioni incremental future (regola progetto).
-2) Alla fine di ogni ciclo SQL: verificare che sql_upgrade contenga solo ciò che non è ancora nel dump completo.
-
-FASE 1 — Sicurezza multi-tenant (bloccante prima di altre espansioni pubbliche)
-3) Rivedere esposizione menu pubblico: niente leakage cross-tenant su view/grant anon; preferire RPC tenant-aware da dominio/host e output senza tenant_id in chiaro dove non serve (@agents/database.md @agents/security.md).
-4) Hardening RPC ordini (es. create_order_with_items): check esplicito accesso tenant e canale; fallimento sicuro se mismatch (@agents/database.md).
-5) Verificare policy RLS e update ordini: filtri sempre tenant-scoped; dove serve, RPC SECURITY DEFINER con controlli interni + test negativi.
-
-FASE 2 — Vetrina e pubblico (preview / homepage / ricerca)
-6) Preview categorie errate: tracciare sorgente dati (tenant, cache, dominio) e allineare query al menu admin tenant; test su dominio reale e tenant di prova (@agents/code.md @agents/dataflows.md).
-7) Homepage cliente: nascondere CTA ordini/registrazione quando il piano non include ordini online; mostrare comunque il menu (@agents/product.md @agents/ui.md); testi @agents/copywriter.md (stesso standard qualitativo delle altre superfici).
-8) Ricerca menu (cassa + vetrina): includere ingredienti reali delle ricette nel motore di ricerca, non solo nome/descrizione prodotto.
-9) Superadmin licenses: allineare UI a subscriptions — verificare RLS, salvataggio da Clienti, o seed/migrazione dati mancanti.
-
-FASE 3 — Admin: listini, ingredienti, food cost
-10) Listini: export/stampa PDF dalla pagina admin menu listini.
-11) Ingredienti — CSV: eliminare doppia richiesta file; ottimizzare import (chunk, progress, errori per riga).
-12) Food cost: allineamento prezzi ingredienti ↔ listino quando food cost attivo; modal mismatch con dettaglio (prime N pizze/prodotti: nome, prezzo attuale, target, delta) + link a listino/food cost.
-13) Pulsante admin "Ricalcola prezzi ora" con conferma, log azione, esito (N aggiornati, errori).
-14) Ingrediente "a fine cottura": default rispettato in composizione pizza e override dal menu cliente già esistente.
-
-FASE 4 — Cassa, ordini, planning
-15) Cliente delivery: deselezione (X) svuota carrello ma mantiene ordine aperto/incompleto; ripresa ordine al richiamo cliente; merge identità locale ↔ online con ordini parziali visibili.
-16) Passaggio domicilio ↔ ritiro: persistenza robusta di tipo_ordine in update ordine; pulsante "ritiro in negozio" da elenco cliente e, se ordine già delivery, controllo dentro dettaglio ordine.
-17) Riepilogo pre-conferma: slot orari con carico reale (pizze già prenotate per fascia); correggere discrepanza capacità vs ordini esistenti.
-18) Planning: click su ordine nella vista planning apre riepilogo ordine.
-19) Icone metodo pagamento in colonna ordini: mappatura univoca tipo → icona (nessun duplicato visivo per tipi diversi).
-20) Performance percepita: code-splitting, query e polling dove serve; misurare route pesanti (cassa, cucina, bancone, admin menu) prima/dopo.
-
-FASE 5 — Superadmin e impostazioni tenant
-21) Pubblicazione sito / DNS: copy e guida più chiara (hostname = dominio Firebase/DNS); verificare salvataggio tenant.
-22) Test layout superadmin: ripristinare comportamento richiesto (bug attuale).
-23) Settings layout: generare o estrarre favicon dal logo e impostare titolo scheda browser.
-24) Area consegna: testi guida + comportamento mappa (punti vendita, poligoni, fallback globale); stato vuoto spiegato.
-25) Dati pizzeria — vetrina: testi privacy/cookie professionali con placeholder {{nome_attivita}}, {{piva}}, ecc.; box informativo SumUp/Stripe/privacy (anche come help inline).
-26) Manuale admin: sostituire riferimenti a nomi file di progetto con titoli e percorsi comprensibili al cliente.
-
-FASE 6 — Dipendenti e HR leggero
-27) Pagina dipendenti: CRUD dipendenti + archivio documenti (buste paga, corsi, dati anagrafici) con permessi tenant e storage sicuro (policy su bucket se allegati).
-
-FASE 7 — Operativo: ingressi, cucina, bancone, delivery
-28) Pizzaiolo ingresso (e analoghi bancone/cucina/delivery): layout minimale — solo accesso alle schermate operative dedicate (es. due pulsanti: schermata reparto / test 4 schermate); rimuovere colonna laterale superflua.
-29) Cucina: tipi preparazione/conservazione, palette colori (preset + personalizzazione), celle per stato; flusso tap cucina → elemento grigio in bancone → tap bancone per "preso" con persistenza adeguata (DB o stato condiviso, non solo locale).
-30) Delivery: dove serve, transizione stato consegna atomica (RPC transazionale) per evitare divergenze stato ordine/consegna.
-
-FASE 8 — Qualità, documentazione, chiusura ciclo
-31) Test automatici: estendere smoke su flussi multi-stato (cassa checkout/modifica, cucina prep→pronto, bancone, delivery, planning overnight, turni).
-32) Accessibilità: search bar e navigazione categorie da tastiera (aria-label, frecce, Enter/Esc) dove previsto.
-33) Osservabilità: evitare catch silenziosi; errori loggati e messaggi utente coerenti.
-34) Copy e microcopy — passata @agents/copywriter.md su **tre superfici**: (a) vetrina/cliente finale; (b) **admin tenant** — etichette, titoli sezione, help inline, vuoti, errori, conferme, PDF/export; (c) **superadmin** — guide, licenze, pubblicazione/DNS, viewport/test layout, messaggi sistema; glossario unificato; niente riferimenti a nomi file di progetto o path tecnici nei testi rivolti all’utente.
-35) Manuale utente interno: aggiornare con food cost, alert mismatch, flussi cliente delivery/negozio, cucina↔bancone.
-36) QA end-to-end su staging e almeno un tenant pilota produzione; checklist in docs (es. QA smoke operativa).
-37) Passaggio finale @agents/supervisor.md su ogni epic prima del merge.
+--------------------------------------------------------------------------------
+SQL MODULI RECENTI (remoto)
+--------------------------------------------------------------------------------
+29 go_live_checklist | 30 presence bind | 31 search_path | 32 verify notices
+Smoke: sql/scripts/smoke_rls_cross_tenant.sql
+Presence asserts: sql/tests/30_support_presence_asserts.sql
+search_path check: sql/scripts/verify_security_definer_search_path.sql
 
 ================================================================================
-ELABORAZIONE UNICA (stato al 2026-04-17) — sintesi per punto roadmap
+FINE — ad ogni ciclo: sposta in [x], aggiorna docs/PROGRAMMA_AFFIDABILITA.md
 ================================================================================
-FASE 0: (1–2) sql_upgrade.sql svuotato (template); patch categorie vetrina consolidate in schema_completo. HR staff in schema_completo.
-FASE 1: (3–5) RPC menu/ordini già in uso (create_order_with_items con controlli area/turno); revisione RLS granulare = sprint dedicato.
-FASE 2: (6) RPC categorie + PublicStore. (7) PublicLayout + HeroStore nascondono CTA ordini/registrazione se licenza; ProductGrid senza pulsante Aggiungi in sola consultazione (storefront). (8) Ricerca ingredienti: cassa + vetrina con mappa ricette dove esposto. (9) Licenze: copy guida + getSubscriptions con upsert/derivazione tenant.
-FASE 3: (10) PDF listini. (11) CSV useRef/useId. (12–14) food cost modal/cottura = da completare se mancano vincoli UI.
-FASE 4: (15) Cassa delivery: ✕ svuota carrello, cliente resta selezionato, bozza vuota in archivio. (16–18) ritiro/slot/planning = verifiche flusso esistente. (19) Icone pagamento distinte (Misto/Altro/Link/…). (20) code-split/route lazy già in AppRouter; ulteriore profiling opzionale.
-FASE 5–8: copy superadmin (pubblicazione/test layout/area consegna/dati pizzeria/manuale), HR dipendenti, cucina colori, delivery atomico, test/a11y — backlog incrementale.

@@ -9,7 +9,9 @@ import { devLog } from "@/lib/devLog"
 import { supabase } from "@/lib/supabaseClient"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
-import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview"
+import { isViewportLayoutPreviewSearch, isQaSupportSearch } from "@/utils/viewportLayoutPreview"
+import { isSuperAdminRole } from "@/utils/superAdminAccess"
+import { readSafeReturnTo } from "@/utils/supportTenantOverride"
 import "@/styles/login.css"
 
 export default function Login() {
@@ -22,15 +24,64 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const searchParams = new URLSearchParams(location.search)
+  const supportTenantId = searchParams.get("support_tenant")
+  const supportReturnTo = location.state?.from
+  const returnToQuery = readSafeReturnTo(location.search)
   const forceClienteMode =
-    new URLSearchParams(location.search).get("cliente") === "1" ||
+    searchParams.get("cliente") === "1" ||
     location.pathname === "/preview" ||
     location.pathname === "/negozio"
 
   useEffect(() => {
     if (loading) return
-    if (!user || !tipoUtente) return
-    if (isViewportLayoutPreviewSearch(location.search)) return
+    if (!user) return
+    // Aspetta profilo completo (finestre Sala QA non devono restare sul form).
+    if (!tipoUtente || !ruolo) return
+
+    const qaSupport = isQaSupportSearch(location.search) || Boolean(supportTenantId)
+    const layoutOnlyPreview =
+      isViewportLayoutPreviewSearch(location.search) && !qaSupport && location.pathname === "/login"
+
+    const returnPathFromState =
+      supportReturnTo?.pathname && supportReturnTo.pathname !== "/login"
+        ? `${supportReturnTo.pathname}${supportReturnTo.search || ""}`
+        : null
+
+    const buildQaTarget = (pathOnly) => {
+      const p = pathOnly || "/operative/cassa"
+      const params = new URLSearchParams()
+      if (supportTenantId) params.set("support_tenant", supportTenantId)
+      params.set("_qa_console", "1")
+      params.set("return_to", p)
+      return `${p}?${params.toString()}`
+    }
+
+    // Super Admin in Sala QA / supporto: mai restare sul form login.
+    if (isSuperAdminRole(ruolo) && (qaSupport || returnPathFromState || returnToQuery)) {
+      if (returnPathFromState) {
+        navigate(returnPathFromState.includes("?") ? returnPathFromState : buildQaTarget(returnPathFromState), {
+          replace: true,
+        })
+        return
+      }
+      if (returnToQuery) {
+        navigate(buildQaTarget(returnToQuery), { replace: true })
+        return
+      }
+      if (supportTenantId) {
+        navigate(buildQaTarget("/operative/cassa"), { replace: true })
+        return
+      }
+    }
+
+    // Solo anteprima layout della pagina login (tool Test layout), non Sala QA.
+    if (layoutOnlyPreview) return
+
+    if (returnPathFromState && isSuperAdminRole(ruolo)) {
+      navigate(returnPathFromState, { replace: true })
+      return
+    }
 
     devLog("Login", "redirect check", { tipoUtente, ruolo, email: user?.email })
 
@@ -54,12 +105,21 @@ export default function Login() {
     }
 
     if (tipoUtente === "staff") {
-      const ruoloNorm = (ruolo && typeof ruolo === "string") ? ruolo.toLowerCase().trim() : ""
+      const ruoloNorm = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
       let targetRoute = "/operative/dashboard"
-      if (ruoloNorm === "superadmin") targetRoute = "/superadmin/dashboard"
-      else if (ruoloNorm === "admin" || ruoloNorm === "owner")
-        targetRoute = ADMIN_TENANT_HOME
+      if (ruoloNorm === "superadmin") targetRoute = "/superadmin/ingresso"
+      else if (ruoloNorm === "admin" || ruoloNorm === "owner") targetRoute = ADMIN_TENANT_HOME
       else targetRoute = getOperativeHomePathForStaff(ruolo, user?.email)
+
+      if (isSuperAdminRole(ruolo) && qaSupport && supportTenantId) {
+        navigate(buildQaTarget(returnToQuery || "/operative/cassa"), { replace: true })
+        return
+      }
+
+      if (isSuperAdminRole(ruolo) && returnToQuery) {
+        navigate(buildQaTarget(returnToQuery), { replace: true })
+        return
+      }
 
       devLog("Login", "redirect →", targetRoute, { ruolo })
       navigate(targetRoute, { replace: true })
@@ -68,7 +128,20 @@ export default function Login() {
 
     devLog("Login", "fallback redirect → /")
     navigate("/", { replace: true })
-  }, [user, ruolo, tipoUtente, loading, navigate, location.state, location.search, location.pathname, forceClienteMode])
+  }, [
+    user,
+    ruolo,
+    tipoUtente,
+    loading,
+    navigate,
+    location.state,
+    location.search,
+    location.pathname,
+    forceClienteMode,
+    supportTenantId,
+    supportReturnTo,
+    returnToQuery,
+  ])
 
   const isSaaS = getIsSaaSClient()
 
@@ -112,7 +185,8 @@ export default function Login() {
     )
   }
 
-  const layoutPreview = isViewportLayoutPreviewSearch(location.search)
+  const layoutPreview =
+    isViewportLayoutPreviewSearch(location.search) && !isQaSupportSearch(location.search)
 
   return (
     <div className="login-page">

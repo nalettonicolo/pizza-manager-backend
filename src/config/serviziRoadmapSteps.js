@@ -42,29 +42,29 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "gestione_consegne",
     titolo: "Gestione consegne",
     stato: "wip",
-    percentuale: 72,
+    percentuale: 84,
     resto:
-      "Assegnazione rider con ottimizzazione percorso (VRP leggero) e SLA stimato lato cliente.\nNotifiche multicanale (SMS, push) con template e preferenze opt‑in.\nMappa live per sala comando; heatmap ritardi.\nIntegrazione aggregator (Glovo, Uber Eats) tramite API normalizzate.\nContratti di servizio: timeout, rimborsi automatici, escalation.\nMetriche NPS post‑consegna e analisi causa ritardo.",
-    nota: "Poligono server-side, coordinate su ordine, dashboard delivery, RPC stati atomici (ASSEGNATO/IN_VIAGGIO/CONSEGNATO), vista rider PWA `/operative/rider`.",
+      "Assegnazione rider con VRP completo e SLA stimato lato cliente.\nNotifiche multicanale (SMS, push) con template e preferenze opt‑in.\nHeatmap ritardi sala comando.\nIntegrazione aggregator (Glovo, Uber Eats) tramite API normalizzate.\nContratti di servizio: timeout, rimborsi automatici, escalation.\nMetriche NPS post‑consegna e analisi causa ritardo.\nSigned URL / retention policy sulle prove Storage.",
+    nota: "Poligono server-side, coordinate, dashboard delivery, RPC stati, rider PWA `/operative/rider`, proof firma/foto su Storage `consegna-prove` (mod. 37), mappa live Realtime, sort nearest-neighbor GPS.",
   },
   {
     id: "ordini_online",
     titolo: "Ordini online (cliente)",
     stato: "wip",
-    percentuale: 72,
+    percentuale: 84,
     resto:
-      "Pagamenti online (Stripe/SumUp): produzione con webhook e rimborsi.\nAnti‑frode: velocity limits, CAPTCHA, lista blocchi indirizzi.\nSEO + Core Web Vitals; PWA.\nWebhook ordine con firma HMAC; rate limit API pubblica.\nLoad test weekend.",
+      "Smoke Stripe live su tenant produzione + rimborsi.\nCAPTCHA opzionale oltre velocity/blocklist.\nSEO + Core Web Vitals; PWA cliente.\nWebhook ordine con firma HMAC verso partner.\nLoad test weekend.",
     nota:
-      "Carrello, checkout, profilo, storico ordini, fidelity cliente, notifiche web → notifiche_outbox + worker Edge; Stripe E2E in staging.",
+      "Carrello, checkout, profilo, storico, fidelity; Stripe IN_ATTESA sbloccato (mod. 25); capacity forno checkout+RPC; antifraud 8/ora + blocklist; notifiche → outbox (adapter SMTP/SMS da completare).",
   },
   {
     id: "tablet_ruoli",
     titolo: "Schermate tablet / ruoli operativi",
-    stato: "todo",
-    percentuale: 52,
+    stato: "wip",
+    percentuale: 72,
     resto:
       "Matrice permessi per schermata e azione (non solo area).\nStati ordine con macchina a stati validata server‑side e UI sincrona (Realtime).\nModalità kiosk con logout automatico e sessione corta.\nResilienza: Service Worker, coda azioni offline, risoluzione conflitti.\nAccessibilità touch target 48dp, contrasto, lettura distanza.\nLog strutturati per audit operativo (chi ha cambiato stato e quando).\nDark mode e temi per ambiente cucina/bancone.",
-    nota: "Cucina, bancone, pizzaiolo, delivery; permessi aree; da rafforzare Realtime e audit.",
+    nota: "Cucina, bancone, pizzaiolo, delivery, rider PWA; Realtime su core.ordini + polling fallback; da rafforzare audit azione.",
   },
   {
     id: "report_analisi",
@@ -105,11 +105,11 @@ export const SERVIZI_ROADMAP_STEPS = [
   {
     id: "magazzino_gestione",
     titolo: "Magazzino (fornitori / DDT)",
-    stato: "todo",
-    percentuale: 48,
+    stato: "wip",
+    percentuale: 78,
     resto:
-      "Migrazione completa dati localStorage → Supabase con job una tantum.\nGiacenza valorizzata (FIFO/medio); inventari ciclici e rettifiche firmate.\nOrdini fornitore con conferma, ricezione parziale, fattura abbinata.\nDDT elettronici e integrazione SDI dove applicabile.\nAlert scadenze e lotti; traceability verso piatto venduto.\nIntegrazione bilancia e lettura EAN.\nKPI: fill rate, giorni di copertura, ABC analysis.",
-    nota: "Tabella `magazzino_movimenti` + UI base; fornitori/DDT ancora prevalentemente locale.",
+      "Giacenza valorizzata (FIFO/medio); inventari ciclici e rettifiche firmate.\nOrdini fornitore con conferma, ricezione parziale, fattura abbinata.\nDDT elettronici e integrazione SDI dove applicabile.\nAlert scadenze e lotti; traceability verso piatto venduto.\nIntegrazione bilancia e lettura EAN.\nKPI: fill rate, giorni di copertura, ABC analysis.",
+    nota: "Fornitori/DDT/movimenti su Supabase (hybrid con fallback locale); UI hub aggiornata.",
   },
   {
     id: "contabilita_locale",
@@ -160,10 +160,10 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "api_integrazioni",
     titolo: "API e integrazioni",
     stato: "todo",
-    percentuale: 36,
+    percentuale: 42,
     resto:
-      "OpenAPI 3.1 pubblicata, semver, changelog e deprecation policy.\nOAuth2 client credentials + scope per tenant.\nRate limit, quota, burst e header Retry‑After.\nWebhooks firmati (HMAC) con delivery garantita e dead letter.\nSandbox isolata e dati sintetici.\nSDK ufficiali (Node, .NET).\nCertificazione SOC2 Type II per layer API.",
-    nota: "Nest parziale; serve piattaforma integrazioni documentata e osservabile.",
+      "OpenAPI 3.1 pubblicata, semver, changelog e deprecation policy.\nOAuth2 client credentials + scope per tenant (endpoint Nest).\nRate limit, quota, burst e header Retry‑After.\nWebhooks firmati (HMAC) con delivery garantita e dead letter.\nSandbox isolata e dati sintetici.\nSDK ufficiali (Node, .NET).\nCertificazione SOC2 Type II per layer API.",
+    nota: "Nest parziale; tabella `api_oauth_clients` (mod. 25 stub); serve `/oauth/token` + OpenAPI.",
   },
   {
     id: "account_manager",

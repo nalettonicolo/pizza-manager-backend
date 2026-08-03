@@ -80,7 +80,7 @@ export function TenantProvider({ children }) {
     try {
       if (isNestAuthEnabled() && getNestJwt()) {
         try {
-          const nestRow = await nestTenantMe()
+          const nestRow = await nestTenantMe(tenantId)
           if (
             nestRow &&
             nestRow.id &&

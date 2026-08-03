@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -11,11 +10,11 @@ import {
   ParseUUIDPipe,
   Query,
   Req,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/jwt.guard'
+import { resolveTenantIdForRequest } from '../common/resolve-tenant'
 import { BatchProductIdsDto } from './dto/batch-product-ids.dto'
 import { CreateOrderDto } from './dto/create-order.dto'
 import {
@@ -39,11 +38,8 @@ export class OperativeController {
     private readonly writes: OperativeWritesService,
   ) {}
 
-  private assertTenantMatches(jwtT: string | undefined, queryTenant?: string) {
-    if (!jwtT) throw new UnauthorizedException('Tenant non nel token')
-    if (queryTenant && queryTenant !== jwtT) {
-      throw new ForbiddenException('tenantId non coerente col token')
-    }
+  private tenantOf(req: { user: JwtUser }, tenantIdParam?: string) {
+    return resolveTenantIdForRequest(req.user, tenantIdParam)
   }
 
   @Get('ordini')
@@ -52,7 +48,7 @@ export class OperativeController {
   @ApiOperation({
     summary: 'Ordini tenant da core.ordini',
     description:
-      'Filtri opzionali `from` / `to` ISO; allineamento forma client pubblic."Ordine".',
+      'Filtri opzionali `from` / `to` ISO; allineamento forma client pubblic."Ordine". Super Admin: `tenantId` query = override Sala QA.',
   })
   ordini(
     @Req() req: { user: JwtUser },
@@ -62,9 +58,9 @@ export class OperativeController {
     @Query('limit') limitStr?: string,
     @Query('stato') stato?: string,
   ) {
-    this.assertTenantMatches(req.user?.tenantId, tenantIdParam)
+    const tenantId = this.tenantOf(req, tenantIdParam)
     const limit = limitStr ? Number(limitStr) : 50
-    return this.operative.listOrdini(req.user?.tenantId, {
+    return this.operative.listOrdini(tenantId, {
       fromIso: fromIso || undefined,
       toIso: toIso || undefined,
       limit: Number.isFinite(limit) ? limit : 50,
@@ -80,8 +76,7 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    this.assertTenantMatches(req.user?.tenantId, tenantIdParam)
-    return this.operative.listCategorie(req.user?.tenantId)
+    return this.operative.listCategorie(this.tenantOf(req, tenantIdParam))
   }
 
   @Get('ingredienti')
@@ -92,8 +87,7 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    this.assertTenantMatches(req.user?.tenantId, tenantIdParam)
-    return this.operative.listIngredienti(req.user?.tenantId)
+    return this.operative.listIngredienti(this.tenantOf(req, tenantIdParam))
   }
 
   @Get('prodotti')
@@ -105,8 +99,7 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam?: string,
     @Query('categoryId') categoryId?: string,
   ) {
-    this.assertTenantMatches(req.user?.tenantId, tenantIdParam)
-    return this.operative.listProdotti(req.user?.tenantId, categoryId)
+    return this.operative.listProdotti(this.tenantOf(req, tenantIdParam), categoryId)
   }
 
   @Get('configurazione-costi')
@@ -117,8 +110,7 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    this.assertTenantMatches(req.user?.tenantId, tenantIdParam)
-    return this.operative.getConfigurazioneCosti(req.user?.tenantId)
+    return this.operative.getConfigurazioneCosti(this.tenantOf(req, tenantIdParam))
   }
 
   @Post('prodotto-ingredienti-batch')
@@ -133,9 +125,8 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam: string | undefined,
     @Body() body: BatchProductIdsDto,
   ) {
-    this.assertTenantMatches(req.user?.tenantId, tenantIdParam)
     return this.operative.batchProdottoIngredientiMerged(
-      req.user?.tenantId,
+      this.tenantOf(req, tenantIdParam),
       body.productIds,
     )
   }

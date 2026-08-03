@@ -47,7 +47,7 @@ Se il piano non include alcuni moduli, alcune voci possono mancare: contatta il 
 
 **Dati pizzeria**, logo e colori, **orari**, **parametri operativi** (cassa, ritiri, ecc.).
 
-**Dominio pubblico e go-live** (DNS, Firebase, stato pubblicazione) sono gestiti dal **team piattaforma** in **Super Admin → Pubblicazione dominio**, non dall’area admin del singolo locale.
+**Dominio pubblico e go-live** (DNS, Firebase, stato pubblicazione) sono gestiti dal **team piattaforma** in **Super Admin → Go-live cliente**, non dall’area admin del singolo locale.
 
 ---
 

@@ -289,6 +289,30 @@ export async function updateTenantPublicDomain(id, patch) {
   throw error;
 }
 
+/** Checklist go-live condivisa (RPC Super Admin). */
+export async function getGoLiveChecklist(tenantId) {
+  if (!tenantId) return null
+  const { data, error } = await supabase.rpc("sa_get_go_live_checklist", { p_tenant_id: tenantId })
+  if (error) {
+    logSupabaseError("superadmin.getGoLiveChecklist", error, { tenantId })
+    throw error
+  }
+  return data && typeof data === "object" ? data : null
+}
+
+export async function upsertGoLiveChecklist(tenantId, checks) {
+  if (!tenantId) throw new Error("tenant obbligatorio")
+  const { data, error } = await supabase.rpc("sa_upsert_go_live_checklist", {
+    p_tenant_id: tenantId,
+    p_checks: checks || {},
+  })
+  if (error) {
+    logSupabaseError("superadmin.upsertGoLiveChecklist", error, { tenantId })
+    throw error
+  }
+  return data
+}
+
 /** Piano UI → valore enum DB (core.piano_saas: FREE, PRO, ENTERPRISE) */
 function pianoToDbEnum(piano) {
   const p = String(piano ?? "TRIAL").toUpperCase();

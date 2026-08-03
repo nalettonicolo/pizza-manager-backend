@@ -1,11 +1,12 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
+import { isSuperAdminRole } from "@/utils/superAdminAccess"
 
 /**
- * Solo utenti con riga in public.clienti (tipoUtente === "cliente").
+ * Area cliente: utenti con riga in public.clienti, oppure Super Admin in supporto/QA.
  */
 export default function ClienteRoute() {
-  const { user, tipoUtente, loading } = useAuth()
+  const { user, tipoUtente, ruolo, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -16,8 +17,12 @@ export default function ClienteRoute() {
     )
   }
 
+  if (user && isSuperAdminRole(ruolo)) {
+    return <Outlet />
+  }
+
   if (!user || tipoUtente !== "cliente") {
-    return <Navigate to="/login" state={{ from: location }} replace />
+    return <Navigate to={`/login${location.search || ""}`} state={{ from: location }} replace />
   }
 
   return <Outlet />

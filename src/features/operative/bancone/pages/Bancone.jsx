@@ -28,10 +28,11 @@ import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/pla
 import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
-const POLL_MS = 10000
+const POLL_FALLBACK_MS = 30000
 const BANCONE_PICK_STORAGE_PREFIX = "pm_bancone_picked_v1"
 
 function getBanconePickStorageKey(tenantId) {
@@ -142,11 +143,11 @@ export default function Bancone() {
     }
   }, [tenantId])
 
-  useEffect(() => {
-    loadOrders()
-    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
-    return () => clearInterval(t)
-  }, [loadOrders])
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: () => loadOrders({ silent: true }),
+    pollMs: POLL_FALLBACK_MS,
+  })
 
   useEffect(() => {
     const storageKey = getBanconePickStorageKey(tenantId)

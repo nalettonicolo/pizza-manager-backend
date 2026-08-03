@@ -3,9 +3,10 @@ import { Link } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { getOrders } from "@/features/admin/services/adminService"
 import { loadGoogleMapsScript } from "@/lib/googleMapsLoader"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-const POLL_MS = 12000
+const POLL_FALLBACK_MS = 30000
 const STATI = ["PRONTO", "IN_PREPARAZIONE"]
 
 function isDelivery(o) {
@@ -52,11 +53,11 @@ export default function DeliveryCommandMapPage() {
     }
   }, [tenantId])
 
-  useEffect(() => {
-    load()
-    const t = setInterval(load, POLL_MS)
-    return () => clearInterval(t)
-  }, [load])
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: () => load(),
+    pollMs: POLL_FALLBACK_MS,
+  })
 
   useEffect(() => {
     if (!GOOGLE_API_KEY || !mapElRef.current) return
@@ -134,7 +135,7 @@ export default function DeliveryCommandMapPage() {
         <div>
           <strong style={{ fontSize: 17 }}>Mappa consegne live</strong>
           <p style={{ margin: "4px 0 0", fontSize: 12, opacity: 0.85 }}>
-            {orders.length} ordini con coordinate · aggiornamento ogni {POLL_MS / 1000}s
+            {orders.length} ordini con coordinate · Realtime + fallback {POLL_FALLBACK_MS / 1000}s
           </p>
         </div>
         <Link to="/operative/delivery" style={{ color: "#93c5fd", fontSize: 13, fontWeight: 600 }}>

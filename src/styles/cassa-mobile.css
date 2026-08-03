@@ -223,6 +223,13 @@
     flex: 1 1 auto !important;
     min-height: 44px !important;
     font-size: 15px !important;
+    touch-action: manipulation;
+    transition: opacity 0.04s linear, transform 0.04s linear;
+  }
+
+  .cassa-product-grid .cassa-product-row-actions > button:active:not(:disabled) {
+    opacity: 0.75;
+    transform: scale(0.98);
   }
 
   .cassa-product-grid .cassa-product-name {

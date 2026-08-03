@@ -93,8 +93,8 @@ export default function MagazzinoMovimentiDbPage() {
       </div>
       <h1 className="dashboard-page-title">Movimenti magazzino (database)</h1>
       <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748b", lineHeight: 1.55, maxWidth: 720 }}>
-        Registro carichi/scarichi su Supabase (<code>magazzino_movimenti</code>). Non sostituisce ancora fornitori e DDT locali; è la base per
-        giacenze e audit enterprise.
+        Registro carichi/scarichi su Supabase (<code>magazzino_movimenti</code>). Fornitori e DDT sono nelle sezioni
+        dedicate del hub Magazzino, anch&apos;essi su database.
       </p>
 
       {!tenantId ? (

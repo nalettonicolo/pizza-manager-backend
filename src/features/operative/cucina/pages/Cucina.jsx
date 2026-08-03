@@ -24,10 +24,11 @@ import {
   mergeCucinaPrepColorsFromParametri,
   resolvePrepTaskBackgroundColor,
 } from "@/utils/cucinaPrepCategoryTheme"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
-const POLL_MS = 10000
+const POLL_FALLBACK_MS = 30000
 
 function rigaGroupKey(r) {
   return `${r.prodottoId ?? r.prodotto_id}|${r.formatoNome ?? r.formato_nome ?? ""}`
@@ -176,11 +177,11 @@ export default function Cucina() {
     [tenantId],
   )
 
-  useEffect(() => {
-    loadOrders()
-    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
-    return () => clearInterval(t)
-  }, [loadOrders])
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: () => loadOrders({ silent: true }),
+    pollMs: POLL_FALLBACK_MS,
+  })
 
   const righeByOrdineId = useMemo(() => {
     const m = {}

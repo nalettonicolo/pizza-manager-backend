@@ -1,6 +1,6 @@
 # Macrofasi sviluppo PizzaManager
 
-Piano operativo per completare la piattaforma **fase per fase**, con Definition of Done per ogni macrofase. Allineato a `BACKLOG_E_STATO_SVILUPPO.md` e `serviziRoadmapSteps.js`.
+Piano operativo per completare la piattaforma **fase per fase**. Allineato a `BACKLOG_E_STATO_SVILUPPO.md` e `serviziRoadmapSteps.js`.
 
 ---
 
@@ -8,76 +8,55 @@ Piano operativo per completare la piattaforma **fase per fase**, con Definition 
 
 | Fase | Nome | Obiettivo | DoD sintetico | Stato |
 |------|------|-----------|---------------|-------|
-| **1** | Go-live piattaforma | Produzione stabile, DB e auth allineati | Deploy OK, SQL applicati, preview/menu, redirect Auth | ✅ Completata |
-| **2** | Cliente end-to-end | Area cliente completa post-ordine | Storico ordini, profilo con geo, checkout→ordini | ✅ Completata |
-| **3** | Back-office persistente | Admin su Supabase, non localStorage | Magazzino 14, contabilità 16, incassi DB | ✅ Completata |
-| **4** | Operativo & consegne | Sala, rider, notifiche | Delivery UX, webhooks ordine, fidelity cliente | ✅ Completata (core) |
-| **5** | Piattaforma enterprise | Superadmin, billing, DR | Catalogo/piani su DB, offline queue, export fiscal | ✅ Completata (core) |
+| **1** | Go-live piattaforma | Produzione stabile, DB e auth | Deploy OK, SQL, preview/menu, Auth | ✅ Completata |
+| **2** | Cliente end-to-end | Area cliente post-ordine | Storico, profilo geo, checkout→ordini | ✅ Completata |
+| **3** | Back-office persistente | Admin su Supabase | Magazzino 14, contabilità 16, incassi DB | ✅ Completata |
+| **4** | Operativo & consegne | Sala, rider, notifiche | Delivery, rider PWA, outbox notifiche | ✅ Completata (core) |
+| **5** | Piattaforma enterprise | Superadmin, billing, DR | Catalogo SA DB, offline queue, fiscal export | ✅ Completata (core) |
+| **6** | Produzione hard | Stripe live, Realtime, magazzino, adapter | Smoke prod + Realtime + magazzino DB | 🟡 In corso |
 
 **Regola:** ogni patch SQL in `sql/modules/` va applicata subito con `npm run sql:apply -- sql/modules/NN_*.sql`.
 
 ---
 
-## Fase 1 — Go-live piattaforma ✅
+## Fasi 1–5 (sintesi)
 
-- Moduli SQL 14–20 applicati
-- Preview tenant fallback + `VITE_PUBLIC_DEMO_TENANT_ID`
-- Deploy hosting + sync redirect Auth
+1. **Go-live** — moduli 14–20, deploy hosting, Auth redirect  
+2. **Cliente** — RPC ordini, profilo mappa, fidelity UI  
+3. **Back-office** — magazzino/contabilità/incassi su DB + `importLocalIfDbEmpty`  
+4. **Operativo** — delivery stati, rider PWA, worker notifiche, capacity forno (25)  
+5. **Enterprise core** — catalogo SA, offline cassa, fiscal outbox stub, OAuth clients stub  
 
----
-
-## Fase 2 — Cliente end-to-end ✅
-
-- Modulo 20: RPC ordini cliente
-- `ClienteOrdiniPage`, profilo con mappa, `clienteAuthService`
+Dettaglio storico: commit recenti + `docs/GO_LIVE_ORDINI_WEB.md`.
 
 ---
 
-## Fase 3 — Back-office persistente ✅
+## Fase 6 — Produzione hard (in corso)
 
-- Moduli 14, 16 + migrazione localStorage→DB (`importLocalIfDbEmpty`)
-- Hook magazzino/contabilità/incassi su Supabase
+### Fatto (sessione 2026-08-03)
 
----
+| Filo | Stato |
+|------|--------|
+| Hardening grant RPC (mod. 34–35) + search_path `pm_*` | ✅ |
+| **B** Realtime `core.ordini` (mod. 36) + Cucina/Bancone/Pizzaiolo/Delivery/Mappa | ✅ |
+| **C** Magazzino fornitori/DDT su Supabase (tabelle ok, UI hub aggiornata) | ✅ |
+| Proof delivery → Storage `consegna-prove` (mod. 37) | ✅ |
+| **A** Stampa comanda web automatica su Francy | ✅ |
+| **A** Stripe **live** smoke | ⏸ solo chiavi **test** su Francy |
+| Guide DNS per host (Register, Aruba, …) + CTA sito esterno | ✅ (codice; deploy hosting fermo) |
+| SA gate privacy + Sala QA multi-finestra | ✅ (codice; deploy hosting fermo) |
 
-## Fase 4 — Operativo & consegne ✅
+### Prossimi (ordine)
 
-### Implementato (agg. modulo 23)
-- Worker SQL `claim_notifiche_outbox_batch` + Edge `notifiche-outbox-processor`
-- Admin → Coda notifiche (`/admin/notifiche-outbox`)
-- RPC `delivery_update_stato_consegna` + sync `stato_delivery`
-- Vista rider PWA `/operative/rider`
-- Fidelity cliente: match anche per email anagrafica
-- **Notifiche ordine web**: `webOrderNotifications.js` (RPC + fallback webhook)
-- **Fidelity cliente**: dashboard e profilo con saldo punti / movimenti
-- **Report**: macro-categorie (pizze/fritti/dolci/bibite) + CSV esteso
-- Delivery dashboard + RPC `delivery_mark_consegnato` (modulo 11, schema esistente)
+1. **Stripe live** su Francy (quando ci sono `pk_live` / `sk_live` / `whsec`) + smoke pagamento  
+2. Go-live **dominio reale** Francy (DNS + Firebase custom domain + Auth redirects)  
+3. Adapter SMTP / RT-SDI (quando ci sono credenziali vendor)  
+4. Auth: leaked password protection (Dashboard Supabase)
 
-### Fuori scope automatico (adapter da completare)
-- Implementazione SMTP / SMS / WhatsApp in `supabase/functions/_shared/notifications/adapters/`
-- Vedi `docs/NOTIFICHE_INTEGRAZIONE.md`
-- Slot/capacity E2E con blocco slot pieni in vetrina
+### Vincolo operativo
 
----
-
-## Fase 5 — Piattaforma enterprise ✅ (core)
-
-### Implementato
-- **Modulo 22**: `admin.sa_catalog_snapshot` + sync Piani/Servizi SA
-- **Offline cassa**: retry con backoff (`offlineRetryDelayMs`) + errori in banner Cassa
-- **Fiscal**: RPC `fiscal_outbox_export_pending_json` + export JSON in monitor
-
-### Ancora manuale / roadmap
-- Billing Stripe abbonamenti tenant (produzione)
-- Adapter vendor RT/SDI reale
-- API pubbliche OAuth
+Deploy Firebase Hosting **solo su richiesta esplicita**.
 
 ---
 
-## Ordine di esecuzione (completato)
-
-1. Fase 1 → 2 → 3 → 4 → 5 (incrementale)
-
----
-
-*Ultima revisione: 2026-06-02*
+*Ultima revisione: 2026-08-03*

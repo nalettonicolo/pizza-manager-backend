@@ -6,6 +6,7 @@ import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
 import "@/styles/superadmin-enterprise.css";
 
 const PIATTAFORMA_ITEMS_BASE = [
+  { to: "/superadmin/sala-qa", label: "Sala QA e supporto" },
   { to: "/superadmin/guide", label: "Documentazione" },
   { to: "/superadmin/auth-email-templates", label: "Template email Auth" },
   { to: "/superadmin/sviluppo", label: "Roadmap" },
@@ -32,10 +33,7 @@ const NAV_DROPDOWNS = [
   },
   {
     label: "Go Live",
-    items: [
-      { to: "/superadmin/deploy-clienti", label: "Deploy siti" },
-      { to: "/superadmin/pubblicazione-sito", label: "Pubblicazione dominio" },
-    ],
+    items: [{ to: "/superadmin/go-live", label: "Go-live cliente" }],
   },
   {
     label: "Piattaforma",
@@ -43,7 +41,7 @@ const NAV_DROPDOWNS = [
   },
 ];
 
-const NAV_ANTEPRIMA = { to: "/superadmin/home-pizzeria", label: "Anteprima sito" };
+const NAV_ANTEPRIMA = { to: "/preview", label: "Anteprima sito" };
 
 function pathMatchesItem(pathname, to) {
   if (pathname === to) return true;
@@ -108,8 +106,7 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/Piani"),
       () => import("@/features/superadmin/pages/ServiziCatalogo"),
       () => import("@/features/superadmin/pages/Licenses"),
-      () => import("@/features/superadmin/pages/DeployClientiPage"),
-      () => import("@/features/superadmin/pages/SuperadminPubblicazioneSitoPage"),
+      () => import("@/features/superadmin/pages/SuperadminGoLivePage"),
       () => import("@/features/superadmin/pages/SuperadminGuideHub"),
       () => import("@/features/superadmin/pages/SuperadminGuideDocPage"),
       () => import("@/features/superadmin/pages/SviluppoPage"),
@@ -128,7 +125,7 @@ export default function SuperAdminLayout() {
         <div className="sa-bar-row-top">
           <div className="sa-bar-row-left-cluster">
             <div className="sa-bar-brand-block">
-              <Link to="/superadmin/dashboard" className="superadmin-bar-logo">
+              <Link to="/superadmin/ingresso" className="superadmin-bar-logo">
                 PizzaManager
               </Link>
               <span className="sa-enterprise-badge">Console piattaforma</span>

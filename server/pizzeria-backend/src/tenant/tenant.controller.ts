@@ -1,6 +1,7 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common'
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/jwt.guard'
+import { resolveTenantIdForRequest } from '../common/resolve-tenant'
 import { PuntiVenditaService } from './punti-vendita.service'
 import { TenantService } from './tenant.service'
 
@@ -18,23 +19,31 @@ export class TenantController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Riga tenant corrente (JWT)',
+    summary: 'Riga tenant corrente (JWT o override SA)',
     description:
-      'Usa `tenantId` nel payload JWT. Legge `admin.tenants` se presente, altrimenti `core.tenants`.',
+      'Usa `tenantId` nel payload JWT. Super Admin può passare `?tenantId=` (Sala QA).',
   })
-  me(@Req() req: { user: JwtUser }) {
-    return this.tenantService.getTenantRowForJwtTenantId(req.user?.tenantId)
+  me(
+    @Req() req: { user: JwtUser },
+    @Query('tenantId') tenantIdParam?: string,
+  ) {
+    const tenantId = resolveTenantIdForRequest(req.user, tenantIdParam)
+    return this.tenantService.getTenantRowForJwtTenantId(tenantId)
   }
 
   @Get('punti-vendita')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Punti vendita del tenant (JWT)',
+    summary: 'Punti vendita del tenant (JWT o override SA)',
     description:
-      'Legge `core.punti_vendita` per `tenantId` nel token (necessario senza sessione Supabase).',
+      'Legge `core.punti_vendita`. Super Admin: `?tenantId=` per il tenant in assistenza.',
   })
-  puntiVendita(@Req() req: { user: JwtUser }) {
-    return this.puntiVenditaService.listForJwtTenant(req.user?.tenantId)
+  puntiVendita(
+    @Req() req: { user: JwtUser },
+    @Query('tenantId') tenantIdParam?: string,
+  ) {
+    const tenantId = resolveTenantIdForRequest(req.user, tenantIdParam)
+    return this.puntiVenditaService.listForJwtTenant(tenantId)
   }
 }

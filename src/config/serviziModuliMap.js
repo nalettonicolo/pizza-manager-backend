@@ -52,7 +52,7 @@ export const SCHEDE_SERVIZI_IMPLEMENTAZIONE = {
     moduli: [
       { label: "Store e preview SaaS", paths: ["/negozio", "/preview"] },
       { label: "Dominio pizzeria", paths: ["/ordine", "/ordine-confermato"], note: "Solo host non-SaaS" },
-      { label: "Super Admin dominio / deploy", paths: ["/superadmin/pubblicazione-sito"] },
+      { label: "Super Admin go-live cliente", paths: ["/superadmin/go-live"] },
     ],
     riferimentiCodice: [
       "src/features/public/pages/PublicStore.jsx",

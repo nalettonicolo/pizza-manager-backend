@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { resolveTenantIdForRequest } from '../common/resolve-tenant'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ReplaceOrderItemsDto } from './dto/replace-order-items.dto'
@@ -24,6 +25,11 @@ export class OperativeWritesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private resolveTenant(jwt: JwtOperativeUser, queryTenant?: string) {
+    return resolveTenantIdForRequest(jwt, queryTenant)
+  }
+
+  /** @deprecated usare resolveTenant */
   private jwtTenant(jwt: JwtOperativeUser) {
     if (!jwt.tenantId) throw new UnauthorizedException('Tenant non nel token')
     return jwt.tenantId
@@ -96,8 +102,7 @@ export class OperativeWritesService {
   }
 
   async turnoAperto(jwt: JwtOperativeUser, queryTenant?: string) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!jwt.sub) throw new UnauthorizedException()
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
@@ -134,8 +139,7 @@ export class OperativeWritesService {
    * Se in deploy storici era legato solo ad `auth.users`, allineare id o migrazione dati prima di usare questo path.
    */
   async turnoApri(jwt: JwtOperativeUser, queryTenant: string | undefined, pvId: string) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!jwt.sub) throw new UnauthorizedException()
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
@@ -200,8 +204,7 @@ export class OperativeWritesService {
     incassoAtteso?: number | null,
     note?: string | null,
   ) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!jwt.sub) throw new UnauthorizedException()
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
@@ -248,8 +251,7 @@ export class OperativeWritesService {
   }
 
   async createOrder(jwt: JwtOperativeUser, queryTenant: string | undefined, body: CreateOrderDto) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
     if (!body.items?.length) throw new ForbiddenException('almeno_una_riga')
 
@@ -351,8 +353,7 @@ export class OperativeWritesService {
   }
 
   async getOrderDetail(jwt: JwtOperativeUser, queryTenant: string | undefined, ordineId: string) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
     const orows = await this.prisma.$queryRaw<Record<string, unknown>[]>(
@@ -374,8 +375,7 @@ export class OperativeWritesService {
     ordineId: string,
     stato: string,
   ) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
     const res = await this.prisma.$executeRaw(
@@ -393,8 +393,7 @@ export class OperativeWritesService {
     ordineId: string,
     tipoPagamento: string,
   ) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
     const tp = Number(
@@ -414,8 +413,7 @@ export class OperativeWritesService {
     ordineId: string,
     updates: UpdateOrderPatchDto,
   ) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
     const parts: Prisma.Sql[] = []
@@ -487,8 +485,7 @@ export class OperativeWritesService {
     ordineId: string,
     body: ReplaceOrderItemsDto,
   ) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
     const { totale, items } = body
     if (!items?.length) throw new ForbiddenException('almeno_una_riga')
@@ -556,8 +553,7 @@ export class OperativeWritesService {
   }
 
   async listRuoliPizzeriaCore(jwt: JwtOperativeUser, queryTenant?: string) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
 
     try {
@@ -607,8 +603,7 @@ export class OperativeWritesService {
     queryTenant: string | undefined,
     ordineIds: string[],
   ) {
-    const tid = this.jwtTenant(jwt)
-    this.assertTenantParam(tid, queryTenant)
+    const tid = this.resolveTenant(jwt, queryTenant)
     if (!this.canCassaMutate(jwt.ruolo)) throw new ForbiddenException()
     const ids = [...new Set((ordineIds || []).filter(Boolean).map(String))]
     if (!ids.length) return {}

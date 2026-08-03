@@ -12,9 +12,10 @@ import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import { sortOrdersByNearestNeighbor } from "@/features/operative/delivery/utils/deliveryRouteUtils"
 import ConsegnaProofDialog from "@/features/operative/delivery/components/ConsegnaProofDialog"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 
 const STATO_PRONTO = "PRONTO"
-const POLL_MS = 10000
+const POLL_FALLBACK_MS = 30000
 
 /** Chiave slot per ordini senza orario_ritiro (vista test griglia reparti). */
 const SLOT_SENZA_ORARIO = "__senza_orario__"
@@ -160,11 +161,11 @@ export default function DeliveryDashboard(props) {
     [tenantId, quadTest],
   )
 
-  useEffect(() => {
-    loadOrders()
-    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
-    return () => clearInterval(t)
-  }, [loadOrders])
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: () => loadOrders({ silent: true }),
+    pollMs: POLL_FALLBACK_MS,
+  })
 
   useEffect(() => {
     if (!navigator.geolocation) return
@@ -206,7 +207,7 @@ export default function DeliveryDashboard(props) {
     if (!proofOrdine?.id) return
     setProofBusy(true)
     try {
-      await markDeliveryConsegnatoWithProof(proofOrdine.id, prove)
+      await markDeliveryConsegnatoWithProof(proofOrdine.id, prove, tenantId)
       setOrders((prev) => prev.filter((o) => o.id !== proofOrdine.id))
       setProofOrdine(null)
     } catch (err) {

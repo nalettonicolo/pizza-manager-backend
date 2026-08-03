@@ -23,4 +23,16 @@
 --   sql/modules/23_notifiche_worker_delivery_stati.sql  ← worker notifiche + stati delivery
 --   sql/modules/24_notifiche_canale_parametri.sql  ← canale notifica da parametri_operativi
 --   sql/modules/25_ordini_web_capacity_antifraud_delivery_proof.sql  ← Stripe IN_ATTESA, capacity, proof delivery
+--   sql/modules/26_support_presence.sql  ← presence live per Sala QA Super Admin
+--   sql/modules/27_security_invoker_views.sql  ← advisor security_definer_view + auth users exposed
+--   sql/modules/28_security_invoker_views_batch2.sql  ← resto viste public (tenants, menu, righe, …)
+--   sql/modules/29_go_live_checklist.sql  ← checklist go-live condivisa (Super Admin)
+--   sql/modules/30_support_presence_tenant_bind.sql  ← presence: tenant solo da identità
+--   sql/modules/31_security_definer_search_path.sql  ← SET search_path su SECURITY DEFINER
+--   sql/modules/32_verify_hardening_notices.sql  ← verifica read-only post-hardening
+--   sql/modules/33_sa_support_punti_vendita.sql  ← SA legge PV di qualsiasi tenant (Sala QA)
+--   sql/modules/34_revoke_edge_secrets_and_search_path.sql  ← REVOKE edge/secrets/fiscal + search_path pm_*
+--   sql/modules/35_revoke_anon_auth_required_rpcs.sql  ← REVOKE anon su RPC che richiedono login
+--   sql/modules/36_realtime_ordini_publication.sql  ← Realtime core.ordini (cucina/bancone)
+--   sql/modules/37_storage_consegna_prove.sql  ← bucket Storage privato firma/foto delivery
 -- =============================================================================

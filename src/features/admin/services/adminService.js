@@ -421,12 +421,71 @@ export async function markDeliveryConsegnatoAtomic(ordineId) {
   if (error) throw error
 }
 
+const CONSEGNA_PROVE_BUCKET = "consegna-prove"
+
+function dataUrlToBlob(dataUrl) {
+  const m = String(dataUrl || "").match(/^data:([^;]+);base64,(.+)$/i)
+  if (!m) return null
+  const mime = m[1] || "image/png"
+  const bin = atob(m[2])
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i)
+  return { blob: new Blob([bytes], { type: mime }), mime }
+}
+
+function mimeToExt(mime) {
+  const m = String(mime || "").toLowerCase()
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpg"
+  if (m.includes("webp")) return "webp"
+  return "png"
+}
+
+/**
+ * Carica firma/foto su Storage e restituisce prove con `storagePath` (senza data URL).
+ * Note testuali restano inline.
+ */
+export async function uploadConsegnaProveMedia(tenantId, ordineId, prove = []) {
+  if (!tenantId || !ordineId) throw new Error("tenant/ordine mancante per upload proof")
+  const out = []
+  for (const item of prove || []) {
+    const tipo = String(item?.tipo || "").toLowerCase()
+    const payload = item?.payload && typeof item.payload === "object" ? { ...item.payload } : {}
+    if ((tipo === "firma" || tipo === "foto") && payload.dataUrl) {
+      const parsed = dataUrlToBlob(payload.dataUrl)
+      if (!parsed) throw new Error("Proof media non valido")
+      const ext = mimeToExt(parsed.mime)
+      const path = `${tenantId}/${ordineId}/${tipo}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+      const { error } = await supabase.storage.from(CONSEGNA_PROVE_BUCKET).upload(path, parsed.blob, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: parsed.mime,
+      })
+      if (error) {
+        throw new Error(
+          (error.message || "Upload proof non riuscito") +
+            " — Verifica bucket Storage «consegna-prove» (modulo SQL 37) e policy staff.",
+        )
+      }
+      delete payload.dataUrl
+      payload.storagePath = path
+      payload.bucket = CONSEGNA_PROVE_BUCKET
+      payload.mime = parsed.mime
+    }
+    out.push({ tipo, payload })
+  }
+  return out
+}
+
 /** Delivery: CONSEGNATO con firma/foto/note (proof of delivery). */
-export async function markDeliveryConsegnatoWithProof(ordineId, prove = []) {
+export async function markDeliveryConsegnatoWithProof(ordineId, prove = [], tenantId = null) {
   if (!ordineId) throw new Error("ordineId mancante")
+  const prepared =
+    tenantId && Array.isArray(prove) && prove.some((p) => p?.payload?.dataUrl)
+      ? await uploadConsegnaProveMedia(tenantId, ordineId, prove)
+      : prove
   const { error } = await supabase.rpc("delivery_mark_consegnato_with_proof", {
     p_ordine_id: ordineId,
-    p_prove: prove,
+    p_prove: prepared,
   })
   if (error) throw error
 }
@@ -2349,6 +2408,30 @@ export async function getProductIngredientiMap(tenantId, productIds) {
   }
 }
 
+/** Cache in-memory: evita round-trip su ogni tap «Aggiungi» in cassa. */
+const _productIngredientiCache = new Map()
+
+function productIngredientiCacheKey(tenantId, productId) {
+  return `${tenantId}:${productId}`
+}
+
+/** Precompila la cache da un batch (es. al load categoria cassa). */
+export function primeProductIngredientiCache(tenantId, batchMap) {
+  if (!tenantId || !batchMap || typeof batchMap !== "object") return
+  for (const [pid, list] of Object.entries(batchMap)) {
+    if (!pid) continue
+    _productIngredientiCache.set(productIngredientiCacheKey(tenantId, pid), Array.isArray(list) ? list : [])
+  }
+}
+
+/** Lettura sincrona; `undefined` = non in cache. */
+export function getCachedProductIngredienti(tenantId, productId) {
+  if (!tenantId || !productId) return undefined
+  const key = productIngredientiCacheKey(tenantId, productId)
+  if (!_productIngredientiCache.has(key)) return undefined
+  return _productIngredientiCache.get(key)
+}
+
 /**
  * Stesso output di {@link getProductIngredienti} ma in 2–3 round-trip (schermate operative con molte pizze).
  * @returns {Promise<Record<string, Array<{ id: string, nome: string, vaInCottura: boolean, prepCucina?: boolean, categoria?: string, colore?: string }>>>}
@@ -2356,7 +2439,11 @@ export async function getProductIngredientiMap(tenantId, productIds) {
 export async function getProductIngredientiBatch(tenantId, productIds) {
   if (!tenantId || !productIds?.length) return {}
   const uniqueIds = [...new Set(productIds.filter(Boolean))]
-  const emptyMap = () => Object.fromEntries(uniqueIds.map((id) => [id, []]))
+  const emptyMap = () => {
+    const m = Object.fromEntries(uniqueIds.map((id) => [id, []]))
+    primeProductIngredientiCache(tenantId, m)
+    return m
+  }
   if (nestOperativeReadsEnabled()) {
     try {
       const batch = await nestOperativeProdottoIngBatch(tenantId, uniqueIds)
@@ -2364,6 +2451,7 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
       for (const id of uniqueIds) {
         out[id] = Array.isArray(batch[id]) ? batch[id] : []
       }
+      primeProductIngredientiCache(tenantId, out)
       return out
     } catch (e) {
       console.warn("[adminService] getProductIngredientiBatch Nest fallback:", e?.message ?? e)
@@ -2432,6 +2520,7 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
         }
       })
     }
+    primeProductIngredientiCache(tenantId, out)
     return out
   } catch (e) {
     console.warn("getProductIngredientiBatch error:", e)
@@ -2444,6 +2533,8 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
  *  Include `posizione_cottura` se la colonna è presente sul DB (`in_cottura` | `fuori_cottura` | `a_parte`). */
 export async function getProductIngredienti(tenantId, productId) {
   if (!tenantId || !productId) return []
+  const cached = getCachedProductIngredienti(tenantId, productId)
+  if (cached !== undefined) return cached
   try {
     let rows
     /** PostgREST: `.eq` va dopo `.select` su `from()`, non direttamente su `from()`. */
@@ -2483,14 +2574,20 @@ export async function getProductIngredienti(tenantId, productId) {
       return []
     }
     const ids = rows.map((r) => r.ingrediente_id).filter(Boolean)
-    if (!ids.length) return []
+    if (!ids.length) {
+      _productIngredientiCache.set(productIngredientiCacheKey(tenantId, productId), [])
+      return []
+    }
     const ingredients = await selectIngredientiRowsByIds(tenantId, ids)
-    if (!ingredients?.length) return []
+    if (!ingredients?.length) {
+      _productIngredientiCache.set(productIngredientiCacheKey(tenantId, productId), [])
+      return []
+    }
     const byId = new Map(ingredients.map((ing) => [ing.id, ing]))
     let ordered = ids.map((id) => byId.get(id)).filter(Boolean)
     if (rows[0] && rows[0].ordine === undefined) ordered = ordered.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""))
     const posById = new Map(rows.map((r) => [r.ingrediente_id, r.posizione_cottura]))
-    return ordered.map((ing) => ({
+    const result = ordered.map((ing) => ({
       id: ing.id,
       nome: ing.nome ?? "",
       vaInCottura: ing.va_in_cottura === true,
@@ -2501,6 +2598,8 @@ export async function getProductIngredienti(tenantId, productId) {
       costo_poco: ing.costo_poco,
       posizione_cottura: normalizePosizioneCottura(posById.get(ing.id)),
     }))
+    _productIngredientiCache.set(productIngredientiCacheKey(tenantId, productId), result)
+    return result
   } catch (e) {
     console.warn("getProductIngredienti error:", e)
     return []

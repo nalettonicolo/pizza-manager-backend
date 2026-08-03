@@ -4,6 +4,7 @@ import {
   PUBLIC_DOMAIN_FIREBASE_DOCS_URL,
   PUBLIC_SAAS_BASE_URL,
 } from "@/config/publicDomain";
+import DnsHostGuidesPanel from "@/features/pubblicazione/DnsHostGuidesPanel";
 
 const overlayStyle = {
   position: "fixed",
@@ -19,8 +20,8 @@ const overlayStyle = {
 
 const panelStyle = {
   width: "100%",
-  maxWidth: 720,
-  maxHeight: "min(92vh, 900px)",
+  maxWidth: 880,
+  maxHeight: "min(92vh, 960px)",
   overflow: "auto",
   background: "#fff",
   borderRadius: 14,
@@ -100,12 +101,12 @@ export default function PubblicazioneDeployGuideModal({ open, onClose }) {
         >
           <div>
             <h2 id={titleId} style={{ margin: 0, fontSize: 18, color: "#0f172a" }}>
-              Guida passo passo — Deploy sul dominio del cliente
+              Guida — Go-live sul dominio del cliente
             </h2>
             <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
               Sul dominio del cliente si pubblica il <strong>frontend</strong> della webapp (stesso codice di{" "}
               {PUBLIC_SAAS_BASE_URL}). Menu, logo, colori e orari sono quelli del <strong>tenant</strong> risolti
-              automaticamente in base al dominio.
+              automaticamente in base al dominio. Non serve un deploy per ogni nuovo hostname.
             </p>
           </div>
           <button
@@ -141,12 +142,12 @@ export default function PubblicazioneDeployGuideModal({ open, onClose }) {
 
           <ol style={{ margin: 0, paddingLeft: 22, fontSize: 14, color: "#334155", lineHeight: 1.75 }}>
             <li style={{ marginBottom: 18 }}>
-              <p style={stepHead}>1. Prepara il tenant (admin del locale + questa console)</p>
+              <p style={stepHead}>1. Prepara il tenant (anagrafica + Admin locale)</p>
               <p style={pText}>
                 L&apos;admin del tenant compila <strong>Admin → Impostazioni</strong> (dati pizzeria, layout, orari) e il
-                menu. In <strong>Super Admin → Pubblicazione dominio</strong> salva <strong>dominio pubblico</strong>,{" "}
-                <strong>sito web cliente</strong> se serve, e aggiorna lo <strong>stato pubblicazione</strong> durante il
-                go-live.
+                menu. In <strong>Super Admin → Go-live cliente</strong> verifica lo <strong>slug</strong>, salva il{" "}
+                <strong>dominio menu</strong> (<code>public_domain</code>) e usa «sito web cliente» solo se esiste un sito
+                marketing esterno diverso. Aggiorna lo <strong>stato pubblicazione</strong> durante il go-live.
               </p>
             </li>
 
@@ -180,34 +181,27 @@ export default function PubblicazioneDeployGuideModal({ open, onClose }) {
             <li style={{ marginBottom: 18 }}>
               <p style={stepHead}>4. DNS presso il registrar del cliente</p>
               <p style={pText}>
-                Nel pannello DNS del dominio (Aruba, OVH, Cloudflare, ecc.) crea i record che Firebase ti mostra
-                (solitamente <strong>CNAME</strong> dal sottodominio scelto verso un target tipo{" "}
-                <code>ghs.googlehosted.com</code> o verso il tuo hosting — <strong>usa sempre i valori indicati nella
-                console Firebase</strong> per quel dominio). Il target generico della piattaforma è spesso:
+                Nel pannello DNS del dominio crea i record che Firebase ti mostra (di solito <strong>CNAME</strong> sul
+                sottodominio). Target generico di riferimento:
               </p>
               <code style={codeBlock}>{PUBLIC_DOMAIN_CNAME_TARGET}</code>
-              <p style={{ ...pText, marginBottom: 0 }}>
-                Attendi la propagazione DNS (da pochi minuti a 24–48 ore). Poi imposta lo stato pubblicazione su{" "}
-                <em>DNS / Firebase in configurazione</em> finché non è tutto verde.
+              <p style={pText}>
+                Attendi la propagazione (minuti–48 ore) e tieni lo stato su <em>DNS / Firebase in configurazione</em>{" "}
+                finché HTTPS non è verde. Sotto trovi la guida dettagliata per ogni host.
               </p>
             </li>
 
             <li style={{ marginBottom: 18 }}>
-              <p style={stepHead}>5. Deploy del frontend (chi gestisce il codice)</p>
+              <p style={stepHead}>5. Deploy del frontend (solo aggiornamenti prodotto)</p>
               <p style={pText}>
-                Il bundle pubblicato è <strong>unico</strong> per tutti i tenant. Dalla root del repository:
+                Il bundle pubblicato è <strong>unico</strong> per tutti i tenant. Aggiungere un dominio cliente{" "}
+                <strong>non</strong> richiede un nuovo deploy: basta host Firebase + DNS. Per release di codice:
               </p>
-              <code style={codeBlock}>
-                {`cd cartella-progetto
-git add .
-git commit -m "Deploy"
-git push
-npm run deploy`}
-              </code>
+              <code style={codeBlock}>npm run deploy:full:ci</code>
               <p style={pText}>
-                <code>npm run deploy</code> esegue la build Vite e pubblica su Firebase Hosting. Dopo ogni deploy,{" "}
-                <strong>tutti i domini collegati</strong> (incluso quello del cliente) servono l&apos;ultima versione
-                della webapp.
+                Dopo ogni deploy, <strong>tutti i domini collegati</strong> (incluso quello del cliente) servono
+                l&apos;ultima versione della webapp. Finché non lo chiedi esplicitamente, non eseguire deploy Firebase
+                «di routine» solo per aggiungere un hostname.
               </p>
             </li>
 
@@ -224,6 +218,17 @@ npm run deploy`}
           <div
             style={{
               marginTop: 8,
+              marginBottom: 22,
+              paddingTop: 20,
+              borderTop: "1px solid #e2e8f0",
+            }}
+          >
+            <DnsHostGuidesPanel />
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
               padding: "14px 16px",
               borderRadius: 10,
               background: "#eff6ff",
@@ -232,10 +237,9 @@ npm run deploy`}
               color: "#1e3a8a",
               lineHeight: 1.6,
             }}
-            >
-            <strong>Suggerimento:</strong> se il sito non si aggiorna, prova una finestra anonima o svuota la cache. Il
-            backend (Koyeb) si aggiorna con <code>git push</code>; per solo modifiche a menu e impostazioni tenant non è
-            sempre necessario un nuovo deploy frontend.
+          >
+            <strong>Suggerimento:</strong> se il sito non si aggiorna, prova una finestra anonima o svuota la cache. Per
+            sole modifiche a menu e impostazioni tenant non serve un nuovo deploy frontend.
           </div>
         </div>
       </div>

@@ -13,7 +13,7 @@ import {
 } from "@/utils/publicDomain";
 import PubblicazioneDeployGuideModal from "@/features/admin/pages/PubblicazioneDeployGuideModal";
 
-const BASE_PATH = "/superadmin/pubblicazione-sito";
+const DEFAULT_BASE_PATH = "/superadmin/go-live";
 
 const DOMAIN_STATUS = [
   { value: "none", label: "Non configurato" },
@@ -34,8 +34,9 @@ const card = {
 const labelStyle = { display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 };
 
 /** Form dominio / stato pubblicazione — solo Super Admin (console piattaforma). */
-export default function PubblicazioneSitoWorkspace({ tenantId }) {
+export default function PubblicazioneSitoWorkspace({ tenantId, basePath = DEFAULT_BASE_PATH, embedded = false }) {
   const location = useLocation();
+  const BASE_PATH = basePath || DEFAULT_BASE_PATH;
   const [guideOpen, setGuideOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -147,13 +148,15 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
   if (!tenantId) return null;
 
   return (
-    <div className="dashboard-settings-page">
-      <p style={{ maxWidth: "100%", fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 14 }}>
-        Sul <strong>dominio del cliente</strong> viene servito lo stesso <strong>frontend</strong> della webapp (build
-        unica su Firebase): a runtime, le <strong>impostazioni del tenant</strong> (menu, layout, orari, dati pizzeria) si
-        applicano in base all&apos;hostname. Qui registri dominio e stato operativo; DNS e SSL si configurano in Firebase
-        e dal registrar.
-      </p>
+    <div className={embedded ? undefined : "dashboard-settings-page"}>
+      {!embedded ? (
+        <p style={{ maxWidth: "100%", fontSize: 15, lineHeight: 1.65, color: "#334155", marginBottom: 14 }}>
+          Sul <strong>dominio del cliente</strong> viene servito lo stesso <strong>frontend</strong> della webapp (build
+          unica su Firebase): a runtime, le <strong>impostazioni del tenant</strong> (menu, layout, orari, dati pizzeria) si
+          applicano in base all&apos;hostname. Qui registri dominio e stato operativo; DNS e SSL si configurano in Firebase
+          e dal registrar.
+        </p>
+      ) : null}
 
       <div
         style={{
@@ -169,9 +172,10 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
         }}
       >
         <div style={{ flex: "1 1 220px" }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#9a3412" }}>Guida al deploy</p>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#9a3412" }}>Guida dominio / DNS</p>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
-            Passi ordinati: tenant → Supabase → Firebase → DNS → <code>npm run deploy</code> → verifica.
+            Passi: slug → salva dominio menu → Firebase host → DNS CNAME. Il deploy codice è globale (
+            <code>npm run deploy:full:ci</code>), non per ogni cliente.
           </p>
         </div>
         <button
@@ -273,7 +277,7 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
             </p>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Dominio pubblico</label>
+              <label style={labelStyle}>Dominio menu (pubblico)</label>
               <input
                 type="text"
                 value={domainInput}
@@ -297,10 +301,10 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Sito web del cliente (opzionale)</label>
+              <label style={labelStyle}>Sito web marketing (opzionale)</label>
               <p style={{ margin: "0 0 8px", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
-                URL del sito vetrina esterno del locale (es. Google Sites, sito istituzionale). Non è il dominio
-                PizzaManager: serve solo per riferimento e collegamenti dalla guida.
+                Solo se il locale ha un sito vetrina esterno diverso dal dominio menu PizzaManager (es. Google Sites).
+                Non sostituisce il dominio menu per ordini.
               </p>
               <input
                 type="url"
@@ -369,7 +373,11 @@ export default function PubblicazioneSitoWorkspace({ tenantId }) {
             </h2>
             <p style={{ margin: "0 0 12px", fontSize: 14, lineHeight: 1.65, color: "#475569" }}>
               Dal pannello DNS del dominio acquistato dal cliente (es. Aruba, OVH, Cloudflare), crea un record che punti
-              all&apos;hosting della webapp:
+              all&apos;hosting della webapp. Guide dettagliate per ogni registrar: sezione{" "}
+              <a href="#guida-dns-host" style={{ fontWeight: 600, color: "#c0392b" }}>
+                Guide DNS per host
+              </a>{" "}
+              nella pagina Go-live, oppure «Apri guida passo passo».
             </p>
             <ul style={{ margin: "0 0 12px", paddingLeft: 20, fontSize: 14, color: "#334155", lineHeight: 1.7 }}>
               <li>

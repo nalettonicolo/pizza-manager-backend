@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common'
 import { ApiOperation, ApiTags } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import { PublicMenuIngredientsDto } from './dto/public-menu-ingredients.dto'
 import { PublicMenuService } from './public-menu.service'
 
 @ApiTags('public')
 @Controller('public/menu')
+@Throttle({ default: { limit: 60, ttl: 60_000 } })
 export class PublicMenuController {
   constructor(private readonly menu: PublicMenuService) {}
 

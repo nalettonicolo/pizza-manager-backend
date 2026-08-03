@@ -2,7 +2,16 @@ import React from "react"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { devLog } from "@/lib/devLog"
-import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview"
+import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
+
+function loginRedirectSearch(location) {
+  const params = new URLSearchParams(location.search || "")
+  if (location.pathname && location.pathname !== "/login" && !params.get("return_to")) {
+    params.set("return_to", location.pathname)
+  }
+  const qs = params.toString()
+  return qs ? `?${qs}` : ""
+}
 
 const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
   const { user, tipoUtente, ruolo, loading } = useAuth()
@@ -17,32 +26,58 @@ const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
     )
   }
 
-  if (!user || tipoUtente !== "staff") {
-    devLog("ProtectedRoute", "non autorizzato → /login", { haUser: !!user, tipoUtente, allowedRoles })
-    return <Navigate to="/login" state={{ from: location }} replace />
+  if (!user) {
+    devLog("ProtectedRoute", "non autenticato → /login", { allowedRoles })
+    return (
+      <Navigate to={`/login${loginRedirectSearch(location)}`} state={{ from: location }} replace />
+    )
   }
 
-  const ruoloNorm = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
-  const viewportPreview = isViewportLayoutPreviewSearch(location.search)
-  let allowed = allowedRoles.some((r) => (r && typeof r === "string" ? r.toLowerCase().trim() : "") === ruoloNorm)
-  if (!allowed && ruoloNorm === "superadmin" && viewportPreview) {
-    allowed = true
+  // Sessione presente ma profilo ancora in caricamento: NON mandare a /login
+  // (nuove finestre Sala QA altrimenti sembrano “non loggate”).
+  if (!tipoUtente || (!ruolo && tipoUtente === "staff")) {
+    return (
+      <div className="min-h-[200px] flex items-center justify-center">
+        <span className="text-gray-400 text-sm">Caricamento profilo...</span>
+      </div>
+    )
   }
+
+  if (isSuperAdminRole(ruolo)) {
+    devLog("ProtectedRoute", "superadmin bypass", { allowedRoles, path: location.pathname })
+    if (children != null && React.Children.count(children) > 0) return children
+    return <Outlet />
+  }
+
+  if (tipoUtente !== "staff") {
+    devLog("ProtectedRoute", "non staff → /login", { tipoUtente, allowedRoles })
+    return (
+      <Navigate to={`/login${loginRedirectSearch(location)}`} state={{ from: location }} replace />
+    )
+  }
+
+  const ruoloNorm = normalizeAppRuolo(ruolo)
+  const allowed = allowedRoles.some(
+    (r) => (r && typeof r === "string" ? r.toLowerCase().trim() : "") === ruoloNorm,
+  )
   if (!allowed) {
     devLog("ProtectedRoute", "ruolo non consentito → /login", { ruolo, allowedRoles })
-    return <Navigate to="/login" state={{ from: location }} replace />
+    return (
+      <Navigate to={`/login${loginRedirectSearch(location)}`} state={{ from: location }} replace />
+    )
   }
 
   if (demoOnly) {
     const email = user.email?.toLowerCase() || ""
     if (!email.endsWith("@pizzamanager.it")) {
       devLog("ProtectedRoute", "demoOnly: email non @pizzamanager.it → /login", { email })
-      return <Navigate to="/login" state={{ from: location }} replace />
+      return (
+        <Navigate to={`/login${loginRedirectSearch(location)}`} state={{ from: location }} replace />
+      )
     }
   }
 
   devLog("ProtectedRoute", "autorizzato", { ruolo, allowedRoles })
-  // Se ci sono children (es. RoleLayout + SuperAdminLayout), renderizzali così il layout con il suo Outlet viene mostrato
   if (children != null && React.Children.count(children) > 0) {
     return children
   }

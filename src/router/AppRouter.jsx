@@ -1,9 +1,9 @@
 import { lazy as reactLazy, Suspense } from "react";
-import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useSearchParams } from "react-router-dom";
 import { createLazyWithChunkReload } from "@/utils/lazyWithReload";
-import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 import { isSaaSHostname } from "@/utils/saasHost";
+import { useSupportPresenceHeartbeat } from "@/hooks/useSupportPresenceHeartbeat";
 
 /* ================= LAYOUT ================= */
 import PublicLayout from "@/layouts/PublicLayout";
@@ -53,8 +53,18 @@ const SuperadminTenantArchivioPasswordPage = lazy(() =>
 const Settings = lazy(() => import("@/features/superadmin/pages/Settings"));
 const Piani = lazy(() => import("@/features/superadmin/pages/Piani"));
 const ServiziCatalogo = lazy(() => import("@/features/superadmin/pages/ServiziCatalogo"));
-const DeployClientiPage = lazy(() => import("@/features/superadmin/pages/DeployClientiPage"));
-const SuperadminPubblicazioneSitoPage = lazy(() => import("@/features/superadmin/pages/SuperadminPubblicazioneSitoPage"));
+const SuperadminGoLivePage = lazy(() => import("@/features/superadmin/pages/SuperadminGoLivePage"));
+
+function RedirectToGoLive() {
+  const [sp] = useSearchParams();
+  const tenant = sp.get("tenant");
+  return (
+    <Navigate
+      to={tenant ? `/superadmin/go-live?tenant=${encodeURIComponent(tenant)}` : "/superadmin/go-live"}
+      replace
+    />
+  );
+}
 const SuperadminGuideHub = lazy(() => import("@/features/superadmin/pages/SuperadminGuideHub"));
 const SuperadminGuideDocPage = lazy(() => import("@/features/superadmin/pages/SuperadminGuideDocPage"));
 const SviluppoPage = lazy(() => import("@/features/superadmin/pages/SviluppoPage"));
@@ -63,6 +73,8 @@ const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
 const SuperadminViewportTesterPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportTesterPage"));
 const SuperadminViewportStudioPage = lazy(() => import("@/features/superadmin/pages/SuperadminViewportStudioPage"));
+const SuperadminQaConsolePage = lazy(() => import("@/features/superadmin/pages/SuperadminQaConsolePage"));
+const SuperadminGatePage = lazy(() => import("@/features/superadmin/pages/SuperadminGatePage"));
 const SuperadminAuthEmailTemplatesPage = lazy(
   () => import("@/features/superadmin/pages/SuperadminAuthEmailTemplatesPage"),
 );
@@ -126,18 +138,14 @@ const PizzaioloIngressoPage = lazy(() => import("@/features/operative/pages/Pizz
 const PageFallback = () => <div className="p-6 flex items-center justify-center min-h-[120px]"><span className="text-gray-400 text-sm">Caricamento...</span></div>;
 
 const OPERATIVE_ROLES = ["operatore", "cassa", "bancone", "cucina", "pony", "delivery", "pizzaiolo"];
-/** In dev o con VITE_ENABLE_TEST_REPARTI: superadmin può aprire le schermate operative (pannello test iframe). */
-const OPERATIVE_ROLES_WITH_SUPERADMIN_TEST = ENABLE_TEST_REPARTI ? [...OPERATIVE_ROLES, "superadmin"] : OPERATIVE_ROLES;
+/** Superadmin sempre ammesso (Sala QA / supporto live tenant). */
+const OPERATIVE_ROLES_WITH_SUPERADMIN_TEST = [...OPERATIVE_ROLES, "superadmin"];
 
 /* =========================================================
    HOST DETECTION
 ========================================================= */
 
 const host = typeof window !== "undefined" ? window.location.hostname : "";
-
-const isLocal =
-  host.includes("localhost") ||
-  host.includes("127.0.0.1");
 
 const isSupportHost = host === "support.pizzamanager.it";
 
@@ -164,6 +172,7 @@ function RootResolver() {
 ========================================================= */
 
 export default function AppRouter() {
+  useSupportPresenceHeartbeat()
   return (
     <Routes>
 
@@ -342,7 +351,14 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         >
-          <Route path="/superadmin/ingresso" element={<Navigate to="/superadmin/dashboard" replace />} />
+          <Route
+            path="/superadmin/ingresso"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <SuperadminGatePage />
+              </Suspense>
+            }
+          />
           {/* Studio viewport: fullscreen senza barra superadmin (anteprima tipo builder). */}
           <Route
             path="/superadmin/test-layout/studio"
@@ -353,8 +369,17 @@ export default function AppRouter() {
             }
           />
           <Route element={<SuperAdminLayout />}>
-            <Route path="/superadmin" element={<Navigate to="/superadmin/dashboard" replace />} />
+            <Route path="/superadmin" element={<Navigate to="/superadmin/ingresso" replace />} />
+            <Route path="/superadmin/home-pizzeria" element={<Navigate to="/preview" replace />} />
             <Route path="/superadmin/test-reparti" element={<Suspense fallback={<PageFallback />}><TestRepartiPanelPage /></Suspense>} />
+            <Route
+              path="/superadmin/sala-qa"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminQaConsolePage />
+                </Suspense>
+              }
+            />
             <Route
               path="/superadmin/test-layout"
               element={
@@ -375,8 +400,9 @@ export default function AppRouter() {
             />
             <Route path="/superadmin/servizi" element={<Suspense fallback={<PageFallback />}><ServiziCatalogo /></Suspense>} />
             <Route path="/superadmin/servizi/:servizioId" element={<Suspense fallback={<PageFallback />}><ServizioSchedaPage /></Suspense>} />
-            <Route path="/superadmin/deploy-clienti" element={<Suspense fallback={<PageFallback />}><DeployClientiPage /></Suspense>} />
-            <Route path="/superadmin/pubblicazione-sito" element={<Suspense fallback={<PageFallback />}><SuperadminPubblicazioneSitoPage /></Suspense>} />
+            <Route path="/superadmin/go-live" element={<Suspense fallback={<PageFallback />}><SuperadminGoLivePage /></Suspense>} />
+            <Route path="/superadmin/deploy-clienti" element={<RedirectToGoLive />} />
+            <Route path="/superadmin/pubblicazione-sito" element={<RedirectToGoLive />} />
             <Route path="/superadmin/piani" element={<Suspense fallback={<PageFallback />}><Piani /></Suspense>} />
             <Route path="/superadmin/licenses" element={<Suspense fallback={<PageFallback />}><Licenses /></Suspense>} />
             <Route path="/superadmin/settings" element={<Suspense fallback={<PageFallback />}><Settings /></Suspense>} />
@@ -399,14 +425,6 @@ export default function AppRouter() {
                 </Suspense>
               }
             />
-            <Route
-              path="/superadmin/home-pizzeria"
-              element={
-                <Suspense fallback={<PageFallback />}>
-                  <Home />
-                </Suspense>
-              }
-            />
           </Route>
         </Route>
       )}
@@ -418,8 +436,8 @@ export default function AppRouter() {
       {isSaaS && (
         <Route
           element={
-            <ProtectedRoute allowedRoles={["admin", "owner"]} requireTenant>
-              <RoleLayout allowedRoles={["admin", "owner"]}>
+            <ProtectedRoute allowedRoles={["admin", "owner", "superadmin"]} requireTenant>
+              <RoleLayout allowedRoles={["admin", "owner", "superadmin"]}>
                 <AdminLayout />
               </RoleLayout>
             </ProtectedRoute>
@@ -492,24 +510,45 @@ export default function AppRouter() {
               </Suspense>
             }
           />
-          <Route path="/admin/contabilita/incassi" element={<Suspense fallback={<PageFallback />}><GestioneIncassiPage /></Suspense>} />
-          <Route path="/admin/fiscal-outbox" element={<Suspense fallback={<PageFallback />}><FiscalOutboxMonitorPage /></Suspense>} />
-          <Route path="/admin/notifiche-outbox" element={<Suspense fallback={<PageFallback />}><NotificheOutboxMonitorPage /></Suspense>} />
+          <Route
+            path="/admin/contabilita/gestione-incassi"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ContabilitaFullRoutesGate>
+                  <GestioneIncassiPage />
+                </ContabilitaFullRoutesGate>
+              </Suspense>
+            }
+          />
+          <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
+          <Route path="/admin/ordini" element={<Suspense fallback={<PageFallback />}><AdminOrdiniPage /></Suspense>} />
+          <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
           <Route path="/admin/manuale" element={<Suspense fallback={<PageFallback />}><ManualeUtentePage /></Suspense>} />
-          <Route path="/admin/guida" element={<Navigate to="/admin/manuale" replace />} />
-          <Route path="/admin/pubblicazione" element={<Navigate to="/admin/manuale" replace />} />
+          <Route path="/admin/notifiche-outbox" element={<Suspense fallback={<PageFallback />}><NotificheOutboxMonitorPage /></Suspense>} />
+          <Route path="/admin/fiscal-outbox" element={<Suspense fallback={<PageFallback />}><FiscalOutboxMonitorPage /></Suspense>} />
+          <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
+          <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
+          <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
+            <Route index element={<Navigate to="parametri" replace />} />
+            <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
+            <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />
+            <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
+            <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
+            <Route path="area-consegna" element={<Suspense fallback={<PageFallback />}><AreaConsegnaSection /></Suspense>} />
+            <Route path="pagamenti-online" element={<Suspense fallback={<PageFallback />}><PagamentiOnlinePage /></Suspense>} />
+          </Route>
           <Route path="/admin/menu" element={<Navigate to="/admin/menu/categorie" replace />} />
           <Route path="/admin/menu/categorie" element={<Suspense fallback={<PageFallback />}><CategoriePage /></Suspense>} />
-          <Route path="/admin/menu/formati" element={<Suspense fallback={<PageFallback />}><FormatiPage /></Suspense>} />
-          <Route path="/admin/menu/cottura" element={<Suspense fallback={<PageFallback />}><CotturaPage /></Suspense>} />
           <Route path="/admin/menu/pizze" element={<Suspense fallback={<PageFallback />}><PizzePage /></Suspense>} />
           <Route path="/admin/menu/ingredienti" element={<Suspense fallback={<PageFallback />}><IngredientiPage /></Suspense>} />
           <Route path="/admin/menu/impasti" element={<Suspense fallback={<PageFallback />}><ImpastiPage /></Suspense>} />
-          <Route path="/admin/menu/bibite" element={<Suspense fallback={<PageFallback />}><BibitePage /></Suspense>} />
-          <Route path="/admin/menu/dolci" element={<Suspense fallback={<PageFallback />}><DolciPage /></Suspense>} />
-          <Route path="/admin/menu/fritti" element={<Suspense fallback={<PageFallback />}><FrittiPage /></Suspense>} />
+          <Route path="/admin/menu/formati" element={<Suspense fallback={<PageFallback />}><FormatiPage /></Suspense>} />
+          <Route path="/admin/menu/cottura" element={<Suspense fallback={<PageFallback />}><CotturaPage /></Suspense>} />
           <Route path="/admin/menu/allergeni" element={<Suspense fallback={<PageFallback />}><AllergeniPage /></Suspense>} />
           <Route path="/admin/menu/listini" element={<Suspense fallback={<PageFallback />}><ListiniPage /></Suspense>} />
+          <Route path="/admin/menu/fritti" element={<Suspense fallback={<PageFallback />}><FrittiPage /></Suspense>} />
+          <Route path="/admin/menu/bibite" element={<Suspense fallback={<PageFallback />}><BibitePage /></Suspense>} />
+          <Route path="/admin/menu/dolci" element={<Suspense fallback={<PageFallback />}><DolciPage /></Suspense>} />
           <Route
             path="/admin/menu/prep-cucina-colori"
             element={
@@ -518,21 +557,6 @@ export default function AppRouter() {
               </Suspense>
             }
           />
-          <Route path="/admin/ordini" element={<Suspense fallback={<PageFallback />}><AdminOrdiniPage /></Suspense>} />
-          <Route path="/admin/report" element={<Suspense fallback={<PageFallback />}><Report /></Suspense>} />
-          <Route path="/admin/fidelity" element={<Suspense fallback={<PageFallback />}><FidelityCardPage /></Suspense>} />
-          <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
-          <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
-          <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
-            <Route index element={<Navigate to="dati-pizzeria" replace />} />
-            <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />
-            <Route path="pagamenti-online" element={<Suspense fallback={<PageFallback />}><PagamentiOnlinePage /></Suspense>} />
-            <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
-            <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
-            <Route path="area-consegna" element={<Suspense fallback={<PageFallback />}><AreaConsegnaSection /></Suspense>} />
-            <Route path="sedi-aree" element={<Navigate to="/admin/settings/area-consegna" replace />} />
-            <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
-          </Route>
         </Route>
       )}
 

@@ -9,6 +9,8 @@ import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMen
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 import { applyTenantFavicon } from "@/utils/tenantFavicon";
+import { isSuperAdminRole } from "@/utils/superAdminAccess";
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
 
 /**
  * Voci allineate alle route reali (vedi docs/ARCHITETTURA_E_STATO.md).
@@ -132,6 +134,7 @@ export default function AdminLayout() {
   }, [hasServizio, enforcementActive]);
 
   const blockedRedirect = useMemo(() => {
+    if (isSuperAdminRole(ruolo)) return null;
     if (!enforcementActive) return null;
     const p = location.pathname;
     if (p.startsWith("/admin/report") && !hasServizio("report_analisi")) return ADMIN_TENANT_HOME;
@@ -145,10 +148,10 @@ export default function AdminLayout() {
       return ADMIN_TENANT_HOME;
     }
     return null;
-  }, [enforcementActive, location.pathname, hasServizio]);
+  }, [enforcementActive, location.pathname, hasServizio, ruolo]);
 
   const ruoloKey = (ruolo && String(ruolo).toLowerCase().trim()) || "";
-  const adminNeedsPvChoice = ruoloKey === "admin" && pvList.length > 1;
+  const adminNeedsPvChoice = !isSuperAdminRole(ruolo) && ruoloKey === "admin" && pvList.length > 1;
 
   useEffect(() => {
     closeMobileNav();
@@ -191,11 +194,11 @@ export default function AdminLayout() {
   }, [logoUrl]);
 
   if (blockedRedirect) {
-    return <Navigate to={blockedRedirect} replace />;
+    return <Navigate to={`${blockedRedirect}${location.search || ""}`} replace />;
   }
 
   if (adminNeedsPvChoice && !pvLoading && !activePv) {
-    return <Navigate to="/select-pv" replace />;
+    return <Navigate to={`/select-pv${location.search || ""}`} replace />;
   }
 
   return (
@@ -231,7 +234,7 @@ export default function AdminLayout() {
               {visibleTopNav.map((item) => (
                 <NavLink
                   key={item.to}
-                  to={item.to}
+                  to={withPreservedSupportSearch(item.to, location.search)}
                   end={topNavLinkEnd(item.to)}
                   className={({ isActive }) => (isActive ? "active" : "")}
                 >
@@ -274,7 +277,7 @@ export default function AdminLayout() {
               {visibleTopNav.map((item) => (
                 <NavLink
                   key={item.to}
-                  to={item.to}
+                  to={withPreservedSupportSearch(item.to, location.search)}
                   end={topNavLinkEnd(item.to)}
                   className={({ isActive }) => (isActive ? "active" : "")}
                   onClick={closeMobileNav}
@@ -298,7 +301,7 @@ export default function AdminLayout() {
               {sidebarItems.map((item) => (
                 <NavLink
                   key={item.to}
-                  to={item.to}
+                  to={withPreservedSupportSearch(item.to, location.search)}
                   end={item.to === "/admin/magazzino" || item.to === "/admin/contabilita"}
                   className={({ isActive }) => (isActive ? "active" : "")}
                 >

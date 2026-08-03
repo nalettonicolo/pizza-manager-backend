@@ -18,6 +18,27 @@ body {
   overflow-x: clip;
 }
 
+/* Tap/click più reattivi: niente delay 300ms su mobile + feedback immediato */
+button,
+[role="button"],
+a.btn-primary,
+input[type="button"],
+input[type="submit"],
+.dashboard-sidebar a,
+.dashboard-header button,
+.cassa-product-grid button,
+.cassa-toolbar-compact-btn {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active:not(:disabled),
+[role="button"]:active,
+.cassa-product-grid button:active:not(:disabled),
+.cassa-toolbar-compact-btn:active:not(:disabled) {
+  opacity: 0.82;
+}
+
 /* LAYOUT PRINCIPALE */
 .layout {
   display: flex;

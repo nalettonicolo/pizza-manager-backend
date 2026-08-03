@@ -17,6 +17,7 @@ import {
   isSupabaseBuildConfigured,
   supabaseLoginNetworkHelpMessage,
 } from "@/lib/supabaseEnv.js"
+import { resolveSupportTenantOverride } from "@/utils/supportTenantOverride"
 
 const AuthContext = createContext()
 
@@ -57,6 +58,12 @@ export function AuthProvider({ children }) {
   /** Nome tenant dall’API Nest (`/me`, login): usato da TenantContext se `public.tenants` non è leggibile senza sessione Supabase. */
   const [nestTenantNome, setNestTenantNome] = useState(null)
   const [loading, setLoading] = useState(true)
+  /** Override tenant attivo solo per Super Admin (Sala QA / supporto live). */
+  const [supportTenantOverride, setSupportTenantOverride] = useState(() => {
+    if (typeof window === "undefined") return null
+    const id = resolveSupportTenantOverride(window.location.search)
+    return id || null
+  })
   const retryPendingRef = useRef(false)
   const loadUserDataInProgressRef = useRef(false)
   const lastLoadedUserIdRef = useRef(null)
@@ -72,6 +79,23 @@ export function AuthProvider({ children }) {
   const forceLoadingFalse = useCallback(() => {
     retryPendingRef.current = false
     setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const sync = () => {
+      const id = resolveSupportTenantOverride(window.location.search)
+      setSupportTenantOverride(id || null)
+    }
+    window.addEventListener("storage", sync)
+    window.addEventListener("pm-support-tenant", sync)
+    window.addEventListener("popstate", sync)
+    const t = window.setInterval(sync, 2000)
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener("pm-support-tenant", sync)
+      window.removeEventListener("popstate", sync)
+      window.clearInterval(t)
+    }
   }, [])
 
   const applyNestProfile = useCallback((profile) => {
@@ -511,7 +535,15 @@ export function AuthProvider({ children }) {
         user,
         tipoUtente,
         ruolo,
-        tenantId,
+        /** Tenant effettivo: per Super Admin può essere override Sala QA. */
+        tenantId:
+          ruolo === "superadmin" && supportTenantOverride
+            ? supportTenantOverride
+            : tenantId,
+        /** Tenant dal profilo auth (senza override supporto). */
+        authTenantId: tenantId,
+        supportTenantOverride,
+        isSupportTenantMode: Boolean(ruolo === "superadmin" && supportTenantOverride),
         permessiAree,
         nestTenantNome,
         loading,

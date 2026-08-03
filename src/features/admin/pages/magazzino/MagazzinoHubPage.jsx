@@ -24,9 +24,9 @@ export default function MagazzinoHubPage() {
     <>
       <h1 className="dashboard-page-title">Magazzino</h1>
       <p style={{ margin: "0 0 20px 0", fontSize: 14, color: "#64748b", lineHeight: 1.55 }}>
-        Gestione acquisti e movimenti verso fornitore. I <strong>movimenti magazzino</strong> possono essere salvati su Supabase
-        (tabella <code>magazzino_movimenti</code> dopo <code>sql/sql_upgrade.sql</code>); ordini fornitori e DDT restano in
-        questo browser fino a integrazione completa.
+        Acquisti e movimenti: <strong>fornitori</strong>, <strong>DDT</strong> e <strong>movimenti</strong> sono
+        salvati su Supabase per il locale. Se il database non è raggiungibile, l&apos;app usa un salvataggio locale di
+        emergenza e lo importa al primo collegamento riuscito.
       </p>
       <DashboardNavCards items={ITEMS} columns={2} currentPath="/admin/magazzino" />
       <p style={{ marginTop: 24, fontSize: 13, color: "#94a3b8" }}>

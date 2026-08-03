@@ -75,3 +75,6 @@ dist/
 
 # dataconnect generated files
 .dataconnect
+
+# Stato locale del Supabase CLI: non e' una migrazione ne' configurazione condivisa.
+supabase/.temp/

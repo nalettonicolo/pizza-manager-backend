@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 import { ValidationPipe } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import helmet from 'helmet'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
@@ -43,8 +44,13 @@ if (process.env.NODE_ENV !== 'production') {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
+  const isProduction = process.env.NODE_ENV === 'production'
 
-  if (process.env.SWAGGER_ENABLED !== 'false') {
+  app.use(helmet())
+  app.getHttpAdapter().getInstance().set('trust proxy', 1)
+
+  // In produzione la documentazione API non viene esposta per default.
+  if (process.env.SWAGGER_ENABLED === 'true') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Pizzeria API')
       .setDescription(
@@ -71,8 +77,18 @@ async function bootstrap() {
 
   // CORS per frontend in deploy (es. Firebase / Vercel)
   const corsOrigin = process.env.CORS_ORIGIN || process.env.FRONTEND_URL
+  if (isProduction && !corsOrigin) {
+    throw new Error('CORS_ORIGIN (o FRONTEND_URL) obbligatorio in produzione')
+  }
+  const allowedOrigins = corsOrigin
+    ? corsOrigin.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : ['http://localhost:5173', 'http://127.0.0.1:5173']
   app.enableCors({
-    origin: corsOrigin ? corsOrigin.split(',').map((o) => o.trim()) : true,
+    origin(origin, callback) {
+      // Richieste server-to-server e strumenti CLI non hanno l'header Origin.
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+      return callback(new Error('Origine CORS non consentita'))
+    },
     credentials: true,
   })
 

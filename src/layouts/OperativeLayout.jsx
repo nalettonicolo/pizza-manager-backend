@@ -10,7 +10,7 @@ import {
   isTabletLike,
 } from "@/hooks/usePizzaioloFullscreen";
 import { OPERATIVE_ROLE_HOME, PIZZAIOLO_TEST_INGRESSO_PATH } from "@/constants/operativeRoutes";
-import { ENABLE_TEST_REPARTI, PERMESSI_TUTTE_AREE } from "@/constants/testReparti";
+import { PERMESSI_TUTTE_AREE } from "@/constants/testReparti";
 import { isDefaultAreaForRole } from "@/utils/operativeAreaAccess";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import { OPERATIVE_AREA_NAV } from "@/constants/operativeNav";
@@ -19,8 +19,9 @@ import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { isViewportLayoutPreviewSearch } from "@/utils/viewportLayoutPreview";
 import { applyTenantFavicon } from "@/utils/tenantFavicon";
+import { isQaSupportSearch } from "@/utils/viewportLayoutPreview";
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -57,13 +58,15 @@ export default function OperativeLayout() {
   }, [logoUrl]);
 
   const ruoloKey = typeof ruolo === "string" ? ruolo.toLowerCase().trim() : "";
-  const viewportLayoutPreview = isViewportLayoutPreviewSearch(location.search);
+  const isSaSupport =
+    ruoloKey === "superadmin" &&
+    (isQaSupportSearch(location.search) || Boolean(new URLSearchParams(location.search).get("support_tenant")));
   const defaultPath =
     isQuadRepartiTestEmail(user?.email) && ruoloKey === "pizzaiolo"
       ? PIZZAIOLO_TEST_INGRESSO_PATH
       : OPERATIVE_ROLE_HOME[ruoloKey] || "/operative/dashboard";
   const permessiAreeEffective =
-    ruoloKey === "superadmin" && (ENABLE_TEST_REPARTI || viewportLayoutPreview)
+    ruoloKey === "superadmin"
       ? PERMESSI_TUTTE_AREE
       : isQuadRepartiTestEmail(user?.email)
         ? PERMESSI_TUTTE_AREE
@@ -164,7 +167,18 @@ export default function OperativeLayout() {
     ]);
   }, []);
 
-  if (!firstAllowedPath) {
+  // Evita schermata vuota / “Nessuna area” mentre il ruolo SA non è ancora risolto (iframe Sala QA).
+  if (!ruoloKey) {
+    return (
+      <div className={`dashboard-wrap theme-admin${tenantThemeClass}`} style={themeStyle}>
+        <main className="dashboard-main" style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: "#64748b", fontSize: 14 }}>Accesso in corso…</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!firstAllowedPath && ruoloKey !== "superadmin") {
     return (
       <div className={`dashboard-wrap theme-admin${tenantThemeClass}`} style={themeStyle}>
         <main className="dashboard-main" style={{ flex: 1, minWidth: 0 }}>
@@ -186,11 +200,11 @@ export default function OperativeLayout() {
 
   if (location.pathname === "/operative" || location.pathname === "/operative/") {
     const homeOp =
-      isQuadRepartiTestEmail(user?.email) ? "/operative/pizzaiolo-ingresso" : firstAllowedPath;
-    return <Navigate to={homeOp} replace />;
+      isQuadRepartiTestEmail(user?.email) ? "/operative/pizzaiolo-ingresso" : firstAllowedPath || "/operative/cassa";
+    return <Navigate to={`${homeOp}${location.search || ""}`} replace />;
   }
-  if (!canAccessCurrent && firstAllowedPath) {
-    return <Navigate to={firstAllowedPath} replace />;
+  if (!canAccessCurrent && firstAllowedPath && ruoloKey !== "superadmin" && !isSaSupport) {
+    return <Navigate to={`${firstAllowedPath}${location.search || ""}`} replace />;
   }
   const wrapClass = [
     "dashboard-wrap",
@@ -239,7 +253,7 @@ export default function OperativeLayout() {
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={withPreservedSupportSearch(item.to, location.search)}
                 className={({ isActive }) => (isActive ? "active" : "")}
               >
                 {item.label}

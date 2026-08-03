@@ -17,17 +17,13 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 
 ## 2. Completato di recente (repo, verificabile)
 
-- **Turni cassa**: RPC `turni_cassa_*`, tabella `turni_operatori` (se mancante), parametro `cassa_turno_obbligatorio`, gate checkout Cassa.
-- **Ordine ↔ turno**: `core.ordini.turno_operatori_id`, `create_order_with_items(..., p_turno_operatori_id)`, Cassa passa l’id turno; dettaglio ordine mostra PV e turno quando presenti.
-- **Registratore Super Admin**: fix hooks React (#310) su `SuperadminRegistratoreCassaPage` (`useMemo` prima di `if (!ready)`).
-- **DB edge cases**: FK `punti_vendita` solo se tabella base; `sql_upgrade` allineato.
-- **Cassa enterprise (realizzabile)**: tabella `cassa_ordine_audit` + RPC `cassa_audit_log`; in app: log su checkout ok/errore/fuori area; pagamento misto a righe illimitate (max 15 UI); parametro `cassa_arrotonda_5_cent`; sconto globale a cassa con riga in nota `[Sconto cassa €…]`; telemetria console + hook opzionale `window.__CASSA_TELEMETRY_HOOK__`.
-- **Super Admin — navigazione**: barra orizzontale compatta (voci top: Accesso, Commercio, Go Live, Piattaforma, Anteprima sito); sottovoci in **dropdown al passaggio del mouse** su desktop e elenco nel drawer mobile (`SuperAdminLayout.jsx`, `superadmin-enterprise.css`).
-- **Layout larghezza**: allineamento a contenuto a tutta larghezza su Super Admin, admin, operativo e layout pubblico dove previsto (CSS condivisi + pagine puntuali).
-- **Performance bundle frontend**: `vite.config.js` con `manualChunks` granulari; route pubbliche lazy in `AppRouter.jsx`; Sentry inizializzato in idle (`main.jsx`); `npm run build:analyze` + `rollup-plugin-visualizer`; dipendenze tipiche del server Nest rimosse dalla root `package.json` per alleggerire l’installazione front-only.
-- **Perimetro fiscale (ingegneria)**: modulo SQL `sql/modules/12_fiscal_outbox_payment_links.sql` (e inclusione in `sql/sql_upgrade.sql`) — `fiscal_outbox`, `payment_link_intents`, RLS/trigger; FK su **`core.tenants`** e **`core.ordini`**. Lato app: cartella `src/integrations/fiscal/` e hook post-checkout in cassa (nessuna emissione RT/SDI reale senza vendor).
-- **Vetrina / ordini online**: con ordini online disattivati — CTA hero coerenti; esperienza menù pubblico più vicina alla cassa (ricerca, tab categorie, griglia) dove implementato (`PublicStore`, componenti collegati).
-- **Qualità frontend**: ESLint 9 + Prettier + Vitest; script `ci:frontend` (lint + test + build).
+- **Modulo SQL 25**: web `IN_ATTESA` Stripe, capacity forno (`vetrina_slot_carico_oggi` + assert), antifraud (8/ora + blocklist), proof delivery (`consegna_prova`), stub `api_oauth_clients`.
+- **Checkout vetrina**: blocco fasce piene; Stripe checkout path sbloccato lato RPC.
+- **Delivery**: proof firma/foto, mappa live `/operative/delivery/mappa`, sort nearest-neighbor, rider PWA.
+- **Notifiche / fiscale**: adapter pattern Edge (stub SMTP/SMS/WA e RT/SDI); coda outbox come log.
+- **CI keep-alive Supabase**: retry e check secret (workflow verde).
+- **Macrofasi 1–5**: core completato (vedi `MACROFASI_SVILUPPO.md`); **Fase 6** = produzione hard + adapter reali.
+- **2026-08-03**: hardening RPC grants (34–35); Realtime ordini (36) su cucina/bancone/pizzaiolo/delivery; magazzino fornitori/DDT DB; stampa comanda web Francy; guide DNS host in Go-live; SA gate privacy.
 
 ---
 
@@ -35,13 +31,12 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 
 | Area | Blocco |
 |------|--------|
-| **Pagamenti online** | Gateway reale (Stripe/SumUp), edge function, webhook, PCI — serve account e scelta prodotto. |
-| **Registratore telematico / SDI** | Dispositivo o middleware certificato, normativa, commercialista — non solo codice. |
+| **Pagamenti online live** | Account Stripe **live** tenant + webhook produzione (oggi Francy ha solo `*_test_`). |
+| **Registratore telematico / SDI** | Vendor RT + commercialista — adapter stub pronto. |
 | **POS certificati (PAX/Ingenico)** | SDK/protocolli e ambiente hardware di test. |
+| **SMTP Auth cliente** | Config Dashboard Supabase (`no-reply@pizzamanager.it`). |
 | **Supporto SLA / Account manager** | Organizzazione commerciale, non repository. |
-| **Penetration test periodici** | Team security o fornitore esterno. |
-
-Questi restano **backlog prodotto** con owner business + engineering, non task “da chiudere in un branch”.
+| **Dominio reale Francy** | Registrar + hostname + Firebase custom domain (guide in Go-live). |
 
 ---
 
@@ -49,44 +44,34 @@ Questi restano **backlog prodotto** con owner business + engineering, non task �
 
 | Epic | Stato | Prossimo passo tecnico tipico |
 |------|------|-------------------------------|
-| **Cassa (ordini_cassa)** | Avanzato | Audit + misto multi-riga + arrotondamento 5 ct + telemetria leggera in codice; integrazione Sentry/OTel resta opzionale. |
-| **Offline / DR** | Non iniziato | Coda IndexedDB + sync idempotente + policy conflitti — dopo stabilità RPC cassa. |
-| **Ordini online** | WIP | Gateway; anti‑frode; notifiche se non coperte da stampa comanda automatica. |
-| **Consegne** | Todo | Stati rider, SLA, app rider — grande incremento. |
-| **Multi‑PV / report gruppo** | Parziale | PV su ordine; report consolidato e permessi gruppo — backlog dedicato. |
-| **Magazzino / contabilità** | Parziale | Migrazione dati localStorage → Supabase dove previsto. |
-| **Fiscale IT (outbox / pay-by-link)** | Parziale | DB + client/hook in cassa; **emissione** e SDI restano legati a vendor e consulenza. |
-| **API pubbliche** | Todo | OpenAPI, OAuth, rate limit — piattaforma dedicata. |
-
-Dettaglio testuale per servizio: `resto` in `serviziRoadmapSteps.js`.
+| **Ordini online** | WIP ~84% | Smoke Stripe **live** + verifica stampa comanda web. |
+| **Consegne** | WIP ~84% | Proof su Storage (mod. 37); VRP più ricco se serve. |
+| **Tablet / Realtime** | WIP ~72% | Realtime attivo; audit azione e kiosk. |
+| **Magazzino** | WIP ~78% | Giacenza valorizzata / inventari (fornitori-DDT già DB). |
+| **API pubbliche** | Todo ~42% | Nest OAuth token su `api_oauth_clients`. |
+| **Fiscale IT** | Parziale | Completare `rt-sdi.ts` quando vendor scelto. |
 
 ---
 
-## 5. Ordine di lavoro consigliato (allineato a `ROADMAP_CASSA_ENTERPRISE.md`)
+## 5. Ordine di lavoro consigliato (ora)
 
-1. **Fase 0**: applicare tutte le migration Supabase necessarie all’ambiente usato dall’app.
-2. **Blocco A (cassa)**: chiudere sotto‑epic misurabili (audit, osservabilità minima, poi pagamenti misti avanzati).
-3. **Blocco B (offline)**: dopo metriche e stabilità RPC.
-4. **Blocco C (fiscale IT)**: applicare migration su Supabase; completare flussi outbox/link in staging; integrazione vendor RT/SDI quando scelto.
-
----
-
-## 6. Cose da fare / follow-up (prodotto & architettura)
-
-- **Flussi “tutto nell’app” vs siti clienti su GitHub**: decidere se mantenere vetrina/ordini nel motore unico (Supabase + SPA) o quando proporre siti/landing per cliente su repo separati; trade-off branding, sync menu, costi operativi e supporto (discussione dedicata, non bloccante per lo sviluppo corrente).
-- **Deploy DB**: eseguire `sql/sql_upgrade.sql` (o modulo 12) sugli ambienti Supabase usati dall’app prima di validare fiscal outbox in produzione.
+1. **Stripe live** Francy (chiavi) + smoke pagamento web.
+2. **Dominio menu** Francy (DNS + Firebase + Auth redirects).
+3. Adapter SMTP / RT-SDI quando ci sono credenziali.
+4. Enterprise: billing Stripe tenant / OAuth quando in scope.
 
 ---
 
-## 7. Riferimenti
+## 6. Riferimenti
 
 | Documento | Contenuto |
 |-----------|-----------|
-| `docs/ROADMAP_CASSA_ENTERPRISE.md` | Priorità cassa → offline → fiscale IT. |
-| `docs/ARCHITETTURA_E_STATO.md` | Route vs implementazione. |
-| `DEPLOY_COMANDI.md` | Deploy frontend/backend; migrazioni DB (sezione dedicata). |
-| `sql/sql_upgrade.sql` | Script incrementali manuali. |
+| `docs/MACROFASI_SVILUPPO.md` | Macrofasi 1–5 done, Fase 6. |
+| `docs/GO_LIVE_ORDINI_WEB.md` | Produzione oggi senza adapter. |
+| `src/config/serviziRoadmapSteps.js` | Percentuali UI Super Admin. |
+| `src/content/dnsHostGuides.js` | Guide DNS per registrar. |
+| Canvas Cursor | `punto-situazione-supervisore.canvas.tsx` |
 
 ---
 
-*Ultima revisione: 2026-04-10*
+*Ultima revisione: 2026-08-03*
