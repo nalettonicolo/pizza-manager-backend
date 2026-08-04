@@ -1,7 +1,10 @@
 import { lazy, Suspense, useState } from "react"
-import { Link, Navigate, useNavigate } from "react-router-dom"
+import { Link, Navigate, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
+import { isSuperAdminRole } from "@/utils/superAdminAccess"
+import { isDemoGiroSearch } from "@/utils/demoGiro"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { RepartiQuadTestProvider } from "@/features/operative/contexts/RepartiQuadTestContext"
 
 /**
@@ -35,11 +38,15 @@ function PanelFallback() {
 }
 
 export default function RepartiQuadTestPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, ruolo } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [reloadKey, setReloadKey] = useState(0)
+  const inDemo = isDemoGiroSearch(location.search)
 
-  if (!isQuadRepartiTestEmail(user?.email)) {
+  const canAccessQuad =
+    isQuadRepartiTestEmail(user?.email) || isSuperAdminRole(ruolo)
+  if (!canAccessQuad) {
     return <Navigate to="/operative/dashboard" replace />
   }
 
@@ -49,7 +56,8 @@ export default function RepartiQuadTestPage() {
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        minHeight: 0,
+        minHeight: "100%",
+        flex: 1,
         boxSizing: "border-box",
       }}
     >
@@ -70,17 +78,35 @@ export default function RepartiQuadTestPage() {
           Pizzaioli · Bancone · Cucina · Delivery (sessione condivisa, senza iframe)
         </span>
         <Link
-          to="/operative/pizzaioli"
+          to={withPreservedSupportSearch("/operative/cassa", location.search)}
           style={{ fontSize: 13, color: "#0f766e", fontWeight: 600, marginLeft: 8 }}
         >
-          Pizzaiolo full screen
+          Torna a Cassa
         </Link>
         <Link
-          to="/operative/dashboard"
+          to={withPreservedSupportSearch("/operative/dashboard", location.search)}
           style={{ fontSize: 13, color: "#c0392b", fontWeight: 600, marginLeft: 8 }}
         >
-          Riepilogo classico
+          Riepilogo
         </Link>
+        {inDemo ? (
+          <button
+            type="button"
+            onClick={() => navigate("/superadmin/ingresso", { replace: true })}
+            style={{
+              padding: "6px 12px",
+              fontSize: 13,
+              fontWeight: 600,
+              border: "1px solid #fecaca",
+              borderRadius: 6,
+              background: "#fef2f2",
+              color: "#b91c1c",
+              cursor: "pointer",
+            }}
+          >
+            Esci demo
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setReloadKey((k) => k + 1)}

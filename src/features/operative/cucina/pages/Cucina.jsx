@@ -298,30 +298,17 @@ export default function Cucina() {
   const tasksInTab = activeSlot ? tasksBySlot[activeSlot] || [] : []
   const pendingInTab = tasksInTab.filter((t) => !t.done)
   const doneInTab = tasksInTab.filter((t) => t.done)
-  const totalPrepPending = useMemo(
-    () => Object.values(tasksBySlot).reduce((acc, list) => acc + (list || []).filter((t) => !t.done).length, 0),
-    [tasksBySlot],
-  )
 
   return (
     <div style={styles.wrapper} className="operative-mobile-pad">
-      {!quad ? (
-        <>
-          <h1 style={styles.title}>Cucina</h1>
-          <p style={styles.subtitle}>
-            Vista predefinita: solo <strong>preparazioni in cucina</strong> per la fascia selezionata. Tocca una{" "}
-            <strong>fascia oraria</strong> qui sotto per aprire il <strong>dettaglio ordini e piatti in forno</strong> per quella fascia; un secondo
-            tocco sulla <strong>stessa</strong> fascia lo nasconde (passando a un’altra fascia il dettaglio segue la fascia selezionata).
-          </p>
-        </>
-      ) : null}
+      {!quad ? <h1 style={styles.title}>Cucina</h1> : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
       {loading && orders.length === 0 ? (
         quad ? null : <p style={styles.muted}>Caricamento...</p>
       ) : orders.length === 0 ? (
-        quad ? null : <p style={styles.muted}>Nessuna lavorazione in coda (nessun ordine in preparazione).</p>
+        quad ? null : <p style={styles.muted}>Nessuna lavorazione in coda.</p>
       ) : slotTabs.length === 0 ? (
         quad ? null : <p style={styles.muted}>Nessuna fascia oraria disponibile.</p>
       ) : (
@@ -341,8 +328,8 @@ export default function Cucina() {
                   aria-expanded={compositionOpen}
                   title={
                     compositionOpen
-                      ? "Tocca di nuovo per nascondere il dettaglio ordini"
-                      : "Tocca per vedere composizione piatti e ordini in questa fascia"
+                      ? "Nascondi dettaglio ordini"
+                      : "Mostra composizione piatti e ordini"
                   }
                   style={{
                     ...styles.tabBtn,
@@ -358,45 +345,23 @@ export default function Cucina() {
               )
             })}
           </div>
-          {!quad ? (
-            <p style={styles.tabHint} role="note">
-              {compositionSlot
-                ? `Dettaglio ordini per ${slotTabLabel(compositionSlot)}: tocca di nuovo la stessa fascia (bordo arancione) per chiudere.`
-                : "Tocca una fascia oraria per mostrare piatti in forno e righe ordine; altrimenti resta solo l’elenco preparazioni."}
-            </p>
-          ) : null}
 
-          <section style={styles.prepSection} aria-label="Preparazioni cucina">
-            {!quad ? (
-              <>
-                <h2 style={styles.sectionTitle}>Da preparare (cucina)</h2>
-                <p style={styles.prepHint}>
-                  Ingredienti: flag &quot;Prep. cucina&quot; in Admin → Ingredienti. Fritti, bibite e dolci: stesso flag sul prodotto in Admin →
-                  Fritti / Bibite / Dolci. Tocca quando la preparazione è pronta.
-                  {totalPrepPending > 0 ? ` · ${totalPrepPending} totali da fare` : ""}
-                </p>
-                <p style={styles.prepLegend}>
-                  Colori base preparazione: congelato blu, affettato verde, bibite bianco, fritto giallo, comuni rosa.
-                  Se un ingrediente ha un colore personalizzato in anagrafica, qui viene usato quello.
-                </p>
-              </>
-            ) : null}
-            <div style={styles.taskList}>
-              {pendingInTab.length === 0 && doneInTab.length === 0 ? (
-                quad ? null : <p style={styles.mutedSmall}>Nessuna preparazione per questa fascia.</p>
-              ) : null}
-              {pendingInTab.map((t) => {
-                const key = `${t.ordineId}:${t.rigaId}:${t.ingredienteId}`
-                const busy = prepActionId === key
-                const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
-                const isVoceProdotto = t.kind === "prodotto"
-                const prepBg = resolvePrepTaskBackgroundColor(t, prepCategoryColors)
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    style={{
-                      ...styles.taskBtn,
+          {pendingInTab.length > 0 || doneInTab.length > 0 ? (
+            <section style={styles.prepSection} aria-label="Preparazioni cucina">
+              {!quad ? <h2 style={styles.sectionTitle}>Da preparare</h2> : null}
+              <div style={styles.taskList}>
+                {pendingInTab.map((t) => {
+                  const key = `${t.ordineId}:${t.rigaId}:${t.ingredienteId}`
+                  const busy = prepActionId === key
+                  const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
+                  const isVoceProdotto = t.kind === "prodotto"
+                  const prepBg = resolvePrepTaskBackgroundColor(t, prepCategoryColors)
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      style={{
+                        ...styles.taskBtn,
                       background: prepBg,
                       borderColor: "#d1d5db",
                     }}
@@ -436,18 +401,11 @@ export default function Cucina() {
               ) : null}
             </div>
           </section>
+          ) : null}
 
           {compositionSlot ? (
           <section style={styles.fornoSection} aria-label="Composizione in forno">
-            {!quad ? (
-              <>
-                <h2 style={styles.sectionTitle}>In forno — composizione piatti</h2>
-                <p style={styles.fornoHint}>
-                  Fascia <strong>{slotTabLabel(compositionSlot)}</strong>: dettaglio prodotti e ingredienti (in cottura in grassetto). Segna pronto
-                  quando la cucina ha finito: passa al pizzaiolo / bancone.
-                </p>
-              </>
-            ) : null}
+            {!quad ? <h2 style={styles.sectionTitle}>In forno</h2> : null}
             {(ordersBySlot[compositionSlot] || []).length === 0 ? (
               quad ? null : <p style={styles.mutedSmall}>Nessun ordine in questa fascia.</p>
             ) : (

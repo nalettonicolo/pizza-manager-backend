@@ -15,7 +15,7 @@ import { readSafeReturnTo } from "@/utils/supportTenantOverride"
 import "@/styles/login.css"
 
 export default function Login() {
-  const { login, ruolo, tipoUtente, user, loading } = useAuth()
+  const { login, logout, ruolo, tipoUtente, user, loading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -24,6 +24,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [switchingToCliente, setSwitchingToCliente] = useState(false)
   const searchParams = new URLSearchParams(location.search)
   const supportTenantId = searchParams.get("support_tenant")
   const supportReturnTo = location.state?.from
@@ -32,6 +33,23 @@ export default function Login() {
     searchParams.get("cliente") === "1" ||
     location.pathname === "/preview" ||
     location.pathname === "/negozio"
+  const staffBlockedOnClienteLogin = Boolean(forceClienteMode && user && tipoUtente === "staff")
+  const vetrinaReturnPath =
+    supportReturnTo?.pathname === "/preview" || supportReturnTo?.pathname === "/negozio"
+      ? `${supportReturnTo.pathname}${supportReturnTo.search || ""}`
+      : "/preview"
+
+  const handleExitStaffForClienteDemo = async () => {
+    setError(null)
+    setSwitchingToCliente(true)
+    try {
+      await logout()
+    } catch (e) {
+      setError(e?.message || "Uscita non riuscita. Riprova.")
+    } finally {
+      setSwitchingToCliente(false)
+    }
+  }
 
   useEffect(() => {
     if (loading) return
@@ -57,8 +75,9 @@ export default function Login() {
       return `${p}?${params.toString()}`
     }
 
-    // Super Admin in Sala QA / supporto: mai restare sul form login.
-    if (isSuperAdminRole(ruolo) && (qaSupport || returnPathFromState || returnToQuery)) {
+    // Solo Sala QA / supporto live: torna alla schermata richiesta (cassa, cucina, …).
+    // Login SA normale → sempre /superadmin/ingresso (scelta Anteprima / Amministrazione).
+    if (isSuperAdminRole(ruolo) && qaSupport) {
       if (returnPathFromState) {
         navigate(returnPathFromState.includes("?") ? returnPathFromState : buildQaTarget(returnPathFromState), {
           replace: true,
@@ -78,8 +97,29 @@ export default function Login() {
     // Solo anteprima layout della pagina login (tool Test layout), non Sala QA.
     if (layoutOnlyPreview) return
 
-    if (returnPathFromState && isSuperAdminRole(ruolo)) {
-      navigate(returnPathFromState, { replace: true })
+    // Login cliente da vetrina (/login?cliente=1): se c'è ancora sessione staff/SA,
+    // NON dirottare al gate — serve uscire e accedere come cliente (demo ai clienti).
+    // Eccezione: giro demo SA (_demo_giro) non deve passare da qui.
+    if (forceClienteMode && tipoUtente === "staff" && !isQaSupportSearch(location.search)) {
+      return
+    }
+
+    // Super Admin fuori da Sala QA:
+    // - login pulito → ingresso a 2 tasti
+    // - return_to / state verso area superadmin (es. Sala QA) → onora la destinazione
+    if (isSuperAdminRole(ruolo) && !qaSupport) {
+      const fromState =
+        returnPathFromState && returnPathFromState.startsWith("/superadmin/")
+          ? returnPathFromState
+          : null
+      const fromQuery =
+        returnToQuery && returnToQuery.startsWith("/superadmin/") ? returnToQuery : null
+      const saTarget = fromState || fromQuery
+      if (saTarget && saTarget !== "/superadmin/ingresso" && !saTarget.startsWith("/superadmin/ingresso?")) {
+        navigate(saTarget, { replace: true })
+        return
+      }
+      navigate("/superadmin/ingresso", { replace: true })
       return
     }
 
@@ -99,6 +139,14 @@ export default function Login() {
     }
 
     if (tipoUtente === "cliente") {
+      if (forceClienteMode && returnToQuery && (returnToQuery.startsWith("/preview") || returnToQuery.startsWith("/negozio"))) {
+        navigate(returnToQuery, { replace: true })
+        return
+      }
+      if (forceClienteMode && supportReturnTo?.pathname && (supportReturnTo.pathname === "/preview" || supportReturnTo.pathname === "/negozio")) {
+        navigate(`${supportReturnTo.pathname}${supportReturnTo.search || ""}`, { replace: true })
+        return
+      }
       devLog("Login", "redirect → /cliente/dashboard")
       navigate("/cliente/dashboard", { replace: true })
       return
@@ -111,13 +159,13 @@ export default function Login() {
       else if (ruoloNorm === "admin" || ruoloNorm === "owner") targetRoute = ADMIN_TENANT_HOME
       else targetRoute = getOperativeHomePathForStaff(ruolo, user?.email)
 
-      if (isSuperAdminRole(ruolo) && qaSupport && supportTenantId) {
-        navigate(buildQaTarget(returnToQuery || "/operative/cassa"), { replace: true })
+      if (returnPathFromState) {
+        navigate(returnPathFromState, { replace: true })
         return
       }
 
-      if (isSuperAdminRole(ruolo) && returnToQuery) {
-        navigate(buildQaTarget(returnToQuery), { replace: true })
+      if (returnToQuery && !returnToQuery.startsWith("/superadmin")) {
+        navigate(returnToQuery, { replace: true })
         return
       }
 
@@ -201,14 +249,52 @@ export default function Login() {
             <div className="login-brand-mark" aria-hidden="true">
               🍕
             </div>
-            <h1 className="login-brand-title">{isSaaS ? "PizzaManager" : "Accedi"}</h1>
+            <h1 className="login-brand-title">{isSaaS && !forceClienteMode ? "PizzaManager" : "Accedi"}</h1>
             <p className="login-brand-sub">
               {isSaaS && !forceClienteMode
                 ? "Accesso per staff e operatori della piattaforma. Account cliente: usa il sito della tua pizzeria."
-                : "Accedi con l’account cliente per questa pizzeria. Il personale accede da PizzaManager."}
+                : "Accedi con l’account cliente per ordinare online. Il personale usa il login staff da PizzaManager."}
             </p>
           </div>
 
+          {staffBlockedOnClienteLogin ? (
+            <div
+              role="status"
+              style={{
+                marginBottom: 16,
+                padding: "14px 16px",
+                borderRadius: 10,
+                background: "#fff7ed",
+                border: "1px solid #fdba74",
+                color: "#9a3412",
+                fontSize: 14,
+                lineHeight: 1.45,
+              }}
+            >
+              <p style={{ margin: "0 0 12px" }}>
+                Sei ancora connesso come <strong>staff / Super Admin</strong>. Per mostrare il percorso cliente (carrello,
+                ordini) esci da questa sessione e accedi con un account cliente, oppure crea un account dalla vetrina.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button
+                  type="button"
+                  className="login-submit"
+                  style={{ width: "auto", margin: 0, padding: "10px 16px" }}
+                  disabled={switchingToCliente}
+                  onClick={() => void handleExitStaffForClienteDemo()}
+                >
+                  {switchingToCliente ? "Uscita…" : "Esci e continua come cliente"}
+                </button>
+                <Link
+                  to={vetrinaReturnPath}
+                  className="login-back"
+                  style={{ alignSelf: "center", margin: 0 }}
+                >
+                  Torna alla vetrina
+                </Link>
+              </div>
+            </div>
+          ) : (
           <form className="login-form" onSubmit={handleSubmit} noValidate>
             <div className="login-field">
               <label className="login-label" htmlFor="login-email">
@@ -274,12 +360,22 @@ export default function Login() {
               {submitting ? "Accesso in corso…" : "Accedi"}
             </button>
           </form>
+          )}
+
+          {error && staffBlockedOnClienteLogin ? (
+            <p className="login-error" role="alert">
+              {error}
+            </p>
+          ) : null}
 
           <div className="login-footer-links">
             {!isSaaS || forceClienteMode ? (
               <>
-                <Link to="/registrazione" className="login-back">
-                  Crea account
+                <Link
+                  to={`/registrazione${forceClienteMode ? "?from=preview" : ""}`}
+                  className="login-back"
+                >
+                  Crea account cliente
                 </Link>
                 <Link to="/password-dimenticata" className="login-back">
                   Password dimenticata
@@ -290,8 +386,8 @@ export default function Login() {
                 Recupero password: solo sul sito della pizzeria (menu online).
               </p>
             )}
-            <Link to="/" className="login-back">
-              ← Torna alla home
+            <Link to={forceClienteMode ? vetrinaReturnPath : "/"} className="login-back">
+              {forceClienteMode ? "← Torna alla vetrina" : "← Torna alla home"}
             </Link>
           </div>
         </div>

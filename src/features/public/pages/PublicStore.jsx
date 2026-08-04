@@ -175,7 +175,10 @@ export default function PublicStore() {
     (product) => {
       if (!vetrinaOrdiniOk) return;
       if (!user) {
-        navigate("/login", {
+        const qs = new URLSearchParams(location.search || "");
+        qs.set("cliente", "1");
+        qs.set("return_to", `${location.pathname}${location.search || ""}`);
+        navigate(`/login?${qs.toString()}`, {
           state: {
             from: location,
             pendingProductId: product?.id ?? null,
@@ -279,7 +282,8 @@ export default function PublicStore() {
                 <code style={{ fontSize: 12 }}>demo</code>, oppure imposta{" "}
                 <code style={{ fontSize: 12 }}>VITE_PUBLIC_DEMO_TENANT_ID</code> nel file{" "}
                 <code style={{ fontSize: 12 }}>.env</code>, oppure aggiungi{" "}
-                <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> all&apos;URL.
+                <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> o{" "}
+                <code style={{ fontSize: 12 }}>?support_tenant=&lt;uuid&gt;</code> all&apos;URL.
               </>
             ) : (
               <>Al momento non ci sono piatti disponibili online.</>

@@ -139,6 +139,11 @@
     display: flex;
     flex-direction: column;
   }
+
+  /* Salvaguardia: se il contenitore non ha altezza (iframe QA), non collassare a 0 */
+  .dashboard-wrap--cassa-mobile .dashboard-content > .cassa-page-root {
+    min-height: min(480px, 70dvh);
+  }
 }
 
 /* Tab bar cassa (fissa in basso) */

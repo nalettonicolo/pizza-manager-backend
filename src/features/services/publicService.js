@@ -92,7 +92,8 @@ async function tryFetchMenuForDomainNest(host) {
 }
 
 /**
- * Opzioni tenant da query string: `?tenant=<uuid>`, `?tenantId=<uuid>`, `?slug=<slug>`
+ * Opzioni tenant da query string:
+ * `?tenant=<uuid>`, `?tenantId=<uuid>`, `?support_tenant=<uuid>` (Sala QA), `?slug=<slug>`
  * @param {string} [searchString] — es. `location.search` (`?foo=bar`)
  */
 export function parsePublicTenantQuery(searchString) {
@@ -104,11 +105,50 @@ export function parsePublicTenantQuery(searchString) {
   } catch {
     return {};
   }
-  const id = (p.get("tenant") || p.get("tenantId") || "").trim();
+  const id = (p.get("tenant") || p.get("tenantId") || p.get("support_tenant") || "").trim();
   if (UUID_RE.test(id)) return { tenantId: id };
   const slug = (p.get("slug") || "").trim();
   if (slug) return { tenantSlug: slug };
   return {};
+}
+
+/**
+ * Dopo hardening RLS, anon non legge public.tenants: usa RPC pubblica.
+ * Fallback sintetico se la RPC manca ancora (menu via get_public_menu_for_tenant).
+ * @param {string} tenantId
+ */
+async function fetchPublicTenantById(tenantId) {
+  if (!tenantId || !UUID_RE.test(tenantId)) return null;
+
+  const { data, error } = await supabase.rpc("get_public_tenant_by_id", {
+    p_tenant_id: tenantId,
+  });
+  if (!error && data && typeof data === "object") {
+    return data;
+  }
+  if (error && !isRpcMissingError(error)) {
+    logSupabaseError("publicService.fetchPublicTenantById", error, {
+      p_tenant_id: tenantId,
+    });
+  }
+
+  const { data: row, error: selErr } = await supabase
+    .from("tenants")
+    .select("*")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (!selErr && row) return row;
+
+  // Sintetico: consente comunque get_public_menu_for_tenant(p_tenant_id).
+  // `piano` assente → resolveServiziIdsForTenant usa default TRIAL (include ordini_online).
+  return {
+    id: tenantId,
+    nome: "Pizzeria",
+    slug: null,
+    logo_url: null,
+    attivo: true,
+    parametri_operativi: {},
+  };
 }
 
 /**
@@ -152,13 +192,13 @@ async function resolveSaaSPublicTenant(resolved = {}) {
   }
 
   if (tenantId) {
-    const { data, error } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle();
-    if (!error && data) return data;
+    const byId = await fetchPublicTenantById(tenantId);
+    if (byId) return byId;
   }
 
   if (envId && String(envId).trim()) {
-    const { data, error } = await supabase.from("tenants").select("*").eq("id", String(envId).trim()).maybeSingle();
-    if (!error && data) return data;
+    const byEnv = await fetchPublicTenantById(String(envId).trim());
+    if (byEnv) return byEnv;
   }
 
   if (slugTry) {
@@ -167,6 +207,7 @@ async function resolveSaaSPublicTenant(resolved = {}) {
   }
 
   // Fallback anteprima SaaS: primo tenant attivo (es. unica pizzeria live senza slug "demo")
+  // Nota: spesso fallisce per RLS anon; preferire ?tenant= / support_tenant / VITE_PUBLIC_DEMO_TENANT_ID.
   const { data: activeTenant, error: activeErr } = await supabase
     .from("tenants")
     .select("*")
@@ -368,7 +409,7 @@ export async function getPublicMenuIngredientNames(tenantId, productIds) {
 /**
  * Info tenant per home pubblica (chiuso oggi, branding, carrello).
  * @param {{ tenantId?: string | null, tenantSlug?: string | null, search?: string }} [options]
- * — `search`: tipicamente `location.search` per `?tenant=` / `?slug=`
+ * — `search`: tipicamente `location.search` per `?tenant=` / `?support_tenant=` / `?slug=`
  */
 export async function getPublicTenantInfo(options = {}) {
   const host = getBrowserHostname();

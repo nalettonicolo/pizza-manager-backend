@@ -7317,6 +7317,47 @@ COMMENT ON FUNCTION public.resolve_public_tenant_by_domain(text) IS 'Menu pubbli
 GRANT EXECUTE ON FUNCTION public.resolve_public_tenant_by_domain(text) TO anon;
 GRANT EXECUTE ON FUNCTION public.resolve_public_tenant_by_domain(text) TO authenticated;
 
+-- Anteprima SaaS (/preview, /negozio): tenant per UUID (anon non SELECT su tenants post-hardening)
+CREATE OR REPLACE FUNCTION public.get_public_tenant_by_id(p_tenant_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, core, admin, pg_temp
+AS $$
+DECLARE
+  v_row JSONB;
+BEGIN
+  IF p_tenant_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT jsonb_build_object(
+    'id', t.id,
+    'nome', t.nome,
+    'slug', t.slug,
+    'logo_url', t.logo_url,
+    'attivo', COALESCE(t.attivo, true),
+    'piano', t.piano,
+    'parametri_operativi', COALESCE(t.parametri_operativi, '{}'::JSONB),
+    'orari_settimana', t.orari_settimana,
+    'indirizzo', t.indirizzo
+  )
+  INTO v_row
+  FROM admin.tenants t
+  WHERE t.id = p_tenant_id
+    AND COALESCE(t.attivo, true) = true
+    AND t.deleted_at IS NULL;
+
+  RETURN v_row;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_public_tenant_by_id(UUID) IS
+  'Anteprima SaaS: branding/tenant attivo per UUID (anon). Solo campi pubblici. (mod. 39)';
+
+REVOKE ALL ON FUNCTION public.get_public_tenant_by_id(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_public_tenant_by_id(UUID) TO anon, authenticated;
+
 -- Menu filtrato per tenant risolto dal dominio (stesso schema della vista prodotti_menu_pubblico)
 CREATE OR REPLACE FUNCTION public.get_public_menu_for_domain(p_host text)
 RETURNS SETOF public.prodotti_menu_pubblico

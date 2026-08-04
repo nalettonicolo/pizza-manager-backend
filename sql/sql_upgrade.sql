@@ -36,4 +36,5 @@
 --   sql/modules/36_realtime_ordini_publication.sql  ← Realtime core.ordini (cucina/bancone)
 --   sql/modules/37_storage_consegna_prove.sql  ← bucket Storage privato firma/foto delivery
 --   sql/modules/38_advisor_residuals_turni_search_path.sql  ← policy turni_operatori + search_path pm_storage
+--   sql/modules/39_public_tenant_by_id.sql  ← RPC anteprima SaaS (anon) get_public_tenant_by_id
 -- =============================================================================

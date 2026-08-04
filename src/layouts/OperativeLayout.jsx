@@ -22,6 +22,8 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { applyTenantFavicon } from "@/utils/tenantFavicon";
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview";
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
+import { isSuperAdminRole } from "@/utils/superAdminAccess";
+import { isDemoGiroSearch } from "@/utils/demoGiro";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -110,12 +112,20 @@ export default function OperativeLayout() {
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
   const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
-  const operativeFullBleed = isPizzaioloPage || isRepartiQuadTestPage || isOperativeIngressoPage;
+  const inDemoLive = isDemoGiroSearch(location.search);
+  /** SA / demo / Sala QA: sidebar sempre utile per cambiare reparto (niente full-bleed pizzaiolo). */
+  const keepOperativeSidebar =
+    ruoloKey === "superadmin" || isSaSupport || inDemoLive || isSuperAdminRole(ruolo);
+  const operativeFullBleed =
+    (isPizzaioloPage && !keepOperativeSidebar) ||
+    isRepartiQuadTestPage ||
+    isOperativeIngressoPage;
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const narrowViewport = useMediaQuery("(max-width: 900px)");
+  /** Sala QA: drawer ok, ma niente shell cassa-mobile che collassa il contenuto. */
   const useDrawerSidebar = narrowViewport && !operativeFullBleed;
   const matchedNavItem = [...ROLE_NAV]
     .sort((a, b) => b.to.length - a.to.length)
@@ -127,7 +137,7 @@ export default function OperativeLayout() {
   const headerTitle = headerSubtitle ? `Area operativa — ${headerSubtitle}` : `Area operativa${operatoreLabel ? ` — ${operatoreLabel}` : ""}`;
   const headerTitleCompact = headerSubtitle || (operatoreLabel ? operatoreLabel : "Area operativa");
 
-  useAutoFullscreenOnTablet(isPizzaioloPage);
+  useAutoFullscreenOnTablet(isPizzaioloPage && !keepOperativeSidebar);
 
   useEffect(() => {
     const sync = () => setTabletLike(isTabletLike());
@@ -206,13 +216,18 @@ export default function OperativeLayout() {
   if (!canAccessCurrent && firstAllowedPath && ruoloKey !== "superadmin" && !isSaSupport) {
     return <Navigate to={`${firstAllowedPath}${location.search || ""}`} replace />;
   }
+  // Sala QA / support_tenant: evita layout cassa-mobile (min-height:0 + overflow hidden)
+  // che in iframe/popup collassa il contenuto a schermo beige vuoto.
+  // Stessa condizione di CassaPage (`isQaSupportSearch`), non solo SA+override.
+  const qaSupportPreview = isQaSupportSearch(location.search);
+  const useCassaMobileShell = isCassaPage && narrowViewport && !qaSupportPreview;
   const wrapClass = [
     "dashboard-wrap",
     "theme-admin",
     tenantThemeClass.trim(),
     operativeFullBleed ? "pizzaiolo-fullscreen" : "",
     useDrawerSidebar ? "dashboard-wrap--drawer-sidebar" : "",
-    isCassaPage && narrowViewport ? "dashboard-wrap--cassa-mobile" : "",
+    useCassaMobileShell ? "dashboard-wrap--cassa-mobile" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -243,7 +258,14 @@ export default function OperativeLayout() {
               <img src={logoUrl} alt={brandName} style={{ maxWidth: "100%", maxHeight: 48, objectFit: "contain" }} />
             </div>
           )}
-          <h2 className="dashboard-sidebar-title">Area operativa</h2>
+          <h2 className="dashboard-sidebar-title">
+            {inDemoLive ? "Demo live" : "Area operativa"}
+          </h2>
+          {inDemoLive ? (
+            <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8", lineHeight: 1.35 }}>
+              Naviga i reparti da qui. Usa «4 schermate» per la vista multipla.
+            </p>
+          ) : null}
           {isCassaPage && cassaSidebar ? (
             <div className="dashboard-sidebar-cassa-slot" style={{ marginBottom: 14 }}>
               {cassaSidebar}
@@ -259,6 +281,14 @@ export default function OperativeLayout() {
                 {item.label}
               </NavLink>
             ))}
+            {(isSuperAdminRole(ruolo) || inDemoLive) ? (
+              <NavLink
+                to={withPreservedSupportSearch("/operative/test-reparti-quad", location.search)}
+                className={({ isActive }) => (isActive ? "active" : "")}
+              >
+                4 schermate
+              </NavLink>
+            ) : null}
           </nav>
           <div className="dashboard-sidebar-footer">
             <p className="user-email" title={user?.email}>{operatoreLabel || user?.email}</p>
@@ -267,12 +297,22 @@ export default function OperativeLayout() {
                 Ruolo: {RUOLO_SIDEBAR_LABEL[ruoloKey] ?? ruoloKey}
               </p>
             ) : null}
+            {inDemoLive ? (
+              <button
+                type="button"
+                className="btn-logout btn-logout-red"
+                style={{ marginTop: 10, width: "100%" }}
+                onClick={() => navigate("/superadmin/ingresso", { replace: true })}
+              >
+                Esci demo
+              </button>
+            ) : null}
           </div>
         </aside>
       )}
       <div className={`dashboard-main${operativeFullBleed ? " pizzaiolo-fullscreen-main" : ""}`}>
         <CassaHeaderContext.Provider value={{ setContent: setCassaToolbar, setSidebar: setCassaSidebar }}>
-          {isPizzaioloPage && (
+          {isPizzaioloPage && operativeFullBleed && (
             <div className="pizzaiolo-floating-bar" role="toolbar" aria-label="Azioni Pizzaiolo">
               {tabletLike && (
                 <button

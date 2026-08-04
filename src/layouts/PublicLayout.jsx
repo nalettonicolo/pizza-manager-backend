@@ -18,7 +18,12 @@ export default function PublicLayout() {
   const isLanding = isSaaS && pathname === "/"
   /** Pagina vendita online: nav centrale (landing la mostra solo su `/`). */
   const isVetrinaPage = pathname === "/negozio" || pathname === "/preview"
-  const customerAuthQuery = search ? `${search}${search.includes("?") ? "&" : "?"}cliente=1` : "?cliente=1"
+  const customerAuthQuery = (() => {
+    const qs = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
+    qs.set("cliente", "1")
+    qs.set("return_to", `${pathname}${search || ""}`)
+    return `?${qs.toString()}`
+  })()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [tenantName, setTenantName] = useState("")
   const [publicTenantId, setPublicTenantId] = useState(null)

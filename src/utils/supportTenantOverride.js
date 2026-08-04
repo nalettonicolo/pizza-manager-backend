@@ -61,7 +61,8 @@ export function isSupportOrViewportPreviewSearch(search) {
     p.has("_viewport_tester") ||
     p.has("_studio") ||
     p.has("_qa_console") ||
-    p.has(SUPPORT_TENANT_QUERY)
+    p.has(SUPPORT_TENANT_QUERY) ||
+    p.has("_demo_giro")
   )
 }
 
@@ -106,7 +107,7 @@ export function readSafeReturnTo(search) {
 }
 
 /**
- * Conserva marker Sala QA (`support_tenant`, `_qa_console`, …) nei NavLink.
+ * Conserva marker Sala QA / demo giro (`support_tenant`, `_qa_console`, `_demo_giro`, …) nei NavLink.
  * @param {string} to
  * @param {string} [search] location.search
  */
@@ -115,5 +116,16 @@ export function withPreservedSupportSearch(to, search) {
   if (!search || !isSupportOrViewportPreviewSearch(search)) return base
   if (base.includes("?")) return base
   const q = search.startsWith("?") ? search : `?${search}`
-  return `${base}${q}`
+  // Mantieni anche marker demo giro se presenti
+  try {
+    const src = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q)
+    const dst = new URLSearchParams()
+    for (const key of ["support_tenant", "tenant", "_qa_console", "_demo_giro", "_demo_step", "return_to"]) {
+      if (src.has(key)) dst.set(key, src.get(key))
+    }
+    const s = dst.toString()
+    return s ? `${base}?${s}` : base
+  } catch {
+    return `${base}${q}`
+  }
 }

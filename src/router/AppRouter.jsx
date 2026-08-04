@@ -17,6 +17,7 @@ import ContabilitaFullRoutesGate from "@/features/admin/components/ContabilitaFu
 import ClienteRoute from "@/components/ClienteRoute";
 import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
 import RoleLayout from "@/layouts/RoleLayout";
+import RouteErrorBoundary from "@/components/RouteErrorBoundary";
 
 /* ================= PUBLIC (SaaS) — lazy per ridurre JS iniziale (landing / vetrina / legal) ================= */
 const lazy = createLazyWithChunkReload(reactLazy);
@@ -576,7 +577,7 @@ export default function AppRouter() {
         >
           <Route path="/operative" element={<Navigate to="/operative/dashboard" replace />} />
           <Route path="/operative/dashboard" element={<Suspense fallback={<PageFallback />}><OperativeDashboard /></Suspense>} />
-          <Route path="/operative/cassa" element={<Suspense fallback={<PageFallback />}><CassaPage /></Suspense>} />
+          <Route path="/operative/cassa" element={<Suspense fallback={<PageFallback />}><RouteErrorBoundary><CassaPage /></RouteErrorBoundary></Suspense>} />
           <Route path="/operative/cassa/fidelity" element={<Suspense fallback={<PageFallback />}><CassaFidelityPage /></Suspense>} />
           <Route path="/operative/cassa/stampanti-reparti" element={<Suspense fallback={<PageFallback />}><CassaStampantiRepartiPage /></Suspense>} />
           <Route path="/operative/cassa/prodotti-esauriti" element={<Suspense fallback={<PageFallback />}><ProdottiEsauritiPage /></Suspense>} />

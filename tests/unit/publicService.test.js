@@ -9,6 +9,11 @@ describe("publicService tenant query parsing", () => {
     expect(parsePublicTenantQuery(`?tenantId=${uuid}`)).toEqual({ tenantId: uuid })
   })
 
+  it("estrae tenantId da support_tenant (Sala QA)", () => {
+    const uuid = "123e4567-e89b-12d3-a456-426614174000"
+    expect(parsePublicTenantQuery(`?support_tenant=${uuid}&_qa_console=1`)).toEqual({ tenantId: uuid })
+  })
+
   it("ignora tenantId non valido e usa slug", () => {
     expect(parsePublicTenantQuery("?tenant=abc&slug=roma-centro")).toEqual({ tenantSlug: "roma-centro" })
   })

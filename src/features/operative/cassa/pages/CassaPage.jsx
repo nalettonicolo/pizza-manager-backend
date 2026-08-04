@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo, useCallback, useLayoutEffect, useRef } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { usePv } from "@/app/contexts/PvContext"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenantServizi, resolveServiziIdsForTenant } from "@/app/hooks/useTenantServizi"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
+import { isQaSupportSearch } from "@/utils/viewportLayoutPreview"
 
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs"
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid"
@@ -291,6 +292,7 @@ function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
 
 export default function CassaPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { tenantId, tenantData, refreshTenant } = useTenant()
   const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline, flushing: offlineFlushing, lastFlush } = useOfflineSync(tenantId)
   const pvCtx = usePv()
@@ -335,7 +337,9 @@ export default function CassaPage() {
     () => cart.length > 0 || (tipoOrdine === TIPO_ORDINE.DELIVERY && Boolean(selectedCliente)),
     [cart.length, tipoOrdine, selectedCliente],
   )
-  const cassaMobileLayout = useMediaQuery("(max-width: 900px)")
+  const narrowCassaViewport = useMediaQuery("(max-width: 900px)")
+  /** In Sala QA il layout mobile collassa il contenuto (schermo beige): forza desktop. */
+  const cassaMobileLayout = narrowCassaViewport && !isQaSupportSearch(location.search)
   const [cassaMobileTab, setCassaMobileTab] = useState("menu")
   const [checkoutNote, setCheckoutNote] = useState("")
   const [checkoutTipoPagamento, setCheckoutTipoPagamento] = useState(TIPI_PAGAMENTO[0])
@@ -360,6 +364,8 @@ export default function CassaPage() {
   const [showImpostazioniCassa, setShowImpostazioniCassa] = useState(false)
   const [ordiniOggi, setOrdiniOggi] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
+  /** Data locale (YYYY-MM-DD): dichiarata subito — usata in effect/deps prima di altri memo. */
+  const todayStr = useMemo(() => getLocalYYYYMMDD(), [])
   const [showPlanningBar, setShowPlanningBar] = useState(false)
   const [productIngredientiMap, setProductIngredientiMap] = useState({})
   const [productIngredientIdsMap, setProductIngredientIdsMap] = useState({})
@@ -916,7 +922,6 @@ export default function CassaPage() {
     }
   }, [loadOrdini])
 
-  const todayStr = useMemo(() => getLocalYYYYMMDD(), [])
   const ordiniOggiFiltered = useMemo(() => {
     return (ordiniOggi || []).filter((o) => orderCreatedLocalDateKey(o) === todayStr)
   }, [ordiniOggi, todayStr])
@@ -1041,6 +1046,11 @@ export default function CassaPage() {
   )
 
   // Ricerca clienti delivery (solo se c'è testo cercato e nessun cliente già selezionato con stesso testo)
+  const displayCliente = (c) =>
+    c
+      ? [c.nome, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""].filter(Boolean).join(" – ")
+      : ""
+
   useEffect(() => {
     if (tipoOrdine !== TIPO_ORDINE.DELIVERY || !tenantId) {
       setDeliverySearchResults([])
@@ -1128,10 +1138,6 @@ export default function CassaPage() {
     }
   }, [showRiepilogo, tenantId])
 
-  const displayCliente = (c) =>
-    c
-      ? [c.nome, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""].filter(Boolean).join(" – ")
-      : ""
   const handleSelectCliente = useCallback((c) => {
     const savedDraft = c?.id ? deliveryDraftByClienteId[c.id] : null
     setSelectedCliente(c)
@@ -2005,12 +2011,24 @@ export default function CassaPage() {
       }
       const noteForOrder = noteParts.length ? noteParts.join("\n") : undefined
 
-      const rawConsegna =
-        tipoOrdine === TIPO_ORDINE.DELIVERY ? (deliverySearch || selectedCliente?.indirizzo || "").trim() : ""
+      // Nome e indirizzo restano campi distinti: deliverySearch è solo UI ricerca ("Nome – Via…").
+      let rawConsegna = ""
+      let nomeCliente = ""
+      if (tipoOrdine === TIPO_ORDINE.DELIVERY) {
+        if (selectedCliente?.indirizzo) {
+          rawConsegna = String(selectedCliente.indirizzo).trim()
+          nomeCliente = String(selectedCliente.nome || "").trim()
+        } else {
+          const split = splitNomeDaIndirizzoConsegna(deliverySearch)
+          rawConsegna = (split.addrPart || split.full || "").trim()
+          nomeCliente = (split.nomePart || "").trim()
+        }
+      } else if (tipoOrdine === TIPO_ORDINE.NEGOZIO) {
+        nomeCliente = (checkoutNomeCliente || "").trim()
+      }
       const indirizzoConsegna = rawConsegna
         ? formatIndirizzoDisplayItaliano(rawConsegna) || rawConsegna
         : ""
-      const nomeCliente = tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutNomeCliente || "").trim() : ""
       const telefonoRitiroNegozio =
         tipoOrdine === TIPO_ORDINE.NEGOZIO ? (checkoutTelefonoCliente || "").trim() : ""
       const orarioRitiro = orarioRitiroFromSelectedSlot(checkoutSelectedSlot)
@@ -3854,13 +3872,19 @@ export default function CassaPage() {
                   style={{ ...styles.impostazioniBtn, marginTop: 8 }}
                   onClick={() => {
                     setModificaOrdineModal(ordineDetail)
+                    const nomeSaved = ordineNomeCliente(ordineDetail)
+                    const indirizzoSaved = ordineIndirizzoConsegna(ordineDetail)
+                    const splitLegacy =
+                      !nomeSaved && indirizzoSaved
+                        ? splitNomeDaIndirizzoConsegna(indirizzoSaved)
+                        : null
                     setModificaForm({
-                      nome_cliente: ordineNomeCliente(ordineDetail),
+                      nome_cliente: nomeSaved || splitLegacy?.nomePart || "",
                       telefono_ritiro: ordineTelefonoRitiro(ordineDetail),
                       orario_ritiro: ordineOrarioRitiro(ordineDetail),
                       note: ordineDetail.note ?? "",
                       tipo_pagamento: ordineDetail.tipo_pagamento ?? "Da pagare",
-                      indirizzo_consegna: ordineIndirizzoConsegna(ordineDetail),
+                      indirizzo_consegna: splitLegacy?.addrPart || indirizzoSaved || "",
                     })
                     setModificaRighe(
                       (ordineDetail.righe || []).map((r, i) => {
