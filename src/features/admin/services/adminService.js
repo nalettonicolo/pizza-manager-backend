@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 import { logSupabaseError } from "@/utils/logSupabaseError"
+import { getTenantSettings } from "@/features/admin/services/parametriService.js"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
 import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
@@ -3242,7 +3243,8 @@ export async function turniCassaAperto(tenantId) {
   const { data, error } = await supabase.rpc("turni_cassa_aperto", { p_tenant_id: tenantId })
   if (error) {
     logSupabaseError("admin.turniCassaAperto", error, { tenantId })
-    throw error
+    // Soft-fail: cassa e Turni restano usabili (nessun turno aperto).
+    return null
   }
   return data ?? null
 }
@@ -3323,113 +3325,15 @@ export async function logCassaAuditEvent(tenantId, { ordineId, eventType, payloa
 // ===================== TENANT SETTINGS ================
 ///////////////////////////////////////////////////////////
 
-export async function getTenantSettings(tenantId) {
-  const { data, error } = await supabase
-    .from("tenants")
-    .select("*")
-    .eq("id", tenantId)
-    .single()
+export { getTenantSettings, updateTenantSettings, patchTenantParametriOperativi } from "./parametriService.js"
 
-  if (error) {
-    logSupabaseError("admin.getTenantSettings", error, { tenantId })
-    throw error
-  }
-  return data
-}
-
-export async function updateTenantSettings(tenantId, updates) {
-  const payload = { ...updates }
-  const optional = [
-    "indirizzo",
-    "telefono",
-    "email",
-    "lat",
-    "lng",
-    "logo_url",
-    "orari_settimana",
-    "parametri_operativi",
-    "public_domain",
-    "public_domain_status",
-    "public_domain_requested_at",
-    "sito_web_cliente",
-    "legal_ragione_sociale",
-    "legal_piva",
-    "legal_pec",
-    "privacy_policy_html",
-    "cookie_policy_html",
-    "pagamento_online_provider",
-    "stripe_publishable_key",
-    "sumup_merchant_public_id",
-  ]
-  const { error } = await supabase.from("tenants").update(payload).eq("id", tenantId)
-  if (error) {
-    if (error.code === "PGRST204") {
-      const details = String(error.details || error.message || "")
-      const missingFromError = optional.filter((key) => {
-        const re = new RegExp(`\\b${key}\\b`, "i")
-        return re.test(details)
-      })
-      const missing = missingFromError.length ? missingFromError : optional
-      for (const key of missing) delete payload[key]
-      const retry = await supabase.from("tenants").update(payload).eq("id", tenantId)
-      if (retry.error) {
-        logSupabaseError("admin.updateTenantSettings.retry", retry.error, { tenantId })
-        throw retry.error
-      }
-      const droppedFields = missing.filter((key) => Object.prototype.hasOwnProperty.call(updates, key))
-      return { droppedFields }
-    }
-    logSupabaseError("admin.updateTenantSettings", error, { tenantId })
-    throw error
-  }
-  return { droppedFields: [] }
-}
-
-/** Salva la chiave segreta Stripe (sk_…) lato database — solo ruolo admin tenant. */
-export async function saveTenantStripeSecret(tenantId, secret) {
-  const { error } = await supabase.rpc("save_tenant_stripe_secret", {
-    p_tenant_id: tenantId,
-    p_secret: String(secret || "").trim(),
-  })
-  if (error) throw error
-}
-
-/** True se è stata salvata una sk_ per il tenant (senza esporre il valore). */
-export async function fetchTenantStripeSecretConfigured(tenantId) {
-  const { data, error } = await supabase.rpc("tenant_payment_stripe_configured", {
-    p_tenant_id: tenantId,
-  })
-  if (error) throw error
-  return !!data
-}
-
-export async function fetchTenantStripeWebhookConfigured(tenantId) {
-  const { data, error } = await supabase.rpc("tenant_stripe_webhook_configured", {
-    p_tenant_id: tenantId,
-  })
-  if (error) throw error
-  return !!data
-}
-
-export async function saveTenantStripeWebhookSecret(tenantId, secret) {
-  const { error } = await supabase.rpc("save_tenant_stripe_webhook_secret", {
-    p_tenant_id: tenantId,
-    p_secret: String(secret || "").trim(),
-  })
-  if (error) throw error
-}
-
-/** @returns {Promise<{ provider: string|null, stripe_publishable_configured: boolean, stripe_secret_configured: boolean, stripe_webhook_configured: boolean, ready: boolean }>} */
-export async function fetchTenantOnlinePaymentSetupStatus(tenantId) {
-  const { data, error } = await supabase.rpc("tenant_online_payment_setup_status", {
-    p_tenant_id: tenantId,
-  })
-  if (error) throw error
-  return data && typeof data === "object" ? data : {}
-}
-
-export function getStripeWebhookUrl() {
-  const base = import.meta.env.VITE_SUPABASE_URL
-  if (!base) return ""
-  return `${String(base).replace(/\/$/, "")}/functions/v1/payment-stripe-webhook`
-}
+/** Stripe / pagamenti online — implementazione in `onlinePaymentsAdminService.js` (re-export compat). */
+export {
+  saveTenantStripeSecret,
+  fetchTenantStripeSecretConfigured,
+  fetchTenantStripeWebhookConfigured,
+  saveTenantStripeWebhookSecret,
+  fetchTenantOnlinePaymentSetupStatus,
+  getStripeWebhookUrl,
+  STRIPE_EDGE_FUNCTIONS,
+} from "./onlinePaymentsAdminService.js"

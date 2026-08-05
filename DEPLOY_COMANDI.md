@@ -143,7 +143,7 @@ Legge `.env.production` / `.env` se le variabili non sono già in ambiente.
 - **Stacco totale da Supabase (indipendenza: solo Nest + Postgres, fasi e inventario codice):** `docs/STACCO_SUPABASE_TOTALE.md`
 - **Piano milestone (adminService, cassa, delivery, ordini pubblici, superadmin, Realtime, Storage, Edge):** `docs/STACCO_SUPABASE_MILESTONE_PLAN.md`
 - **Cursor / sync verso server casa:** `docs/CURSOR_WORKFLOW_SERVER_CASA.md` — da locale: `npm run sync:server` (push GitHub + pull sul server + **build Nest + systemctl restart**); solo pull: `npm run sync:server:pull`
-- **Punto della situazione (stack / deploy):** `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`
+- **Punto della situazione (per settore):** `docs/punto-situazione/README.md`
 - **Hub guide in console:** `src/features/superadmin/pages/SuperadminGuideHub.jsx` (elenchi slug → `SuperadminGuideDocPage.jsx`)
 
 ---

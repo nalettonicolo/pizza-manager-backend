@@ -69,9 +69,69 @@ const DOCS_SVILUPPO = [
     description: "Checklist manuale pre/post deploy e Supabase Auth.",
   },
   {
-    slug: "punto-situazione-webapp",
-    title: "Punto della situazione (webapp completa)",
-    description: "Visione prodotto, cosa c’è nel repo, gap e riferimenti.",
+    slug: "punto-situazione-indice",
+    title: "Punto situazione — indice (per settore)",
+    description: "Indice dei documenti prodotti dagli agenti (architettura → supervisore).",
+  },
+  {
+    slug: "punto-situazione-architettura",
+    title: "Punto situazione — Architettura",
+    description: "Stack, confini SPA/Supabase/Edge/Nest, multi-tenant, decisioni 33–39.",
+  },
+  {
+    slug: "punto-situazione-prodotto",
+    title: "Punto situazione — Prodotto",
+    description: "Flussi cassa/web/delivery, Francy, gap e priorità Fase 6.",
+  },
+  {
+    slug: "punto-situazione-database",
+    title: "Punto situazione — Database",
+    description: "Moduli SQL, RLS, DEFINER, grant, DoD SQL.",
+  },
+  {
+    slug: "punto-situazione-code",
+    title: "Punto situazione — Code",
+    description: "Features React, adminService, Demo live, debito tecnico.",
+  },
+  {
+    slug: "punto-situazione-ui",
+    title: "Punto situazione — UI / UX",
+    description: "Layout public/admin/operativo/SA, Demo live, cucina slim.",
+  },
+  {
+    slug: "punto-situazione-dataflows",
+    title: "Punto situazione — Dataflows",
+    description: "Flussi app ↔ Supabase (login, cassa, vetrina, realtime, proof).",
+  },
+  {
+    slug: "punto-situazione-security",
+    title: "Punto situazione — Security",
+    description: "Threat model, hardening 34–39, Stripe, advisor, checklist.",
+  },
+  {
+    slug: "punto-situazione-test",
+    title: "Punto situazione — Test / QA",
+    description: "Unit ~49, smoke, Demo live, gap copertura.",
+  },
+  {
+    slug: "punto-situazione-copywriter",
+    title: "Punto situazione — Copywriter",
+    description: "Tono vetrina/admin/SA, debito copy, principi.",
+  },
+  {
+    slug: "punto-situazione-supervisor",
+    title: "Punto situazione — Supervisore",
+    description: "Verdetto APPROVATO / BLOCCATO sullo stato complessivo.",
+  },
+  {
+    slug: "punto-situazione-priorita",
+    title: "Punto situazione — Priorità operative",
+    description: "Ordine P0–P4, stati, comandi verifica post-ciclo.",
+  },
+  {
+    slug: "go-live-francy-runbook",
+    title: "Go-live Francy (Stripe / dominio / P3)",
+    description: "Runbook P2/P3: chiavi live, DNS, HIBP, SMTP/RT-SDI.",
   },
 ];
 

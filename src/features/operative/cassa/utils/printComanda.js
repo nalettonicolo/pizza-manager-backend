@@ -5,6 +5,7 @@
 import {
   normalizeComandaRepartiStampanti,
   stampantiLabelDaReparti,
+  formatRepartoStampanteDest,
 } from "@/utils/comandaRepartiStampanti"
 import { printHtmlDocument } from "@/utils/printHtmlDocument"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
@@ -206,7 +207,7 @@ export function buildComandaHeaderHtmlOrdered(data, parametri) {
   const titoloBanner =
     String(parametri?.comanda_titolo_banner || "").trim() || labels.banner || COMANDA_ETICHETTE_DEFAULT.banner;
 
-  const showId = paramFlagTrue(parametri, "comanda_mostra_id_ordine", true);
+  const showId = paramFlagTrue(parametri, "comanda_mostra_id_ordine", false);
   const showPagamento = paramFlagTrue(parametri, "comanda_mostra_pagamento", true);
   const showDestStampa = paramFlagTrue(parametri, "comanda_mostra_dest_stampanti", true);
   const showLocale = paramFlagTrue(parametri, "comanda_mostra_locale", true);
@@ -250,37 +251,42 @@ export function buildComandaHeaderHtmlOrdered(data, parametri) {
         break;
       case "id_ordine":
         if (orderId && showId) {
-          parts.push(`<div class="muted">${escapeHtml(labels.id)} ${escapeHtml(String(orderId))}</div>`);
+          const shortId = String(orderId).length > 12 ? `${String(orderId).slice(0, 8)}…` : String(orderId)
+          parts.push(
+            `<div class="meta-id"><strong>${escapeHtml(labels.id)}</strong> ${escapeHtml(shortId)}</div>`,
+          )
         }
         break;
       case "tipo_servizio":
         if (showTipoServizio) {
-          parts.push(`<div><strong>${escapeHtml(tipoLabel)}</strong></div>`);
+          parts.push(`<div class="meta-tipo"><strong>${escapeHtml(tipoLabel)}</strong></div>`);
         }
         break;
       case "cliente":
         if (nomeCliente && showCliente) {
           parts.push(
-            `<div>${escapeHtml(labels.cliente)}: ${escapeHtml(nomeCliente)}</div>`,
+            `<div><strong>${escapeHtml(labels.cliente)}</strong> ${escapeHtml(nomeCliente)}</div>`,
           );
         }
         break;
       case "orario":
         if (orarioRitiro && showOrario) {
-          parts.push(`<div>${escapeHtml(labels.orario)}: ${escapeHtml(orarioRitiro)}</div>`);
+          parts.push(`<div><strong>${escapeHtml(labels.orario)}</strong> ${escapeHtml(orarioRitiro)}</div>`);
         }
         break;
       case "indirizzo":
         if (indirizzoConsegna && showIndirizzo) {
           const raw = String(indirizzoConsegna);
           const indFmt = formatIndirizzoDisplayItaliano(raw) || raw;
-          parts.push(`<div>${escapeHtml(labels.indirizzo)}: ${escapeHtml(indFmt)}</div>`);
+          parts.push(
+            `<div><strong>${escapeHtml(labels.indirizzo)}</strong> ${escapeHtml(indFmt)}</div>`,
+          );
         }
         break;
       case "pagamento":
         if (tipoPagamento && showPagamento) {
           parts.push(
-            `<div>${escapeHtml(labels.pagamento)}: ${escapeHtml(tipoPagamento)}</div>`,
+            `<div><strong>${escapeHtml(labels.pagamento)}</strong> ${escapeHtml(tipoPagamento)}</div>`,
           );
         }
         break;
@@ -366,7 +372,7 @@ export function buildComandaKitchenHtmlDocument(payload) {
   let widthMm = clampNum(parametri.comanda_width_mm, 0, 0, 120);
   if (widthMm <= 0 && larghezzaUtilePreset > 0) widthMm = larghezzaUtilePreset;
   const pageSizeRule = rotoloMm > 0 ? `size: ${rotoloMm}mm auto;` : "size: auto;";
-  const fontKey = COMANDA_FONT_STACK[parametri.comanda_font_family] ? parametri.comanda_font_family : "system";
+  const fontKey = COMANDA_FONT_STACK[parametri.comanda_font_family] ? parametri.comanda_font_family : "mono";
   const fontStack = COMANDA_FONT_STACK[fontKey];
   const copie = Math.max(1, Math.min(5, Number(parametri.comanda_copie) || 1));
 
@@ -411,49 +417,65 @@ export function buildComandaKitchenHtmlDocument(payload) {
 
   return `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Comanda</title>
   <style>
-    @page { margin: ${marginMm}mm; ${pageSizeRule} }
+    @page { margin: ${Math.min(marginMm, 4)}mm; ${pageSizeRule} }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body {
       font-family: ${fontStack};
       margin: 0;
-      padding: 10px;
+      padding: 2px;
       font-size: ${fontSize}px;
       line-height: ${lineHeight};
-      color: #111;
+      color: #000;
+      background: #fff;
       ${widthRule}
     }
-    .comanda-page { page-break-after: always; padding-bottom: 12px; }
+    .comanda-page { page-break-after: always; padding-bottom: 6px; }
     .comanda-page:last-of-type { page-break-after: auto; }
     .banner {
       text-align: center;
-      font-weight: 800;
+      font-weight: 900;
       font-size: ${titoloScale}em;
-      letter-spacing: 0.06em;
-      border-bottom: 2px solid #000;
-      padding-bottom: 6px;
-      margin-bottom: 8px;
-      line-height: 1.2;
+      letter-spacing: 0.04em;
+      border-bottom: 3px solid #000;
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+      line-height: 1.15;
+      color: #000;
     }
-    .when { font-size: 0.9em; color: #444; margin-bottom: 10px; }
-    .comanda-top { margin-bottom: 12px; }
-    .comanda-top > div { margin-bottom: 2px; }
-    .comanda-top > .banner { margin-bottom: 8px; }
-    .comanda-top > .when { margin-bottom: 10px; }
-    .muted { font-size: 0.85em; color: #666; }
-    .note { margin-top: 6px; font-style: italic; }
-    .dest { margin-top: 6px; font-size: 0.92em; color: #333; }
+    .when {
+      font-size: 0.95em;
+      font-weight: 700;
+      color: #000;
+      margin-bottom: 6px;
+    }
+    .comanda-top { margin-bottom: 8px; color: #000; }
+    .comanda-top > div { margin-bottom: 1px; color: #000; }
+    .comanda-top > .banner { margin-bottom: 6px; }
+    .comanda-top > .when { margin-bottom: 6px; }
+    .comanda-top strong { font-weight: 900; }
+    .meta-id { font-size: 0.85em; font-weight: 600; color: #000; }
+    .meta-tipo { font-weight: 900; margin: 2px 0; }
+    .note { margin-top: 4px; font-weight: 700; color: #000; }
+    .dest { margin-top: 4px; font-size: 0.92em; font-weight: 700; color: #000; }
     .riga {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: flex-start;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px dashed #bbb;
+      margin-bottom: 6px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #000;
+      color: #000;
     }
-    .qty { font-weight: 800; font-size: ${qtyScale}em; min-width: 2em; flex-shrink: 0; line-height: 1.2; }
-    .titolo { font-weight: 600; }
-    .sub { font-size: ${dettaglioScale}em; color: #333; margin-top: 2px; padding-left: 4px; }
-    .copy { margin-top: 16px; text-align: center; font-size: 0.85em; color: #666; }
-    @media print { body { padding: 4px; } }
+    .qty { font-weight: 900; font-size: ${qtyScale}em; min-width: 1.8em; flex-shrink: 0; line-height: 1.15; color: #000; }
+    .titolo { font-weight: 900; color: #000; }
+    .sub { font-size: ${dettaglioScale}em; font-weight: 600; color: #000; margin-top: 2px; padding-left: 2px; }
+    .copy { margin-top: 10px; text-align: center; font-size: 0.9em; font-weight: 700; color: #000; }
+    @media print {
+      body { padding: 0; color: #000 !important; }
+      .banner, .when, .qty, .titolo, .sub, .meta-id, .dest, .note, .copy, .comanda-top, .comanda-top * {
+        color: #000 !important;
+      }
+    }
   </style></head><body>${pages}</body></html>`;
 }
 
@@ -467,9 +489,53 @@ export function printComandaKitchen(payload) {
 }
 
 /**
- * Apre una finestra di stampa per ogni reparto configurato (IP statico sulla stampante di rete).
- * Sul PC deve essere associata una stampante di sistema all’indirizzo indicato; qui si stampa la stessa comanda
- * con intestazione «Dest. stampa» dedicata al reparto così si sceglie la stampante corretta.
+ * Payload comanda minima per «Test» stampante (USB/IP) dalla pagina reparti.
+ * @param {import("@/utils/comandaRepartiStampanti").ComandaRepartoStampante} row
+ * @param {string} [tenantNome]
+ */
+export function buildStampanteRepartoTestPayload(row, tenantNome = "Locale") {
+  const dest = formatRepartoStampanteDest(row)
+  const nomeReparto = String(row?.nome || "Reparto").trim() || "Reparto"
+  return {
+    tenantNome: tenantNome || "Locale",
+    numero: "TEST",
+    createdAt: new Date().toISOString(),
+    tipoOrdine: "asporto",
+    nomeCliente: "Prova stampa",
+    note: `Stampa di test (${nomeReparto}). Puoi scartare questo scontrino.`,
+    destStampaOverride: dest,
+    righe: [
+      {
+        qty: 1,
+        titolo: "Prodotto di prova",
+        dettagli: [{ tag: "ingredienti", text: "Nessun dettaglio — solo test stampante" }],
+      },
+    ],
+    parametri: {
+      comanda_rotolo_mm: 58,
+      comanda_copie: 1,
+      comanda_mostra_id_ordine: false,
+      comanda_mostra_pagamento: false,
+      comanda_font_family: "mono",
+      comanda_font_size: 12,
+      comanda_margin_mm: 4,
+    },
+  }
+}
+
+/**
+ * Apre il dialogo di stampa del browser con una comanda di prova per un reparto.
+ * @param {import("@/utils/comandaRepartiStampanti").ComandaRepartoStampante} row
+ * @param {string} [tenantNome]
+ * @returns {boolean}
+ */
+export function printComandaStampanteTest(row, tenantNome) {
+  return printComandaKitchen(buildStampanteRepartoTestPayload(row, tenantNome))
+}
+
+/**
+ * Apre una finestra di stampa per ogni reparto (USB locale o IP di rete).
+ * Sul PC scegli la stampante nel dialogo; l’intestazione indica destinazione USB o IP.
  * @param {Parameters<typeof printComandaKitchen>[0]} payload
  */
 export function printComandaKitchenPerReparto(payload) {
@@ -480,10 +546,7 @@ export function printComandaKitchenPerReparto(payload) {
   }
   const delayMs = 480
   reparti.forEach((r, idx) => {
-    const dest =
-      r.indirizzo_ip.trim() !== ""
-        ? `Reparto: ${r.nome} — stampante ${r.indirizzo_ip}:${r.porta}`
-        : `Reparto: ${r.nome}`
+    const dest = formatRepartoStampanteDest(r)
     const parametri = { ...(payload.parametri || {}), comanda_copie: 1 }
     window.setTimeout(() => {
       printComandaKitchen({ ...payload, destStampaOverride: dest, parametri })

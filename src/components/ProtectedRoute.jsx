@@ -14,7 +14,7 @@ function loginRedirectSearch(location) {
 }
 
 const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
-  const { user, tipoUtente, ruolo, loading } = useAuth()
+  const { user, tipoUtente, ruolo, loading, profileReady } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -33,12 +33,59 @@ const ProtectedRoute = ({ allowedRoles = [], demoOnly = false, children }) => {
     )
   }
 
-  // Sessione presente ma profilo ancora in caricamento: NON mandare a /login
-  // (nuove finestre Sala QA altrimenti sembrano “non loggate”).
-  if (!tipoUtente || (!ruolo && tipoUtente === "staff")) {
+  if (!profileReady) {
     return (
       <div className="min-h-[200px] flex items-center justify-center">
         <span className="text-gray-400 text-sm">Caricamento profilo...</span>
+      </div>
+    )
+  }
+
+  // Profilo risolto ma assente / incompleto (non restare in loop infinito).
+  if (!tipoUtente || (!ruolo && tipoUtente === "staff")) {
+    return (
+      <div
+        className="min-h-[200px] flex flex-col items-center justify-center gap-3"
+        style={{ padding: 24, textAlign: "center", maxWidth: 420, margin: "0 auto" }}
+      >
+        <p style={{ margin: 0, fontSize: 15, color: "#334155", lineHeight: 1.5 }}>
+          Non riusciamo a caricare il profilo operativo per questo account.
+        </p>
+        <p style={{ margin: 0, fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+          Ricarica la pagina. Se il problema resta, esci e accedi di nuovo, oppure verifica che l’utente
+          sia presente tra i dipendenti della pizzeria.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "none",
+              background: "#1565c0",
+              color: "#fff",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Ricarica
+          </button>
+          <a
+            href={`/login${loginRedirectSearch(location)}`}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              color: "#334155",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            Vai al login
+          </a>
+        </div>
       </div>
     )
   }

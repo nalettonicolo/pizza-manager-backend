@@ -9,6 +9,14 @@ import {
   buildComandaKitchenHtmlDocument,
 } from "@/features/operative/cassa/utils/printComanda"
 import PosPaymentIntegrationsPanel from "@/features/operative/cassa/components/PosPaymentIntegrationsPanel"
+import {
+  STAMPA_MODALITA_OPTIONS,
+  STAMPA_QUANDO_OPTIONS,
+  STAMPA_CORTESIA_REPARTI,
+  readStampaModalita,
+  readStampaQuando,
+  readStampaRicevutaCortesiaReparto,
+} from "@/utils/stampaOperativaConfig"
 
 function FieldHint({ children, style }) {
   return (
@@ -50,7 +58,7 @@ const defaultParametri = () => ({
   comanda_mostra_orario: true,
   comanda_mostra_indirizzo: true,
   comanda_mostra_note_ordine: true,
-  comanda_mostra_id_ordine: true,
+  comanda_mostra_id_ordine: false,
   comanda_mostra_pagamento: true,
   comanda_mostra_dest_stampanti: true,
   comanda_mostra_riga_impasto: true,
@@ -60,6 +68,14 @@ const defaultParametri = () => ({
   comanda_stampa_auto: false,
   /** Stampa ricevuta cliente dopo conferma (indipendente dalla comanda cucina). */
   cassa_stampa_ricevuta_auto: false,
+  /** solo_cassa | con_tablet */
+  stampa_modalita: "solo_cassa",
+  /** auto | manuale | mai — comanda dalla cassa */
+  comanda_stampa_quando: "manuale",
+  /** auto | manuale | mai — ricevuta da cassa (utile in solo_cassa) */
+  cassa_stampa_ricevuta_quando: "manuale",
+  /** Reparto che può stampare ricevuta di cortesia (con_tablet) */
+  stampa_ricevuta_cortesia_reparto: "delivery",
   comanda_titolo_banner: "",
 })
 
@@ -69,7 +85,7 @@ const COMANDA_BLOCCHI_UI = [
   { id: "data_stampa", flag: "comanda_mostra_data_ora_stampa", label: "Data e ora di stampa", hint: "Momento in cui avvii la stampa dal browser." },
   { id: "locale", flag: "comanda_mostra_locale", label: "Nome locale", hint: "Nome della pizzeria (tenant)." },
   { id: "numero_ordine", flag: "comanda_mostra_numero_ordine", label: "Numero ordine (#…)", hint: "Numero progressivo in cassa." },
-  { id: "id_ordine", flag: "comanda_mostra_id_ordine", label: "ID ordine (UUID)", hint: "Identificativo tecnico; spesso lungo." },
+  { id: "id_ordine", flag: "comanda_mostra_id_ordine", label: "ID ordine (UUID)", hint: "Di default spento: su termica è illeggibile. Se attivo, stampa solo i primi caratteri in nero." },
   { id: "tipo_servizio", flag: "comanda_mostra_tipo_servizio", label: "Tipo servizio", hint: "Ritiro in negozio o Consegna." },
   { id: "cliente", flag: "comanda_mostra_cliente", label: "Nome cliente", hint: "Come salvato sull’ordine." },
   { id: "orario", flag: "comanda_mostra_orario", label: "Orario ritiro / consegna", hint: "Fascia oraria scelta in cassa." },
@@ -133,6 +149,13 @@ export default function CassaImpostazioniPage({ onBack }) {
         ? raw.comanda_etichette
         : {},
     comanda_titolo_banner: raw.comanda_titolo_banner != null ? String(raw.comanda_titolo_banner) : "",
+    stampa_modalita: readStampaModalita(raw),
+    comanda_stampa_quando: readStampaQuando(raw, "comanda"),
+    cassa_stampa_ricevuta_quando: readStampaQuando(raw, "ricevuta"),
+    stampa_ricevuta_cortesia_reparto:
+      raw.stampa_ricevuta_cortesia_reparto !== undefined && raw.stampa_ricevuta_cortesia_reparto !== null
+        ? readStampaRicevutaCortesiaReparto(raw)
+        : "delivery",
   }
 
   useEffect(() => {
@@ -252,8 +275,16 @@ export default function CassaImpostazioniPage({ onBack }) {
           .split(/\r?\n|,/)
           .map((v) => v.trim())
           .filter(Boolean),
-        comanda_stampa_auto: Boolean(p.comanda_stampa_auto),
-        cassa_stampa_ricevuta_auto: Boolean(p.cassa_stampa_ricevuta_auto),
+        comanda_stampa_auto: p.comanda_stampa_quando === "auto",
+        cassa_stampa_ricevuta_auto: p.cassa_stampa_ricevuta_quando === "auto",
+        stampa_modalita: p.stampa_modalita === "con_tablet" ? "con_tablet" : "solo_cassa",
+        comanda_stampa_quando: ["auto", "manuale", "mai"].includes(p.comanda_stampa_quando)
+          ? p.comanda_stampa_quando
+          : "manuale",
+        cassa_stampa_ricevuta_quando: ["auto", "manuale", "mai"].includes(p.cassa_stampa_ricevuta_quando)
+          ? p.cassa_stampa_ricevuta_quando
+          : "manuale",
+        stampa_ricevuta_cortesia_reparto: String(p.stampa_ricevuta_cortesia_reparto || ""),
         comanda_ordine_blocchi: normalizeComandaBlocchiOrdine(p.comanda_ordine_blocchi),
         comanda_ordine_dettagli_prodotto: normalizeComandaDettagliOrdine(p.comanda_ordine_dettagli_prodotto),
         comanda_etichette:
@@ -347,17 +378,115 @@ export default function CassaImpostazioniPage({ onBack }) {
       </div>
       <PosPaymentIntegrationsPanel p={p} setParam={setParam} />
       <section style={styles.section}>
-        <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Comanda — stampa</h3>
+        <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Flusso stampa operativa</h3>
+        <p style={{ margin: "0 0 16px", fontSize: 13, color: "#555", lineHeight: 1.45 }}>
+          Scegli come lavorate in sala: solo stampante in cassa, oppure tablet nei reparti con ricevuta di cortesia
+          (non fiscale) per i ragazzi del delivery.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 560 }}>
+          <label>
+            <span style={{ fontWeight: 600 }}>Organizzazione</span>
+            <select
+              value={p.stampa_modalita || "solo_cassa"}
+              onChange={(e) => setParam("stampa_modalita", e.target.value)}
+              style={inputStyle}
+            >
+              {STAMPA_MODALITA_OPTIONS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <FieldHint>
+              {STAMPA_MODALITA_OPTIONS.find((o) => o.id === p.stampa_modalita)?.hint}
+            </FieldHint>
+          </label>
+
+          <label>
+            <span style={{ fontWeight: 600 }}>Copie comanda (da cassa)</span>
+            <FieldHint>
+              Quante copie della comanda cucina stampare in un colpo solo (max 5). Vale quando la stampa parte dalla
+              cassa.
+            </FieldHint>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={p.comanda_copie === "" ? "" : p.comanda_copie}
+              onChange={(e) => setParam("comanda_copie", e.target.value === "" ? "" : e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+
+          <label>
+            <span style={{ fontWeight: 600 }}>Quando stampare la comanda (cassa)</span>
+            <select
+              value={p.comanda_stampa_quando || "manuale"}
+              onChange={(e) => setParam("comanda_stampa_quando", e.target.value)}
+              style={inputStyle}
+            >
+              {STAMPA_QUANDO_OPTIONS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {p.stampa_modalita !== "con_tablet" ? (
+            <label>
+              <span style={{ fontWeight: 600 }}>Quando stampare la ricevuta di cortesia (cassa)</span>
+              <FieldHint>
+                Documento non fiscale per il cliente. In modalità «solo cassa» parte dalla conferma ordine in cassa.
+              </FieldHint>
+              <select
+                value={p.cassa_stampa_ricevuta_quando || "manuale"}
+                onChange={(e) => setParam("cassa_stampa_ricevuta_quando", e.target.value)}
+                style={inputStyle}
+              >
+                {STAMPA_QUANDO_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label>
+              <span style={{ fontWeight: 600 }}>Reparto che stampa la ricevuta di cortesia</span>
+              <FieldHint>
+                Nella schermata del reparto compare il pulsante «Stampa ricevuta di cortesia» sull’ordine. Tipico:
+                Delivery, così i pony hanno la copia da lasciare al cliente.
+              </FieldHint>
+              <select
+                value={p.stampa_ricevuta_cortesia_reparto ?? "delivery"}
+                onChange={(e) => setParam("stampa_ricevuta_cortesia_reparto", e.target.value)}
+                style={inputStyle}
+              >
+                {STAMPA_CORTESIA_REPARTI.map((o) => (
+                  <option key={o.id || "none"} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      </section>
+
+      <section style={styles.section}>
+        <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Comanda — layout stampa</h3>
         <p style={{ margin: "0 0 16px", fontSize: 13, color: "#555", lineHeight: 1.45 }}>
           Impostazioni usate quando stampi la comanda cucina dal browser (stampante termica o PDF). Il risultato dipende anche dal driver della stampante: prova una stampa di test dopo ogni modifica.
           Trascina le righe per cambiare l&apos;ordine in stampa; l&apos;anteprima a destra usa dati di esempio e riflette salvataggio dopo «Salva».
         </p>
         <p style={{ margin: "0 0 16px", fontSize: 13 }}>
           <Link to="/operative/cassa/stampanti-reparti" style={{ color: "#1565c0", fontWeight: 600 }}>
-            Stampanti per reparto (IP statico)
+            Stampanti per reparto (USB o IP)
           </Link>
           {" — "}
-          associa cucina, forno, fritti, ecc. agli indirizzi delle stampanti di rete; in cassa puoi usare «Stampa per reparto».
+          associa cucina, forno, fritti a stampante USB/locale (es. POS-58) o rete IP; in cassa puoi usare «Stampa per
+          reparto».
         </p>
         <div style={styles.comandaGrid}>
         <div style={{ ...styles.comandaCol, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -385,11 +514,6 @@ export default function CassaImpostazioniPage({ onBack }) {
             </FieldHint>
           </fieldset>
 
-          <label>
-            <span style={{ fontWeight: 600 }}>Numero copie comanda</span>
-            <FieldHint>Quante pagine identiche stampare in un solo comando (es. una per reparto). Massimo 5.</FieldHint>
-            <input type="number" min={1} max={5} placeholder="es. 1" value={p.comanda_copie === "" ? "" : p.comanda_copie} onChange={(e) => setParam("comanda_copie", e.target.value === "" ? "" : e.target.value)} style={inputStyle} />
-          </label>
           <label>
             <span style={{ fontWeight: 600 }}>Dimensione testo corpo (px)</span>
             <FieldHint>Altezza base del carattere per righe normali (locale, righe prodotto, note). Più alto = caratteri più grandi su tutta la comanda, tranne dove c’è una scala dedicata sotto.</FieldHint>
@@ -448,35 +572,6 @@ export default function CassaImpostazioniPage({ onBack }) {
               Testo libero mostrato in comanda come «Dest. stampa: …» (se abilitato sotto). Serve a indicare a chi è destinato lo scontrino (Cucina, Pizzeria, Bancone…). Una voce per riga oppure separate da virgola.
             </FieldHint>
             <textarea rows={3} placeholder="es. Cucina, Bancone" value={p.comanda_stampanti || ""} onChange={(e) => setParam("comanda_stampanti", e.target.value)} style={{ ...inputStyle, resize: "vertical", minHeight: 84 }} />
-          </label>
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={Boolean(p.comanda_stampa_auto)}
-              onChange={(e) => setParam("comanda_stampa_auto", e.target.checked)}
-              style={{ marginTop: 4 }}
-            />
-            <span>
-              <span style={{ fontWeight: 600 }}>Stampa comanda automaticamente dopo conferma ordine</span>
-              <FieldHint>
-                Se attivo, subito dopo aver confermato l’ordine si apre il dialogo di stampa del browser: scegli la stampante termica o «Salva come PDF».
-                Se disattivo, resta un avviso con il pulsante «Stampa comanda» così puoi stampare quando vuoi.
-              </FieldHint>
-            </span>
-          </label>
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={Boolean(p.cassa_stampa_ricevuta_auto)}
-              onChange={(e) => setParam("cassa_stampa_ricevuta_auto", e.target.checked)}
-              style={{ marginTop: 4 }}
-            />
-            <span>
-              <span style={{ fontWeight: 600 }}>Stampa ricevuta cliente automaticamente dopo conferma</span>
-              <FieldHint>
-                Ricevuta di cortesia (non fiscale) con righe e totali per il cliente. È separata dalla comanda cucina: puoi attivarla o meno senza toccare la stampa in cucina.
-              </FieldHint>
-            </span>
           </label>
         </div>
         <div style={{ ...styles.comandaCol, display: "flex", flexDirection: "column", gap: 16 }}>

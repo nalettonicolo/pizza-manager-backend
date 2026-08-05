@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { Store, LayoutDashboard, LogOut, Presentation } from "lucide-react"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { getTenants } from "@/features/superadmin/services/superadminService"
-import { setSupportTenantOverride } from "@/utils/supportTenantOverride"
+import { setSupportTenantOverride, withSupportTenantQuery } from "@/utils/supportTenantOverride"
 import { DEMO_GIRO_STEPS, withDemoGiroQuery } from "@/utils/demoGiro"
 import "@/styles/superadmin-gate.css"
 
@@ -14,6 +14,7 @@ export default function SuperadminGatePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [demoStarting, setDemoStarting] = useState(false)
+  const [previewStarting, setPreviewStarting] = useState(false)
   const [demoError, setDemoError] = useState(null)
 
   const handleLogout = async () => {
@@ -21,33 +22,57 @@ export default function SuperadminGatePage() {
     navigate("/login", { replace: true })
   }
 
+  const resolveDemoTenantId = async () => {
+    const envId = String(import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID || "").trim()
+    if (envId) return envId
+    const rows = await getTenants()
+    const first = (rows || []).find((t) => t?.attivo !== false && t?.id)
+    return first?.id ? String(first.id) : ""
+  }
+
+  const applySupportTenant = (tenantId) => {
+    setSupportTenantOverride(tenantId)
+    try {
+      window.dispatchEvent(new Event("pm-support-tenant"))
+    } catch {
+      /* ignore */
+    }
+  }
+
   const startDemoGiro = async () => {
     setDemoError(null)
     setDemoStarting(true)
     try {
-      const envId = String(import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID || "").trim()
-      let tenantId = envId
-      if (!tenantId) {
-        const rows = await getTenants()
-        const first = (rows || []).find((t) => t?.attivo !== false && t?.id)
-        tenantId = first?.id ? String(first.id) : ""
-      }
+      const tenantId = await resolveDemoTenantId()
       if (!tenantId) {
         setDemoError("Nessun tenant disponibile per la demo. Imposta VITE_PUBLIC_DEMO_TENANT_ID o crea un cliente attivo.")
         return
       }
-      setSupportTenantOverride(tenantId)
-      try {
-        window.dispatchEvent(new Event("pm-support-tenant"))
-      } catch {
-        /* ignore */
-      }
+      applySupportTenant(tenantId)
       const first = DEMO_GIRO_STEPS[0]
       navigate(withDemoGiroQuery(first.path, tenantId, { stepIndex: 0 }))
     } catch (e) {
       setDemoError(e?.message || "Avvio demo non riuscito.")
     } finally {
       setDemoStarting(false)
+    }
+  }
+
+  const startSoloVetrina = async () => {
+    setDemoError(null)
+    setPreviewStarting(true)
+    try {
+      const tenantId = await resolveDemoTenantId()
+      if (!tenantId) {
+        setDemoError("Nessun tenant disponibile per la vetrina. Imposta VITE_PUBLIC_DEMO_TENANT_ID o crea un cliente attivo.")
+        return
+      }
+      applySupportTenant(tenantId)
+      navigate(withSupportTenantQuery("/preview", tenantId))
+    } catch (e) {
+      setDemoError(e?.message || "Apertura vetrina non riuscita.")
+    } finally {
+      setPreviewStarting(false)
     }
   }
 
@@ -73,8 +98,9 @@ export default function SuperadminGatePage() {
         <p className="sa-gate-kicker">Accesso riservato</p>
         <h1 className="sa-gate-title">Dove vuoi andare?</h1>
         <p className="sa-gate-lede">
-          Resta loggato come Super Admin. La demo apre la Cassa del locale: usa la sidebar e «4 schermate» per
-          mostrare i reparti reali, senza altri accessi.
+          Resta loggato come Super Admin. In Demo live hai accesso a <strong>tutti i reparti</strong> e alle potenzialità
+          del locale (cassa, cucina, menu admin, parametri, stampanti USB/IP): usa la sidebar e «4 schermate», senza altri
+          login.
         </p>
 
         {demoError ? (
@@ -87,7 +113,7 @@ export default function SuperadminGatePage() {
           <button
             type="button"
             className="sa-gate-card sa-gate-card--preview"
-            disabled={demoStarting}
+            disabled={demoStarting || previewStarting}
             onClick={() => void startDemoGiro()}
             style={{ cursor: demoStarting ? "wait" : "pointer", textAlign: "left", width: "100%", font: "inherit" }}
           >
@@ -98,18 +124,28 @@ export default function SuperadminGatePage() {
               {demoStarting ? "Avvio demo…" : "Demo live"}
             </span>
             <span className="sa-gate-card-desc">
-              Entra in Cassa con dati reali. Naviga dalla barra laterale: Cassa, Pizzaioli, Cucina, Bancone, Delivery e
-              «4 schermate».
+              Tutti i reparti operativi, Admin locale, Area cliente, stampanti USB/IP e «4 schermate» — accesso pieno
+              Super Admin sul tenant demo.
             </span>
           </button>
 
-          <Link to="/preview" className="sa-gate-card sa-gate-card--preview">
+          <button
+            type="button"
+            className="sa-gate-card sa-gate-card--preview"
+            disabled={demoStarting || previewStarting}
+            onClick={() => void startSoloVetrina()}
+            style={{ cursor: previewStarting ? "wait" : "pointer", textAlign: "left", width: "100%", font: "inherit" }}
+          >
             <span className="sa-gate-icon" aria-hidden>
               <Store size={40} strokeWidth={1.75} />
             </span>
-            <span className="sa-gate-card-label">Solo vetrina</span>
-            <span className="sa-gate-card-desc">Apre solo il menù online (senza ciclo guidato).</span>
-          </Link>
+            <span className="sa-gate-card-label">
+              {previewStarting ? "Apertura vetrina…" : "Solo vetrina"}
+            </span>
+            <span className="sa-gate-card-desc">
+              Menù online del tenant demo. Da lì «Admin» / Accedi ti porta subito in amministrazione locale.
+            </span>
+          </button>
 
           <Link to="/superadmin/dashboard" className="sa-gate-card sa-gate-card--admin">
             <span className="sa-gate-icon" aria-hidden>

@@ -29,6 +29,8 @@ import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
+import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
+import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
@@ -53,6 +55,7 @@ export default function Bancone() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [cortesiaBusy, setCortesiaBusy] = useState(false)
   const [bibiteProductIds, setBibiteProductIds] = useState(() => new Set())
   /** Chiave ingrediente/bibita/summary preso in busta (inverso cucina: parte grigio, tap = colore). */
   const [pickedBanconeKeys, setPickedBanconeKeys] = useState(() => new Set())
@@ -61,6 +64,7 @@ export default function Bancone() {
   const prevOrderIdsKeyRef = useRef("")
 
   const parametri = tenantData?.parametri_operativi || {}
+  const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "bancone")
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
 
@@ -599,11 +603,22 @@ export default function Bancone() {
         <OrderDetailModal
           order={detailOrder}
           loading={detailLoading}
-          onClose={() => !actionLoading && setDetailOrder(null)}
+          onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
           actionLabel={actionLoading ? "Salvataggio..." : "Consegnato"}
           onAction={markAsConsegnato}
-          actionDisabled={actionLoading}
+          actionDisabled={actionLoading || cortesiaBusy}
           ingredientsByProduct={ingredientsByProduct}
+          showPrintCortesia={showPrintCortesia}
+          printCortesiaBusy={cortesiaBusy}
+          onPrintCortesia={() => {
+            if (!detailOrder || cortesiaBusy) return
+            setCortesiaBusy(true)
+            try {
+              printRicevutaCortesiaFromDetail(detailOrder, tenantData)
+            } finally {
+              setCortesiaBusy(false)
+            }
+          }}
         />
       )}
     </div>

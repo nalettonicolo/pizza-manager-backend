@@ -6,6 +6,7 @@ function envMap(): Record<string, string | undefined> {
   return {
     FISCAL_RT_API_URL: Deno.env.get("FISCAL_RT_API_URL") ?? undefined,
     FISCAL_RT_API_KEY: Deno.env.get("FISCAL_RT_API_KEY") ?? undefined,
+    FISCAL_RT_API_HEADER: Deno.env.get("FISCAL_RT_API_HEADER") ?? undefined,
   }
 }
 

@@ -921,6 +921,66 @@ button:active:not(:disabled),
   font-weight: 500;
 }
 
+.operative-sidebar-nav {
+  gap: 8px;
+}
+
+.operative-nav-group {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.operative-nav-group-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  user-select: none;
+}
+
+.operative-nav-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.operative-nav-group-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.15s ease;
+  color: #64748b;
+}
+
+.operative-nav-group[open] > .operative-nav-group-summary::before {
+  transform: rotate(90deg);
+}
+
+.operative-nav-group[open] > .operative-nav-group-summary {
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.operative-nav-group-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 4px 6px;
+}
+
+.operative-nav-group-cassa-slot {
+  padding: 4px 4px 8px;
+}
+
+.operative-nav-group-cassa-slot button {
+  font-size: 12px !important;
+  padding: 8px 10px !important;
+}
+
 .dashboard-sidebar-footer {
   margin-top: auto;
   padding-top: 20px;

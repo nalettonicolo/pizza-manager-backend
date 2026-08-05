@@ -98,6 +98,20 @@ _Ultimo aggiornamento contenuti: 2026-05-15 (unificata smoke operativa multi-rep
 
 - [ ] Login superadmin → area prevista (es. ingresso o dashboard); logout riporta a flusso pubblico atteso.
 
+### Demo live (Super Admin → clienti)
+
+Precondizioni: account **Super Admin**; tenant demo attivo (es. Francy / `VITE_PUBLIC_DEMO_TENANT_ID`); mod. **39** + **40** applicati su Supabase.
+
+- [ ] Gate `/superadmin/ingresso` → card **Demo live** avvia senza errore.
+- [ ] URL operativo contiene `support_tenant`, `_demo_giro=1`, `_qa_console=1`.
+- [ ] Sidebar operativa: Cassa, Pizzaioli, Cucina, Bancone, Delivery raggiungibili; query demo preservate.
+- [ ] Link **4 schermate** / quad reparti senza crash.
+- [ ] **Cassa — delivery:** nome cliente e indirizzo su righe distinte (ordini nuovi e legacy `Nome – Via…`).
+- [ ] **Cucina:** coda visibile solo con task; empty state brevi.
+- [ ] **Esci demo:** ritorno SA / clear override; staff non-SA non impersona via `support_tenant`.
+- [ ] **Solo vetrina** (gate): anteprima menu/branding via RPC pubblica.
+- [ ] Unit correlati verdi: `tests/unit/demoGiro.test.js`, `tests/unit/cassaDeliveryNomeIndirizzo.test.js`.
+
 ### Piani, CSV e abbonamenti
 
 - [ ] **Piani:** import CSV (stesso formato dell’export) aggiorna/aggiunge piani per `id`; piani non presenti nel file restano in elenco; `validita_mesi` e sconto annuale coerenti dopo import.

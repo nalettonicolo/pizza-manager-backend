@@ -4,13 +4,13 @@ import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { getOperativeHomePathForStaff } from "@/constants/operativeRoutes"
-import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome"
+import { ADMIN_TENANT_HOME, adminHomeWithSupportSearch } from "@/constants/adminTenantHome"
 import { devLog } from "@/lib/devLog"
 import { supabase } from "@/lib/supabaseClient"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
 import { isViewportLayoutPreviewSearch, isQaSupportSearch } from "@/utils/viewportLayoutPreview"
-import { isSuperAdminRole } from "@/utils/superAdminAccess"
+import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
 import { readSafeReturnTo } from "@/utils/supportTenantOverride"
 import "@/styles/login.css"
 
@@ -75,6 +75,17 @@ export default function Login() {
       return `${p}?${params.toString()}`
     }
 
+    const ruoloNorm = normalizeAppRuolo(ruolo)
+    const isTenantAdmin =
+      ruoloNorm === "admin" || ruoloNorm === "owner" || isSuperAdminRole(ruolo)
+
+    // Accedi da vetrina (/login?cliente=1): staff già loggato (admin / SA) entra in automatico
+    // nell’area amministrazione del locale — senza form e senza logout per “cliente”.
+    if (forceClienteMode && tipoUtente === "staff" && isTenantAdmin) {
+      navigate(adminHomeWithSupportSearch(location.search), { replace: true })
+      return
+    }
+
     // Solo Sala QA / supporto live: torna alla schermata richiesta (cassa, cucina, …).
     // Login SA normale → sempre /superadmin/ingresso (scelta Anteprima / Amministrazione).
     if (isSuperAdminRole(ruolo) && qaSupport) {
@@ -97,9 +108,7 @@ export default function Login() {
     // Solo anteprima layout della pagina login (tool Test layout), non Sala QA.
     if (layoutOnlyPreview) return
 
-    // Login cliente da vetrina (/login?cliente=1): se c'è ancora sessione staff/SA,
-    // NON dirottare al gate — serve uscire e accedere come cliente (demo ai clienti).
-    // Eccezione: giro demo SA (_demo_giro) non deve passare da qui.
+    // Login cliente da vetrina: sessione staff non-admin → resta sul form (uscita per demo cliente).
     if (forceClienteMode && tipoUtente === "staff" && !isQaSupportSearch(location.search)) {
       return
     }

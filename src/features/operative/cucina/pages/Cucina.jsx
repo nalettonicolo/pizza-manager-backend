@@ -25,6 +25,8 @@ import {
   resolvePrepTaskBackgroundColor,
 } from "@/utils/cucinaPrepCategoryTheme"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
+import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
+import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -124,6 +126,8 @@ export default function Cucina() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [cortesiaBusy, setCortesiaBusy] = useState(false)
+  const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "cucina")
   const [prepActionId, setPrepActionId] = useState(null)
   const [activeSlot, setActiveSlot] = useState(null)
   /** Se valorizzata, mostra la sezione «composizione in forno» (dettaglio ordini) per quella fascia. */
@@ -473,10 +477,21 @@ export default function Cucina() {
         <OrderDetailModal
           order={detailOrder}
           loading={detailLoading}
-          onClose={() => !actionLoading && setDetailOrder(null)}
+          onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
           actionLabel={actionLoading ? "Salvataggio..." : "Segna come pronto"}
           onAction={markAsPronto}
-          actionDisabled={actionLoading}
+          actionDisabled={actionLoading || cortesiaBusy}
+          showPrintCortesia={showPrintCortesia}
+          printCortesiaBusy={cortesiaBusy}
+          onPrintCortesia={() => {
+            if (!detailOrder || cortesiaBusy) return
+            setCortesiaBusy(true)
+            try {
+              printRicevutaCortesiaFromDetail(detailOrder, tenantData)
+            } finally {
+              setCortesiaBusy(false)
+            }
+          }}
         />
       )}
     </div>

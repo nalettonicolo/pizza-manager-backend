@@ -35,7 +35,7 @@ export default [
     },
   },
   {
-    files: ["tests/**/*.{js,mjs}", "vite.config.js", "eslint.config.js", "scripts/**/*.mjs"],
+    files: ["tests/**/*.{js,mjs}", "vite.config.js", "eslint.config.js", "scripts/**/*.mjs", "playwright.config.js", "e2e/**/*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

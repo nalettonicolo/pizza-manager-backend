@@ -13,7 +13,7 @@ import { OPERATIVE_ROLE_HOME, PIZZAIOLO_TEST_INGRESSO_PATH } from "@/constants/o
 import { PERMESSI_TUTTE_AREE } from "@/constants/testReparti";
 import { isDefaultAreaForRole } from "@/utils/operativeAreaAccess";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
-import { OPERATIVE_AREA_NAV } from "@/constants/operativeNav";
+import { OPERATIVE_AREA_NAV, OPERATIVE_NAV_GROUPS, groupOperativeNavItems } from "@/constants/operativeNav";
 import { findOperativeNavItemForPath, resolveFirstOperativePath } from "@/utils/operativePathEligibility";
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
@@ -23,9 +23,24 @@ import { applyTenantFavicon } from "@/utils/tenantFavicon";
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview";
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
 import { isSuperAdminRole } from "@/utils/superAdminAccess";
-import { isDemoGiroSearch } from "@/utils/demoGiro";
+import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess";
+import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
+import { DEMO_GIRO_ADMIN_LINKS } from "@/utils/demoGiro";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
+
+function pathMatchesNavTo(pathname, to) {
+  return pathname === to || (to.length > 1 && pathname.startsWith(`${to}/`));
+}
+
+function OperativeNavGroup({ id, label, open, children }) {
+  return (
+    <details className="operative-nav-group" open={open || undefined} data-group={id}>
+      <summary className="operative-nav-group-summary">{label}</summary>
+      <div className="operative-nav-group-links">{children}</div>
+    </details>
+  );
+}
 
 function getAreaKeyForPath(pathname) {
   return findOperativeNavItemForPath(pathname)?.areaKey;
@@ -43,11 +58,12 @@ const RUOLO_SIDEBAR_LABEL = {
 };
 
 export default function OperativeLayout() {
-  const { user, logout, ruolo, permessiAree } = useAuth();
+  const { user, logout, ruolo } = useAuth();
   const navigate = useNavigate();
   const { tenantData } = useTenant();
   const { hasServizio } = useTenantServizi();
   const location = useLocation();
+  const { permessiAreeEffective, inDemoLive, fullDemoAccess } = useOperativeSaDemoAccess();
 
   const resolvedTenantTheme = resolveMenuTheme(tenantData?.parametri_operativi);
   const themeStyle = adminLayoutCssVarsFromTheme(resolvedTenantTheme);
@@ -67,19 +83,24 @@ export default function OperativeLayout() {
     isQuadRepartiTestEmail(user?.email) && ruoloKey === "pizzaiolo"
       ? PIZZAIOLO_TEST_INGRESSO_PATH
       : OPERATIVE_ROLE_HOME[ruoloKey] || "/operative/dashboard";
-  const permessiAreeEffective =
-    ruoloKey === "superadmin"
-      ? PERMESSI_TUTTE_AREE
-      : isQuadRepartiTestEmail(user?.email)
-        ? PERMESSI_TUTTE_AREE
-        : permessiAree;
-  const navItemsRaw = permessiAreeEffective
+  const permessiForNav = isQuadRepartiTestEmail(user?.email)
+    ? PERMESSI_TUTTE_AREE
+    : permessiAreeEffective;
+  const navItemsRaw = permessiForNav
     ? ROLE_NAV.filter((item) => {
-        if (item.servizioId && !hasServizio(item.servizioId) && !isQuadRepartiTestEmail(user?.email)) return false;
-        if (item.areaKey === "delivery") {
-          return permessiAreeEffective.delivery === true || permessiAreeEffective.pony === true;
+        // Demo / SA: non nascondere voci per piano servizi
+        if (
+          item.servizioId &&
+          !hasServizio(item.servizioId) &&
+          !isQuadRepartiTestEmail(user?.email) &&
+          !fullDemoAccess
+        ) {
+          return false;
         }
-        return permessiAreeEffective[item.areaKey] === true;
+        if (item.areaKey === "delivery") {
+          return permessiForNav.delivery === true || permessiForNav.pony === true;
+        }
+        return permessiForNav[item.areaKey] === true;
       })
     : [];
   const navItems = [...navItemsRaw].sort((a, b) => {
@@ -93,29 +114,63 @@ export default function OperativeLayout() {
     if (diff !== 0) return diff;
     return ROLE_NAV.findIndex((x) => x.to === a.to) - ROLE_NAV.findIndex((x) => x.to === b.to);
   });
-  const firstAllowedPath = resolveFirstOperativePath(navItems, defaultPath, permessiAreeEffective, hasServizio);
+  const firstAllowedPath = resolveFirstOperativePath(navItems, defaultPath, permessiForNav, hasServizio);
+  const showQuadLink = isSuperAdminRole(ruolo) || inDemoLive || fullDemoAccess;
+  const showClienteLink = inDemoLive;
+  const showAdminLinks = fullDemoAccess || inDemoLive;
+  const navGroups = (() => {
+    const byId = new Map(groupOperativeNavItems(navItems).map((g) => [g.id, { ...g, items: [...g.items] }]));
+    const ensure = (id, label, extras) => {
+      if (!extras.length) return;
+      if (byId.has(id)) {
+        byId.get(id).items.push(...extras);
+      } else {
+        byId.set(id, { id, label, items: extras });
+      }
+    };
+    ensure("strumenti", "Strumenti", [
+      ...(showQuadLink ? [{ to: "/operative/test-reparti-quad", label: "4 schermate" }] : []),
+      ...(showClienteLink
+        ? DEMO_GIRO_ADMIN_LINKS.filter((l) => l.group === "strumenti").map((l) => ({
+            to: l.path,
+            label: l.label,
+          }))
+        : []),
+    ]);
+    ensure(
+      "admin",
+      "Amministrazione",
+      showAdminLinks
+        ? DEMO_GIRO_ADMIN_LINKS.filter((l) => l.group === "admin").map((l) => ({
+            to: l.path === "/admin/home" ? ADMIN_TENANT_HOME : l.path,
+            label: l.label,
+          }))
+        : [],
+    );
+    return OPERATIVE_NAV_GROUPS.map((meta) => byId.get(meta.id)).filter(Boolean);
+  })();
   const currentAreaKey = getAreaKeyForPath(location.pathname);
   const currentNavMatch = findOperativeNavItemForPath(location.pathname);
   const servizioOk =
+    fullDemoAccess ||
     isQuadRepartiTestEmail(user?.email) ||
     !currentNavMatch?.servizioId ||
     hasServizio(currentNavMatch.servizioId);
   const canAccessCurrent =
-    Boolean(permessiAreeEffective) &&
+    Boolean(permessiForNav) &&
     servizioOk &&
     (!currentAreaKey ||
       (currentAreaKey === "delivery"
-        ? permessiAreeEffective.delivery === true || permessiAreeEffective.pony === true
-        : permessiAreeEffective[currentAreaKey] === true));
+        ? permessiForNav.delivery === true || permessiForNav.pony === true
+        : permessiForNav[currentAreaKey] === true));
   const operatoreLabel = labelFromEmailPrefix(user?.email ?? "");
   const isCassaPage = location.pathname === "/operative/cassa" || location.pathname.startsWith("/operative/cassa/");
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
   const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
-  const inDemoLive = isDemoGiroSearch(location.search);
   /** SA / demo / Sala QA: sidebar sempre utile per cambiare reparto (niente full-bleed pizzaiolo). */
   const keepOperativeSidebar =
-    ruoloKey === "superadmin" || isSaSupport || inDemoLive || isSuperAdminRole(ruolo);
+    fullDemoAccess || ruoloKey === "superadmin" || isSaSupport || inDemoLive || isSuperAdminRole(ruolo);
   const operativeFullBleed =
     (isPizzaioloPage && !keepOperativeSidebar) ||
     isRepartiQuadTestPage ||
@@ -263,32 +318,44 @@ export default function OperativeLayout() {
           </h2>
           {inDemoLive ? (
             <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8", lineHeight: 1.35 }}>
-              Naviga i reparti da qui. Usa «4 schermate» per la vista multipla.
+              Naviga i reparti dai menu sotto. Usa «4 schermate» in Strumenti.
             </p>
           ) : null}
-          {isCassaPage && cassaSidebar ? (
-            <div className="dashboard-sidebar-cassa-slot" style={{ marginBottom: 14 }}>
-              {cassaSidebar}
-            </div>
-          ) : null}
-          <nav id="operative-sidebar-nav">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={withPreservedSupportSearch(item.to, location.search)}
-                className={({ isActive }) => (isActive ? "active" : "")}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-            {(isSuperAdminRole(ruolo) || inDemoLive) ? (
-              <NavLink
-                to={withPreservedSupportSearch("/operative/test-reparti-quad", location.search)}
-                className={({ isActive }) => (isActive ? "active" : "")}
-              >
-                4 schermate
-              </NavLink>
-            ) : null}
+          <nav id="operative-sidebar-nav" className="operative-sidebar-nav">
+            {navGroups.map((group) => {
+              const hasActive = group.items.some((item) => pathMatchesNavTo(location.pathname, item.to));
+              const defaultOpen =
+                hasActive ||
+                group.id === "panoramica" ||
+                group.id === "reparti" ||
+                (group.id === "cassa" &&
+                  (location.pathname === "/operative/cassa" ||
+                    location.pathname.startsWith("/operative/cassa/") ||
+                    location.pathname.startsWith("/operative/turni")));
+              return (
+                <OperativeNavGroup
+                  key={`${group.id}-${location.pathname}`}
+                  id={group.id}
+                  label={group.label}
+                  open={defaultOpen}
+                >
+                  {group.id === "cassa" && isCassaPage && cassaSidebar ? (
+                    <div className="operative-nav-group-cassa-slot">{cassaSidebar}</div>
+                  ) : null}
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={withPreservedSupportSearch(item.to, location.search)}
+                      end={item.to === "/operative/cassa"}
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setMobileSidebarOpen(false)}
+                    >
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </OperativeNavGroup>
+              );
+            })}
           </nav>
           <div className="dashboard-sidebar-footer">
             <p className="user-email" title={user?.email}>{operatoreLabel || user?.email}</p>

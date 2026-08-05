@@ -34,6 +34,13 @@
     "supabase:auth:apply": "node scripts/supabase-auth-remote.mjs apply-all",
     "supabase:auth:sync-redirects": "node scripts/supabase-auth-remote.mjs sync-redirects --from-db",
     "sql:apply": "node scripts/apply-sql-module.mjs",
+    "verify:public-po": "node scripts/verify-public-parametri-whitelist.mjs",
+    "verify:rls-inventory": "node scripts/verify-rls-inventory.mjs",
+    "verify:rls-jwt-ab": "node scripts/smoke-rls-jwt-ab.mjs",
+    "verify:stripe-edge": "node scripts/verify-stripe-edge.mjs",
+    "e2e:install": "playwright install chromium",
+    "e2e:smoke": "playwright test",
+    "e2e": "playwright test",
     "supabase:functions:deploy:notifiche": "npx supabase functions deploy notifiche-outbox-processor --no-verify-jwt"
   },
   "dependencies": {
@@ -52,6 +59,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^4.2.0",
     "baseline-browser-mapping": "^2.10.0",
     "eslint": "^9.18.0",

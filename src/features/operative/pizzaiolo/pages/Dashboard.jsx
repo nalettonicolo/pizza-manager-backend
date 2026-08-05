@@ -23,6 +23,8 @@ import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
+import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
+import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -47,9 +49,11 @@ export default function PizzaioloDashboard() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [cortesiaBusy, setCortesiaBusy] = useState(false)
   const loadSeqRef = useRef(0)
 
   const parametri = tenantData?.parametri_operativi || {}
+  const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "pizzaiolo")
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
   const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
   const loadOrders = useCallback(async (opts = {}) => {
@@ -388,11 +392,22 @@ export default function PizzaioloDashboard() {
         <OrderDetailModal
           order={detailOrder}
           loading={detailLoading}
-          onClose={() => !actionLoading && setDetailOrder(null)}
+          onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
           actionLabel={actionLoading ? "Salvataggio..." : "Segna come pronto"}
           onAction={markAsPronto}
-          actionDisabled={actionLoading}
+          actionDisabled={actionLoading || cortesiaBusy}
           ingredientsByProduct={ingredientsByProduct}
+          showPrintCortesia={showPrintCortesia}
+          printCortesiaBusy={cortesiaBusy}
+          onPrintCortesia={() => {
+            if (!detailOrder || cortesiaBusy) return
+            setCortesiaBusy(true)
+            try {
+              printRicevutaCortesiaFromDetail(detailOrder, tenantData)
+            } finally {
+              setCortesiaBusy(false)
+            }
+          }}
         />
       )}
     </div>

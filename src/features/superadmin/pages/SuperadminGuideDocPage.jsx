@@ -15,7 +15,21 @@ const LOADERS = {
   "analisi-fiscale-questionario": () => import("@docs/ANALISI_PERIMETRO_FISCALE_E_QUESTIONARIO_SVILUPPO.md?raw"),
   "analisi-gestionale-questionario": () => import("@docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md?raw"),
   "qa-smoke-checklist": () => import("@docs/QA_CHECKLIST_SMOKE.md?raw"),
-  "punto-situazione-webapp": () => import("@docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md?raw"),
+  "punto-situazione-indice": () => import("@docs/punto-situazione/README.md?raw"),
+  "punto-situazione-architettura": () => import("@docs/punto-situazione/01_architettura.md?raw"),
+  "punto-situazione-prodotto": () => import("@docs/punto-situazione/02_prodotto.md?raw"),
+  "punto-situazione-database": () => import("@docs/punto-situazione/03_database.md?raw"),
+  "punto-situazione-code": () => import("@docs/punto-situazione/04_code.md?raw"),
+  "punto-situazione-ui": () => import("@docs/punto-situazione/05_ui.md?raw"),
+  "punto-situazione-dataflows": () => import("@docs/punto-situazione/06_dataflows.md?raw"),
+  "punto-situazione-security": () => import("@docs/punto-situazione/07_security.md?raw"),
+  "punto-situazione-test": () => import("@docs/punto-situazione/08_test.md?raw"),
+  "punto-situazione-copywriter": () => import("@docs/punto-situazione/09_copywriter.md?raw"),
+  "punto-situazione-supervisor": () => import("@docs/punto-situazione/10_supervisor.md?raw"),
+  "punto-situazione-priorita": () => import("@docs/punto-situazione/11_priorita_operative.md?raw"),
+  "go-live-francy-runbook": () => import("@docs/GO_LIVE_FRANCY_RUNBOOK.md?raw"),
+  // Alias legacy (documento monolite rimosso)
+  "punto-situazione-webapp": () => import("@docs/punto-situazione/README.md?raw"),
 };
 
 const TITLES = {
@@ -31,7 +45,20 @@ const TITLES = {
   "analisi-fiscale-questionario": "Analisi perimetro fiscale (questionario)",
   "analisi-gestionale-questionario": "Analisi gestionale completo (questionario)",
   "qa-smoke-checklist": "QA — checklist smoke test",
-  "punto-situazione-webapp": "Punto della situazione — webapp completa",
+  "punto-situazione-indice": "Punto situazione — indice per settore",
+  "punto-situazione-architettura": "Punto situazione — Architettura",
+  "punto-situazione-prodotto": "Punto situazione — Prodotto",
+  "punto-situazione-database": "Punto situazione — Database",
+  "punto-situazione-code": "Punto situazione — Code",
+  "punto-situazione-ui": "Punto situazione — UI / UX",
+  "punto-situazione-dataflows": "Punto situazione — Dataflows",
+  "punto-situazione-security": "Punto situazione — Security",
+  "punto-situazione-test": "Punto situazione — Test / QA",
+  "punto-situazione-copywriter": "Punto situazione — Copywriter",
+  "punto-situazione-supervisor": "Punto situazione — Supervisore",
+  "punto-situazione-priorita": "Punto situazione — Priorità operative",
+  "go-live-francy-runbook": "Go-live Francy (Stripe / dominio / P3)",
+  "punto-situazione-webapp": "Punto situazione — indice per settore",
 };
 
 export default function SuperadminGuideDocPage() {

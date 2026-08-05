@@ -1,30 +1,55 @@
 import { useMemo } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess";
 import { isOperativeAreaPermitted } from "@/utils/operativePathEligibility";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
+import { OPERATIVE_AREA_NAV } from "@/constants/operativeNav";
 
-const OPERATIVE_NAV = Object.freeze([
-  { to: "/operative/cassa", label: "Cassa", description: "Incassi e ordini", servizioId: "ordini_cassa", areaKey: "cassa" },
-  { to: "/operative/cucina", label: "Cucina", description: "Ordini in preparazione", servizioId: "tablet_ruoli", areaKey: "cucina" },
-  { to: "/operative/bancone", label: "Bancone", description: "Comande pronte", servizioId: "tablet_ruoli", areaKey: "bancone" },
-  { to: "/operative/pizzaioli", label: "Pizzaioli", description: "Schermata forno / tablet", servizioId: "tablet_ruoli", areaKey: "pizzaiolo" },
-  { to: "/operative/delivery", label: "Delivery", description: "Consegne", servizioId: "gestione_consegne", areaKey: "delivery" },
-  { to: "/operative/pony", label: "Pony", description: "Asporto", servizioId: "gestione_consegne", areaKey: "pony" },
-]);
+/** Card home: una voce per area operativa principale (non sottovoci cassa / turni). */
+function buildWorkAreaCards() {
+  const seen = new Set();
+  const out = [];
+  for (const item of OPERATIVE_AREA_NAV) {
+    if (item.areaKey === "riepilogo") continue;
+    if (item.to !== "/operative/cassa" && String(item.to).startsWith("/operative/cassa/")) continue;
+    if (item.to === "/operative/turni") continue;
+    if (seen.has(item.areaKey)) continue;
+    seen.add(item.areaKey);
+    const descriptions = {
+      cassa: "Incassi e ordini",
+      cucina: "Preparazione e task cucina",
+      bancone: "Comande pronte e ritiri",
+      pizzaiolo: "Forno e cottura",
+      delivery: "Consegne a domicilio",
+    };
+    out.push({
+      to: item.to,
+      label: item.label,
+      description: descriptions[item.areaKey] || "",
+      servizioId: item.servizioId,
+      areaKey: item.areaKey,
+    });
+  }
+  return out;
+}
+
+const WORK_AREA_CARDS = Object.freeze(buildWorkAreaCards());
 
 export default function OperativeDashboard() {
-  const { permessiAree, user } = useAuth();
+  const { user } = useAuth();
   const { hasServizio } = useTenantServizi();
+  const { permessiAreeEffective, fullDemoAccess } = useOperativeSaDemoAccess();
+
   const items = useMemo(
     () =>
-      OPERATIVE_NAV.filter((item) => {
-        if (item.servizioId && !hasServizio(item.servizioId)) return false;
-        return isOperativeAreaPermitted(item.areaKey, permessiAree);
+      WORK_AREA_CARDS.filter((item) => {
+        if (item.servizioId && !hasServizio(item.servizioId) && !fullDemoAccess) return false;
+        return isOperativeAreaPermitted(item.areaKey, permessiAreeEffective);
       }),
-    [hasServizio, permessiAree],
+    [hasServizio, permessiAreeEffective, fullDemoAccess],
   );
 
   if (isQuadRepartiTestEmail(user?.email)) {
@@ -33,14 +58,25 @@ export default function OperativeDashboard() {
 
   return (
     <>
-      <h1 className="dashboard-page-title">Riepilogo</h1>
+      <h1 className="dashboard-page-title">Aree di lavoro</h1>
       <p style={{ margin: "0 0 20px 0", fontSize: 14, color: "#666" }}>
-        Scegli l’area di lavoro da aprire.
+        Scegli dove lavorare: cassa, cucina, bancone, forno o delivery.
       </p>
       {items.length ? (
         <DashboardNavCards items={[...items]} columns={3} />
       ) : (
-        <p style={{ fontSize: 14, color: "#64748b" }}>Nessuna area operativa è abilitata per i servizi attivi di questa pizzeria.</p>
+        <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.55, maxWidth: 480 }}>
+          <p style={{ margin: "0 0 8px" }}>
+            Non risulta abilitata nessuna area operativa per il tuo utente.
+          </p>
+          <p style={{ margin: 0 }}>
+            Chiedi all’amministratore di abilitarle in{" "}
+            <Link to="/admin/utenti" style={{ color: "#1565c0", fontWeight: 600 }}>
+              Admin → Dipendenti
+            </Link>{" "}
+            (Ruolo operativo / aree consentite).
+          </p>
+        </div>
       )}
     </>
   );

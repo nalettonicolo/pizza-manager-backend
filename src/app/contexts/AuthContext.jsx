@@ -58,6 +58,8 @@ export function AuthProvider({ children }) {
   /** Nome tenant dall’API Nest (`/me`, login): usato da TenantContext se `public.tenants` non è leggibile senza sessione Supabase. */
   const [nestTenantNome, setNestTenantNome] = useState(null)
   const [loading, setLoading] = useState(true)
+  /** True dopo il primo tentativo di risoluzione profilo (staff/cliente/nessuno). */
+  const [profileReady, setProfileReady] = useState(false)
   /** Override tenant attivo solo per Super Admin (Sala QA / supporto live). */
   const [supportTenantOverride, setSupportTenantOverride] = useState(() => {
     if (typeof window === "undefined") return null
@@ -127,6 +129,7 @@ export function AuthProvider({ children }) {
       setPermessiAree(computePermessiAree(normalized, ruoloNorm))
     }
     setNestTenantNome(profile.tenantNome != null ? String(profile.tenantNome) : null)
+    setProfileReady(true)
   }, [])
 
   // ===============================
@@ -136,6 +139,7 @@ export function AuthProvider({ children }) {
   const loadUserData = useCallback(async (userId, isRetry = false) => {
     if (loadUserDataInProgressRef.current && !isRetry) return
     loadUserDataInProgressRef.current = true
+    if (!isRetry) setProfileReady(false)
     devLog("Auth", "loadUserData inizio", { userId, isRetry })
     try {
       const staffPromise = supabase
@@ -193,8 +197,17 @@ export function AuthProvider({ children }) {
             : null
         setRuolo(ruoloNorm)
         setTenantId(staffData.tenant_id)
-        const normalized = normalizeLegacyAllAccessTrue(staffData)
-        setPermessiAree(computePermessiAree(normalized, ruoloNorm))
+        const mgmt =
+          ruoloNorm === "admin" ||
+          ruoloNorm === "owner" ||
+          ruoloNorm === "superadmin"
+        if (mgmt) {
+          setPermessiAree(PERMESSI_TUTTE_AREE)
+        } else {
+          const normalized = normalizeLegacyAllAccessTrue(staffData)
+          setPermessiAree(computePermessiAree(normalized, ruoloNorm))
+        }
+        setProfileReady(true)
         retryPendingRef.current = false
         setLoadingSafe(false)
         return
@@ -240,6 +253,7 @@ export function AuthProvider({ children }) {
         setTipoUtente("cliente")
         setRuolo(null)
         setTenantId(clienteData.tenant_id)
+        setProfileReady(true)
         retryPendingRef.current = false
         setLoadingSafe(false)
         return
@@ -254,6 +268,7 @@ export function AuthProvider({ children }) {
     setTipoUtente(null)
     setRuolo(null)
     setTenantId(null)
+    setProfileReady(true)
     if (isRetry) {
       retryPendingRef.current = false
     }
@@ -296,12 +311,14 @@ export function AuthProvider({ children }) {
             setTenantId(null)
             setPermessiAree(null)
             setNestTenantNome(null)
+            setProfileReady(true)
             latestUserIdRef.current = null
             lastLoadedUserIdRef.current = null
           }
         } finally {
           if (!cancelled) {
             clearTimeout(failsafeId)
+            setProfileReady(true)
             forceLoadingFalse()
             devLog("Auth", "init Nest completato")
           }
@@ -367,6 +384,7 @@ export function AuthProvider({ children }) {
           }
           await loadUserData(currentUser.id)
         } else {
+          setProfileReady(true)
           forceLoadingFalse()
         }
       } catch (err) {
@@ -411,6 +429,7 @@ export function AuthProvider({ children }) {
             setTenantId(null)
             setPermessiAree(null)
             setNestTenantNome(null)
+            setProfileReady(true)
             forceLoadingFalse()
           }
         } catch (e) {
@@ -510,6 +529,7 @@ export function AuthProvider({ children }) {
     setTenantId(null)
     setPermessiAree(null)
     setNestTenantNome(null)
+    setProfileReady(true)
     lastLoadedUserIdRef.current = null
     latestUserIdRef.current = null
     forceLoadingFalse()
@@ -547,6 +567,7 @@ export function AuthProvider({ children }) {
         permessiAree,
         nestTenantNome,
         loading,
+        profileReady,
         login,
         logout,
         updatePassword,

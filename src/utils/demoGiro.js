@@ -15,6 +15,14 @@ export const DEMO_GIRO_STEPS = [
   { path: "/operative/delivery", label: "Delivery / Pony" },
 ]
 
+/** Voci extra in sidebar Demo live (oltre ai reparti): potenzialità admin sul tenant. */
+export const DEMO_GIRO_ADMIN_LINKS = [
+  { path: "/cliente/dashboard", label: "Area cliente", group: "strumenti" },
+  { path: "/admin/home", label: "Admin locale", group: "admin" },
+  { path: "/admin/menu", label: "Menu (admin)", group: "admin" },
+  { path: "/admin/settings/parametri", label: "Parametri", group: "admin" },
+]
+
 export function isDemoGiroSearch(search) {
   const raw = typeof search === "string" ? search : ""
   const q = raw.startsWith("?") ? raw.slice(1) : raw

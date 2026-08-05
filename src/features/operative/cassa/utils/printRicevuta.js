@@ -124,12 +124,13 @@ export function buildRicevutaHtmlDocument(payload) {
   let widthMm = clampNum(parametri.comanda_width_mm, 0, 0, 120)
   if (widthMm <= 0 && larghezzaUtilePreset > 0) widthMm = larghezzaUtilePreset
   const pageSizeRule = rotoloMm > 0 ? `size: ${rotoloMm}mm auto;` : "size: auto;"
-  const fontKey = RICEVUTA_FONT_STACK[parametri.comanda_font_family] ? parametri.comanda_font_family : "system"
+  const fontKey = RICEVUTA_FONT_STACK[parametri.comanda_font_family] ? parametri.comanda_font_family : "mono"
   const fontStack = RICEVUTA_FONT_STACK[fontKey]
 
   const when = createdAt ? new Date(createdAt).toLocaleString("it-IT") : new Date().toLocaleString("it-IT")
   const isDel = String(tipoOrdine || "").toLowerCase() === "delivery"
   const tipoLabel = isDel ? "Consegna" : "Ritiro in negozio"
+  const showId = parametri?.comanda_mostra_id_ordine === true || parametri?.comanda_mostra_id_ordine === "true"
 
   const righeHtml = righe
     .map(
@@ -158,89 +159,105 @@ export function buildRicevutaHtmlDocument(payload) {
   if (numero != null && numero !== "") {
     headerParts.push(`<div><strong>Ordine</strong> #${escapeHtml(String(numero))}</div>`)
   }
-  if (orderId) {
-    headerParts.push(`<div class="muted">ID ${escapeHtml(String(orderId))}</div>`)
+  if (orderId && showId) {
+    const shortId = String(orderId).length > 12 ? `${String(orderId).slice(0, 8)}…` : String(orderId)
+    headerParts.push(`<div class="meta-id"><strong>ID</strong> ${escapeHtml(shortId)}</div>`)
   }
-  headerParts.push(`<div><strong>${escapeHtml(tipoLabel)}</strong></div>`)
-  if (nomeCliente) headerParts.push(`<div>Cliente: ${escapeHtml(String(nomeCliente))}</div>`)
-  if (orarioRitiro) headerParts.push(`<div>Orario: ${escapeHtml(String(orarioRitiro))}</div>`)
+  headerParts.push(`<div class="meta-tipo"><strong>${escapeHtml(tipoLabel)}</strong></div>`)
+  if (nomeCliente) headerParts.push(`<div><strong>Cliente</strong> ${escapeHtml(String(nomeCliente))}</div>`)
+  if (orarioRitiro) headerParts.push(`<div><strong>Orario</strong> ${escapeHtml(String(orarioRitiro))}</div>`)
   if (indirizzoConsegna) {
     const raw = String(indirizzoConsegna)
     const indFmt = formatIndirizzoDisplayItaliano(raw) || raw
-    headerParts.push(`<div>Indirizzo: ${escapeHtml(indFmt)}</div>`)
+    headerParts.push(`<div><strong>Indirizzo</strong> ${escapeHtml(indFmt)}</div>`)
   }
-  if (tipoPagamento) headerParts.push(`<div>Pagamento: ${escapeHtml(String(tipoPagamento))}</div>`)
-  if (note) headerParts.push(`<div class="note">Note: ${escapeHtml(String(note))}</div>`)
+  if (tipoPagamento) headerParts.push(`<div><strong>Pagamento</strong> ${escapeHtml(String(tipoPagamento))}</div>`)
+  if (note) headerParts.push(`<div class="note"><strong>Note</strong> ${escapeHtml(String(note))}</div>`)
 
   const headerHtml = headerParts.join("")
 
   return `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Ricevuta</title>
   <style>
-    @page { margin: ${marginMm}mm; ${pageSizeRule} }
+    @page { margin: ${Math.min(marginMm, 4)}mm; ${pageSizeRule} }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body {
       font-family: ${fontStack};
       margin: 0;
-      padding: 10px;
+      padding: 2px;
       font-size: ${fontSize}px;
       line-height: ${lineHeight};
-      color: #111;
+      color: #000;
+      background: #fff;
       ${widthRule}
     }
     .banner {
       text-align: center;
-      font-weight: 800;
+      font-weight: 900;
       font-size: 1.15em;
-      letter-spacing: 0.08em;
-      border-bottom: 2px solid #000;
-      padding-bottom: 6px;
-      margin-bottom: 8px;
+      letter-spacing: 0.04em;
+      border-bottom: 3px solid #000;
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+      color: #000;
     }
     .annullato {
       text-align: center;
-      font-weight: 700;
-      color: #b71c1c;
-      border: 1px solid #b71c1c;
+      font-weight: 900;
+      color: #000;
+      border: 2px solid #000;
       padding: 6px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       font-size: 0.95em;
     }
-    .when { font-size: 0.9em; color: #444; margin-bottom: 10px; }
-    .muted { font-size: 0.85em; color: #666; }
-    .note { margin-top: 6px; font-style: italic; }
-    .righe { margin-top: 12px; border-top: 1px solid #ccc; padding-top: 8px; }
+    .when { font-size: 0.95em; font-weight: 700; color: #000; margin-bottom: 6px; }
+    .testata { color: #000; }
+    .testata > div { margin-bottom: 1px; color: #000; }
+    .testata strong { font-weight: 900; }
+    .meta-id { font-size: 0.85em; font-weight: 600; color: #000; }
+    .meta-tipo { font-weight: 900; margin: 2px 0; }
+    .note { margin-top: 4px; font-weight: 700; color: #000; }
+    .righe { margin-top: 8px; border-top: 2px solid #000; padding-top: 6px; }
     .riga {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 8px;
-      margin-bottom: 8px;
-      padding-bottom: 6px;
-      border-bottom: 1px dashed #bbb;
+      margin-bottom: 5px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #000;
+      color: #000;
     }
     .riga-main { flex: 1; min-width: 0; }
-    .qty { font-weight: 700; }
-    .titolo { font-weight: 500; }
-    .importo { font-weight: 600; flex-shrink: 0; }
+    .qty { font-weight: 900; color: #000; }
+    .titolo { font-weight: 900; color: #000; }
+    .importo { font-weight: 900; flex-shrink: 0; color: #000; }
     .totale {
-      margin-top: 14px;
-      padding-top: 10px;
-      border-top: 2px solid #000;
-      font-size: 1.1em;
-      font-weight: 800;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 3px solid #000;
+      font-size: 1.15em;
+      font-weight: 900;
       text-align: right;
+      color: #000;
     }
     .footer {
-      margin-top: 16px;
-      font-size: 0.82em;
-      color: #555;
+      margin-top: 10px;
+      font-size: 0.85em;
+      font-weight: 700;
+      color: #000;
       text-align: center;
     }
-    @media print { body { padding: 4px; } }
+    @media print {
+      body { padding: 0; color: #000 !important; }
+      .banner, .when, .qty, .titolo, .importo, .totale, .footer, .testata, .testata * {
+        color: #000 !important;
+      }
+    }
   </style></head><body>
     <div class="testata">${headerHtml}</div>
     <div class="righe">${righeHtml || "<p>Nessuna riga.</p>"}</div>
     <div class="totale">Totale € ${Number(totale).toFixed(2)}</div>
-    <div class="footer">Documento di cortesia — non valido ai fini fiscali</div>
+    <div class="footer">Documento di cortesia — non fiscale</div>
   </body></html>`
 }
 

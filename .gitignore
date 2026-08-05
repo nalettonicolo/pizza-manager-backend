@@ -70,6 +70,12 @@ dist/
 .env.local
 .env.production
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Cursor MCP locale (può contenere URL con token / ref sensibili)
 .cursor/mcp.json
 

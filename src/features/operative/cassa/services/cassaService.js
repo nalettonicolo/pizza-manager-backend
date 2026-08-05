@@ -1,20 +1,18 @@
-import { supabase } from "@/lib/supabaseClient"
+/**
+ * Stub legacy — non usare per create ordine cassa (bypassava RPC).
+ * Preferire `cassaOrdiniService.js` → `createOrder(tenantId, payload)` via RPC.
+ * @deprecated
+ */
+export {
+  createOrder,
+  getOrderDetail,
+  updateOrder,
+  replaceOrderItems,
+} from "./cassaOrdiniService.js"
 
-export async function createOrder(order) {
-  const { data, error } = await supabase
-    .from("Ordine")
-    .insert(order)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-export async function createOrderItems(items) {
-  const { error } = await supabase
-    .from("ordini_items")
-    .insert(items)
-
-  if (error) throw error
+/** @deprecated Usare replaceOrderItems RPC via cassaOrdiniService */
+export async function createOrderItems() {
+  throw new Error(
+    "createOrderItems diretto non supportato: usare createOrder / replaceOrderItems (RPC) da cassaOrdiniService",
+  )
 }

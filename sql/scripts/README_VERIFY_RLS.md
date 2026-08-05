@@ -52,4 +52,8 @@ Esegui **`verify_database_inventory_readonly.sql`** (a sezioni) in SQL Editor o 
 
 ## Automazione futura
 
-- Integrare in CI **non** è banale (serve DB effimero + seed). Priorità: **script in staging** settimanale eseguito da pipeline con credenziali dedicate.
+- Inventario: `npm run verify:rls-inventory` (Management API + token CLI).
+- Cross-tenant JWT: `npm run verify:rls-jwt-ab` con env `RLS_JWT_A`, `RLS_JWT_B`, `RLS_TENANT_A`, `RLS_TENANT_B`.
+  - Senza env → **SKIP** (exit 0); con `REQUIRE_RLS_JWT=1` → fail se mancano.
+- Workflow: `.github/workflows/security-smoke.yml` (whitelist PO, inventario, JWT A/B, Stripe Edge).
+- Smoke SQL manuale: **`smoke_rls_cross_tenant.sql`** in staging con due JWT reali resta l’orizzonte di accettazione completo.

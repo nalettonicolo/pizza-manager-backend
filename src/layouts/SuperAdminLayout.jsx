@@ -3,6 +3,10 @@ import { Outlet, NavLink, Link, useNavigate, useLocation } from "react-router-do
 import { useAuth } from "@/app/contexts/AuthContext";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ENABLE_TEST_REPARTI } from "@/constants/testReparti";
+import {
+  resolveSupportTenantOverride,
+  withSupportTenantQuery,
+} from "@/utils/supportTenantOverride";
 import "@/styles/superadmin-enterprise.css";
 
 const PIATTAFORMA_ITEMS_BASE = [
@@ -41,13 +45,20 @@ const NAV_DROPDOWNS = [
   },
 ];
 
-const NAV_ANTEPRIMA = { to: "/preview", label: "Anteprima sito" };
-
 function pathMatchesItem(pathname, to) {
   if (pathname === to) return true;
   if (to.length > 1 && pathname.startsWith(`${to}/`)) return true;
   return false;
 }
+
+function resolveAnteprimaPath() {
+  const envId = String(import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID || "").trim();
+  const tenantId = resolveSupportTenantOverride() || envId;
+  if (tenantId) return withSupportTenantQuery("/preview", tenantId);
+  return "/preview";
+}
+
+const NAV_ANTEPRIMA = { label: "Anteprima sito" };
 
 function dropdownGroupActive(items, pathname) {
   return items.some((item) => pathMatchesItem(pathname, item.to));
@@ -61,8 +72,9 @@ export default function SuperAdminLayout() {
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  const anteprimaTo = useMemo(() => resolveAnteprimaPath(), []);
   const anteprimaActive = useMemo(
-    () => pathMatchesItem(location.pathname, NAV_ANTEPRIMA.to),
+    () => pathMatchesItem(location.pathname, "/preview"),
     [location.pathname],
   );
 
@@ -163,7 +175,7 @@ export default function SuperAdminLayout() {
                 })}
                 <li className={`sa-nav-dropdown sa-nav-dropdown--flat${anteprimaActive ? " sa-nav-dropdown--active" : ""}`}>
                   <NavLink
-                    to={NAV_ANTEPRIMA.to}
+                    to={anteprimaTo}
                     className={({ isActive }) =>
                       `sa-nav-dropdown-trigger sa-nav-anteprima-link${isActive ? " active" : ""}`
                     }

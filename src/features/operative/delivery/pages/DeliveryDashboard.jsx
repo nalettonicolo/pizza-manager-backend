@@ -13,6 +13,8 @@ import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTes
 import { sortOrdersByNearestNeighbor } from "@/features/operative/delivery/utils/deliveryRouteUtils"
 import ConsegnaProofDialog from "@/features/operative/delivery/components/ConsegnaProofDialog"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
+import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
+import { printRicevutaCortesiaByOrdineId } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 
 const STATO_PRONTO = "PRONTO"
 const POLL_FALLBACK_MS = 30000
@@ -111,12 +113,15 @@ export default function DeliveryDashboard(props) {
   /** Vista test a 4 riquadri: niente titoli né testi esplicativi (anche se mode non passato ma dentro provider). */
   const stripQuadChrome = quadTest || embedQuad
   const { operatoreLabel } = useOutletContext() || {}
-  const { tenantId } = useTenant()
+  const { tenantId, tenantData } = useTenant()
+  const parametri = tenantData?.parametri_operativi || {}
+  const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "delivery")
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(null)
   const [proofOrdine, setProofOrdine] = useState(null)
   const [proofBusy, setProofBusy] = useState(false)
+  const [cortesiaBusyId, setCortesiaBusyId] = useState(null)
   const [riderPos, setRiderPos] = useState(null)
   const loadSeqRef = useRef(0)
 
@@ -354,6 +359,37 @@ export default function DeliveryDashboard(props) {
           >
             Consegnato
           </button>
+          {showPrintCortesia ? (
+            <button
+              type="button"
+              disabled={cortesiaBusyId === ord.id}
+              onClick={async () => {
+                if (!ord.id || cortesiaBusyId) return
+                setCortesiaBusyId(ord.id)
+                try {
+                  await printRicevutaCortesiaByOrdineId(tenantId, ord.id, tenantData)
+                } catch (err) {
+                  logDeliveryError("printRicevutaCortesia", err)
+                  window.alert("Impossibile stampare la ricevuta di cortesia. Riprova.")
+                } finally {
+                  setCortesiaBusyId(null)
+                }
+              }}
+              style={{
+                padding: compact ? "4px 8px" : "8px 16px",
+                fontSize: compact ? 11 : undefined,
+                background: "#fff",
+                color: "#1565c0",
+                border: "1px solid #90caf9",
+                borderRadius: 6,
+                cursor: cortesiaBusyId === ord.id ? "wait" : "pointer",
+                fontWeight: 600,
+                opacity: cortesiaBusyId === ord.id ? 0.7 : 1,
+              }}
+            >
+              {cortesiaBusyId === ord.id ? "Stampa…" : "Ricevuta cortesia"}
+            </button>
+          ) : null}
         </div>
       </li>
     )

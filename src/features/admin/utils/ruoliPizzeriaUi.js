@@ -1,7 +1,7 @@
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
 
 export const AREE_NAV = [
-  { key: "accesso_riepilogo", label: "Riepilogo" },
+  { key: "accesso_riepilogo", label: "Aree di lavoro" },
   { key: "accesso_cassa", label: "Cassa" },
   { key: "accesso_cucina", label: "Cucina" },
   { key: "accesso_bancone", label: "Bancone" },
@@ -61,7 +61,7 @@ export function getCosaPuoFare(ruolo, puoModificareParametri) {
       }
       break
     case "operatore":
-      list.push("Di default solo l’area Riepilogo; le altre aree si abilitano sotto «Aree consentite».")
+      list.push("Di default solo «Aree di lavoro»; le altre aree si abilitano sotto «Aree consentite».")
       break
     case "bancone":
       list.push("Area Bancone")

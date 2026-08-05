@@ -16,13 +16,12 @@ export default function OperativeTurniPage() {
     <div style={{ maxWidth: 560 }}>
       <h1 className="dashboard-page-title">Turni cassa</h1>
       <p style={{ margin: "0 0 20px 0", fontSize: 14, color: "#64748b" }}>
-        Apertura e chiusura turno sul punto vendita attivo. I dati sono salvati su Supabase (tabella{" "}
-        <code style={{ fontSize: 12, background: "#f1f5f9", padding: "2px 6px", borderRadius: 4 }}>turni_operatori</code>
-        ) con riconciliazione in chiusura.
+        Apri e chiudi il turno sul punto vendita attivo. In chiusura puoi indicare il fondo contato e allinearlo
+        agli incassi del turno.
       </p>
       {!activePv && (
         <p style={{ marginBottom: 16, fontSize: 14, color: "#b45309" }}>
-          Nessun punto vendita attivo: verifica la configurazione dei punti vendita per il tenant.
+          Nessun punto vendita attivo: seleziona o configura un punto vendita per questa pizzeria.
         </p>
       )}
       <TurnoControl tenantId={tenantId} puntoVenditaId={activePv} pvList={pvList} />

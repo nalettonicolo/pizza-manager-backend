@@ -4,6 +4,8 @@ import type { NotificaOutboxRow } from "./types.ts"
 
 function envMap(): Record<string, string | undefined> {
   return {
+    NOTIFY_EMAIL_RELAY_URL: Deno.env.get("NOTIFY_EMAIL_RELAY_URL") ?? undefined,
+    NOTIFY_EMAIL_RELAY_KEY: Deno.env.get("NOTIFY_EMAIL_RELAY_KEY") ?? undefined,
     NOTIFY_SMTP_HOST: Deno.env.get("NOTIFY_SMTP_HOST") ?? undefined,
     NOTIFY_SMTP_PORT: Deno.env.get("NOTIFY_SMTP_PORT") ?? undefined,
     NOTIFY_SMTP_USER: Deno.env.get("NOTIFY_SMTP_USER") ?? undefined,

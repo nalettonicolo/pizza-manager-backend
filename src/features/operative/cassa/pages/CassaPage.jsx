@@ -4,6 +4,7 @@ import { useTenant } from "@/app/contexts/TenantContext"
 import { usePv } from "@/app/contexts/PvContext"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenantServizi, resolveServiziIdsForTenant } from "@/app/hooks/useTenantServizi"
+import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview"
@@ -25,6 +26,13 @@ import {
   ordineOrarioRitiro,
 } from "@/features/operative/cassa/utils/ordineFieldHelpers"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { splitNomeDaIndirizzoConsegna } from "@/features/operative/cassa/utils/cassaDeliveryNomeIndirizzo"
+import {
+  deliveryIndirizzoRiga,
+  indirizzoConsegnaMatchAnagrafica,
+  orarioVisualizzatoLista,
+  buildOrdineCardTitleModel,
+} from "@/features/operative/cassa/utils/cassaDeliveryDisplay"
 
 import {
   getCategories,
@@ -34,28 +42,30 @@ import {
   getProductIngredientiBatch,
   getIngredients,
   getRuoliPizzeria,
-  createOrder,
   turniCassaAperto,
-  getOrders,
-  getOrderDetail,
   getProdottiByIds,
-  getRigheAggregateByOrdineIds,
   getProducts,
-  updateOrderTipoPagamento,
-  updateOrder,
-  replaceOrderItems,
-  chiudiGiornata,
   enrichProductsWithPrezzoCalcolato,
   searchAnagraficaClienti,
-  enrichOrdineDetailIngredientiSummaries,
   searchFidelityCassa,
   enrollFidelityCliente,
-  updateOrderStato,
   applyFidelityMovimento,
-  updateTenantSettings,
-  logCassaAuditEvent,
   getFoodcostPriceMismatchReport,
 } from "@/features/admin/services/adminService"
+import {
+  createOrder,
+  getOrders,
+  getOrderDetail,
+  getRigheAggregateByOrdineIds,
+  updateOrderTipoPagamento,
+  updateOrder,
+  chiudiGiornata,
+  enrichOrdineDetailIngredientiSummaries,
+  updateOrderStato,
+  logCassaAuditEvent,
+} from "@/features/operative/cassa/services/cassaOrdiniService"
+import { updateTenantSettings } from "@/features/admin/services/parametriService"
+import { useCassaModificaOrdine } from "@/features/operative/cassa/hooks/useCassaModificaOrdine"
 import { newLocalId } from "@/features/admin/hooks/useTenantLocalJson"
 import { roundTotalToFiveCents } from "@/utils/cassaArrotondamento"
 import { readFiscalConfigFromParametri, enqueueCorrispettivoAfterCheckoutIfConfigured } from "@/integrations/fiscal"
@@ -97,6 +107,7 @@ import {
   ricevutaRigheFromCartSnapshot,
   ricevutaPayloadFromOrdineDetail,
 } from "@/features/operative/cassa/utils/printRicevuta"
+import { readStampaModalita, readStampaQuando, canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { normalizeComandaRepartiStampanti } from "@/utils/comandaRepartiStampanti"
 import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 import {
@@ -158,26 +169,6 @@ function sumMistoRighe(righe) {
 }
 
 /** Stesso criterio di `ordiniRaggruppatiPerOra`: se manca orario_ritiro in DB si usa HH:mm da createdAt. */
-function formatOrarioFallbackDaCreazione(o) {
-  const raw = ordineCreatedAt(o)
-  if (!raw) return ""
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) return ""
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-}
-
-
-function orarioVisualizzatoLista(o) {
-  const t = ordineOrarioRitiro(o)
-  if (t) return t
-  return formatOrarioFallbackDaCreazione(o)
-}
-
-/**
- * Molti ordini delivery hanno solo indirizzo = "Nome – Via …" senza nome_cliente.
- * Separa solo se il primo segmento non sembra già un indirizzo (Via, Viale, …).
- * Accetta trattini − – — - e spaziature irregolari.
- */
 function computeAccreditoFidelityPunti(parametriOperativi, cart, totaleOrdine) {
   const po = parametriOperativi && typeof parametriOperativi === "object" ? parametriOperativi : {}
   if (po.fidelity_attivo === false || po.fidelity_attivo === "false") return 0
@@ -207,68 +198,24 @@ function turnoOkForCassa(po, turno, activePvId) {
   return true
 }
 
-function splitNomeDaIndirizzoConsegna(raw) {
-  const t = String(raw || "")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-  if (!t) return { nomePart: "", addrPart: "", full: "" }
-  const m = t.match(/^(.+?)\s*[\u2013\u2014\u2212-]\s*(.+)$/)
-  if (!m) return { nomePart: "", addrPart: "", full: t }
-  const left = m[1].trim()
-  const right = m[2].trim()
-  if (!right) return { nomePart: "", addrPart: "", full: t }
-  if (/^(Via|Viale|Piazza|Corso|Largo|Contr\.|Contrada)\b/i.test(left)) {
-    return { nomePart: "", addrPart: "", full: t }
-  }
-  if (left.length > 52) return { nomePart: "", addrPart: "", full: t }
-  return { nomePart: left, addrPart: right, full: t }
-}
-
-/** Seconda riga sotto il titolo: solo tratto indirizzo (senza ripetere il nome se era nel campo unico). */
-function deliveryIndirizzoRiga(o) {
-  const ind = ordineIndirizzoConsegna(o)
-  if (!ind) return ""
-  const sp = splitNomeDaIndirizzoConsegna(ind)
-  const line = sp.addrPart || sp.full || ind
-  return formatIndirizzoDisplayItaliano(line) || line
-}
-
-/** Confronto anagrafica ↔ ordine: stesso testo o stessa normalizzazione linea italiana. */
-function indirizzoConsegnaMatchAnagrafica(clienteInd, ordineInd) {
-  const a = String(clienteInd || "").trim()
-  const b = String(ordineInd || "").trim()
-  if (!a || !b) return a === b
-  if (a.toLowerCase() === b.toLowerCase()) return true
-  const af = formatIndirizzoDisplayItaliano(a).trim().toLowerCase()
-  const bf = formatIndirizzoDisplayItaliano(b).trim().toLowerCase()
-  return Boolean(af && bf && af === bf)
-}
-
-/** Riga titolo lista ordini: negozio = nome + orario a destra; delivery = nome grande + orario a destra (fallback da creazione). */
+/** Riga titolo lista ordini: negozio = nome + orario a destra; delivery = nome grande + orario a destra. */
 function OrdineCardTitleRows({ o, isDelivery }) {
-  const nomeDb = ordineNomeCliente(o)
-  const indRaw = ordineIndirizzoConsegna(o)
-  const split = isDelivery ? splitNomeDaIndirizzoConsegna(indRaw) : { nomePart: "" }
-  const nome = isDelivery ? (nomeDb || split.nomePart) : nomeDb
-  const orario = orarioVisualizzatoLista(o)
+  const m = buildOrdineCardTitleModel(o, isDelivery)
   if (isDelivery) {
-    const titoloPrincipale = nome || orario || "—"
-    const orarioADestra = orario && nome
     return (
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, width: "100%" }}>
-        <span style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.25, minWidth: 0 }}>{titoloPrincipale}</span>
-        {orarioADestra ? (
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#1565c0", flexShrink: 0 }}>{orario}</span>
+        <span style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.25, minWidth: 0 }}>{m.titoloPrincipale}</span>
+        {m.showOrarioADestra ? (
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#1565c0", flexShrink: 0 }}>{m.orario}</span>
         ) : null}
       </div>
     )
   }
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, width: "100%" }}>
-      <span style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.25, minWidth: 0 }}>{nome || "—"}</span>
-      {orario ? (
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#2e7d32", flexShrink: 0 }}>{orario}</span>
+      <span style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.25, minWidth: 0 }}>{m.titoloPrincipale}</span>
+      {m.showOrarioADestra ? (
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#2e7d32", flexShrink: 0 }}>{m.orario}</span>
       ) : null}
     </div>
   )
@@ -302,8 +249,9 @@ export default function CassaPage() {
   const { user, ruolo } = useAuth()
   const canAnnullaOrdineCassa = useMemo(() => normalizeRuoloOperativo(ruolo) === "cassa", [ruolo])
   const { hasServizio, enforcementActive } = useTenantServizi()
+  const { fullDemoAccess, canEditParametri: resolveCanEditParametri } = useOperativeSaDemoAccess()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
-  const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
+  const fidelityServizioOk = fullDemoAccess || !enforcementActive || hasServizio("fidelity_card")
   const ordiniOnlineInLicenza = useMemo(
     () => resolveServiziIdsForTenant(tenantData).has("ordini_online"),
     [tenantData],
@@ -374,19 +322,6 @@ export default function CassaPage() {
   const [ordineDetail, setOrdineDetail] = useState(null)
   const [ordineDetailLoading, setOrdineDetailLoading] = useState(false)
   const [segnaPagatoModal, setSegnaPagatoModal] = useState(null)
-  const [modificaOrdineModal, setModificaOrdineModal] = useState(null) // ordineDetail when in edit mode
-  const [modificaForm, setModificaForm] = useState({
-    nome_cliente: "",
-    telefono_ritiro: "",
-    orario_ritiro: "",
-    note: "",
-    tipo_pagamento: "Da pagare",
-    indirizzo_consegna: "",
-  })
-  const [modificaOrdineSaving, setModificaOrdineSaving] = useState(false)
-  /** Righe editabili nel modale Modifica ordine (prodotto, qty, prezzo da listino). */
-  const [modificaRighe, setModificaRighe] = useState([])
-  const [modificaProdottiList, setModificaProdottiList] = useState([])
   const [chiudiGiornataLoading, setChiudiGiornataLoading] = useState(false)
   const [chiudiGiornataConfirmOpen, setChiudiGiornataConfirmOpen] = useState(false)
   const [lastOrderModalDetail, setLastOrderModalDetail] = useState(null)
@@ -400,7 +335,7 @@ export default function CassaPage() {
   /** Area prodotti (scroll) per tornare in cima dopo ordine concluso. */
   const cassaProductsAreaRef = useRef(null)
   const [ordiniSearch, setOrdiniSearch] = useState("")
-  const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro', slotKey, slotLabel, ordini, slotsDisponibili }
+  const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro'|'totale', slotKey, slotLabel, ordini, slotsDisponibili }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
   const [turnoCassa, setTurnoCassa] = useState(null)
   const [turnoCassaLoading, setTurnoCassaLoading] = useState(false)
@@ -658,6 +593,26 @@ export default function CassaPage() {
     }
   }, [tenantId])
 
+  const {
+    modificaOrdineModal,
+    modificaForm,
+    setModificaForm,
+    modificaOrdineSaving,
+    modificaRighe,
+    setModificaRighe,
+    modificaProdottiList,
+    modificaTotaleAnteprima,
+    openModificaOrdine,
+    closeModificaOrdine,
+    handleSalvaModificaOrdine,
+  } = useCassaModificaOrdine({
+    tenantId,
+    tenantData,
+    ordineDetail,
+    setOrdineDetail,
+    loadOrdini,
+  })
+
   useEffect(() => {
     if (!tenantId) return
     const t = setInterval(() => {
@@ -692,6 +647,10 @@ export default function CassaPage() {
     if (!tenantId) return
     let cancelled = false
     const loadPermesso = async () => {
+      if (fullDemoAccess) {
+        if (!cancelled) setCanEditParametriCassa(true)
+        return
+      }
       if (!user?.email) {
         if (!cancelled) setCanEditParametriCassa(false)
         return
@@ -700,7 +659,7 @@ export default function CassaPage() {
         const list = await getRuoliPizzeria(tenantId)
         if (cancelled) return
         const me = (list || []).find((r) => r.email === user.email)
-        setCanEditParametriCassa(Boolean(me?.puo_modificare_parametri))
+        setCanEditParametriCassa(resolveCanEditParametri(Boolean(me?.puo_modificare_parametri)))
       } catch (e) {
         console.warn("Errore caricamento permessi ruoli:", e)
         if (!cancelled) setCanEditParametriCassa(false)
@@ -723,7 +682,7 @@ export default function CassaPage() {
     return () => {
       cancelled = true
     }
-  }, [tenantId, user?.email, loadCategories, loadOrdini])
+  }, [tenantId, user?.email, loadCategories, loadOrdini, fullDemoAccess, resolveCanEditParametri])
 
   useEffect(() => {
     if (!tenantId) {
@@ -818,91 +777,6 @@ export default function CassaPage() {
       alert("Errore aggiornamento pagamento. " + (e?.message || ""))
     }
   }, [ordineDetail?.id, loadOrdini])
-
-  useEffect(() => {
-    if (!tenantId || !modificaOrdineModal?.id) {
-      setModificaProdottiList([])
-      return
-    }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const raw = await getProducts(tenantId)
-        const withPrezzo = await enrichProductsWithPrezzoCalcolato(tenantId, raw)
-        const po = tenantData?.parametri_operativi
-        const list = applyPromoCalendarioToProducts(withPrezzo, po, new Date())
-        const active = (list || []).filter((p) => p.attivo !== false)
-        if (!cancelled) setModificaProdottiList(active)
-      } catch (e) {
-        console.warn("Modifica ordine: catalogo prodotti", e)
-        if (!cancelled) setModificaProdottiList([])
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [tenantId, modificaOrdineModal?.id, tenantData?.parametri_operativi])
-
-  const handleSalvaModificaOrdine = useCallback(async () => {
-    if (!modificaOrdineModal?.id) return
-    if (!modificaRighe.length) {
-      alert("Aggiungi almeno una riga all'ordine.")
-      return
-    }
-    const totaleRighe = modificaRighe.reduce(
-      (s, r) => s + Number(r.prezzo || 0) * Math.max(1, Number(r.quantita) || 1),
-      0,
-    )
-    const ordineId = modificaOrdineModal.id
-    setModificaOrdineSaving(true)
-    try {
-      await updateOrder(ordineId, {
-        nome_cliente: modificaForm.nome_cliente || null,
-        telefono_ritiro: ordineIsDelivery(modificaOrdineModal)
-          ? undefined
-          : modificaForm.telefono_ritiro?.trim() || null,
-        orario_ritiro: modificaForm.orario_ritiro || null,
-        note: modificaForm.note || null,
-        tipo_pagamento: modificaForm.tipo_pagamento || null,
-        indirizzo_consegna: modificaForm.indirizzo_consegna || null,
-      })
-      await replaceOrderItems(
-        ordineId,
-        totaleRighe,
-        modificaRighe.map((r) => ({
-          prodotto_id: r.prodotto_id,
-          quantita: r.quantita,
-          prezzo: r.prezzo,
-          formato_nome: r.formato_nome || null,
-          ingredienti_cottura_summary: r.ingredienti_cottura_summary || null,
-        })),
-      )
-      setModificaOrdineModal(null)
-      if (ordineDetail?.id === ordineId) {
-        const detail = await getOrderDetail(ordineId)
-        const ids = (detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)
-        const prodotti = ids.length ? await getProdottiByIds(tenantId, ids) : []
-        const productNames = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
-        const enriched = await enrichOrdineDetailIngredientiSummaries(tenantId, { ...detail, productNames })
-        setOrdineDetail(enriched)
-      }
-      loadOrdini()
-    } catch (e) {
-      console.error(e)
-      alert("Errore durante la modifica ordine. " + (e?.message || ""))
-    } finally {
-      setModificaOrdineSaving(false)
-    }
-  }, [modificaOrdineModal, modificaForm, modificaRighe, ordineDetail?.id, loadOrdini, tenantId])
-
-  const modificaTotaleAnteprima = useMemo(
-    () =>
-      modificaRighe.reduce(
-        (s, r) => s + Number(r.prezzo || 0) * Math.max(1, Number(r.quantita) || 1),
-        0,
-      ),
-    [modificaRighe],
-  )
 
   const handleSpostaOrdinePlanning = useCallback(async (ordineId, nuovoOrarioRitiro) => {
     setPlanningSpostaLoading(ordineId)
@@ -1034,7 +908,7 @@ export default function CassaPage() {
       try {
         await updateOrderStato(ordineId, "ANNULLATO")
         setSegnaPagatoModal(null)
-        setModificaOrdineModal(null)
+        closeModificaOrdine()
         setOrdineDetail((prev) => (prev?.id === ordineId ? { ...prev, stato: "ANNULLATO" } : prev))
         loadOrdini()
       } catch (e) {
@@ -1042,7 +916,7 @@ export default function CassaPage() {
         alert("Errore annullamento ordine. " + (e?.message || ""))
       }
     },
-    [loadOrdini, ruolo],
+    [loadOrdini, ruolo, closeModificaOrdine],
   )
 
   // Ricerca clienti delivery (solo se c'è testo cercato e nessun cliente già selezionato con stesso testo)
@@ -1874,7 +1748,7 @@ export default function CassaPage() {
     setPlanningSpostaLoading(null)
     setOrdineDetail(null)
     setOrdineDetailLoading(false)
-    setModificaOrdineModal(null)
+    closeModificaOrdine()
     setSegnaPagatoModal(null)
     setLastOrderModalDetail(null)
     setLastOrderLoading(false)
@@ -1907,7 +1781,7 @@ export default function CassaPage() {
         window.scrollTo(0, 0)
       })
     })
-  }, [])
+  }, [closeModificaOrdine])
 
   /////////////////////////////////////////////////////////
   // CHECKOUT
@@ -2249,10 +2123,13 @@ export default function CassaPage() {
         righe: righeComanda,
         parametri: po,
       }
-      const autoStampa = po.comanda_stampa_auto === true || po.comanda_stampa_auto === "true"
-      if (autoStampa) {
+      setPendingComandaPrint(null)
+      setPendingRicevutaPrint(null)
+
+      const quandoComanda = readStampaQuando(po, "comanda")
+      if (quandoComanda === "auto") {
         printComandaKitchen(printPayload)
-      } else {
+      } else if (quandoComanda === "manuale") {
         setPendingComandaPrint(printPayload)
       }
 
@@ -2272,11 +2149,14 @@ export default function CassaPage() {
         parametri: po,
         annullato: false,
       }
-      const autoRicevuta = po.cassa_stampa_ricevuta_auto === true || po.cassa_stampa_ricevuta_auto === "true"
-      if (autoRicevuta) {
-        printRicevuta(ricevutaPayload)
-      } else {
-        setPendingRicevutaPrint(ricevutaPayload)
+      // Con tablet: ricevuta di cortesia dal reparto configurato, non dal checkout cassa.
+      if (readStampaModalita(po) === "solo_cassa") {
+        const quandoRicevuta = readStampaQuando(po, "ricevuta")
+        if (quandoRicevuta === "auto") {
+          printRicevuta(ricevutaPayload)
+        } else if (quandoRicevuta === "manuale") {
+          setPendingRicevutaPrint(ricevutaPayload)
+        }
       }
     } catch (err) {
       console.error("Errore checkout:", err)
@@ -2359,12 +2239,8 @@ export default function CassaPage() {
   const showModificaCategoria = !["fritti", "dolci", "bibite"].includes(activeCatNome)
 
   const orariOggi = useMemo(() => getTodayOrari(tenantData?.orari_settimana), [tenantData?.orari_settimana])
-  const capacityWindowDelivery = Number(parametri.consegne_ogni_min) || 15
-  const capacityWindowNegozio = Number(parametri.ritiro_ogni_min) || 15
   const pizzeOgni15 = Number(parametri.pizze_ogni_15_min) || 8
   const sogliaGiallo = Number(parametri.soglia_giallo_pizze) || 10
-  const maxPizzeDelivery = Math.max(1, Math.round((pizzeOgni15 * capacityWindowDelivery) / 15))
-  const maxPizzeNegozio = Math.max(1, Math.round((pizzeOgni15 * capacityWindowNegozio) / 15))
   /** Unico tetto colore/UI planning: griglia 15 min × throughput pizze/15 min (stesso criterio del riepilogo ordine). */
   const maxPizzeFornoUnico = Math.max(1, Math.round((pizzeOgni15 * PLANNING_GRID_SLOT_MINUTES) / 15))
 
@@ -2449,6 +2325,7 @@ export default function CassaPage() {
         ritiroPizze,
         ritiroOrdiniList,
         totPizzeForno,
+        fornoColor,
         deliveryColor: fornoColor,
         ritiroColor: fornoColor,
       }
@@ -3063,8 +2940,8 @@ export default function CassaPage() {
             {pendingComandaPrint ? " Stampa la comanda per la cucina." : ""}
             {pendingRicevutaPrint
               ? pendingComandaPrint
-                ? " Stampa la ricevuta per il cliente se serve."
-                : " Stampa la ricevuta per il cliente."
+                ? " Stampa anche la ricevuta di cortesia per il cliente se serve."
+                : " Stampa la ricevuta di cortesia per il cliente."
               : ""}
           </span>
           <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
@@ -3098,7 +2975,7 @@ export default function CassaPage() {
                 style={{ ...styles.comandaBannerBtn, background: "#6a1b9a" }}
                 onClick={() => printRicevuta(pendingRicevutaPrint)}
               >
-                Stampa ricevuta
+                Stampa ricevuta di cortesia
               </button>
             ) : null}
             <button
@@ -3362,102 +3239,132 @@ export default function CassaPage() {
               </div>
             </div>
             <p style={styles.planningHint}>
-              Fasce da apertura a chiusura. Le colonne mostrano ordini/pizze per consegna e per ritiro; il{" "}
-              <strong>colore</strong> è uguale in entrambe e riflette il <strong>totale pizze forno</strong> nella fascia
-              (max {maxPizzeFornoUnico} / {PLANNING_GRID_SLOT_MINUTES} min da parametri). Verde: sotto soglia giallo;
-              giallo: quasi pieno; rosso: capacità raggiunta o superata.
+              Fasce ogni {PLANNING_GRID_SLOT_MINUTES} min · capacità forno{" "}
+              <strong>max {maxPizzeFornoUnico} pizze</strong>. Verde sotto soglia, giallo quasi pieno, rosso pieno.
+              Clic su una cella per gli ordini.
             </p>
             {!orariOggi.aperto && (
-              <p style={{ margin: "0 0 12px", color: "#c62828", fontWeight: 500 }}>Oggi chiuso (nessuna fascia disponibile).</p>
+              <p style={{ margin: "0 0 8px", color: "#c62828", fontWeight: 500, fontSize: 13 }}>Oggi chiuso (nessuna fascia disponibile).</p>
             )}
             {planningMergedRows.length > 0 ? (
               <div style={styles.planningMergedTable}>
                 <div style={styles.planningMergedHeader}>
                   <span style={styles.planningMergedCellTime}>Ora</span>
-                  <span style={{ ...styles.planningMergedCell, background: "#e3f2fd", borderColor: "#1976d2" }}>
-                    <span style={styles.planningMergedHeadTitle}>Consegna</span>
-                    <span style={styles.planningMergedHeadMeta}>
-                      Parametri: pizze_ogni_15_min + consegne_ogni_min ({capacityWindowDelivery})
-                    </span>
-                    <span style={styles.planningMergedHeadMetaStrong}>
-                      Capacità: max {maxPizzeDelivery} pizze
-                    </span>
+                  <span style={{ ...styles.planningMergedHeadCell, background: "#e3f2fd", borderColor: "#1976d2" }}>
+                    Consegna
                   </span>
-                  <span style={{ ...styles.planningMergedCell, background: "#f3e5f5", borderColor: "#7b1fa2", borderRight: "none" }}>
-                    <span style={styles.planningMergedHeadTitle}>Ritiro negozio</span>
-                    <span style={styles.planningMergedHeadMeta}>
-                      Parametri: pizze_ogni_15_min + ritiro_ogni_min ({capacityWindowNegozio})
-                    </span>
-                    <span style={styles.planningMergedHeadMetaStrong}>
-                      Capacità: max {maxPizzeNegozio} pizze
-                    </span>
+                  <span style={{ ...styles.planningMergedHeadCell, background: "#f3e5f5", borderColor: "#7b1fa2" }}>
+                    Ritiro
+                  </span>
+                  <span
+                    style={{
+                      ...styles.planningMergedHeadCell,
+                      background: "#eceff1",
+                      borderColor: "#546e7a",
+                      borderRight: "none",
+                    }}
+                  >
+                    Totale
                   </span>
                 </div>
-                {planningMergedRows.map((row, i) => {
-                  const deliveryIndirizzi = (row.deliveryOrdiniList || [])
-                    .map((o) => ordineIndirizzoConsegna(o))
-                    .filter(Boolean)
-                  const indirizziPreview = deliveryIndirizzi.length ? deliveryIndirizzi.slice(0, 3).join(" · ") : ""
-                  const hasMoreIndirizzi = deliveryIndirizzi.length > 3
-                  return (
-                    <div key={i} style={styles.planningMergedRow}>
-                      <span style={styles.planningMergedCellTime}>{row.label}</span>
-                      <button
-                        type="button"
-                        style={{
-                          ...styles.planningMergedCell,
-                          backgroundColor: row.deliveryColor,
-                          borderColor: "#81c784",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "stretch",
-                          gap: 4,
-                        }}
-                        onClick={() => setPlanningSlotModal({
-                          type: "delivery",
-                          slotKey: row.slotKey,
-                          slotLabel: row.label,
-                          ordini: row.deliveryOrdiniList || [],
-                          slotsDisponibili: planningSlotsGrid || [],
-                        })}
-                        title="Clicca per vedere ordini e spostare consegne"
-                      >
-                        <span>{row.deliveryOrdini} ord · {row.deliveryPizze} pizze</span>
-                        {indirizziPreview && (
-                          <span style={{ fontSize: 10, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {indirizziPreview}{hasMoreIndirizzi ? " …" : ""}
+                <div style={styles.planningMergedBody}>
+                  {planningMergedRows.map((row, i) => {
+                    const totOrdini = row.deliveryOrdini + row.ritiroOrdini
+                    const deliveryTitle = `${row.deliveryOrdini} ordini · ${row.deliveryPizze} pizze`
+                    const ritiroTitle = `${row.ritiroOrdini} ordini · ${row.ritiroPizze} pizze`
+                    const totaleTitle = `${totOrdini} ordini · ${row.totPizzeForno} pizze (forno)`
+                    return (
+                      <div key={i} style={styles.planningMergedRow}>
+                        <span style={styles.planningMergedCellTime}>{row.label}</span>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.planningMergedCell,
+                            backgroundColor: row.deliveryColor,
+                            borderColor: "#90caf9",
+                          }}
+                          onClick={() =>
+                            setPlanningSlotModal({
+                              type: "delivery",
+                              slotKey: row.slotKey,
+                              slotLabel: row.label,
+                              ordini: row.deliveryOrdiniList || [],
+                              slotsDisponibili: planningSlotsGrid || [],
+                            })
+                          }
+                          title={`${deliveryTitle} — clic per dettaglio`}
+                        >
+                          <span style={styles.planningMergedCellMain}>
+                            {row.deliveryOrdini}
+                            <span style={styles.planningMergedCellSep}>·</span>
+                            {row.deliveryPizze}
                           </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        style={{
-                          ...styles.planningMergedCell,
-                          backgroundColor: row.ritiroColor,
-                          borderColor: "#81c784",
-                          borderRight: "none",
-                          cursor: "pointer",
-                          textAlign: "left",
-                        }}
-                        onClick={() => setPlanningSlotModal({
-                          type: "ritiro",
-                          slotKey: row.slotKey,
-                          slotLabel: row.label,
-                          ordini: row.ritiroOrdiniList || [],
-                          slotsDisponibili: planningSlotsGrid || [],
-                        })}
-                        title="Clicca per vedere ordini e spostare ritiri"
-                      >
-                        {row.ritiroOrdini} ord · {row.ritiroPizze} pizze
-                      </button>
-                    </div>
-                  )
-                })}
+                          <span style={styles.planningMergedCellUnit}>ord · pz</span>
+                        </button>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.planningMergedCell,
+                            backgroundColor: row.ritiroColor,
+                            borderColor: "#ce93d8",
+                          }}
+                          onClick={() =>
+                            setPlanningSlotModal({
+                              type: "ritiro",
+                              slotKey: row.slotKey,
+                              slotLabel: row.label,
+                              ordini: row.ritiroOrdiniList || [],
+                              slotsDisponibili: planningSlotsGrid || [],
+                            })
+                          }
+                          title={`${ritiroTitle} — clic per dettaglio`}
+                        >
+                          <span style={styles.planningMergedCellMain}>
+                            {row.ritiroOrdini}
+                            <span style={styles.planningMergedCellSep}>·</span>
+                            {row.ritiroPizze}
+                          </span>
+                          <span style={styles.planningMergedCellUnit}>ord · pz</span>
+                        </button>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.planningMergedCell,
+                            backgroundColor: row.fornoColor || row.deliveryColor,
+                            borderColor: "#90a4ae",
+                            borderRight: "none",
+                            fontWeight: 700,
+                          }}
+                          onClick={() =>
+                            setPlanningSlotModal({
+                              type: "totale",
+                              slotKey: row.slotKey,
+                              slotLabel: row.label,
+                              ordini: [
+                                ...(row.deliveryOrdiniList || []).map((o) => ({ ...o, _planningCanale: "delivery" })),
+                                ...(row.ritiroOrdiniList || []).map((o) => ({ ...o, _planningCanale: "ritiro" })),
+                              ],
+                              slotsDisponibili: planningSlotsGrid || [],
+                            })
+                          }
+                          title={`${totaleTitle} — clic per tutti gli ordini`}
+                        >
+                          <span style={styles.planningMergedCellMain}>
+                            {totOrdini}
+                            <span style={styles.planningMergedCellSep}>·</span>
+                            {row.totPizzeForno}
+                          </span>
+                          <span style={styles.planningMergedCellUnit}>
+                            /{maxPizzeFornoUnico}
+                          </span>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ) : (
-              <p style={{ fontSize: 13, color: "#666" }}>Nessuna fascia disponibile.</p>
+              <p style={{ fontSize: 13, color: "#666", margin: 0 }}>Nessuna fascia disponibile.</p>
             )}
           </div>
         )}
@@ -3467,7 +3374,12 @@ export default function CassaPage() {
             <div style={{ ...styles.detailModal, maxWidth: 520, width: "95%" }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <h3 style={{ margin: 0 }}>
-                  Ordini · {planningSlotModal.slotLabel} · {planningSlotModal.type === "delivery" ? "Consegne" : "Ritiro negozio"}
+                  Ordini · {planningSlotModal.slotLabel} ·{" "}
+                  {planningSlotModal.type === "delivery"
+                    ? "Consegne"
+                    : planningSlotModal.type === "ritiro"
+                      ? "Ritiro negozio"
+                      : "Totale fascia"}
                 </h3>
                 <button type="button" style={styles.planningBarClose} onClick={() => setPlanningSlotModal(null)}>✕</button>
               </div>
@@ -3476,7 +3388,10 @@ export default function CassaPage() {
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                   {planningSlotModal.ordini.map((o) => {
-                    const isDelivery = planningSlotModal.type === "delivery"
+                    const isDelivery =
+                      planningSlotModal.type === "delivery" ||
+                      o._planningCanale === "delivery" ||
+                      (planningSlotModal.type === "totale" && ordineIsDelivery(o))
                     const nome = ordineNomeCliente(o) || "—"
                     const indirizzo = ordineIndirizzoConsegna(o)
                     const numero = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
@@ -3501,7 +3416,21 @@ export default function CassaPage() {
                             }}
                             title="Apri riepilogo ordine"
                           >
-                            <div style={{ fontWeight: 600 }}>#{numero} · {nome}</div>
+                            <div style={{ fontWeight: 600 }}>
+                              #{numero} · {nome}
+                              {planningSlotModal.type === "totale" ? (
+                                <span
+                                  style={{
+                                    marginLeft: 8,
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: isDelivery ? "#1565c0" : "#7b1fa2",
+                                  }}
+                                >
+                                  {isDelivery ? "consegna" : "ritiro"}
+                                </span>
+                              ) : null}
+                            </div>
                             {isDelivery && indirizzo && (
                               <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
                                 {formatIndirizzoDisplayItaliano(indirizzo)}
@@ -3833,7 +3762,9 @@ export default function CassaPage() {
                   if (payload) printRicevuta(payload)
                 }}
               >
-                Stampa ricevuta
+                {canRepartoStampareRicevutaCortesia(tenantData?.parametri_operativi, "cassa")
+                  ? "Stampa ricevuta di cortesia"
+                  : "Stampa ricevuta"}
               </button>
               <button
                 type="button"
@@ -3870,38 +3801,7 @@ export default function CassaPage() {
                 <button
                   type="button"
                   style={{ ...styles.impostazioniBtn, marginTop: 8 }}
-                  onClick={() => {
-                    setModificaOrdineModal(ordineDetail)
-                    const nomeSaved = ordineNomeCliente(ordineDetail)
-                    const indirizzoSaved = ordineIndirizzoConsegna(ordineDetail)
-                    const splitLegacy =
-                      !nomeSaved && indirizzoSaved
-                        ? splitNomeDaIndirizzoConsegna(indirizzoSaved)
-                        : null
-                    setModificaForm({
-                      nome_cliente: nomeSaved || splitLegacy?.nomePart || "",
-                      telefono_ritiro: ordineTelefonoRitiro(ordineDetail),
-                      orario_ritiro: ordineOrarioRitiro(ordineDetail),
-                      note: ordineDetail.note ?? "",
-                      tipo_pagamento: ordineDetail.tipo_pagamento ?? "Da pagare",
-                      indirizzo_consegna: splitLegacy?.addrPart || indirizzoSaved || "",
-                    })
-                    setModificaRighe(
-                      (ordineDetail.righe || []).map((r, i) => {
-                        const pid = r.prodottoId ?? r.prodotto_id
-                        return {
-                          key: r.id ? String(r.id) : `tmp-${i}-${newLocalId()}`,
-                          prodotto_id: pid,
-                          nome: ordineDetail.productNames?.[pid] ?? "—",
-                          quantita: Math.max(1, Number(r.quantita) || 1),
-                          prezzo: Number(r.prezzo) || 0,
-                          formato_nome: r.formatoNome ?? r.formato_nome ?? "",
-                          ingredienti_cottura_summary:
-                            r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? "",
-                        }
-                      }),
-                    )
-                  }}
+                  onClick={() => openModificaOrdine(ordineDetail)}
                 >
                   Modifica
                 </button>
@@ -3949,7 +3849,7 @@ export default function CassaPage() {
           modificaProdottiList={modificaProdottiList}
           modificaTotaleAnteprima={modificaTotaleAnteprima}
           tipiPagamento={TIPI_PAGAMENTO}
-          onClose={() => setModificaOrdineModal(null)}
+          onClose={closeModificaOrdine}
           onSave={handleSalvaModificaOrdine}
         />
       ) : null}
@@ -4305,33 +4205,38 @@ const styles = {
     fontSize: 13,
   },
   planningBar: {
-    marginBottom: 16,
-    padding: 14,
+    marginBottom: 12,
+    padding: "10px 12px",
     background: "#ffffff",
     border: "1px solid #d6e2ee",
-    borderRadius: 12,
+    borderRadius: 10,
     boxShadow: "0 2px 8px rgba(15,23,42,0.06)",
+    display: "flex",
+    flexDirection: "column",
+    maxHeight: "min(70vh, 640px)",
+    minHeight: 280,
   },
   planningBarHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 10,
-    gap: 10,
+    marginBottom: 6,
+    gap: 8,
     flexWrap: "wrap",
+    flexShrink: 0,
   },
   planningBarTitleWrap: {
     display: "flex",
     flexDirection: "column",
-    gap: 2,
+    gap: 1,
   },
   planningBarTitle: {
     color: "#0f172a",
-    fontSize: 16,
+    fontSize: 15,
   },
   planningBarSubtitle: {
-    fontSize: 12,
-    color: "#475569",
+    fontSize: 11,
+    color: "#64748b",
   },
   planningBarClose: {
     background: "none",
@@ -4341,44 +4246,97 @@ const styles = {
     padding: "0 4px",
   },
   planningHint: {
-    fontSize: 12,
-    color: "#475569",
-    margin: "0 0 12px 0",
-    lineHeight: 1.45,
+    fontSize: 11,
+    color: "#64748b",
+    margin: "0 0 8px 0",
+    lineHeight: 1.35,
+    flexShrink: 0,
   },
   planningMergedTable: {
     border: "1px solid #d6e2ee",
-    borderRadius: 10,
+    borderRadius: 8,
     overflow: "hidden",
-    marginTop: 8,
+    marginTop: 0,
     background: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
   },
   planningMergedHeader: {
     display: "grid",
-    gridTemplateColumns: "64px 1fr 1fr",
+    gridTemplateColumns: "52px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)",
     gap: 0,
     fontSize: 11,
-    fontWeight: 600,
+    fontWeight: 700,
     color: "#333",
+    flexShrink: 0,
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
+  },
+  planningMergedBody: {
+    overflowY: "auto",
+    flex: 1,
+    minHeight: 0,
   },
   planningMergedRow: {
     display: "grid",
-    gridTemplateColumns: "64px 1fr 1fr",
+    gridTemplateColumns: "52px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)",
     gap: 0,
     fontSize: 12,
     borderTop: "1px solid #e2e8f0",
   },
   planningMergedCellTime: {
-    padding: "8px 10px",
+    padding: "4px 6px",
     background: "#f8fafc",
     borderRight: "1px solid #e2e8f0",
     fontWeight: 700,
     color: "#0f172a",
+    fontSize: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  planningMergedHeadCell: {
+    padding: "5px 6px",
+    borderRight: "1px solid #d6e2ee",
+    textAlign: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#0f172a",
   },
   planningMergedCell: {
-    padding: "8px 10px",
+    padding: "3px 4px",
     borderRight: "1px solid #d6e2ee",
     borderBottom: "none",
+    cursor: "pointer",
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 0,
+    minHeight: 28,
+    lineHeight: 1.15,
+    font: "inherit",
+  },
+  planningMergedCellMain: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#0f172a",
+    letterSpacing: 0.02,
+  },
+  planningMergedCellSep: {
+    margin: "0 2px",
+    fontWeight: 500,
+    color: "#64748b",
+  },
+  planningMergedCellUnit: {
+    fontSize: 9,
+    color: "#64748b",
+    fontWeight: 500,
+    lineHeight: 1.1,
   },
   planningMergedHeadTitle: {
     display: "block",

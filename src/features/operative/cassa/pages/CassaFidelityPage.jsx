@@ -1,19 +1,19 @@
 import { Navigate, Link } from "react-router-dom"
-import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenantServizi } from "@/app/hooks/useTenantServizi"
+import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess"
 import FidelityCardPage from "@/features/admin/pages/FidelityCardPage"
 
 /** Fidelity da area operativa Cassa (stesso modulo admin, route dedicata). */
 export default function CassaFidelityPage() {
   const { hasServizio, enforcementActive } = useTenantServizi()
-  const { permessiAree } = useAuth()
-  const okCassa = permessiAree?.cassa === true
+  const { permessiAreeEffective, fullDemoAccess } = useOperativeSaDemoAccess()
+  const okCassa = fullDemoAccess || permessiAreeEffective?.cassa === true
 
   if (!okCassa) {
     return <Navigate to="/operative/cassa" replace />
   }
 
-  const fidelityManca = enforcementActive && !hasServizio("fidelity_card")
+  const fidelityManca = !fullDemoAccess && enforcementActive && !hasServizio("fidelity_card")
   if (fidelityManca) {
     return (
       <div style={{ maxWidth: 560 }}>

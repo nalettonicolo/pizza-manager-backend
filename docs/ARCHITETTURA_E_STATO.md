@@ -87,7 +87,7 @@ Piano prioritizzato (blocchi, allineamento DB, perimetro normativo Italia): **`d
 
 Backlog realistico, dipendenze esterne e ordine di lavoro: **`docs/BACKLOG_E_STATO_SVILUPPO.md`**.
 
-Sintesi **visione webapp completa / fatto / manca**: **`docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`**.
+Sintesi **visione / fatto / manca per settore**: **`docs/punto-situazione/`** (indice + agenti; verdetto in `10_supervisor.md`).
 
 Questionario perimetro **gestionale completo** (stakeholder, priorità, migrazione locale→DB): **`docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md`**.
 
@@ -109,7 +109,8 @@ Questionario perimetro **gestionale completo** (stakeholder, priorità, migrazio
 | 2026-04-05 | Sezione roadmap enterprise cassa/offline/fiscale IT → `docs/ROADMAP_CASSA_ENTERPRISE.md`. |
 | 2026-04-05 | Backlog engineering / stato → `docs/BACKLOG_E_STATO_SVILUPPO.md`. |
 | 2026-04-06 | Link a questionario gestionale completo → `docs/ANALISI_GESTIONALE_COMPLETO_E_QUESTIONARIO_SVILUPPO.md`. |
-| 2026-04-05 | Punto situazione webapp completa → `docs/PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md` (anche Super Admin → Guide, slug `punto-situazione-webapp`). |
+| 2026-04-05 | Punto situazione webapp completa (storico). |
+| 2026-08-04 | Punto situazione **per settore** → `docs/punto-situazione/` (slug Guide `punto-situazione-*`); rimosso monolite `PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md`. |
 | 2026-04-10 | Super Admin: nav compatta a dropdown; layout larghezza piena; bundle Vite chunk/lazy; modulo SQL fiscale outbox/payment links; aggiornati `BACKLOG_E_STATO_SVILUPPO`, `PUNTO_SITUAZIONE_*`. |
 
 ---

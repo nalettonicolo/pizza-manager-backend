@@ -72,7 +72,7 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 | `docs/GO_LIVE_ORDINI_WEB.md` | Produzione oggi senza adapter. |
 | `src/config/serviziRoadmapSteps.js` | Percentuali UI Super Admin. |
 | `src/content/dnsHostGuides.js` | Guide DNS per registrar. |
-| Canvas Cursor | `punto-situazione-supervisore` · `supabase-advisor-analisi` |
+| Canvas Cursor / Guide SA | `docs/punto-situazione/` · slug `punto-situazione-*` |
 
 ---
 

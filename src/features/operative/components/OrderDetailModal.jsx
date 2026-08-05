@@ -4,8 +4,20 @@ import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
  * Modale dettaglio ordine (righe, cliente, orario, formato).
  * Usato da Cucina, Bancone, Pizzaiolo.
  * ingredientsByProduct: opzionale { [prodottoId]: string[] } per mostrare ingredienti (es. da Pizzaioli).
+ * showPrintCortesia / onPrintCortesia: ricevuta non fiscale (config Impostazioni → flusso stampa).
  */
-export default function OrderDetailModal({ order, onClose, actionLabel, onAction, actionDisabled, loading, ingredientsByProduct }) {
+export default function OrderDetailModal({
+  order,
+  onClose,
+  actionLabel,
+  onAction,
+  actionDisabled,
+  loading,
+  ingredientsByProduct,
+  showPrintCortesia = false,
+  onPrintCortesia,
+  printCortesiaBusy = false,
+}) {
   if (!order && !loading) return null
   const ord = order || {}
   const ingMap = ingredientsByProduct || {}
@@ -88,16 +100,31 @@ export default function OrderDetailModal({ order, onClose, actionLabel, onAction
               Totale: € {typeof ord.totale === "number" ? ord.totale.toFixed(2) : ord.totale ?? "—"}
             </p>
 
-            {actionLabel && onAction && (
-              <button
-                type="button"
-                style={{ ...styles.actionBtn, ...(actionDisabled ? styles.actionBtnDisabled : {}) }}
-                onClick={() => !actionDisabled && onAction(ord.id)}
-                disabled={actionDisabled}
-              >
-                {actionLabel}
-              </button>
-            )}
+            <div style={styles.actions}>
+              {showPrintCortesia && onPrintCortesia ? (
+                <button
+                  type="button"
+                  style={{
+                    ...styles.cortesiaBtn,
+                    ...(printCortesiaBusy || actionDisabled ? styles.actionBtnDisabled : {}),
+                  }}
+                  onClick={() => !printCortesiaBusy && !actionDisabled && onPrintCortesia()}
+                  disabled={printCortesiaBusy || actionDisabled}
+                >
+                  {printCortesiaBusy ? "Stampa in corso…" : "Stampa ricevuta di cortesia"}
+                </button>
+              ) : null}
+              {actionLabel && onAction ? (
+                <button
+                  type="button"
+                  style={{ ...styles.actionBtn, ...(actionDisabled ? styles.actionBtnDisabled : {}) }}
+                  onClick={() => !actionDisabled && onAction(ord.id)}
+                  disabled={actionDisabled}
+                >
+                  {actionLabel}
+                </button>
+              ) : null}
+            </div>
           </>
         )}
       </div>
@@ -151,11 +178,22 @@ const styles = {
   riga: { display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 14 },
   rigaIngredienti: { fontSize: 12, color: "#666", marginTop: 2 },
   totale: { fontWeight: 600, marginBottom: 16, fontSize: 16 },
+  actions: { display: "flex", flexDirection: "column", gap: 8 },
   actionBtn: {
     padding: "10px 20px",
     background: "#2e7d32",
     color: "#fff",
     border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 600,
+    width: "100%",
+  },
+  cortesiaBtn: {
+    padding: "10px 20px",
+    background: "#fff",
+    color: "#1565c0",
+    border: "1px solid #90caf9",
     borderRadius: 8,
     cursor: "pointer",
     fontWeight: 600,

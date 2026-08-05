@@ -1,6 +1,7 @@
 /**
- * Stampa un documento HTML completo senza document.write (evita [Violation] Chrome).
- * Prova prima iframe nascosto con srcdoc, poi finestra con URL blob.
+ * Stampa un documento HTML senza aprire una scheda di anteprima.
+ * Usa un iframe nascosto e chiama print() una sola volta (niente popup = niente “seconda conferma” a schermo).
+ * Il dialogo di sistema del browser/OS resta obbligatorio senza flag Chrome `--kiosk-printing`.
  *
  * @param {string} html Documento completo (DOCTYPE + html…)
  * @param {{ title?: string, alertPopupBlocked?: string }} [opts]
@@ -12,71 +13,94 @@ export function printHtmlDocument(html, opts = {}) {
     opts.alertPopupBlocked ??
     "Impossibile stampare (popup bloccato). Consenti i popup per questo sito e riprova."
 
+  const runPrint = (win) => {
+    if (!win) return
+    try {
+      win.focus()
+    } catch {
+      /* ignore */
+    }
+    try {
+      win.print()
+    } catch (e) {
+      console.warn("[printHtmlDocument]", e)
+    }
+  }
+
   try {
     const iframe = document.createElement("iframe")
     iframe.setAttribute("title", title)
     iframe.setAttribute("aria-hidden", "true")
+    iframe.setAttribute("data-pm-print", "1")
     iframe.style.cssText =
-      "position:fixed;width:0;height:0;border:0;left:0;top:0;opacity:0;pointer-events:none;visibility:hidden"
-    iframe.srcdoc = html
+      "position:fixed;width:1px;height:1px;border:0;left:0;top:0;opacity:0;pointer-events:none;"
+    // Evita popup/scheda: solo iframe. Una sola chiamata print al load.
     iframe.addEventListener(
       "load",
       () => {
+        const win = iframe.contentWindow
+        if (!win) return
+        try {
+          win.onafterprint = () => {
+            try {
+              iframe.remove()
+            } catch {
+              /* ignore */
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        // requestAnimationFrame: layout pronto, evita doppio print su alcuni browser
+        requestAnimationFrame(() => {
+          setTimeout(() => runPrint(win), 40)
+        })
         setTimeout(() => {
           try {
-            iframe.contentWindow?.focus()
-            iframe.contentWindow?.print()
-          } catch (e) {
-            console.warn("[printHtmlDocument]", e)
+            if (iframe.isConnected) iframe.remove()
+          } catch {
+            /* ignore */
           }
-        }, 150)
+        }, 120_000)
       },
       { once: true },
     )
+    iframe.srcdoc = html
     document.body.appendChild(iframe)
-    setTimeout(() => {
-      try {
-        iframe.remove()
-      } catch {
-        /* ignore */
-      }
-    }, 90_000)
     return true
-  } catch {
-    /* fallback blob */
+  } catch (e) {
+    console.warn("[printHtmlDocument] iframe fallito", e)
   }
 
+  // Fallback raro: ancora senza scheda visibile se possible via blob in iframe
   let url = ""
   try {
     const blob = new Blob([html], { type: "text/html;charset=utf-8" })
     url = URL.createObjectURL(blob)
-    const w = window.open(url, "_blank", "noopener,noreferrer")
-    if (!w) {
-      URL.revokeObjectURL(url)
-      window.alert(alertMsg)
-      return false
-    }
-    w.addEventListener(
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("title", title)
+    iframe.setAttribute("aria-hidden", "true")
+    iframe.style.cssText =
+      "position:fixed;width:1px;height:1px;border:0;left:0;top:0;opacity:0;pointer-events:none;"
+    iframe.addEventListener(
       "load",
       () => {
+        requestAnimationFrame(() => {
+          setTimeout(() => runPrint(iframe.contentWindow), 40)
+        })
         setTimeout(() => {
           try {
-            w.focus()
-            w.print()
-          } catch (e) {
-            console.warn("[printHtmlDocument popup]", e)
+            iframe.remove()
+            URL.revokeObjectURL(url)
+          } catch {
+            /* ignore */
           }
-        }, 150)
+        }, 120_000)
       },
       { once: true },
     )
-    setTimeout(() => {
-      try {
-        URL.revokeObjectURL(url)
-      } catch {
-        /* ignore */
-      }
-    }, 120_000)
+    iframe.src = url
+    document.body.appendChild(iframe)
     return true
   } catch (e) {
     console.error(e)

@@ -1,30 +1,42 @@
 import { useMemo, useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { usePv } from "@/app/contexts/PvContext"
 import { usePlan } from "@/app/hooks/usePlan"
 import { getTenantVenditeInsights } from "@/features/admin/services/adminService"
-
-const HOME_NAV = [
-  { to: "/select-pv", label: "Scegli punto vendita", description: "Seleziona la pizzeria" },
-  { to: "/preview", label: "Anteprima", description: "Vedi l’app in anteprima" },
-]
+import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 
 export default function Home() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { ruolo } = useAuth()
   const { tenantData, tenantId } = useTenant()
   const [venditeInsights, setVenditeInsights] = useState(null)
   const { pvList, selectPv } = usePv()
   const { plan, isPro, isEnterprise } = usePlan()
-  const homeNavItems = useMemo(
-    () => HOME_NAV.filter((item) => item.to !== "/select-pv" || pvList.length > 1),
-    [pvList],
-  )
+  const ruoloNorm = normalizeAppRuolo(ruolo)
+  const homeNavItems = useMemo(() => {
+    const items = [
+      { to: "/select-pv", label: "Scegli punto vendita", description: "Seleziona la pizzeria" },
+      {
+        to: withPreservedSupportSearch("/preview", location.search),
+        label: "Anteprima",
+        description: "Apri la vetrina online del locale",
+      },
+    ]
+    return items
+      .filter((item) => !item.to.startsWith("/select-pv") || pvList.length > 1)
+      .map((item) =>
+        item.to.startsWith("/select-pv")
+          ? { ...item, to: withPreservedSupportSearch("/select-pv", location.search) }
+          : item,
+      )
+  }, [pvList, location.search])
 
-  const isAdmin = ruolo === "admin"
+  const isAdmin = ruoloNorm === "admin" || ruoloNorm === "owner" || isSuperAdminRole(ruolo)
 
   const activePvs = useMemo(
     () => (pvList || []).filter((p) => p && p.attivo !== false),
@@ -118,7 +130,7 @@ export default function Home() {
                   type="button"
                   onClick={() => {
                     selectPv(pv.id)
-                    navigate("/admin/home")
+                    navigate(withPreservedSupportSearch("/admin/home", location.search))
                   }}
                   className="admin-home-pv-btn"
                 >

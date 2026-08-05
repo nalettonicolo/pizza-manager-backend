@@ -46,6 +46,7 @@ Riferimento metodologico: guida interna “Setup AI Team” (adattata al repo co
 
 Documenti di coordinamento e sicurezza (repo):
 
+- `docs/punto-situazione/` — **punto situazione per settore** (output agenti; indice + 01–10).
 - `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` — epic, ordine di lavoro, supervisore.
 - `docs/MIGRAZIONE_MYSQL_E_BACKUP.md` — roadmap stacco Supabase → MySQL e backup.
 - `docs/SICUREZZA_HARDENING.md` — blindatura, crittografia, checklist.

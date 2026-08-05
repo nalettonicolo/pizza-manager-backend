@@ -3,11 +3,13 @@ import { Outlet, Link, useLocation } from "react-router-dom"
 import CookieBanner from "@/features/public/components/CookieBanner"
 import OrdineOnlineDisattivoModal from "@/features/public/components/OrdineOnlineDisattivoModal"
 import { useAuth } from "@/app/contexts/AuthContext"
+import { adminHomeWithSupportSearch } from "@/constants/adminTenantHome"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getPublicTenantInfo } from "@/features/services/publicService"
 import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
 import { applyTenantFavicon } from "@/utils/tenantFavicon"
+import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
 import "@/styles/public-layout.css"
 
 const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
@@ -30,10 +32,21 @@ export default function PublicLayout() {
   const [publicParametri, setPublicParametri] = useState(null)
   /** Riga tenant (licenza / piano) per gate ordini online vetrina */
   const [publicTenantRow, setPublicTenantRow] = useState(null)
-  const { tipoUtente, tenantId: authTenantId, loading: authLoading } = useAuth()
+  const { user, ruolo, tipoUtente, tenantId: authTenantId, loading: authLoading } = useAuth()
   const [modalDismissed, setModalDismissed] = useState(() =>
     typeof sessionStorage !== "undefined" && sessionStorage.getItem(DISMISS_KEY) === "1",
   )
+  const ruoloNorm = normalizeAppRuolo(ruolo)
+  const staffAdminOnVetrina =
+    Boolean(user) &&
+    tipoUtente === "staff" &&
+    (isSuperAdminRole(ruolo) || ruoloNorm === "admin" || ruoloNorm === "owner")
+  const vetrinaAccediTo =
+    isVetrinaPage && staffAdminOnVetrina
+      ? adminHomeWithSupportSearch(search)
+      : isVetrinaPage
+        ? `/login${customerAuthQuery}`
+        : "/login"
 
   useEffect(() => {
     let cancelled = false
@@ -210,12 +223,12 @@ export default function PublicLayout() {
         ) : null}
         <div className="public-layout-header-trailing">
           <Link
-            to={isVetrinaPage ? `/login${customerAuthQuery}` : "/login"}
+            to={vetrinaAccediTo}
             className="public-layout-btn public-layout-btn--outline"
-            onMouseEnter={prefetchLogin}
-            onFocus={prefetchLogin}
+            onMouseEnter={staffAdminOnVetrina ? undefined : prefetchLogin}
+            onFocus={staffAdminOnVetrina ? undefined : prefetchLogin}
           >
-            Accedi
+            {staffAdminOnVetrina && isVetrinaPage ? "Admin" : "Accedi"}
           </Link>
           {isVetrinaPage && !vetrinaOrdiniOnlineEnabled ? null : (
             <Link

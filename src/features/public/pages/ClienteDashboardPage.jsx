@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { getPublicTenantInfo } from "@/features/services/publicService"
 import { useEffect, useState } from "react"
@@ -9,20 +9,28 @@ import {
 } from "@/utils/fidelityProgramConfig"
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
 import { getClienteFidelityProfile } from "@/features/public/services/clienteAuthService"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
+import { isSuperAdminRole } from "@/utils/superAdminAccess"
 
 export default function ClienteDashboardPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, ruolo } = useAuth()
+  const location = useLocation()
   const [nomePizzeria, setNomePizzeria] = useState("")
   const [mostraFidelityDomicilio, setMostraFidelityDomicilio] = useState(false)
   const [vetrinaTenant, setVetrinaTenant] = useState(null)
   const [fidelity, setFidelity] = useState(null)
+  const isSaDemo = isSuperAdminRole(ruolo)
+  const menuPath = isSaDemo
+    ? withPreservedSupportSearch("/preview", location.search)
+    : withPreservedSupportSearch("/", location.search)
+  const linkTo = (path) => withPreservedSupportSearch(path, location.search)
 
   useEffect(() => {
-    getPublicTenantInfo().then((t) => {
+    getPublicTenantInfo({ search: location.search }).then((t) => {
       setNomePizzeria((t?.nome || "").trim())
       setVetrinaTenant(t && typeof t === "object" ? t : null)
     })
-  }, [])
+  }, [location.search])
 
   useEffect(() => {
     if (!user?.id) return
@@ -118,7 +126,7 @@ export default function ClienteDashboardPage() {
 
       <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <Link
-          to="/"
+          to={menuPath}
           style={{
             padding: "12px 16px",
             borderRadius: 8,
@@ -133,7 +141,7 @@ export default function ClienteDashboardPage() {
         </Link>
         {mostraLinkOrdineVetrina ? (
           <Link
-            to="/ordina"
+            to={linkTo("/ordina")}
             style={{
               padding: "12px 16px",
               borderRadius: 8,
@@ -148,7 +156,7 @@ export default function ClienteDashboardPage() {
           </Link>
         ) : null}
         <Link
-          to="/cliente/ordini"
+          to={linkTo("/cliente/ordini")}
           style={{
             padding: "12px 16px",
             borderRadius: 8,
@@ -162,7 +170,7 @@ export default function ClienteDashboardPage() {
           I miei ordini
         </Link>
         <Link
-          to="/cliente/profilo"
+          to={linkTo("/cliente/profilo")}
           style={{
             padding: "12px 16px",
             borderRadius: 8,

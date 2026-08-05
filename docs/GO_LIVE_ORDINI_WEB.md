@@ -56,6 +56,8 @@ npm run sql:apply -- sql/modules/25_ordini_web_capacity_antifraud_delivery_proof
 npm run deploy:full:ci
 ```
 
+Go-live tenant Francy (Stripe live, dominio, HIBP, SMTP/RT): **`docs/GO_LIVE_FRANCY_RUNBOOK.md`**.
+
 Edge (opzionale, quando servono worker):
 
 ```bash

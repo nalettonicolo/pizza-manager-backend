@@ -8,7 +8,7 @@ Indice degli artifact in questa cartella. I comandi operative di deploy vivono n
 
 | Documento | Contenuto |
 |-----------|-----------|
-| [PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md](./PUNTO_SITUAZIONE_WEBAPP_COMPLETA.md) | Visione prodotto, stato repo, routing, stack, troubleshooting; anche in Super Admin → Guide (`punto-situazione-webapp`) |
+| [punto-situazione/](./punto-situazione/README.md) | **Punto situazione per settore** (agenti 01–10); anche in Super Admin → Guide (`punto-situazione-*`) |
 | [ARCHITETTURA_E_STATO.md](./ARCHITETTURA_E_STATO.md) | Route/admin/operativo vs implementazione |
 | [ARCHITETTURA_API_E_RUOLI.md](./ARCHITETTURA_API_E_RUOLI.md) | Supabase vs API Nest (`VITE_API_URL`), ruoli |
 | [BACKLOG_E_STATO_SVILUPPO.md](./BACKLOG_E_STATO_SVILUPPO.md) | Backlog e ordine di lavoro |
