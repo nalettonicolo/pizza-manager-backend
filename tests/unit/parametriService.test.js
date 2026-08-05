@@ -15,11 +15,11 @@ describe("parametriService", () => {
   })
 
   it("patchTenantParametriOperativi merge sul blob esistente", async () => {
-    const single = vi.fn().mockResolvedValue({
+    const maybeSingle = vi.fn().mockResolvedValue({
       data: { id: "t1", parametri_operativi: { a: 1, ordini_online_attivi: false } },
       error: null,
     })
-    const eqSelect = vi.fn(() => ({ single }))
+    const eqSelect = vi.fn(() => ({ maybeSingle }))
     const select = vi.fn(() => ({ eq: eqSelect }))
 
     const eqUpdate = vi.fn().mockResolvedValue({ error: null })
