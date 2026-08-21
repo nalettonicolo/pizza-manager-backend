@@ -45,9 +45,14 @@ export default function RepartiQuadTestPage() {
   const inDemo = isDemoGiroSearch(location.search)
 
   const canAccessQuad =
-    isQuadRepartiTestEmail(user?.email) || isSuperAdminRole(ruolo)
+    isQuadRepartiTestEmail(user?.email) || isSuperAdminRole(ruolo) || inDemo
   if (!canAccessQuad) {
-    return <Navigate to="/operative/dashboard" replace />
+    return (
+      <Navigate
+        to={withPreservedSupportSearch("/operative/dashboard", location.search)}
+        replace
+      />
+    )
   }
 
   return (

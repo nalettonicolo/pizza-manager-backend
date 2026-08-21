@@ -8,21 +8,26 @@ import {
   getRigheByOrdineIds,
   getProductIngredientiBatch,
   getCategorieByIds,
+  getIngredients,
   updateOrderStato,
 } from "@/features/admin/services/adminService"
 import {
   aggregateBanconeBibiteBySlot,
   aggregateBanconeIngredientsBySlot,
-  banconeIngredientPickedColor,
   banconeSlotsFromOrders,
   BANCONE_BIBITE_PICKED_BG,
 } from "@/features/operative/bancone/utils/banconeSlotPick"
+import {
+  resolvePrepTaskBackgroundColor,
+  mergeCucinaPrepColorsFromParametri,
+} from "@/utils/cucinaPrepCategoryTheme"
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
 import {
   filterOrdiniVisibili,
   getRitardoMinuti,
   slotPizzeCount,
   sortedSlotLabels,
+  readPizzaioloLeadTimeConsegnaMin,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
@@ -31,8 +36,10 @@ import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTes
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
+import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
 
 const STATO_PRONTO = "PRONTO"
+const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_CONSEGNATO = "CONSEGNATO"
 const POLL_FALLBACK_MS = 30000
 const BANCONE_PICK_STORAGE_PREFIX = "pm_bancone_picked_v1"
@@ -46,10 +53,16 @@ export default function Bancone() {
   const quad = useRepartiQuadTest()
   const { tenantId, tenantData } = useTenant()
   const [orders, setOrders] = useState([])
+  /** Ordini usati solo per aggregare le prep (può includere IN_PREPARAZIONE se no tablet cucina). */
+  const [prepOrders, setPrepOrders] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
   const [righePerOrdine, setRighePerOrdine] = useState({})
+  const [righePrepPerOrdine, setRighePrepPerOrdine] = useState({})
   const [productNames, setProductNames] = useState({})
+  const [productPrepCucinaById, setProductPrepCucinaById] = useState({})
+  const [productPrepMetaById, setProductPrepMetaById] = useState({})
   const [ingredientsByProduct, setIngredientsByProduct] = useState({})
+  const [ingredientiGlobali, setIngredientiGlobali] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [detailOrder, setDetailOrder] = useState(null)
@@ -59,14 +72,21 @@ export default function Bancone() {
   const [bibiteProductIds, setBibiteProductIds] = useState(() => new Set())
   /** Chiave ingrediente/bibita/summary preso in busta (inverso cucina: parte grigio, tap = colore). */
   const [pickedBanconeKeys, setPickedBanconeKeys] = useState(() => new Set())
+  const [highlightedOrdineIds, setHighlightedOrdineIds] = useState(() => new Set())
   const [lastPickResetReason, setLastPickResetReason] = useState("")
   const loadSeqRef = useRef(0)
   const prevOrderIdsKeyRef = useRef("")
 
   const parametri = tenantData?.parametri_operativi || {}
+  const cucinaTabletOn = isCucinaTabletAbilitato(parametri)
+  /** Stessi colori per categoria della pagina impostazioni Cucina (admin tenant → Menù → Colori preparazione). */
+  const prepCategoryColors = useMemo(
+    () => mergeCucinaPrepColorsFromParametri(tenantData?.parametri_operativi),
+    [tenantData?.parametri_operativi],
+  )
   const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "bancone")
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
-  const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
+  const leadTimeConsegnaMin = readPizzaioloLeadTimeConsegnaMin(parametri)
 
   const loadOrders = useCallback(async (opts = {}) => {
     const silent = opts.silent === true
@@ -77,26 +97,47 @@ export default function Bancone() {
       setError(null)
     }
     try {
-      const data = await getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 100 })
-      const ids = (data || []).map((o) => o.id).filter(Boolean)
+      const [dataPronto, dataPrep] = await Promise.all([
+        getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 100 }),
+        cucinaTabletOn
+          ? Promise.resolve([])
+          : getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 }),
+      ])
+      const prontoList = dataPronto || []
+      const prepExtra = dataPrep || []
+      const prepMergedMap = new Map()
+      for (const o of [...prepExtra, ...prontoList]) {
+        if (o?.id) prepMergedMap.set(o.id, o)
+      }
+      const prepList = [...prepMergedMap.values()]
+      const cardIds = prontoList.map((o) => o.id).filter(Boolean)
+      const prepIds = prepList.map((o) => o.id).filter(Boolean)
+      const allIds = [...new Set([...cardIds, ...prepIds])]
+
       const [pizze, righe] = await Promise.all([
-        ids.length ? getRigheAggregateByOrdineIds(ids) : {},
-        ids.length ? getRigheByOrdineIds(ids) : [],
+        cardIds.length ? getRigheAggregateByOrdineIds(cardIds) : {},
+        allIds.length ? getRigheByOrdineIds(allIds) : [],
       ])
       if (seq !== loadSeqRef.current) return
-      setOrders(data || [])
+      setOrders(prontoList)
+      setPrepOrders(prepList)
       setPizzePerOrdine(pizze)
 
       const righePerOrd = {}
+      const righePrep = {}
       const prodIds = new Set()
       for (const r of righe || []) {
-        const oid = r.ordineId
+        const oid = r.ordineId ?? r.ordine_id
+        if (!oid) continue
         if (!righePerOrd[oid]) righePerOrd[oid] = []
-        righePerOrd[oid].push(r)
+        if (!righePrep[oid]) righePrep[oid] = []
+        if (cardIds.includes(oid)) righePerOrd[oid].push(r)
+        if (prepIds.includes(oid)) righePrep[oid].push(r)
         const pid = r.prodottoId ?? r.prodotto_id
         if (pid) prodIds.add(pid)
       }
       setRighePerOrdine(righePerOrd)
+      setRighePrepPerOrdine(righePrep)
 
       const pIds = [...prodIds]
       const [prodotti, ingBatch] = await Promise.all([
@@ -105,6 +146,21 @@ export default function Bancone() {
       ])
       if (seq !== loadSeqRef.current) return
       setProductNames((prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {}))
+      setProductPrepCucinaById(
+        (prodotti || []).reduce(
+          (acc, p) => ({ ...acc, [p.id]: p.prep_cucina === true || p.prepCucina === true }),
+          {},
+        ),
+      )
+      setProductPrepMetaById(
+        (prodotti || []).reduce(
+          (acc, p) => ({
+            ...acc,
+            [p.id]: { categoria: p.prep_categoria || p.prepCategoria || "", colore: p.prep_colore || p.prepColore || "" },
+          }),
+          {},
+        ),
+      )
 
       const catIds = [...new Set((prodotti || []).map((p) => p.categoria_id ?? p.categoriaId).filter(Boolean))]
       let bibitePids = new Set()
@@ -145,13 +201,30 @@ export default function Bancone() {
     } finally {
       if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
-  }, [tenantId])
+  }, [tenantId, cucinaTabletOn])
 
   useOperativeOrdersLiveRefresh({
     tenantId,
     onRefresh: () => loadOrders({ silent: true }),
     pollMs: POLL_FALLBACK_MS,
   })
+
+  /** Catalogo ingredienti completo (nome→categoria/colore): fallback per gli "extra" aggiunti a
+   * una riga che non fanno parte della ricetta base di nessun prodotto già caricato (altrimenti
+   * risultano grigi "comune" anche se in anagrafica hanno una categoria impostata). Cambia raramente:
+   * un fetch per tenant, non ad ogni refresh ordini. */
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    getIngredients(tenantId)
+      .then((list) => {
+        if (!cancelled) setIngredientiGlobali(Array.isArray(list) ? list : [])
+      })
+      .catch((e) => console.warn("[Bancone] getIngredients:", e))
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId])
 
   useEffect(() => {
     const storageKey = getBanconePickStorageKey(tenantId)
@@ -174,17 +247,17 @@ export default function Bancone() {
   }, [tenantId])
 
   const ordiniVisibili = useMemo(() => {
-    const base = filterOrdiniVisibili(orders, minutiVisibili)
+    const base = quad ? orders || [] : filterOrdiniVisibili(orders, minutiVisibili)
     return [...base].sort((a, b) => {
       const ta = new Date(a.updatedAt ?? a.updated_at ?? a.createdAt ?? a.created_at).getTime() || 0
       const tb = new Date(b.updatedAt ?? b.updated_at ?? b.createdAt ?? b.created_at).getTime() || 0
       return ta - tb
     })
-  }, [orders, minutiVisibili])
+  }, [orders, minutiVisibili, quad])
 
   const slotPizze = useMemo(
-    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES),
-    [ordiniVisibili, pizzePerOrdine]
+    () => slotPizzeCount(ordiniVisibili, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES, leadTimeConsegnaMin),
+    [ordiniVisibili, pizzePerOrdine, leadTimeConsegnaMin]
   )
   const slotLabels = useMemo(
     () => sortedSlotLabels(slotPizze).filter((label) => (slotPizze[label] || 0) > 0),
@@ -193,7 +266,7 @@ export default function Bancone() {
 
   const orderStateKey = useMemo(
     () =>
-      ordiniVisibili
+      prepOrders
         .map((o) => {
           const prep = JSON.stringify(o?.cucina_prep_stato ?? o?.cucinaPrepStato ?? {})
           return `${o.id}:${prep}`
@@ -201,24 +274,26 @@ export default function Bancone() {
         .filter(Boolean)
         .sort()
         .join(","),
-    [ordiniVisibili]
+    [prepOrders]
   )
 
   const banconeSlotOrder = useMemo(
-    () => banconeSlotsFromOrders(ordiniVisibili, PLANNING_GRID_SLOT_MINUTES),
-    [ordiniVisibili]
+    () => banconeSlotsFromOrders(prepOrders.length ? prepOrders : ordiniVisibili, PLANNING_GRID_SLOT_MINUTES),
+    [prepOrders, ordiniVisibili]
   )
 
-  const ingredientsBySlot = useMemo(
-    () =>
-      aggregateBanconeIngredientsBySlot(
-        ordiniVisibili,
-        righePerOrdine,
-        ingredientsByProduct,
-        PLANNING_GRID_SLOT_MINUTES
-      ),
-    [ordiniVisibili, righePerOrdine, ingredientsByProduct]
-  )
+  const ingredientsBySlot = useMemo(() => {
+    // Con Cucina abilitata se ne occupa lei di tutti gli ingredienti fuori/in cottura: a Bancone
+    // restano solo le bibite (pannello separato sotto). Senza Cucina, torna tutto qui.
+    if (cucinaTabletOn) return {}
+    return aggregateBanconeIngredientsBySlot(
+      prepOrders.length ? prepOrders : ordiniVisibili,
+      Object.keys(righePrepPerOrdine).length ? righePrepPerOrdine : righePerOrdine,
+      ingredientsByProduct,
+      PLANNING_GRID_SLOT_MINUTES,
+      { productPrepCucinaById, productPrepMetaById, productNames, ingredientiGlobali },
+    )
+  }, [cucinaTabletOn, prepOrders, ordiniVisibili, righePrepPerOrdine, righePerOrdine, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, productNames, ingredientiGlobali])
 
   const bibiteBySlot = useMemo(
     () =>
@@ -289,6 +364,13 @@ export default function Bancone() {
     })
   }, [])
 
+  /** Evidenzia la/le card ordine collegate a una chip (ingrediente/bibita), oltre al toggle "preso". */
+  const highlightOrdiniFromChip = useCallback((ordineIds) => {
+    const ids = ordineIds instanceof Set ? ordineIds : new Set(ordineIds || [])
+    if (ids.size === 0) return
+    setHighlightedOrdineIds(ids)
+  }, [])
+
   const openDetail = useCallback(
     async (ordineId) => {
       if (!tenantId || !ordineId) return
@@ -329,8 +411,9 @@ export default function Bancone() {
   )
 
   const renderCard = (ord, isDelivery) => {
-    const ritardo = getRitardoMinuti(ord, partenzaConsegneMinuti)
+    const ritardo = getRitardoMinuti(ord, leadTimeConsegnaMin)
     const urgPartenza = isDelivery && isDeliveryUrgentPartenzaBancone(ord, parametri)
+    const highlighted = highlightedOrdineIds.has(ord.id)
     const righe = righePerOrdine[ord.id] || []
     const pagamento = (ord.tipo_pagamento || "").trim()
     return (
@@ -343,6 +426,12 @@ export default function Bancone() {
                 border: "2px solid #e65100",
                 background: "#fff8e1",
                 boxShadow: "0 0 0 1px rgba(230,81,0,0.35)",
+              }
+            : {}),
+          ...(highlighted
+            ? {
+                border: "2px solid #1565c0",
+                boxShadow: "0 0 0 2px rgba(21,101,192,0.35)",
               }
             : {}),
         }}
@@ -465,12 +554,21 @@ export default function Bancone() {
     )
   }
 
+  const hasPrepChips = useMemo(() => {
+    return Object.values(ingredientsBySlot || {}).some((arr) => (arr || []).length > 0)
+      || Object.values(bibiteBySlot || {}).some((arr) => (arr || []).length > 0)
+  }, [ingredientsBySlot, bibiteBySlot])
+
   return (
     <div style={styles.wrapper} className="operative-mobile-pad">
       {!quad ? (
         <>
           <h1 style={styles.title}>Bancone</h1>
-          <p style={styles.subtitle}>Ordini pronti per il ritiro</p>
+          <p style={styles.subtitle}>
+            {cucinaTabletOn
+              ? "Ordini pronti per il ritiro"
+              : "Preparazioni cucina + ordini pronti (tablet cucina non attivo: prep integrate qui)"}
+          </p>
         </>
       ) : null}
 
@@ -487,10 +585,14 @@ export default function Bancone() {
         </div>
       )}
 
-      {loading && ordiniVisibili.length === 0 ? (
+      {loading && ordiniVisibili.length === 0 && !hasPrepChips ? (
         quad ? null : <p style={styles.muted}>Caricamento...</p>
-      ) : ordiniVisibili.length === 0 ? (
-        quad ? null : <p style={styles.muted}>Nessun ordine pronto.</p>
+      ) : ordiniVisibili.length === 0 && !hasPrepChips ? (
+        <p style={styles.muted}>
+          {quad
+            ? "Nessun ordine PRONTO oggi. Porta un ordine a PRONTO in cassa/pizzaioli per vederlo qui."
+            : "Nessun ordine pronto."}
+        </p>
       ) : (
         <div style={styles.mainRow} className="bancone-layout-main">
           <aside
@@ -500,9 +602,13 @@ export default function Bancone() {
           >
             {!quad ? (
               <>
-                <h2 style={styles.pickColumnTitle}>Ingredienti per orario</h2>
+                <h2 style={styles.pickColumnTitle}>
+                  {cucinaTabletOn ? "Bibite per orario" : "Da preparare (per orario)"}
+                </h2>
                 <p style={styles.pickHint}>
-                  Elenco basato su &quot;Prep. cucina&quot;: grigio = da prendere per la busta, tocca quando l&apos;hai messo.
+                  {cucinaTabletOn
+                    ? "Con Cucina attiva gli ingredienti (congelati, affettati, dolci, fritti, generici) si preparano lì: qui restano solo le bibite. Tocca quando l'hai presa."
+                    : "Conteggi per fascia (stesso ingrediente = un solo chip con quantità). Compare appena l'ordine è in preparazione. Tocca quando pronto."}
                 </p>
               </>
             ) : null}
@@ -519,11 +625,15 @@ export default function Bancone() {
                   {ingList.length > 0 ? (
                     <div style={styles.pickChipWrap}>
                       {ingList.map((item) => {
+                        // Questa lista è popolata solo quando !cucinaTabletOn (vedi useMemo di
+                        // ingredientsBySlot): con Cucina attiva se ne occupa lei, qui restano solo
+                        // le bibite (mappa separata sotto) — nessun caso "in cottura" da gestire qui.
                         const picked = pickedBanconeKeys.has(item.pickKey)
-                        const fullBg = banconeIngredientPickedColor(item)
-                        const nonCottura = item.nonCottura !== false
-                        const kitchenPrepared = Number(item.doneCount || 0) > 0
-                        const disabledForCottura = !nonCottura
+                        const fullBg = resolvePrepTaskBackgroundColor(
+                          { ingredienteColore: item.colore, ingredienteCategoria: item.categoria },
+                          prepCategoryColors,
+                        )
+                        const showCount = item.count
                         return (
                           <button
                             key={item.pickKey}
@@ -533,24 +643,15 @@ export default function Bancone() {
                               ...(picked
                                 ? { background: fullBg, color: "#1a1a1a", borderColor: "#9e9e9e", fontWeight: 600 }
                                 : styles.pickChipTodo),
-                              ...(kitchenPrepared ? styles.pickChipFromKitchen : {}),
-                              ...(disabledForCottura ? styles.pickChipDisabled : {}),
                             }}
                             onClick={() => {
-                              if (disabledForCottura) return
                               togglePickedBancone(item.pickKey)
+                              highlightOrdiniFromChip(item.ordineIds)
                             }}
-                            title={
-                              disabledForCottura
-                                ? "Ingrediente in cottura: il pick Bancone è disponibile solo per voci fuori cottura."
-                                : kitchenPrepared
-                                  ? "Preparato in cucina: ora risulta in grigio su Bancone. Tocca per segnarlo preso al bancone."
-                                  : "Tocca quando l'hai messo in busta."
-                            }
+                            title="Tocca quando l'hai preparato / messo in busta."
                           >
-                            {item.count > 1 ? `${item.count}× ` : ""}
+                            {showCount > 1 ? `${showCount}× ` : ""}
                             {item.label}
-                            {kitchenPrepared ? " · da cucina" : ""}
                           </button>
                         )
                       })}
@@ -577,7 +678,10 @@ export default function Bancone() {
                                     }
                                   : styles.pickChipTodo),
                               }}
-                              onClick={() => togglePickedBancone(item.pickKey)}
+                              onClick={() => {
+                                togglePickedBancone(item.pickKey)
+                                highlightOrdiniFromChip(item.ordineIds)
+                              }}
                             >
                               {item.count > 1 ? `${item.count}× ` : ""}
                               {item.label}
@@ -695,15 +799,6 @@ const styles = {
     color: "#616161",
     fontWeight: 500,
     borderColor: "#bdbdbd",
-  },
-  pickChipFromKitchen: {
-    background: "#e2e8f0",
-    color: "#475569",
-    borderColor: "#94a3b8",
-  },
-  pickChipDisabled: {
-    opacity: 0.65,
-    cursor: "not-allowed",
   },
   bibiteSubheading: {
     fontSize: 11,

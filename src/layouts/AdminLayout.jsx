@@ -8,71 +8,35 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
+import { ADMIN_TOP_NAV } from "@/constants/adminTenantNav";
 import { applyTenantFavicon } from "@/utils/tenantFavicon";
 import { isSuperAdminRole } from "@/utils/superAdminAccess";
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
+import { isDemoGiroSearch } from "@/utils/demoGiro";
+import SaHomeButton from "@/components/SaHomeButton";
+import AdminGroupedSidebar from "@/components/admin/AdminGroupedSidebar";
+import {
+  SETTINGS_SIDEBAR_GROUPS,
+  MENU_SIDEBAR_GROUPS,
+  MAGAZZINO_SIDEBAR_GROUPS,
+  CONTABILITA_SIDEBAR_GROUPS,
+  CONTABILITA_SEMPLICE_SIDEBAR_GROUPS,
+} from "@/constants/adminSidebarGroups";
 
 /**
- * Voci allineate alle route reali (vedi docs/ARCHITETTURA_E_STATO.md).
- * `servizioId` → opzionale filtro voci nav; nessun redirect forzato per piano (servizi non bloccanti).
+ * Voci allineate alle route reali (vedi `ADMIN_TOP_NAV`).
+ * `servizioId` → filtro piano; nessun redirect forzato senza enforcement.
  */
-const topNavItems = [
-  { to: "/admin/ordini", label: "Ordini", servizioId: null },
-  { to: "/admin/manuale", label: "Manuale", servizioId: null },
-  { to: "/admin/report", label: "Report", servizioId: "report_analisi" },
-  { to: "/admin/fidelity", label: "Fidelity", servizioId: "fidelity_card" },
-  { to: "/admin/menu", label: "Menu", servizioId: null },
-  { to: "/admin/magazzino", label: "Magazzino", servizioId: "magazzino_gestione" },
-  { to: "/admin/contabilita", label: "Contabilità", servizioId: null },
-  { to: "/admin/dipendenti", label: "Dipendenti", servizioId: null },
-  { to: "/admin/ruoli", label: "Ruoli", servizioId: null },
-  { to: "/admin/settings", label: "Impostazioni", servizioId: null },
-];
 
-const magazzinoSidebarItems = [
-  { to: "/admin/magazzino", label: "Panoramica" },
-  { to: "/admin/magazzino/ordini-fornitori", label: "Ordini fornitori" },
-  { to: "/admin/magazzino/ddt", label: "DDT" },
-  { to: "/admin/magazzino/movimenti-db", label: "Movimenti (DB)" },
-];
+const settingsSidebarGroups = SETTINGS_SIDEBAR_GROUPS;
+const menuSidebarGroups = MENU_SIDEBAR_GROUPS;
+const magazzinoSidebarGroups = MAGAZZINO_SIDEBAR_GROUPS;
+const contabilitaSidebarGroups = CONTABILITA_SIDEBAR_GROUPS;
+const contabilitaSempliceSidebarGroups = CONTABILITA_SEMPLICE_SIDEBAR_GROUPS;
 
-const contabilitaSidebarItems = [
-  { to: "/admin/contabilita", label: "Panoramica" },
-  { to: "/admin/contabilita/fatture", label: "Fatture" },
-  { to: "/admin/contabilita/pagamenti-fatture", label: "Pagamenti fatture" },
-  { to: "/admin/contabilita/food-cost", label: "Food cost" },
-  { to: "/admin/contabilita/spese-locale", label: "Spese gestione locale" },
-  { to: "/admin/contabilita/spese-personale", label: "Spese gestione personale" },
-  { to: "/admin/contabilita/incassi", label: "Gestione incassi" },
-  { to: "/admin/fiscal-outbox", label: "Coda fiscale" },
-  { to: "/admin/notifiche-outbox", label: "Coda notifiche" },
-];
-
-const menuSidebarItems = [
-  { to: "/admin/menu/categorie", label: "Categorie" },
-  { to: "/admin/menu/formati", label: "Formati" },
-  { to: "/admin/menu/cottura", label: "Cottura" },
-  { to: "/admin/menu/pizze", label: "Pizze" },
-  { to: "/admin/menu/ingredienti", label: "Ingredienti" },
-  { to: "/admin/menu/prep-cucina-colori", label: "Colori prep Cucina" },
-  { to: "/admin/menu/impasti", label: "Impasti" },
-  { to: "/admin/menu/bibite", label: "Bibite" },
-  { to: "/admin/menu/dolci", label: "Dolci" },
-  { to: "/admin/menu/fritti", label: "Fritti" },
-  { to: "/admin/menu/allergeni", label: "Allergeni" },
-  { to: "/admin/menu/listini", label: "Listini e backup" },
-];
-
-const settingsSidebarItems = [
-  { to: "/admin/settings/dati-pizzeria", label: "Dati pizzeria" },
-  { to: "/admin/settings/pagamenti-online", label: "Pagamenti online" },
-  { to: "/admin/settings/layout", label: "Layout" },
-  { to: "/admin/settings/orari", label: "Giorni e orari" },
-  { to: "/admin/settings/area-consegna", label: "Area di consegna" },
-  { to: "/admin/settings/parametri", label: "Parametri" },
-];
-
-function topNavLinkEnd(to) {
+function topNavLinkEnd(item) {
+  if (item.end) return true;
+  const to = item.to;
   return !(
     to === "/admin/menu" ||
     to === "/admin/settings" ||
@@ -88,6 +52,7 @@ export default function AdminLayout() {
   const { activePv, pvList, loading: pvLoading } = usePv();
   const { hasServizio, enforcementActive, contabilitaMode } = useTenantServizi();
   const location = useLocation();
+  const inDemoLive = isDemoGiroSearch(location.search);
   const adminNavCompact = useMediaQuery("(max-width: 768px)");
   const [adminMobileNavOpen, setAdminMobileNavOpen] = useState(false);
   const closeMobileNav = useCallback(() => setAdminMobileNavOpen(false), []);
@@ -97,17 +62,19 @@ export default function AdminLayout() {
   const isMagazzinoArea = location.pathname.startsWith("/admin/magazzino");
   const isContabilitaArea = location.pathname.startsWith("/admin/contabilita");
   const showSectionSidebar = isMenuArea || isSettingsArea || isMagazzinoArea || isContabilitaArea;
-  const sidebarItems = isSettingsArea
-    ? settingsSidebarItems
+  const sidebarGroups = isSettingsArea
+    ? settingsSidebarGroups
     : isMenuArea
-      ? menuSidebarItems
+      ? menuSidebarGroups
       : isMagazzinoArea
-        ? magazzinoSidebarItems
+        ? magazzinoSidebarGroups
         : isContabilitaArea
           ? contabilitaMode === "semplice"
-            ? [{ to: "/admin/contabilita/incassi", label: "Gestione incassi" }]
-            : contabilitaSidebarItems
-          : menuSidebarItems;
+            ? contabilitaSempliceSidebarGroups
+            : contabilitaSidebarGroups
+          : menuSidebarGroups;
+  const sidebarLinkEndFor =
+    isMagazzinoArea ? "/admin/magazzino" : isContabilitaArea ? "/admin/contabilita" : null;
   const sidebarTitle = isSettingsArea
     ? "Impostazioni"
     : isMenuArea
@@ -121,12 +88,11 @@ export default function AdminLayout() {
           : "Menu e listino";
 
   const visibleTopNav = useMemo(() => {
-    return topNavItems.filter((item) => {
+    return ADMIN_TOP_NAV.filter((item) => {
       if (item.to === "/admin/contabilita") {
         if (enforcementActive) {
           return hasServizio("contabilita_locale") || hasServizio("contabilita_semplice");
         }
-        // Senza enforcement piano: la voce resta sempre visibile (hub, food cost, incassi in base ai moduli attivi).
         return true;
       }
       return !item.servizioId || hasServizio(item.servizioId);
@@ -174,7 +140,10 @@ export default function AdminLayout() {
   useEffect(() => {
     return prefetchWhenIdle([
       () => import("@/features/admin/pages/AdminOrdiniPage"),
-      () => import("@/features/admin/pages/ManualeUtentePage"),
+      // ManualeUtentePage esclusa apposta: usa react-markdown (+ remark/rehype), ~100KB
+      // (chunk vendor-markdown) — prefetch idle su ogni sessione admin forzava Rollup a
+      // includere quel chunk nel modulepreload eager di index.html per TUTTI i visitatori
+      // (anche vetrina pubblica anonima), dato che AdminLayout è importato eager in AppRouter.
       () => import("@/features/admin/pages/menu/CategoriePage"),
       () => import("@/features/admin/pages/menu/IngredientiPage"),
       () => import("@/features/admin/pages/menu/PrepCucinaColoriPage"),
@@ -205,7 +174,7 @@ export default function AdminLayout() {
     <Fragment>
       <header className={`admin-fixed-bar${tenantThemeClass}`} role="banner" style={adminThemeStyle}>
         <div className="admin-bar-left">
-          <Link to={ADMIN_TENANT_HOME} className="admin-bar-logo">
+          <Link to={withPreservedSupportSearch(ADMIN_TENANT_HOME, location.search)} className="admin-bar-logo">
             {logoUrl ? (
               <img src={logoUrl} alt={brandName} />
             ) : (
@@ -235,7 +204,7 @@ export default function AdminLayout() {
                 <NavLink
                   key={item.to}
                   to={withPreservedSupportSearch(item.to, location.search)}
-                  end={topNavLinkEnd(item.to)}
+                  end={topNavLinkEnd(item)}
                   className={({ isActive }) => (isActive ? "active" : "")}
                 >
                   {item.label}
@@ -248,19 +217,33 @@ export default function AdminLayout() {
           <span className="admin-bar-user-email" title={user?.email}>
             {user?.email}
           </span>
-          <span className="admin-bar-role-label">Admin</span>
-          <button
-            type="button"
-            className="admin-bar-logout"
-            onClick={() => {
-              void (async () => {
-                await logout();
-                navigate("/login", { replace: true });
-              })();
-            }}
-          >
-            Esci
-          </button>
+          <span className="admin-bar-role-label">{inDemoLive ? "Demo · Admin locale" : "Admin"}</span>
+          {isSuperAdminRole(ruolo) ? <SaHomeButton compact={adminNavCompact} /> : null}
+          {inDemoLive ? (
+            <>
+              <Link
+                to={withPreservedSupportSearch("/operative/dashboard", location.search)}
+                className="admin-bar-logout"
+                style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+              >
+                Hub demo
+              </Link>
+            </>
+          ) : null}
+          {!isSuperAdminRole(ruolo) ? (
+            <button
+              type="button"
+              className="admin-bar-logout"
+              onClick={() => {
+                void (async () => {
+                  await logout();
+                  navigate("/login", { replace: true });
+                })();
+              }}
+            >
+              Esci
+            </button>
+          ) : null}
         </div>
         {adminNavCompact && adminMobileNavOpen ? (
           <div
@@ -278,7 +261,7 @@ export default function AdminLayout() {
                 <NavLink
                   key={item.to}
                   to={withPreservedSupportSearch(item.to, location.search)}
-                  end={topNavLinkEnd(item.to)}
+                  end={topNavLinkEnd(item)}
                   className={({ isActive }) => (isActive ? "active" : "")}
                   onClick={closeMobileNav}
                 >
@@ -295,21 +278,12 @@ export default function AdminLayout() {
         style={{ ...adminThemeStyle }}
       >
         {showSectionSidebar ? (
-          <aside className="dashboard-sidebar" style={{ flexShrink: 0 }}>
-            <h2 className="dashboard-sidebar-title">{sidebarTitle}</h2>
-            <nav>
-              {sidebarItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={withPreservedSupportSearch(item.to, location.search)}
-                  end={item.to === "/admin/magazzino" || item.to === "/admin/contabilita"}
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-          </aside>
+          <AdminGroupedSidebar
+            title={sidebarTitle}
+            groups={sidebarGroups}
+            locationSearch={location.search}
+            linkEndFor={sidebarLinkEndFor}
+          />
         ) : null}
         <main className="dashboard-main" style={{ flex: 1, minWidth: 0 }}>
           <div className="dashboard-content">

@@ -26,3 +26,8 @@ export function ordineIndirizzoConsegna(o) {
 export function ordineOrarioRitiro(o) {
   return String(o?.orario_ritiro ?? o?.orarioRitiro ?? "").trim()
 }
+
+/** Ordine web in attesa di Accetta / Sposta / Rifiuta da cassa. */
+export function ordineRichiedeAccettazioneCassa(o) {
+  return o?.richiede_accettazione_cassa === true || o?.richiedeAccettazioneCassa === true
+}

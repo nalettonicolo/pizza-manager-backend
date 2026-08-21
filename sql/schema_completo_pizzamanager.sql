@@ -10,10 +10,8 @@
 -- Modifiche successive al baseline: solo sql/sql_upgrade.sql (idempotente).
 -- Cartella supabase/migrations/ non contiene pi� file SQL (usare sql_upgrade o rigenerare snapshot).
 --
--- In coda: blocco "CONSOLIDAMENTO sql/modules" (contabilit�, magazzino, fiscal/payment,
--- 14_magazzino_fornitori_ddt, RPC claim fiscal outbox, estensioni core.punti_vendita,
--- vista Ordine / ingredienti prep_cucina, delivery_mark_consegnato).
--- I file sotto sql/modules/ restano copie di lavoro; fonte operativa unica: questo file + sql_upgrade.
+-- I file sotto sql/modules/ contengono solo patch incrementali non ancora consolidate (18–38).
+-- Fonte operativa: questo file (baseline + consolidamenti) + sql/modules per delta recenti.
 -- =============================================================================
 
 -- ---------- BEGIN: supabase/migrations/20260220171734_remote_schema.sql ----------
@@ -7299,7 +7297,11 @@ DECLARE
     'fidelity_timbri_per_pizza',
     'fidelity_timbri_scheda_totale',
     'fidelity_premi',
-    'fidelity_punti_per_euro'
+    'fidelity_punti_per_euro',
+    'ordini_web_accettazione_mode',
+    'cassa_pagamento_contanti',
+    'cassa_pagamento_carta',
+    'cassa_pagamento_paga_online'
   ];
   k TEXT;
 BEGIN
@@ -7316,7 +7318,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.pm_public_parametri_operativi(JSONB) IS
-  'Sottoinsieme parametri_operativi sicuro per anon/vetrina (mod. 40).';
+  'Sottoinsieme parametri_operativi sicuro per anon/vetrina (mod. 40 + 46 + 51).';
 
 REVOKE ALL ON FUNCTION public.pm_public_parametri_operativi(JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.pm_public_parametri_operativi(JSONB) FROM anon, authenticated;
@@ -7392,9 +7394,19 @@ BEGIN
     'logo_url', t.logo_url,
     'attivo', COALESCE(t.attivo, true),
     'piano', t.piano,
+    'email', t.email,
+    'telefono', t.telefono,
     'parametri_operativi', public.pm_public_parametri_operativi(COALESCE(t.parametri_operativi, '{}'::JSONB)),
     'orari_settimana', t.orari_settimana,
-    'indirizzo', t.indirizzo
+    'indirizzo', t.indirizzo,
+    'legal_ragione_sociale', t.legal_ragione_sociale,
+    'legal_piva', t.legal_piva,
+    'legal_pec', t.legal_pec,
+    'privacy_policy_html', t.privacy_policy_html,
+    'cookie_policy_html', t.cookie_policy_html,
+    'pagamento_online_provider', t.pagamento_online_provider,
+    'stripe_publishable_key', t.stripe_publishable_key,
+    'sumup_merchant_public_id', t.sumup_merchant_public_id
   )
   INTO v_row
   FROM admin.tenants t
@@ -7407,7 +7419,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_public_tenant_by_id(UUID) IS
-  'Anteprima SaaS: branding/tenant attivo per UUID (anon). parametri_operativi filtrati (mod. 40).';
+  'Anteprima SaaS: branding/tenant attivo per UUID (anon). parametri filtrati (mod. 40) + pagamento pubblico (mod. 41).';
 
 REVOKE ALL ON FUNCTION public.get_public_tenant_by_id(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_public_tenant_by_id(UUID) TO anon, authenticated;
@@ -8969,7 +8981,6 @@ BEGIN
     FROM public.punti_vendita pv
     WHERE pv.id = p_punto_vendita_id
       AND pv.tenant_id = p_tenant_id
-      AND pv.deleted_at IS NULL
   ) THEN
     RAISE EXCEPTION 'punto_vendita_non_valido' USING ERRCODE = 'P0001';
   END IF;
@@ -11488,7 +11499,7 @@ END $$;
 -- =============================================================================
 -- CONSOLIDAMENTO FASE 0 (2026-04-18): merge sql_upgrade in baseline
 -- (create_order hardening + web_cliente + delivery_mark_consegnato + prodotto_ingrediente)
--- Copia di lavoro: docs/sql/append_phase0_consolidamento_2026-04.sql
+-- Copia di lavoro storica (2026-04): contenuto già in questo file sotto CONSOLIDAMENTO FASE 0.
 -- =============================================================================
 
 DO $drop$
@@ -12730,3 +12741,24 @@ $status$;
 GRANT EXECUTE ON FUNCTION public.tenant_online_payment_setup_status(UUID) TO authenticated;
 
 -- ---------- END CONSOLIDAMENTO 2026-05-30 ----------
+
+-- ---------- BEGIN CONSOLIDAMENTO 2026-08-06 (mod. 09 legal + vetrina) ----------
+DO $legal$
+BEGIN
+  IF to_regclass('admin.tenants') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_ragione_sociale TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_piva TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS legal_pec TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS privacy_policy_html TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS cookie_policy_html TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS pagamento_online_provider TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS stripe_publishable_key TEXT';
+    EXECUTE 'ALTER TABLE admin.tenants ADD COLUMN IF NOT EXISTS sumup_merchant_public_id TEXT';
+    COMMENT ON COLUMN admin.tenants.privacy_policy_html IS 'HTML informativa privacy vetrina; se NULL si usa testo predefinito app.';
+    COMMENT ON COLUMN admin.tenants.cookie_policy_html IS 'HTML cookie policy vetrina; se NULL si usa testo predefinito app.';
+    COMMENT ON COLUMN admin.tenants.pagamento_online_provider IS 'stripe | sumup | null — checkout pubblico.';
+    COMMENT ON COLUMN admin.tenants.stripe_publishable_key IS 'Chiave pubblica Stripe (pk_...), sicura in client.';
+  END IF;
+END
+$legal$;
+-- ---------- END CONSOLIDAMENTO 2026-08-06 ----------

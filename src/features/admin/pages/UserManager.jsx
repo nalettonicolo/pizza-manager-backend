@@ -158,15 +158,14 @@ export default function UserManager() {
 
   return (
     <div className="dashboard-settings-page dashboard-dipendenti-page">
-      <h1 className="dashboard-page-title">Dipendenti (HR)</h1>
+      <h1 className="dashboard-page-title">Staff</h1>
       <p className="dashboard-settings-section-desc" style={{ marginBottom: 14 }}>
-        Archivio persone: <strong>anagrafica</strong>, <strong>corsi</strong>, <strong>allegati</strong> e{" "}
-        <strong>buste paga</strong>. Le schede possono esistere anche senza login applicativo. Per abilitare o sospendere
-        gli accessi e assegnare i ruoli di reparto usa la pagina{" "}
+        <strong>Dipendenti</strong>: anagrafica, corsi, allegati e buste paga. Le schede possono esistere anche senza
+        login. Per abilitare accessi e aree di lavoro usa{" "}
         <Link to="/admin/ruoli" style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline" }}>
           Ruoli
         </Link>
-        . L&apos;imputazione dei costi buste in <strong>contabilità</strong> sarà collegata in una fase successiva.
+        .
       </p>
 
       <section className="dashboard-box dashboard-settings-section" style={{ padding: 0, overflow: "hidden" }}>

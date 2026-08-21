@@ -8,12 +8,7 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "baseUrl": ".",
-    "paths": {
-      "@supabase/supabase-js": ["../../node_modules/@supabase/supabase-js"],
-      "stripe": ["../../node_modules/stripe"]
-    }
+    "isolatedModules": true
   },
   "include": ["./**/*.ts", "./types/**/*.d.ts"]
 }

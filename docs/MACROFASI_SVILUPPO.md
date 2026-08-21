@@ -33,7 +33,7 @@ Dettaglio storico: commit recenti + `docs/GO_LIVE_ORDINI_WEB.md`.
 
 ## Fase 6 — Produzione hard (in corso)
 
-### Fatto (agg. 2026-08-03 pomeriggio)
+### Fatto (agg. 2026-08-20)
 
 | Filo | Stato |
 |------|--------|
@@ -48,6 +48,7 @@ Dettaglio storico: commit recenti + `docs/GO_LIVE_ORDINI_WEB.md`.
 | Guide DNS per host (Register, Aruba, …) + CTA sito esterno | ✅ in produzione |
 | SA gate privacy + Sala QA multi-finestra | ✅ in produzione |
 | Deploy hosting + push GitHub (`f005920` + delta 38) | ✅ |
+| Chek-Sviluppi batch CA/CL/OP/OW (ago) + checkout profilo + logo | ✅ codice (smoke carta residuo) |
 
 Advisor sicurezza: **106 → 43** WARN (42 rumore atteso vetrina/staff; 1 HIBP richiede piano Pro+).
 
@@ -60,4 +61,4 @@ Advisor sicurezza: **106 → 43** WARN (42 rumore atteso vetrina/staff; 1 HIBP r
 
 ---
 
-*Ultima revisione: 2026-08-03*
+*Ultima revisione: 2026-08-20*

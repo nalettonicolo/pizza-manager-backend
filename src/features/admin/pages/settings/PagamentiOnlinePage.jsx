@@ -1,243 +1,322 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useOutletContext } from "react-router-dom";
-import { useTenant } from "@/app/contexts/TenantContext";
-import { useTenantServizi } from "@/app/hooks/useTenantServizi";
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useOutletContext } from "react-router-dom"
+import { useTenant } from "@/app/contexts/TenantContext"
+import { useTenantServizi } from "@/app/hooks/useTenantServizi"
+import SettingsSectionHeader from "@/features/admin/components/SettingsSectionHeader"
+import OnlinePaymentProviderCard from "@/features/admin/components/OnlinePaymentProviderCard"
+import PosPaymentIntegrationsPanel from "@/features/operative/cassa/components/PosPaymentIntegrationsPanel"
+import { ONLINE_PAYMENT_PROVIDERS } from "@/constants/onlinePaymentProviders"
 import {
   fetchTenantOnlinePaymentSetupStatus,
   getStripeWebhookUrl,
+  listTenantOnlinePaymentProviders,
+  patchTenantParametriOperativi,
+  saveTenantPaymentProviderSecret,
   saveTenantStripeWebhookSecret,
   updateTenantSettings,
-} from "@/features/admin/services/adminService";
+  upsertTenantOnlinePaymentProvider,
+} from "@/features/admin/services/adminService"
+import { readOrdiniOnlineAttivi } from "@/utils/ordiniOnlineAttivi"
+import OnlinePaymentTestCardsHint from "@/features/public/components/OnlinePaymentTestCardsHint"
 
 function CheckRow({ ok, label, hint }) {
   return (
-    <li style={{ marginBottom: 10, lineHeight: 1.5 }}>
-      <span style={{ color: ok ? "#166534" : "#b45309", fontWeight: 700, marginRight: 8 }}>{ok ? "✓" : "○"}</span>
-      <strong>{label}</strong>
-      {hint ? <span style={{ display: "block", fontSize: 13, color: "#64748b", marginLeft: 22 }}>{hint}</span> : null}
+    <li className="online-pay-check-row">
+      <span className={`online-pay-check-icon${ok ? " online-pay-check-icon--ok" : ""}`}>{ok ? "✓" : "○"}</span>
+      <div>
+        <strong>{label}</strong>
+        {hint ? <span className="online-pay-check-hint">{hint}</span> : null}
+      </div>
     </li>
-  );
+  )
 }
 
 export default function PagamentiOnlinePage() {
-  const { settings, setSettings } = useOutletContext();
-  const { tenantId, refreshTenant } = useTenant();
-  const { hasServizio } = useTenantServizi();
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [whInput, setWhInput] = useState("");
-  const [whSaving, setWhSaving] = useState(false);
-  const [providerSaving, setProviderSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { settings, setSettings } = useOutletContext()
+  const { tenantId, refreshTenant } = useTenant()
+  const { hasServizio } = useTenantServizi()
+  const [status, setStatus] = useState(null)
+  const [providers, setProviders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [whInput, setWhInput] = useState("")
+  const [whSaving, setWhSaving] = useState(false)
+  const [vetrinaSaving, setVetrinaSaving] = useState(false)
+  const [posSaving, setPosSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
 
-  const webhookUrl = getStripeWebhookUrl();
-  const ordiniOnlineLicenza = hasServizio("ordini_online");
+  const webhookUrl = getStripeWebhookUrl()
+  const ordiniOnlineLicenza = hasServizio("ordini_online")
+  const ordiniOnlineVetrinaAttivi = readOrdiniOnlineAttivi(settings?.parametri_operativi)
+  const posParams = settings?.parametri_operativi && typeof settings.parametri_operativi === "object"
+    ? settings.parametri_operativi
+    : {}
 
-  const loadStatus = useCallback(async () => {
-    if (!tenantId) return;
-    setLoading(true);
+  const setPosParam = (key, value) => {
+    setSettings((prev) => ({
+      ...prev,
+      parametri_operativi: { ...(prev?.parametri_operativi || {}), [key]: value },
+    }))
+  }
+
+  async function savePosPredispositions() {
+    if (!tenantId || !settings) return
+    setPosSaving(true)
     try {
-      const s = await fetchTenantOnlinePaymentSetupStatus(tenantId);
-      setStatus(s);
+      await updateTenantSettings(tenantId, {
+        parametri_operativi: settings.parametri_operativi || {},
+      })
+      await refreshTenant()
+      alert("Predisposizioni POS / catalogo sistemi salvate.")
     } catch (e) {
-      setStatus({ error: e?.message || "Stato non disponibile (applica SQL modulo 17)" });
+      alert(e?.message || "Salvataggio non riuscito")
     } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => {
-    void loadStatus();
-  }, [loadStatus]);
-
-  async function setProvider(value) {
-    if (!tenantId) return;
-    setProviderSaving(true);
-    try {
-      await updateTenantSettings(tenantId, { pagamento_online_provider: value || null });
-      setSettings((prev) => ({ ...prev, pagamento_online_provider: value || null }));
-      await refreshTenant();
-      await loadStatus();
-    } catch (e) {
-      alert(e?.message || "Salvataggio non riuscito");
-    } finally {
-      setProviderSaving(false);
+      setPosSaving(false)
     }
   }
 
-  async function saveWebhookSecret() {
-    if (!tenantId || !whInput.trim().startsWith("whsec_")) return;
-    setWhSaving(true);
+  const providerRows = useMemo(() => {
+    const byKey = Object.fromEntries((providers || []).map((p) => [p.provider_key, p]))
+    return ONLINE_PAYMENT_PROVIDERS.map((def) => ({
+      def,
+      row: byKey[def.key] || {
+        provider_key: def.key,
+        enabled: false,
+        public_config: {},
+        ready: false,
+        secret_configured: false,
+      },
+    }))
+  }, [providers])
+
+  const enabledReadyCount = useMemo(
+    () => providerRows.filter(({ row, def }) => row.enabled && row.ready && def.implementation === "live").length,
+    [providerRows],
+  )
+
+  const loadStatus = useCallback(async () => {
+    if (!tenantId) return
+    setLoading(true)
     try {
-      await saveTenantStripeWebhookSecret(tenantId, whInput.trim());
-      setWhInput("");
-      await loadStatus();
-      alert("Webhook secret salvato per questo locale.");
+      const [s, list] = await Promise.all([
+        fetchTenantOnlinePaymentSetupStatus(tenantId),
+        listTenantOnlinePaymentProviders(tenantId),
+      ])
+      setStatus(s)
+      setProviders(Array.isArray(list) ? list : s?.providers || [])
     } catch (e) {
-      alert(e?.message || "Salvataggio webhook non riuscito");
+      setStatus({ error: e?.message || "Stato non disponibile (applica SQL modulo 43)" })
+      setProviders([])
     } finally {
-      setWhSaving(false);
+      setLoading(false)
+    }
+  }, [tenantId])
+
+  useEffect(() => {
+    void loadStatus()
+  }, [loadStatus])
+
+  async function setOrdiniOnlineVetrina(attivo) {
+    if (!tenantId) return
+    setVetrinaSaving(true)
+    try {
+      await patchTenantParametriOperativi(tenantId, { ordini_online_attivi: attivo === true })
+      setSettings((prev) => ({
+        ...prev,
+        parametri_operativi: { ...(prev?.parametri_operativi || {}), ordini_online_attivi: attivo === true },
+      }))
+      await refreshTenant()
+    } catch (e) {
+      alert(e?.message || "Salvataggio non riuscito")
+    } finally {
+      setVetrinaSaving(false)
+    }
+  }
+
+  async function handleToggleEnabled(providerKey, enabled) {
+    if (!tenantId) return
+    try {
+      const list = await upsertTenantOnlinePaymentProvider(tenantId, providerKey, { enabled })
+      setProviders(Array.isArray(list) ? list : [])
+      await refreshTenant()
+      await loadStatus()
+    } catch (e) {
+      alert(e?.message || "Salvataggio non riuscito")
+    }
+  }
+
+  async function handleSavePublic(providerKey, publicConfig) {
+    if (!tenantId) return
+    const list = await upsertTenantOnlinePaymentProvider(tenantId, providerKey, {
+      enabled: true,
+      publicConfig,
+    })
+    setProviders(Array.isArray(list) ? list : [])
+    await refreshTenant()
+    await loadStatus()
+  }
+
+  async function handleSaveSecret(providerKey, secret) {
+    if (!tenantId) return
+    await saveTenantPaymentProviderSecret(tenantId, providerKey, secret)
+    await loadStatus()
+  }
+
+  async function saveWebhookSecret() {
+    if (!tenantId || !whInput.trim().startsWith("whsec_")) return
+    setWhSaving(true)
+    try {
+      await saveTenantStripeWebhookSecret(tenantId, whInput.trim())
+      setWhInput("")
+      await loadStatus()
+    } catch (e) {
+      alert(e?.message || "Salvataggio webhook non riuscito")
+    } finally {
+      setWhSaving(false)
     }
   }
 
   function copyWebhookUrl() {
-    if (!webhookUrl) return;
+    if (!webhookUrl) return
     void navigator.clipboard.writeText(webhookUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
   }
 
-  const ready = status?.ready === true;
-  const provider = status?.provider || settings?.pagamento_online_provider || "";
-
   return (
-    <div className="dashboard-settings-section">
-      <h2 className="dashboard-settings-section-title">Pagamenti online (Stripe)</h2>
-      <p className="dati-pizzeria-hint" style={{ marginBottom: 16, lineHeight: 1.55 }}>
-        Configura qui l’incasso con carta sulla vetrina cliente. Dopo il pagamento l’ordine passa in preparazione anche senza
-        attendere il webhook (conferma server attiva). Per i dettagli chiavi pk/sk vedi anche{" "}
-        <Link to="/admin/settings/dati-pizzeria">Dati pizzeria</Link>.
-      </p>
+    <div className="admin-settings-page online-pay-page">
+      <SettingsSectionHeader
+        title="Pagamenti online"
+        description="Configura uno o più gestori di pagamento. In vetrina il cliente sceglie come pagare tra quelli attivi e pronti."
+      />
 
-      {!ordiniOnlineLicenza ? (
-        <p
-          style={{
-            padding: 12,
-            background: "#fffbeb",
-            border: "1px solid #fcd34d",
-            borderRadius: 8,
-            color: "#92400e",
-            marginBottom: 16,
-          }}
-        >
-          Il servizio <strong>Ordini online</strong> non risulta attivo su questo tenant. Abilitalo in Super Admin → Clienti /
-          Piani prima che i clienti possano ordinare e pagare online.
-        </p>
-      ) : null}
-
-      <div
-        style={{
-          padding: 16,
-          borderRadius: 10,
-          border: `1px solid ${ready ? "#86efac" : "#fcd34d"}`,
-          background: ready ? "#f0fdf4" : "#fffbeb",
-          marginBottom: 20,
-        }}
-      >
-        <p style={{ margin: "0 0 12px", fontWeight: 700, color: ready ? "#166534" : "#92400e" }}>
-          {ready ? "Pronto per accettare pagamenti Stripe" : "Configurazione incompleta"}
-        </p>
-        {loading ? (
-          <p style={{ margin: 0, color: "#64748b" }}>Verifica in corso…</p>
-        ) : status?.error ? (
-          <p style={{ margin: 0, color: "#991b1b" }}>{status.error}</p>
+      <section className="dashboard-box online-pay-overview">
+        <h2 className="dashboard-box-title">Panoramica vetrina</h2>
+        {loading ? <p className="dati-pizzeria-hint">Caricamento stato…</p> : null}
+        {status?.error ? (
+          <p style={{ color: "#b91c1c", fontSize: 14 }}>{status.error}</p>
         ) : (
-          <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+          <ul className="online-pay-checklist">
             <CheckRow
               ok={ordiniOnlineLicenza}
               label="Licenza ordini online"
-              hint="Servizio ordini_online nel piano tenant"
-            />
-            <CheckRow ok={provider === "stripe"} label="Provider = Stripe" />
-            <CheckRow
-              ok={status?.stripe_publishable_configured}
-              label="Chiave pubblica Stripe (pk_…)"
-              hint="In Dati pizzeria"
+              hint={ordiniOnlineLicenza ? "Attiva sul piano" : "Richiedi attivazione ordini online"}
             />
             <CheckRow
-              ok={status?.stripe_secret_configured}
-              label="Chiave segreta Stripe (sk_…)"
-              hint="Salvata in modo riservato — Dati pizzeria"
+              ok={ordiniOnlineVetrinaAttivi}
+              label="Ordini vetrina attivi"
+              hint="Toggle sotto — necessario per checkout pubblico"
             />
             <CheckRow
-              ok={status?.stripe_webhook_configured}
-              label="Webhook secret (whsec_…) — consigliato"
-              hint="Notifiche automatiche da Stripe; opzionale se usi solo conferma al checkout"
+              ok={enabledReadyCount > 0}
+              label={`Gestori pronti in vetrina (${enabledReadyCount})`}
+              hint="Almeno un gestore live attivo e configurato (Stripe o SumUp)"
             />
           </ul>
         )}
-        <button type="button" className="dashboard-settings-btn-secondary" style={{ marginTop: 12 }} onClick={() => void loadStatus()}>
+        <label className="online-pay-vetrina-toggle">
+          <input
+            type="checkbox"
+            checked={ordiniOnlineVetrinaAttivi}
+            disabled={vetrinaSaving || !tenantId}
+            onChange={(e) => void setOrdiniOnlineVetrina(e.target.checked)}
+          />
+          <span>
+            <strong>Attiva ordini e pagamento online in vetrina</strong>
+            <span className="online-pay-vetrina-toggle-hint">
+              Se disattivo, i clienti vedono solo il menù. Serve anche la licenza ordini online.
+            </span>
+          </span>
+        </label>
+        <button type="button" className="dashboard-settings-btn-secondary" onClick={() => void loadStatus()}>
           Aggiorna stato
         </button>
-      </div>
+      </section>
 
-      <div className="dashboard-settings-fields" style={{ marginBottom: 20 }}>
-        <label>
-          Provider pagamento online
-          <select
-            value={provider}
-            disabled={providerSaving}
-            onChange={(e) => void setProvider(e.target.value)}
-          >
-            <option value="">Non configurato</option>
-            <option value="stripe">Stripe</option>
-            <option value="sumup">SumUp (non ancora attivo)</option>
-          </select>
-        </label>
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 15, marginBottom: 8 }}>Webhook Stripe (Dashboard)</h3>
-        <p className="dati-pizzeria-hint" style={{ marginBottom: 8 }}>
-          In Stripe → Developers → Webhooks → Add endpoint, incolla questo URL ed eventi{" "}
-          <code>payment_intent.succeeded</code>, <code>payment_intent.payment_failed</code>.
+      <section className="online-pay-providers-section">
+        <h2 className="online-pay-section-title">Gestori di pagamento</h2>
+        <p className="dati-pizzeria-hint online-pay-section-desc">
+          Attiva «In vetrina» per ogni gestore che vuoi offrire. Stripe e SumUp sono già collegati al checkout; Satispay,
+          Nexi e PayPal si possono preconfigurare per i test.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 }}>
-          <code
-            style={{
-              flex: "1 1 280px",
-              padding: 8,
-              background: "#f1f5f9",
-              borderRadius: 6,
-              fontSize: 12,
-              wordBreak: "break-all",
-            }}
-          >
-            {webhookUrl || "VITE_SUPABASE_URL non configurato"}
-          </code>
-          <button type="button" className="dashboard-settings-btn-secondary" onClick={copyWebhookUrl} disabled={!webhookUrl}>
-            {copied ? "Copiato" : "Copia URL"}
-          </button>
+        <div className="online-pay-provider-grid">
+          {providerRows.map(({ def, row }) => (
+            <OnlinePaymentProviderCard
+              key={def.key}
+              definition={def}
+              row={row}
+              disabled={loading || !tenantId}
+              onToggleEnabled={handleToggleEnabled}
+              onSavePublic={handleSavePublic}
+              onSaveSecret={handleSaveSecret}
+            >
+              {def.key === "stripe" ? (
+                <div className="online-pay-stripe-webhook-inline">
+                  <h4 className="online-pay-card-subtitle">Webhook (opzionale)</h4>
+                  <p className="dati-pizzeria-hint">
+                    Eventi: <code>payment_intent.succeeded</code>, <code>payment_intent.payment_failed</code>.
+                  </p>
+                  <div className="online-pay-webhook-row">
+                    <code className="online-pay-webhook-url">
+                      {webhookUrl || "VITE_SUPABASE_URL non configurato"}
+                    </code>
+                    <button
+                      type="button"
+                      className="dashboard-settings-btn-secondary"
+                      onClick={copyWebhookUrl}
+                      disabled={!webhookUrl}
+                    >
+                      {copied ? "Copiato" : "Copia URL"}
+                    </button>
+                  </div>
+                  <label className="online-pay-field">
+                    <span className="online-pay-field-label">Signing secret (whsec_…)</span>
+                    <input
+                      type="password"
+                      value={whInput}
+                      onChange={(e) => setWhInput(e.target.value)}
+                      placeholder={status?.stripe_webhook_configured ? "•••• già configurato" : "whsec_…"}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="dashboard-settings-btn-secondary"
+                    disabled={whSaving || !whInput.trim().startsWith("whsec_")}
+                    onClick={() => void saveWebhookSecret()}
+                  >
+                    {whSaving ? "Salvataggio…" : "Salva webhook secret"}
+                  </button>
+                </div>
+              ) : null}
+            </OnlinePaymentProviderCard>
+          ))}
         </div>
-        <label>
-          Signing secret del webhook (whsec_…) — per questo locale
-          <input
-            type="password"
-            value={whInput}
-            onChange={(e) => setWhInput(e.target.value)}
-            placeholder={
-              status?.stripe_webhook_configured ? "•••• già configurato — incolla per sostituire" : "whsec_..."
-            }
-            autoComplete="off"
-          />
-        </label>
+      </section>
+
+      <section className="dashboard-box online-pay-smoke">
+        <h2 className="dashboard-box-title">Area test — pagamento online</h2>
+        <ol className="online-pay-smoke-list">
+          <li>Attiva almeno un gestore (Stripe o SumUp) e spunta «In vetrina».</li>
+          <li>Attiva ordini vetrina (toggle sopra).</li>
+          <li>Checkout vetrina → scegli pagamento online → seleziona il gestore se ne hai più di uno.</li>
+          <li>Usa le carte di test sotto (solo sandbox / modalità TEST) → ordine in preparazione.</li>
+        </ol>
+        <OnlinePaymentTestCardsHint title="Carte di pagamento test per gestore" />
+      </section>
+
+      <div style={{ marginTop: 24 }}>
+        <PosPaymentIntegrationsPanel p={posParams} setParam={setPosParam} />
         <button
           type="button"
           className="dashboard-settings-btn-secondary"
           style={{ marginTop: 8 }}
-          disabled={whSaving || !whInput.trim().startsWith("whsec_")}
-          onClick={() => void saveWebhookSecret()}
+          disabled={posSaving || !tenantId}
+          onClick={() => void savePosPredispositions()}
         >
-          {whSaving ? "Salvataggio…" : "Salva webhook secret"}
+          {posSaving ? "Salvataggio catalogo…" : "Salva catalogo sistemi / predisposizioni"}
         </button>
-        <p className="dati-pizzeria-hint" style={{ marginTop: 8 }}>
-          In alternativa puoi impostare un secret globale con{" "}
-          <code>supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_…</code> (vale per tutti i tenant che usano lo stesso account
-          Stripe).
-        </p>
-      </div>
-
-      <div style={{ padding: 14, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-        <h3 style={{ fontSize: 15, margin: "0 0 8px" }}>Test rapido</h3>
-        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.6, color: "#334155" }}>
-          <li>Parametri → attiva ordini vetrina / consegna se necessario.</li>
-          <li>Cliente registrato → carrello → checkout → «Pagamento online».</li>
-          <li>Carta test Stripe <code>4242 4242 4242 4242</code> (modalità test).</li>
-          <li>Ordine deve passare da «in attesa pagamento» a «in preparazione».</li>
-        </ol>
       </div>
     </div>
-  );
+  )
 }

@@ -116,7 +116,7 @@ export default function GestioneIncassiPage() {
     return () => {
       cancelled = true;
     };
-  }, [tenantId, localReady, data.movimenti]);
+  }, [tenantId, localReady, data.movimenti, setData]);
 
   useEffect(() => {
     if (storageBackend !== "local") return;

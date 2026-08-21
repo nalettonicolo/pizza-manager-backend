@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useLayoutEffect, useRef } from "react"
-import { useNavigate, useLocation } from "react-router-dom"
+import { useLocation } from "react-router-dom"
+import { usePreservedNavigate } from "@/hooks/usePreservedNavigate"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { usePv } from "@/app/contexts/PvContext"
 import { useAuth } from "@/app/contexts/AuthContext"
@@ -17,6 +18,7 @@ import ModificaPizzaModal from "@/features/operative/cassa/components/ModificaPi
 import NuovoClienteModal from "@/features/operative/cassa/components/NuovoClienteModal"
 import Cart from "@/features/operative/cassa/components/Cart"
 import CassaModificaOrdineModal from "@/features/operative/cassa/components/CassaModificaOrdineModal"
+import CassaPlanningBoard from "@/features/operative/cassa/components/CassaPlanningBoard"
 import {
   ordineTipoOrdine,
   ordineIsDelivery,
@@ -24,6 +26,7 @@ import {
   ordineTelefonoRitiro,
   ordineIndirizzoConsegna,
   ordineOrarioRitiro,
+  ordineRichiedeAccettazioneCassa,
 } from "@/features/operative/cassa/utils/ordineFieldHelpers"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { splitNomeDaIndirizzoConsegna } from "@/features/operative/cassa/utils/cassaDeliveryNomeIndirizzo"
@@ -33,6 +36,12 @@ import {
   orarioVisualizzatoLista,
   buildOrdineCardTitleModel,
 } from "@/features/operative/cassa/utils/cassaDeliveryDisplay"
+import {
+  emailsMatchLoose,
+  phonesMatchLoose,
+  ordineStatoIncompleto,
+  orderLineToCassaCartPayload,
+} from "@/utils/ordineRecallCart"
 
 import {
   getCategories,
@@ -63,6 +72,8 @@ import {
   enrichOrdineDetailIngredientiSummaries,
   updateOrderStato,
   logCassaAuditEvent,
+  staffAccettaOrdineWeb,
+  staffRifiutaOrdineWeb,
 } from "@/features/operative/cassa/services/cassaOrdiniService"
 import { updateTenantSettings } from "@/features/admin/services/parametriService"
 import { useCassaModificaOrdine } from "@/features/operative/cassa/hooks/useCassaModificaOrdine"
@@ -78,6 +89,7 @@ import { sortByOrdine } from "@/utils/sortByOrdine"
 import { ordineIsAnnullato } from "@/utils/incassiFromOrdini"
 import { getDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
 import { ordineDeliveryRichiedeAttenzione } from "@/utils/riderDeliveryConfig"
+import { readPizzaioloLeadTimeConsegnaMin } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
 import { resolveMenuTheme } from "@/utils/tenantMenuTheme"
 import { getLocalYYYYMMDD, orderCreatedLocalDateKey } from "@/utils/localDate"
@@ -108,8 +120,9 @@ import {
   ricevutaPayloadFromOrdineDetail,
 } from "@/features/operative/cassa/utils/printRicevuta"
 import { readStampaModalita, readStampaQuando, canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { normalizeComandaRepartiStampanti } from "@/utils/comandaRepartiStampanti"
-import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
+import { buildComandaIngredientiSummary, extractModificheFromIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 import {
   cassaTipoOrdineBtn,
   cassaTipoOrdineBtnActive,
@@ -123,12 +136,19 @@ import { computeFidelityRedeemPuntiCost } from "@/utils/fidelityRedeem"
 import { productMatchesMenuSearch } from "@/utils/menuProductSearch"
 import {
   iconTipoPagamentoLista,
+  isTipoPagamentoLink,
   labelTipoPagamentoLista,
   tipoPagamentoInAttesa,
 } from "@/features/operative/cassa/utils/cassaPaymentDisplay"
+import {
+  listTipiPagamentoCassa,
+  TIPO_PAGAMENTO_CONTANTI,
+  TIPO_PAGAMENTO_CARTA,
+  TIPO_PAGAMENTO_PAGA_ONLINE,
+  isOrdineOnlineCanale,
+} from "@/features/operative/cassa/utils/cassaPagamentiOptions"
 
 const ORDER_STATUS = "IN_PREPARAZIONE"
-const TIPI_PAGAMENTO = ["Contanti", "Carta", "Misto", "Da pagare", "Link (carta da casa)", "Altro"]
 const MAX_MISTO_RIGHE = 15
 const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 
@@ -221,24 +241,34 @@ function OrdineCardTitleRows({ o, isDelivery }) {
   )
 }
 
-/** Ordini collegati all’anagrafica cliente (delivery: nome+indirizzo; negozio: stesso nome cliente). */
+/** Ordini collegati all’anagrafica: indirizzo + (email|telefono), oppure legacy nome(+indirizzo delivery). */
 function ordiniFiltratiPerClienteAnagrafica(ordini, cliente) {
   if (!cliente) return []
   const nomeNorm = (cliente.nome || "").trim().toLowerCase()
   const clienteInd = cliente.indirizzo || ""
+  const clienteTel = cliente.telefono || ""
+  const clienteEmail = cliente.email || ""
   return (ordini || []).filter((o) => {
     const oNome = ordineNomeCliente(o).toLowerCase()
     const oInd = ordineIndirizzoConsegna(o)
+    const oTel = ordineTelefonoRitiro(o)
+    const oEmail = String(o.email_cliente ?? o.cliente_email ?? o.email ?? "").trim()
     const tipo = ordineTipoOrdine(o)
+
+    const addrOk = indirizzoConsegnaMatchAnagrafica(clienteInd, oInd)
+    const contactOk =
+      phonesMatchLoose(clienteTel, oTel) || emailsMatchLoose(clienteEmail, oEmail)
+    if (addrOk && contactOk) return true
+
     if (tipo === "delivery") {
-      return oNome === nomeNorm && indirizzoConsegnaMatchAnagrafica(clienteInd, oInd)
+      return Boolean(nomeNorm) && oNome === nomeNorm && indirizzoConsegnaMatchAnagrafica(clienteInd, oInd)
     }
-    return oNome === nomeNorm && nomeNorm.length > 0
+    return Boolean(nomeNorm) && oNome === nomeNorm
   })
 }
 
 export default function CassaPage() {
-  const navigate = useNavigate()
+  const navigate = usePreservedNavigate()
   const location = useLocation()
   const { tenantId, tenantData, refreshTenant } = useTenant()
   const { pendingCount: offlinePendingCount, flush: flushOfflineQueue, isOnline, flushing: offlineFlushing, lastFlush } = useOfflineSync(tenantId)
@@ -249,7 +279,7 @@ export default function CassaPage() {
   const { user, ruolo } = useAuth()
   const canAnnullaOrdineCassa = useMemo(() => normalizeRuoloOperativo(ruolo) === "cassa", [ruolo])
   const { hasServizio, enforcementActive } = useTenantServizi()
-  const { fullDemoAccess, canEditParametri: resolveCanEditParametri } = useOperativeSaDemoAccess()
+  const { fullDemoAccess, inDemoLive, canEditParametri: resolveCanEditParametri } = useOperativeSaDemoAccess()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
   const fidelityServizioOk = fullDemoAccess || !enforcementActive || hasServizio("fidelity_card")
   const ordiniOnlineInLicenza = useMemo(
@@ -290,7 +320,7 @@ export default function CassaPage() {
   const cassaMobileLayout = narrowCassaViewport && !isQaSupportSearch(location.search)
   const [cassaMobileTab, setCassaMobileTab] = useState("menu")
   const [checkoutNote, setCheckoutNote] = useState("")
-  const [checkoutTipoPagamento, setCheckoutTipoPagamento] = useState(TIPI_PAGAMENTO[0])
+  const [checkoutTipoPagamento, setCheckoutTipoPagamento] = useState(TIPO_PAGAMENTO_CONTANTI)
   const [mistoRighe, setMistoRighe] = useState([])
   const [checkoutScontoGlobale, setCheckoutScontoGlobale] = useState("")
   const [checkoutNomeCliente, setCheckoutNomeCliente] = useState("")
@@ -345,7 +375,7 @@ export default function CassaPage() {
   const seenOrderIdsForToastRef = useRef(new Set())
   /** Dopo ripristino bozza locale (stesso giorno / tenant / PV): abilita salvataggio automatico */
   const [cassaDraftReady, setCassaDraftReady] = useState(false)
-  /** Pay-by-link (percorso B): ultimo ordine confermato, se abilitato in impostazioni cassa */
+  /** Pay-by-link: pannello post-conferma (anche se impostazioni non ancora attive) */
   const [postCheckoutPayLink, setPostCheckoutPayLink] = useState(null)
   const [payLinkPhone, setPayLinkPhone] = useState("")
   const [payLinkBusy, setPayLinkBusy] = useState(false)
@@ -613,13 +643,11 @@ export default function CassaPage() {
     loadOrdini,
   })
 
-  useEffect(() => {
-    if (!tenantId) return
-    const t = setInterval(() => {
-      void loadOrdini()
-    }, 40000)
-    return () => clearInterval(t)
-  }, [tenantId, loadOrdini])
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: loadOrdini,
+    pollMs: 40000,
+  })
 
   useEffect(() => {
     if (!tenantId || cassaSessionStartMsRef.current == null) return
@@ -632,13 +660,17 @@ export default function CassaPage() {
       const ts = raw ? new Date(raw).getTime() : 0
       if (!Number.isFinite(ts) || ts < start) continue
       const note = String(o.note ?? "").toLowerCase()
-      if (!note.includes("ordine web")) continue
+      const pendingAccept = ordineRichiedeAccettazioneCassa(o)
+      if (!note.includes("ordine web") && !pendingAccept) continue
       const toastId = `web-${id}-${ts}`
       const num = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
-      setCassaWebToasts((prev) => [...prev.slice(-3), { toastId, numero: num, ordineId: id }])
+      setCassaWebToasts((prev) => [
+        ...prev.slice(-3),
+        { toastId, numero: num, ordineId: id, pendingAccept },
+      ])
       window.setTimeout(() => {
         setCassaWebToasts((prev) => prev.filter((x) => x.toastId !== toastId))
-      }, 14000)
+      }, pendingAccept ? 60000 : 14000)
     }
   }, [tenantId, ordiniOggi])
 
@@ -748,11 +780,12 @@ export default function CassaPage() {
         const ids = (detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)
         const prodotti = ids.length ? await getProdottiByIds(tenantId, ids) : []
         const productNames = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
-        const base = { ...detail, productNames }
+        const productsById = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p }), {})
+        const base = { ...detail, productNames, productsById }
         const enriched = await enrichOrdineDetailIngredientiSummaries(tenantId, base)
         setLastOrderModalDetail((prev) => {
           const historyOrdini = prev?.mode === "list" ? prev.ordini : prev?.historyOrdini || []
-          return { mode: "detail", historyOrdini, ...enriched }
+          return { mode: "detail", historyOrdini, ...enriched, productsById }
         })
       } catch (e) {
         console.error(e)
@@ -815,7 +848,7 @@ export default function CassaPage() {
   const deliveryAttenzioneInfo = useMemo(() => {
     void deliveryAlertTick
     const po = tenantData?.parametri_operativi || {}
-    const partenza = Number(po.pizzaiolo_partenza_consegne_minuti) || 30
+    const partenza = readPizzaioloLeadTimeConsegnaMin(po)
     const list = (ordiniOggiAttivi || []).filter((o) => ordineDeliveryRichiedeAttenzione(o, po, partenza))
     return {
       count: list.length,
@@ -917,6 +950,60 @@ export default function CassaPage() {
       }
     },
     [loadOrdini, ruolo, closeModificaOrdine],
+  )
+
+  const [accettazioneWebBusy, setAccettazioneWebBusy] = useState(false)
+
+  const ordiniWebInAttesaAccettazione = useMemo(
+    () => (ordiniOggiAttivi || []).filter((o) => ordineRichiedeAccettazioneCassa(o)),
+    [ordiniOggiAttivi],
+  )
+
+  const handleAccettaOrdineWeb = useCallback(
+    async (ordineId) => {
+      if (!ordineId) return
+      setAccettazioneWebBusy(true)
+      try {
+        await staffAccettaOrdineWeb(ordineId)
+        setCassaWebToasts((prev) => prev.filter((x) => x.ordineId !== ordineId))
+        await openOrdineDetail(ordineId)
+        loadOrdini()
+      } catch (e) {
+        console.error(e)
+        alert("Errore accettazione ordine. " + (e?.message || ""))
+      } finally {
+        setAccettazioneWebBusy(false)
+      }
+    },
+    [loadOrdini, openOrdineDetail],
+  )
+
+  const handleRifiutaOrdineWeb = useCallback(
+    async (ordineId) => {
+      if (!ordineId) return
+      const motivo = window.prompt("Motivo del rifiuto (opzionale):", "")
+      if (motivo === null) return
+      if (!window.confirm("Rifiutare questo ordine web? Verrà annullato e il cliente non lo riceverà in cucina.")) {
+        return
+      }
+      setAccettazioneWebBusy(true)
+      try {
+        await staffRifiutaOrdineWeb(ordineId, motivo.trim() || null)
+        setCassaWebToasts((prev) => prev.filter((x) => x.ordineId !== ordineId))
+        setOrdineDetail((prev) =>
+          prev?.id === ordineId
+            ? { ...prev, stato: "ANNULLATO", richiede_accettazione_cassa: false }
+            : prev,
+        )
+        loadOrdini()
+      } catch (e) {
+        console.error(e)
+        alert("Errore rifiuto ordine. " + (e?.message || ""))
+      } finally {
+        setAccettazioneWebBusy(false)
+      }
+    },
+    [loadOrdini],
   )
 
   // Ricerca clienti delivery (solo se c'è testo cercato e nessun cliente già selezionato con stesso testo)
@@ -1025,7 +1112,26 @@ export default function CassaPage() {
       setCheckoutTelefonoCliente(savedDraft.checkoutTelefonoCliente || "")
       setCheckoutSelectedSlot(savedDraft.checkoutSelectedSlot || null)
     }
-  }, [deliveryDraftByClienteId])
+    // Se profilo collegabile (indirizzo + email/tel), apri storico: evidenzia ordini non conclusi.
+    if (tenantId && c && (c.indirizzo || "").trim() && ((c.telefono || "").trim() || (c.email || "").trim())) {
+      void (async () => {
+        try {
+          const data = await getOrders(tenantId, { limit: 400 })
+          const matches = ordiniFiltratiPerClienteAnagrafica(data, c)
+          const incompleti = matches.filter((o) => ordineStatoIncompleto(o))
+          if (incompleti.length > 0) {
+            setLastOrderModalDetail({
+              mode: "list",
+              ordini: matches,
+              highlightIncompleti: true,
+            })
+          }
+        } catch {
+          /* ignore */
+        }
+      })()
+    }
+  }, [deliveryDraftByClienteId, tenantId])
 
   const handleSwitchConsegnaToNegozio = useCallback(async () => {
     const curr = selectedCliente
@@ -1122,42 +1228,67 @@ export default function CassaPage() {
       setCassaSidebar(null)
       return () => setCassaSidebar(null)
     }
+    const demoCards = inDemoLive
     setCassaSidebar(
       <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
         <button
           type="button"
-          style={{
-            ...styles.impostazioniBtn,
-            width: "100%",
-            boxSizing: "border-box",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className={demoCards ? "operative-sa-demo-shortcut" : undefined}
+          style={
+            demoCards
+              ? undefined
+              : {
+                  ...styles.impostazioniBtn,
+                  width: "100%",
+                  boxSizing: "border-box",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }
+          }
           onClick={() => setShowImpostazioniCassa(true)}
         >
-          Impostazioni cassa
+          {demoCards ? (
+            <>
+              <span className="operative-sa-demo-shortcut-label">Impostazioni cassa</span>
+              <span className="operative-sa-demo-shortcut-desc">Parametri, stampanti e preferenze sala</span>
+            </>
+          ) : (
+            "Impostazioni cassa"
+          )}
         </button>
         <button
           type="button"
-          style={{
-            ...styles.impostazioniBtn,
-            width: "100%",
-            boxSizing: "border-box",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#37474f",
-            color: "#fff",
-          }}
+          className={demoCards ? "operative-sa-demo-shortcut" : undefined}
+          style={
+            demoCards
+              ? undefined
+              : {
+                  ...styles.impostazioniBtn,
+                  width: "100%",
+                  boxSizing: "border-box",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "#37474f",
+                  color: "#fff",
+                }
+          }
           onClick={() => navigate("/operative/cassa/stampanti-reparti")}
         >
-          Stampanti reparto
+          {demoCards ? (
+            <>
+              <span className="operative-sa-demo-shortcut-label">Stampanti reparto</span>
+              <span className="operative-sa-demo-shortcut-desc">USB / IP per comande di cucina</span>
+            </>
+          ) : (
+            "Stampanti reparto"
+          )}
         </button>
       </div>,
     )
     return () => setCassaSidebar(null)
-  }, [setCassaSidebar, canEditParametriCassa, navigate])
+  }, [setCassaSidebar, canEditParametriCassa, navigate, inDemoLive])
 
   useLayoutEffect(() => {
     if (!setCassaHeader) return
@@ -1478,6 +1609,7 @@ export default function CassaPage() {
           qty: 1,
           modificaCassaDisponibile: modificaCassaDisponibile !== false,
           ingredientiCotturaSummary: summary,
+          ingredientiModificheClienteSummary: modsPayload?.ingredientiModificheClienteSummary || "",
           ingredientiModifiche: modsPayload?.ingredientiModifiche,
           extraIngredienti: modsPayload?.extraIngredienti,
           impastoId: modsPayload?.impastoId,
@@ -1491,6 +1623,43 @@ export default function CassaPage() {
       ]
     })
   }, [])
+
+  const addHistoryLineToCart = useCallback(
+    (riga, detail) => {
+      const pid = riga.prodottoId ?? riga.prodotto_id
+      const product = detail?.productsById?.[pid] || null
+      const mapped = orderLineToCassaCartPayload(riga, {
+        productNames: detail?.productNames,
+        product,
+      })
+      if (!mapped) {
+        alert("Prodotto non disponibile per il carrello.")
+        return
+      }
+      const qty = mapped.qty
+      for (let i = 0; i < qty; i += 1) {
+        addToCartWithIngredienti(mapped.product, mapped.modsPayload, true)
+      }
+    },
+    [addToCartWithIngredienti],
+  )
+
+  const recallHistoryOrderToCart = useCallback(
+    (detail) => {
+      if (!detail?.righe?.length) return
+      setCart([])
+      for (const r of detail.righe) {
+        addHistoryLineToCart(r, detail)
+      }
+      const nome = ordineNomeCliente(detail)
+      const tel = ordineTelefonoRitiro(detail)
+      if (nome) setCheckoutNomeCliente(nome)
+      if (tel) setCheckoutTelefonoCliente(tel)
+      setLastOrderModalDetail(null)
+      setCassaMobileTab("carrello")
+    },
+    [addHistoryLineToCart],
+  )
 
   const addToCart = useCallback(
     (product) => {
@@ -1597,6 +1766,7 @@ export default function CassaPage() {
           qty: 1,
           prezzo: modsPayload?.prezzoCalcolato != null ? modsPayload.prezzoCalcolato : line.prezzo,
           ingredientiCotturaSummary: summary,
+          ingredientiModificheClienteSummary: modsPayload?.ingredientiModificheClienteSummary || "",
           ingredientiModifiche: modsPayload?.ingredientiModifiche,
           extraIngredienti: modsPayload?.extraIngredienti,
           impastoId: modsPayload?.impastoId,
@@ -2056,17 +2226,16 @@ export default function CassaPage() {
         if (error) console.warn("[Cassa] fiscal_outbox enqueue:", error)
       })
 
-      if (fiscalCfg.paymentLinkEnabled && fiscalCfg.paymentLinkProviderKey) {
+      const linkSelezionato = isTipoPagamentoLink(tipoPagamentoFinale)
+      const payLinkConfigurato = Boolean(fiscalCfg.paymentLinkEnabled && fiscalCfg.paymentLinkProviderKey)
+      if (linkSelezionato || payLinkConfigurato) {
+        const phoneFromCheckout = (checkoutTelefonoCliente || "").trim()
+        const phoneCliente = (selectedCliente?.telefono || "").trim()
         setPostCheckoutPayLink({
           orderId,
           importoCent: Math.round(totalCheckout * 100),
-          providerKey: fiscalCfg.paymentLinkProviderKey,
         })
-        setPayLinkPhone(
-          tipoOrdine === TIPO_ORDINE.NEGOZIO
-            ? telefonoRitiroNegozio
-            : (selectedCliente?.telefono || "").trim(),
-        )
+        setPayLinkPhone(phoneFromCheckout || telefonoRitiroNegozio || phoneCliente)
         setPayLinkMessage("")
       } else {
         setPostCheckoutPayLink(null)
@@ -2077,7 +2246,7 @@ export default function CassaPage() {
       clearCassaDraft(tenantId, activePvId ?? "nopv")
       setCart([])
       setCheckoutNote("")
-      setCheckoutTipoPagamento(TIPI_PAGAMENTO[0])
+      setCheckoutTipoPagamento(tipiPagamentoCassa[0] || TIPO_PAGAMENTO_CONTANTI)
       setMistoRighe([])
       setCheckoutScontoGlobale("")
       setCheckoutNomeCliente("")
@@ -2233,6 +2402,21 @@ export default function CassaPage() {
     () => normalizeComandaRepartiStampanti(parametri?.comanda_reparti_stampanti).length > 0,
     [parametri?.comanda_reparti_stampanti],
   )
+  const tipiPagamentoCassa = useMemo(
+    () => listTipiPagamentoCassa(parametri, { ordineOnline: false }),
+    [parametri],
+  )
+  const tipiPagamentoOrdineOnline = useMemo(
+    () => listTipiPagamentoCassa(parametri, { ordineOnline: true }),
+    [parametri],
+  )
+
+  useEffect(() => {
+    if (!tipiPagamentoCassa.includes(checkoutTipoPagamento) && tipiPagamentoCassa[0]) {
+      setCheckoutTipoPagamento(tipiPagamentoCassa[0])
+    }
+  }, [tipiPagamentoCassa, checkoutTipoPagamento])
+
   const menuTheme = resolveMenuTheme(parametri)
   const menuRowBackground = menuTheme?.cardBackground || "#f3f9f4"
   const activeCatNome = (categories.find((c) => c.id === activeCategory)?.nome || "").toLowerCase()
@@ -2409,7 +2593,12 @@ export default function CassaPage() {
 
   if (showImpostazioniCassa) {
     return (
-      <CassaImpostazioniPage onBack={() => setShowImpostazioniCassa(false)} />
+      <CassaImpostazioniPage
+        onBack={() => {
+          setShowImpostazioniCassa(false)
+          void refreshTenant()
+        }}
+      />
     )
   }
 
@@ -2475,7 +2664,7 @@ export default function CassaPage() {
           onCheckoutTelefonoClienteChange={setCheckoutTelefonoCliente}
           selectedSlot={checkoutSelectedSlot}
           onSlotSelect={setCheckoutSelectedSlot}
-          tipiPagamento={TIPI_PAGAMENTO}
+          tipiPagamento={tipiPagamentoCassa}
           parametri={parametri}
           orariSettimana={tenantData?.orari_settimana}
           onConfirm={handleCheckout}
@@ -2507,6 +2696,7 @@ export default function CassaPage() {
           selectedFidelity={selectedFidelitySaldo}
           onSelectFidelity={handleSelectFidelitySaldo}
           onNuovaFidelityCliente={() => setNuovoFidelityClienteModalOpen(true)}
+          fidelityRedeemInfo={fidelityRedeemInfo}
           fidelityRedeemPuntiCost={fidelityRedeemInfo.cost}
           fidelityPremioDescrizione={fidelityRedeemInfo.premioLabel}
           margheritaPrezzoCatalogo={margheritaPremioPrezzo}
@@ -2719,9 +2909,16 @@ export default function CassaPage() {
           </div>
         </div>
       ) : null}
-      {postCheckoutPayLink ? (
+      {postCheckoutPayLink ? (() => {
+        const fiscalLive = readFiscalConfigFromParametri(tenantData?.parametri_operativi)
+        const payLinkConfigured = Boolean(
+          fiscalLive.paymentLinkEnabled && fiscalLive.paymentLinkProviderKey,
+        )
+        const providerKey = fiscalLive.paymentLinkProviderKey || ""
+        return (
         <div
-          role="region"
+          role="dialog"
+          aria-modal="true"
           aria-label="Pagamento con link"
           style={{
             position: "fixed",
@@ -2729,17 +2926,19 @@ export default function CassaPage() {
             right: 12,
             bottom: 12,
             zIndex: 10030,
-            padding: "12px 14px",
+            padding: "14px 16px",
             borderRadius: 10,
-            background: "#e8f5e9",
-            border: "1px solid #66bb6a",
+            background: payLinkConfigured ? "#e8f5e9" : "#fff8e1",
+            border: `1px solid ${payLinkConfigured ? "#66bb6a" : "#ffb300"}`,
             boxShadow: "0 6px 20px rgba(0,0,0,0.12)",
             fontSize: 13,
             lineHeight: 1.45,
+            maxWidth: 520,
+            margin: "0 auto",
           }}
         >
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
-            <strong>Pay-by-link</strong>
+            <strong>Paga online</strong>
             <button
               type="button"
               className="cassa-toolbar-compact-btn"
@@ -2752,13 +2951,26 @@ export default function CassaPage() {
               Chiudi
             </button>
           </div>
-          <p style={{ margin: "8px 0", color: "#1b5e20" }}>
+          <p style={{ margin: "8px 0", color: payLinkConfigured ? "#1b5e20" : "#e65100" }}>
             Ordine <code style={{ fontSize: 12 }}>{postCheckoutPayLink.orderId}</code> — importo €
-            {(postCheckoutPayLink.importoCent / 100).toFixed(2)} · provider{" "}
-            <strong>{postCheckoutPayLink.providerKey}</strong>
+            {(postCheckoutPayLink.importoCent / 100).toFixed(2)}
+            {payLinkConfigured ? (
+              <>
+                {" "}
+                · provider <strong>{providerKey}</strong>
+              </>
+            ) : (
+              <> · <strong>da configurare</strong></>
+            )}
           </p>
+          {!payLinkConfigured ? (
+            <p style={{ margin: "0 0 10px", color: "#bf360c" }}>
+              Per inviare o registrare il link abilita «Paga online» in Admin → Parametri e configura Pay-by-link in
+              Admin → Pagamenti online.
+            </p>
+          ) : null}
           <label style={{ display: "block", marginBottom: 8 }}>
-            <span style={{ fontWeight: 600 }}>Telefono destinatario (opzionale, per traccia SMS futura)</span>
+            <span style={{ fontWeight: 600 }}>Telefono destinatario (opzionale)</span>
             <input
               type="tel"
               value={payLinkPhone}
@@ -2767,37 +2979,57 @@ export default function CassaPage() {
               style={{ display: "block", marginTop: 6, padding: "8px 10px", width: "100%", maxWidth: 280, boxSizing: "border-box" }}
             />
           </label>
-          <button
-            type="button"
-            className="cassa-toolbar-compact-btn"
-            disabled={payLinkBusy}
-            onClick={() => {
-              if (!tenantId || !postCheckoutPayLink) return
-              setPayLinkBusy(true)
-              setPayLinkMessage("")
-              void runUnifiedPayByLinkSetup({
-                tenantId,
-                ordineId: postCheckoutPayLink.orderId,
-                importoCent: postCheckoutPayLink.importoCent,
-                paymentLinkProviderKey: postCheckoutPayLink.providerKey,
-                destinatarioTelefono: payLinkPhone.trim() || null,
-              })
-                .then((r) => {
-                  setPayLinkMessage(r.ok ? r.message || "OK" : r.error || "Errore")
-                })
-                .finally(() => setPayLinkBusy(false))
-            }}
-            style={{ fontWeight: 700, background: "#2e7d32", color: "#fff" }}
-          >
-            {payLinkBusy ? "Registrazione…" : "Registra richiesta pay-by-link"}
-          </button>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {!payLinkConfigured ? (
+              <button
+                type="button"
+                className="cassa-toolbar-compact-btn"
+                onClick={() => setShowImpostazioniCassa(true)}
+                style={{ fontWeight: 700, background: "#ef6c00", color: "#fff" }}
+              >
+                Apri impostazioni cassa
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cassa-toolbar-compact-btn"
+                disabled={payLinkBusy}
+                onClick={() => {
+                  if (!tenantId || !postCheckoutPayLink) return
+                  setPayLinkBusy(true)
+                  setPayLinkMessage("")
+                  void runUnifiedPayByLinkSetup({
+                    tenantId,
+                    ordineId: postCheckoutPayLink.orderId,
+                    importoCent: postCheckoutPayLink.importoCent,
+                    paymentLinkProviderKey: providerKey,
+                    destinatarioTelefono: payLinkPhone.trim() || null,
+                  })
+                    .then((r) => {
+                      setPayLinkMessage(r.ok ? r.message || "OK" : r.error || "Errore")
+                    })
+                    .finally(() => setPayLinkBusy(false))
+                }}
+                style={{ fontWeight: 700, background: "#2e7d32", color: "#fff" }}
+              >
+                {payLinkBusy ? "Registrazione…" : "Registra / invia richiesta link"}
+              </button>
+            )}
+          </div>
           {payLinkMessage ? (
-            <p style={{ margin: "10px 0 0", fontSize: 12, color: "#33691e" }}>
+            <p
+              style={{
+                margin: "10px 0 0",
+                fontSize: 12,
+                color: payLinkConfigured ? "#33691e" : "#bf360c",
+              }}
+            >
               {payLinkMessage}
             </p>
           ) : null}
         </div>
-      ) : null}
+        )
+      })() : null}
       {chiudiGiornataConfirmOpen ? (
         <div
           style={styles.modalOverlay}
@@ -2856,41 +3088,83 @@ export default function CassaPage() {
               pointerEvents: "auto",
               padding: "12px 14px",
               borderRadius: 10,
-              background: "#0f172a",
+              background: tw.pendingAccept ? "#9a3412" : "#0f172a",
               color: "#fff",
               boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
               fontSize: 14,
               display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 10,
+              flexDirection: "column",
+              gap: 8,
             }}
           >
-            <span>
-              Nuovo ordine web
-              {tw.numero != null && tw.numero !== "—" ? (
-                <>
-                  {" "}
-                  <strong>#{tw.numero}</strong>
-                </>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+              <span>
+                {tw.pendingAccept ? "Ordine web da accettare" : "Nuovo ordine web"}
+                {tw.numero != null && tw.numero !== "—" ? (
+                  <>
+                    {" "}
+                    <strong>#{tw.numero}</strong>
+                  </>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCassaWebToasts((prev) => prev.filter((x) => x.toastId !== tw.toastId))}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#94a3b8",
+                  cursor: "pointer",
+                  fontSize: 18,
+                  lineHeight: 1,
+                  padding: 0,
+                }}
+                aria-label="Chiudi"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  void openOrdineDetail(tw.ordineId)
+                  setCassaWebToasts((prev) => prev.filter((x) => x.toastId !== tw.toastId))
+                }}
+                style={{
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 10px",
+                  background: "#fff",
+                  color: "#0f172a",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Apri
+              </button>
+              {tw.pendingAccept ? (
+                <button
+                  type="button"
+                  disabled={accettazioneWebBusy}
+                  onClick={() => void handleAccettaOrdineWeb(tw.ordineId)}
+                  style={{
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "6px 10px",
+                    background: "#16a34a",
+                    color: "#fff",
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: accettazioneWebBusy ? "default" : "pointer",
+                    opacity: accettazioneWebBusy ? 0.7 : 1,
+                  }}
+                >
+                  Accetta
+                </button>
               ) : null}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCassaWebToasts((prev) => prev.filter((x) => x.toastId !== tw.toastId))}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#94a3b8",
-                cursor: "pointer",
-                fontSize: 18,
-                lineHeight: 1,
-                padding: 0,
-              }}
-              aria-label="Chiudi"
-            >
-              ×
-            </button>
+            </div>
           </div>
         ))}
       </div>
@@ -3026,6 +3300,7 @@ export default function CassaPage() {
                         const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
                         const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
                         const ann = ordineIsAnnullato(o)
+                        const pendingAccept = ordineRichiedeAccettazioneCassa(o)
                         return (
                           <li key={o.id}>
                             <button
@@ -3033,6 +3308,7 @@ export default function CassaPage() {
                               style={{
                                 ...styles.ordiniItem,
                                 ...(ann ? { opacity: 0.72, borderLeft: "3px solid #b71c1c" } : {}),
+                                ...(!ann && pendingAccept ? { borderLeft: "3px solid #ea580c" } : {}),
                               }}
                               onClick={() => { openOrdineDetail(o.id); setShowPaginaOrdini(false); }}
                               title="Apri dettaglio"
@@ -3043,6 +3319,9 @@ export default function CassaPage() {
                                   <div style={{ fontSize: 11, color: "#666", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                     <span>{idOrdine}</span>
                                     {ann ? <span style={{ color: "#b71c1c", fontWeight: 700 }}>Annullato</span> : null}
+                                    {!ann && pendingAccept ? (
+                                      <span style={{ color: "#c2410c", fontWeight: 700 }}>Da accettare</span>
+                                    ) : null}
                                   </div>
                                   {indirizzoSecondaRiga ? (
                                     <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
@@ -3063,6 +3342,8 @@ export default function CassaPage() {
           </div>
         </div>
       )}
+      {/* Planning desktop: nasconde elenco ordini e carrello (come il menù) per usare tutta la larghezza. */}
+      {!(showPlanningBar && !cassaMobileLayout) ? (
       <div style={{ ...styles.ordiniSection, ...cassaMobileShell.ordiniExtra }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
           <h3 style={{ ...styles.ordiniTitle, margin: 0, ...(cassaMobileLayout ? { fontSize: 18 } : {}) }}>Ordini</h3>
@@ -3096,6 +3377,44 @@ export default function CassaPage() {
             </button>
           </div>
         </div>
+        {ordiniWebInAttesaAccettazione.length > 0 ? (
+          <div
+            role="status"
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "#fff7ed",
+              border: "1px solid #fb923c",
+              color: "#9a3412",
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            <strong>Ordini web da accettare:</strong> {ordiniWebInAttesaAccettazione.length}.{" "}
+            {ordiniWebInAttesaAccettazione.slice(0, 8).map((o, i) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => void openOrdineDetail(o.id)}
+                style={{
+                  marginLeft: i === 0 ? 0 : 6,
+                  padding: "2px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #fdba74",
+                  background: "#fff",
+                  color: "#9a3412",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                #{o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}
+              </button>
+            ))}
+            {ordiniWebInAttesaAccettazione.length > 8 ? "…" : null}
+          </div>
+        ) : null}
         {deliveryAttenzioneInfo.count > 0 ? (
           <div
             role="alert"
@@ -3124,6 +3443,7 @@ export default function CassaPage() {
             const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
             const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
             const ann = ordineIsAnnullato(o)
+            const pendingAccept = ordineRichiedeAccettazioneCassa(o)
             return (
               <li key={o.id}>
                 <button
@@ -3134,6 +3454,7 @@ export default function CassaPage() {
                     width: "100%",
                     boxSizing: "border-box",
                     ...(ann ? { opacity: 0.72, borderLeft: "3px solid #b71c1c" } : {}),
+                    ...(!ann && pendingAccept ? { borderLeft: "3px solid #ea580c" } : {}),
                   }}
                   onClick={() => openOrdineDetail(o.id)}
                   title="Apri dettaglio"
@@ -3156,6 +3477,9 @@ export default function CassaPage() {
                         {ann ? (
                           <span style={{ color: "#b71c1c", fontWeight: 700 }}>Annullato</span>
                         ) : null}
+                        {!ann && pendingAccept ? (
+                          <span style={{ color: "#c2410c", fontWeight: 700 }}>Da accettare</span>
+                        ) : null}
                       </div>
                       {indirizzoSecondaRiga ? (
                         <div style={{ fontSize: cassaMobileLayout ? 13 : 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
@@ -3170,204 +3494,88 @@ export default function CassaPage() {
           })}
         </ul>
       </div>
-      <div ref={cassaProductsAreaRef} style={{ ...styles.productsArea, ...cassaMobileShell.productsExtra }}>
-        {showPlanningBar && (
-          <div style={styles.planningBar}>
-            <div style={styles.planningBarHeader}>
-              <div style={styles.planningBarTitleWrap}>
-                <strong style={styles.planningBarTitle}>Situazione planning</strong>
-                <span style={styles.planningBarSubtitle}>Ordini e pizze per fascia oraria</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button
-                  type="button"
-                  disabled={
-                    ordiniOnlineToggleSaving ||
-                    !tenantId ||
-                    (ordiniOnlineDisabilitati && !ordiniOnlineInLicenza)
-                  }
-                  onClick={() => {
-                    if (!tenantId || ordiniOnlineToggleSaving) return
-                    const nextDisabilitati = !ordiniOnlineDisabilitati
-                    if (!nextDisabilitati && !ordiniOnlineInLicenza) {
-                      window.alert(
-                        "Il servizio «Ordini online» non è incluso nella licenza del locale (Super Admin). Non è possibile abilitare la vetrina.",
-                      )
-                      return
-                    }
-                    setOrdiniOnlineToggleSaving(true)
-                    const base =
-                      tenantData?.parametri_operativi && typeof tenantData.parametri_operativi === "object"
-                        ? tenantData.parametri_operativi
-                        : {}
-                    const po = { ...base, ordini_online_attivi: !nextDisabilitati }
-                    void updateTenantSettings(tenantId, { parametri_operativi: po })
-                      .then(() => refreshTenant())
-                      .catch((err) => {
-                        console.error(err)
-                        window.alert(err?.message || "Salvataggio non riuscito")
-                      })
-                      .finally(() => setOrdiniOnlineToggleSaving(false))
-                  }}
-                  style={{
-                    padding: "7px 12px",
-                    borderRadius: 999,
-                    border: "1px solid transparent",
-                    background: ordiniOnlineDisabilitati ? "#c62828" : "#2e7d32",
-                    color: "#fff",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: ordiniOnlineToggleSaving || !tenantId ? "default" : "pointer",
-                    opacity: ordiniOnlineToggleSaving ? 0.75 : 1,
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
-                  }}
-                  title={
-                    ordiniOnlineDisabilitati && !ordiniOnlineInLicenza
-                      ? "Licenza senza ordini online: abilitazione non disponibile"
-                      : ordiniOnlineDisabilitati
-                        ? "Riabilita ordini online"
-                        : "Disabilita ordini online"
-                  }
-                >
-                  {ordiniOnlineToggleSaving
-                    ? "Salvataggio…"
-                    : ordiniOnlineDisabilitati
-                      ? "Ordini online disattivi"
-                      : "Ordini online attivi"}
-                </button>
-                <button type="button" style={styles.planningBarClose} onClick={() => setShowPlanningBar(false)}>✕</button>
-              </div>
-            </div>
-            <p style={styles.planningHint}>
-              Fasce ogni {PLANNING_GRID_SLOT_MINUTES} min · capacità forno{" "}
-              <strong>max {maxPizzeFornoUnico} pizze</strong>. Verde sotto soglia, giallo quasi pieno, rosso pieno.
-              Clic su una cella per gli ordini.
-            </p>
-            {!orariOggi.aperto && (
-              <p style={{ margin: "0 0 8px", color: "#c62828", fontWeight: 500, fontSize: 13 }}>Oggi chiuso (nessuna fascia disponibile).</p>
-            )}
-            {planningMergedRows.length > 0 ? (
-              <div style={styles.planningMergedTable}>
-                <div style={styles.planningMergedHeader}>
-                  <span style={styles.planningMergedCellTime}>Ora</span>
-                  <span style={{ ...styles.planningMergedHeadCell, background: "#e3f2fd", borderColor: "#1976d2" }}>
-                    Consegna
-                  </span>
-                  <span style={{ ...styles.planningMergedHeadCell, background: "#f3e5f5", borderColor: "#7b1fa2" }}>
-                    Ritiro
-                  </span>
-                  <span
-                    style={{
-                      ...styles.planningMergedHeadCell,
-                      background: "#eceff1",
-                      borderColor: "#546e7a",
-                      borderRight: "none",
-                    }}
-                  >
-                    Totale
-                  </span>
-                </div>
-                <div style={styles.planningMergedBody}>
-                  {planningMergedRows.map((row, i) => {
-                    const totOrdini = row.deliveryOrdini + row.ritiroOrdini
-                    const deliveryTitle = `${row.deliveryOrdini} ordini · ${row.deliveryPizze} pizze`
-                    const ritiroTitle = `${row.ritiroOrdini} ordini · ${row.ritiroPizze} pizze`
-                    const totaleTitle = `${totOrdini} ordini · ${row.totPizzeForno} pizze (forno)`
-                    return (
-                      <div key={i} style={styles.planningMergedRow}>
-                        <span style={styles.planningMergedCellTime}>{row.label}</span>
-                        <button
-                          type="button"
-                          style={{
-                            ...styles.planningMergedCell,
-                            backgroundColor: row.deliveryColor,
-                            borderColor: "#90caf9",
-                          }}
-                          onClick={() =>
-                            setPlanningSlotModal({
-                              type: "delivery",
-                              slotKey: row.slotKey,
-                              slotLabel: row.label,
-                              ordini: row.deliveryOrdiniList || [],
-                              slotsDisponibili: planningSlotsGrid || [],
-                            })
-                          }
-                          title={`${deliveryTitle} — clic per dettaglio`}
-                        >
-                          <span style={styles.planningMergedCellMain}>
-                            {row.deliveryOrdini}
-                            <span style={styles.planningMergedCellSep}>·</span>
-                            {row.deliveryPizze}
-                          </span>
-                          <span style={styles.planningMergedCellUnit}>ord · pz</span>
-                        </button>
-                        <button
-                          type="button"
-                          style={{
-                            ...styles.planningMergedCell,
-                            backgroundColor: row.ritiroColor,
-                            borderColor: "#ce93d8",
-                          }}
-                          onClick={() =>
-                            setPlanningSlotModal({
-                              type: "ritiro",
-                              slotKey: row.slotKey,
-                              slotLabel: row.label,
-                              ordini: row.ritiroOrdiniList || [],
-                              slotsDisponibili: planningSlotsGrid || [],
-                            })
-                          }
-                          title={`${ritiroTitle} — clic per dettaglio`}
-                        >
-                          <span style={styles.planningMergedCellMain}>
-                            {row.ritiroOrdini}
-                            <span style={styles.planningMergedCellSep}>·</span>
-                            {row.ritiroPizze}
-                          </span>
-                          <span style={styles.planningMergedCellUnit}>ord · pz</span>
-                        </button>
-                        <button
-                          type="button"
-                          style={{
-                            ...styles.planningMergedCell,
-                            backgroundColor: row.fornoColor || row.deliveryColor,
-                            borderColor: "#90a4ae",
-                            borderRight: "none",
-                            fontWeight: 700,
-                          }}
-                          onClick={() =>
-                            setPlanningSlotModal({
-                              type: "totale",
-                              slotKey: row.slotKey,
-                              slotLabel: row.label,
-                              ordini: [
-                                ...(row.deliveryOrdiniList || []).map((o) => ({ ...o, _planningCanale: "delivery" })),
-                                ...(row.ritiroOrdiniList || []).map((o) => ({ ...o, _planningCanale: "ritiro" })),
-                              ],
-                              slotsDisponibili: planningSlotsGrid || [],
-                            })
-                          }
-                          title={`${totaleTitle} — clic per tutti gli ordini`}
-                        >
-                          <span style={styles.planningMergedCellMain}>
-                            {totOrdini}
-                            <span style={styles.planningMergedCellSep}>·</span>
-                            {row.totPizzeForno}
-                          </span>
-                          <span style={styles.planningMergedCellUnit}>
-                            /{maxPizzeFornoUnico}
-                          </span>
-                        </button>
-                      </div>
+      ) : null}
+      <div
+        ref={cassaProductsAreaRef}
+        style={{
+          ...styles.productsArea,
+          ...cassaMobileShell.productsExtra,
+          ...(showPlanningBar
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                padding: 12,
+                minHeight: 0,
+                flex: 1,
+                minWidth: 0,
+                width: "100%",
+              }
+            : {}),
+        }}
+      >
+        {showPlanningBar ? (
+          <CassaPlanningBoard
+            rows={planningMergedRows}
+            pizzePerOrdine={pizzePerOrdine}
+            parametri={tenantData?.parametri_operativi}
+            tenantId={tenantId}
+            canEditPony={canAnnullaOrdineCassa || fullDemoAccess}
+            maxPizzeForno={maxPizzeFornoUnico}
+            onClose={() => setShowPlanningBar(false)}
+            onOpenOrdine={(id) => void openOrdineDetail(id)}
+            ordiniOnlineToggle={
+              <button
+                type="button"
+                disabled={
+                  ordiniOnlineToggleSaving ||
+                  !tenantId ||
+                  (ordiniOnlineDisabilitati && !ordiniOnlineInLicenza)
+                }
+                onClick={() => {
+                  if (!tenantId || ordiniOnlineToggleSaving) return
+                  const nextDisabilitati = !ordiniOnlineDisabilitati
+                  if (!nextDisabilitati && !ordiniOnlineInLicenza) {
+                    window.alert(
+                      "Il servizio «Ordini online» non è incluso nella licenza del locale (Super Admin). Non è possibile abilitare la vetrina.",
                     )
-                  })}
-                </div>
-              </div>
-            ) : (
-              <p style={{ fontSize: 13, color: "#666", margin: 0 }}>Nessuna fascia disponibile.</p>
-            )}
-          </div>
-        )}
+                    return
+                  }
+                  setOrdiniOnlineToggleSaving(true)
+                  const base =
+                    tenantData?.parametri_operativi && typeof tenantData.parametri_operativi === "object"
+                      ? tenantData.parametri_operativi
+                      : {}
+                  const po = { ...base, ordini_online_attivi: !nextDisabilitati }
+                  void updateTenantSettings(tenantId, { parametri_operativi: po })
+                    .then(() => refreshTenant())
+                    .catch((err) => {
+                      console.error(err)
+                      window.alert(err?.message || "Salvataggio non riuscito")
+                    })
+                    .finally(() => setOrdiniOnlineToggleSaving(false))
+                }}
+                style={{
+                  padding: "7px 12px",
+                  borderRadius: 999,
+                  border: "1px solid transparent",
+                  background: ordiniOnlineDisabilitati ? "#c62828" : "#2e7d32",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: ordiniOnlineToggleSaving || !tenantId ? "default" : "pointer",
+                  opacity: ordiniOnlineToggleSaving ? 0.75 : 1,
+                }}
+              >
+                {ordiniOnlineToggleSaving
+                  ? "Salvataggio…"
+                  : ordiniOnlineDisabilitati
+                    ? "Ordini online disattivi"
+                    : "Ordini online attivi"}
+              </button>
+            }
+          />
+        ) : null}
 
         {planningSlotModal && (
           <div style={styles.modalOverlay} onClick={() => setPlanningSlotModal(null)} role="dialog" aria-modal="true">
@@ -3478,46 +3686,51 @@ export default function CassaPage() {
           </div>
         )}
 
-        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="text"
-            placeholder="Cerca pizza..."
-            value={searchPizza}
-            onChange={(e) => setSearchPizza(e.target.value)}
-            style={{
-              flex: 1,
-              padding: cassaMobileLayout ? "12px 14px" : "10px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              fontSize: cassaMobileLayout ? 16 : 14,
-              minHeight: cassaMobileLayout ? 48 : undefined,
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
-        <CategoryTabs
-          categories={categories}
-          activeCategory={activeCategory}
-          onSelect={setActiveCategory}
-          compact={cassaMobileLayout}
-        />
+        {!showPlanningBar ? (
+          <>
+            <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Cerca pizza..."
+                value={searchPizza}
+                onChange={(e) => setSearchPizza(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: cassaMobileLayout ? "12px 14px" : "10px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  fontSize: cassaMobileLayout ? 16 : 14,
+                  minHeight: cassaMobileLayout ? 48 : undefined,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <CategoryTabs
+              categories={categories}
+              activeCategory={activeCategory}
+              onSelect={setActiveCategory}
+              compact={cassaMobileLayout}
+            />
 
-        <ProductGrid
-          products={filteredProducts}
-          ingredientiMap={productIngredientiMap}
-          rowBackground={menuRowBackground}
-          onAdd={addToCart}
-          onModifica={(p) => {
-            setPizzaModalEditCartLine(null)
-            setProductToAdd(p)
-            setProductModalOpen(true)
-          }}
-          showModifica={showModificaCategoria}
-          disabledProductIds={disabledProductIds}
-          layoutDensity={cassaMobileLayout ? "comfortable" : "default"}
-        />
+            <ProductGrid
+              products={filteredProducts}
+              ingredientiMap={productIngredientiMap}
+              rowBackground={menuRowBackground}
+              onAdd={addToCart}
+              onModifica={(p) => {
+                setPizzaModalEditCartLine(null)
+                setProductToAdd(p)
+                setProductModalOpen(true)
+              }}
+              showModifica={showModificaCategoria}
+              disabledProductIds={disabledProductIds}
+              layoutDensity={cassaMobileLayout ? "comfortable" : "default"}
+            />
+          </>
+        ) : null}
       </div>
 
+      {!(showPlanningBar && !cassaMobileLayout) ? (
       <div style={{ ...styles.riepilogoSection, ...cassaMobileShell.cartExtra }}>
         <Cart
           cart={cart}
@@ -3535,6 +3748,7 @@ export default function CassaPage() {
           variant={cassaMobileLayout ? "mobile" : "default"}
         />
       </div>
+      ) : null}
 
       <ModificaPizzaModal
         open={productModalOpen}
@@ -3664,6 +3878,75 @@ export default function CassaPage() {
                 Ordine annullato — escluso da planning e dai totali giornata.
               </p>
             ) : null}
+            {ordineRichiedeAccettazioneCassa(ordineDetail) && !ordineIsAnnullato(ordineDetail) ? (
+              <div
+                style={{
+                  margin: "0 0 12px",
+                  padding: "10px 12px",
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                }}
+              >
+                <p style={{ margin: "0 0 10px", fontWeight: 600, color: "#9a3412" }}>
+                  In attesa di accettazione cassa — non ancora in cucina.
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    type="button"
+                    disabled={accettazioneWebBusy}
+                    onClick={() => void handleAccettaOrdineWeb(ordineDetail.id)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#16a34a",
+                      color: "#fff",
+                      fontWeight: 600,
+                      cursor: accettazioneWebBusy ? "default" : "pointer",
+                      opacity: accettazioneWebBusy ? 0.7 : 1,
+                    }}
+                  >
+                    Accetta
+                  </button>
+                  <button
+                    type="button"
+                    disabled={accettazioneWebBusy}
+                    onClick={() => openModificaOrdine(ordineDetail)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #c2410c",
+                      background: "#fff",
+                      color: "#9a3412",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Sposta orario
+                  </button>
+                  <button
+                    type="button"
+                    disabled={accettazioneWebBusy}
+                    onClick={() => void handleRifiutaOrdineWeb(ordineDetail.id)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#b91c1c",
+                      color: "#fff",
+                      fontWeight: 600,
+                      cursor: accettazioneWebBusy ? "default" : "pointer",
+                      opacity: accettazioneWebBusy ? 0.7 : 1,
+                    }}
+                  >
+                    Rifiuta
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <p style={{ margin: "0 0 8px", color: "#666" }}>
               {ordineIsDelivery(ordineDetail) ? "Consegna" : "Ritiro in negozio"}
             </p>
@@ -3691,14 +3974,17 @@ export default function CassaPage() {
                 const formatoNome = r.formatoNome ?? r.formato_nome
                 const label = formatoNome ? `${nomeProdotto} (${formatoNome})` : nomeProdotto
                 const ing = r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
+                const modsOnly = extractModificheFromIngredientiSummary(ing)
                 return (
                   <li key={r.id || i} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <span>{label} × {r.quantita}</span>
                       <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
                     </div>
-                    {ing ? (
-                      <div style={{ fontSize: 12, color: "#555", marginTop: 4, lineHeight: 1.35 }}>{ing}</div>
+                    {modsOnly ? (
+                      <div style={{ fontSize: 12, color: "#b71c1c", marginTop: 4, lineHeight: 1.35, fontWeight: 700 }}>
+                        {modsOnly}
+                      </div>
                     ) : null}
                   </li>
                 )
@@ -3708,8 +3994,8 @@ export default function CassaPage() {
             <p style={{ marginBottom: 12, fontSize: 13 }}>
               Pagamento:{" "}
               {tipoPagamentoInAttesa(ordineDetail.tipo_pagamento)
-                ? ordineDetail.tipo_pagamento?.toLowerCase().includes("link")
-                  ? "🔗 Link (carta da casa)"
+                ? isTipoPagamentoLink(ordineDetail.tipo_pagamento)
+                  ? TIPO_PAGAMENTO_PAGA_ONLINE
                   : "⏳ Da pagare"
                 : ordineDetail.tipo_pagamento || "—"}
             </p>
@@ -3788,6 +4074,27 @@ export default function CassaPage() {
                   Stampa per reparto
                 </button>
               )}
+              {!ordineIsAnnullato(ordineDetail) && isTipoPagamentoLink(ordineDetail.tipo_pagamento) ? (
+                <button
+                  type="button"
+                  style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#2e7d32", color: "#fff" }}
+                  onClick={() => {
+                    const tot =
+                      typeof ordineDetail.totale === "number"
+                        ? ordineDetail.totale
+                        : Number(ordineDetail.totale) || 0
+                    setPostCheckoutPayLink({
+                      orderId: ordineDetail.id,
+                      importoCent: Math.max(1, Math.round(tot * 100)),
+                    })
+                    setPayLinkPhone(String(ordineDetail.telefono || ordineDetail.telefono_ritiro || "").trim())
+                    setPayLinkMessage("")
+                    setOrdineDetail(null)
+                  }}
+                >
+                  Link pagamento (invia / registra)
+                </button>
+              ) : null}
               {!ordineIsAnnullato(ordineDetail) && tipoPagamentoInAttesa(ordineDetail.tipo_pagamento) ? (
                 <button
                   type="button"
@@ -3824,14 +4131,28 @@ export default function CassaPage() {
         <div style={styles.modalOverlay} onClick={() => setSegnaPagatoModal(null)} role="dialog" aria-modal="true">
           <div style={styles.detailModal} onClick={(e) => e.stopPropagation()}>
             <p style={{ margin: "0 0 12px", fontWeight: 600 }}>Segna ordine come pagato</p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" style={styles.impostazioniBtn} onClick={() => handleSegnaPagato(segnaPagatoModal, "Contanti")}>
-                Contanti
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {(isOrdineOnlineCanale(
+                (ordiniOggiAttivi || []).find((o) => o.id === segnaPagatoModal) ||
+                  (ordineDetail?.id === segnaPagatoModal ? ordineDetail : null),
+              )
+                ? tipiPagamentoOrdineOnline
+                : tipiPagamentoCassa
+              )
+                .filter((t) => t === TIPO_PAGAMENTO_CONTANTI || t === TIPO_PAGAMENTO_CARTA)
+                .map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    style={styles.impostazioniBtn}
+                    onClick={() => handleSegnaPagato(segnaPagatoModal, t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              <button type="button" style={styles.planningBarToggle} onClick={() => setSegnaPagatoModal(null)}>
+                Annulla
               </button>
-              <button type="button" style={styles.impostazioniBtn} onClick={() => handleSegnaPagato(segnaPagatoModal, "Carta")}>
-                Carta
-              </button>
-              <button type="button" style={styles.planningBarToggle} onClick={() => setSegnaPagatoModal(null)}>Annulla</button>
             </div>
           </div>
         </div>
@@ -3848,8 +4169,9 @@ export default function CassaPage() {
           setModificaRighe={setModificaRighe}
           modificaProdottiList={modificaProdottiList}
           modificaTotaleAnteprima={modificaTotaleAnteprima}
-          tipiPagamento={TIPI_PAGAMENTO}
-          onClose={closeModificaOrdine}
+          tipiPagamento={
+            isOrdineOnlineCanale(modificaOrdineModal) ? tipiPagamentoOrdineOnline : tipiPagamentoCassa
+          }
           onSave={handleSalvaModificaOrdine}
         />
       ) : null}
@@ -3885,6 +4207,7 @@ export default function CassaPage() {
                     const num = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
                     const when = o.createdAt ?? o.created_at
                     const whenStr = when ? new Date(when).toLocaleString("it-IT") : "—"
+                    const incompleto = ordineStatoIncompleto(o)
                     return (
                       <li key={o.id} style={{ borderBottom: "1px solid #eee" }}>
                         <button
@@ -3896,12 +4219,19 @@ export default function CassaPage() {
                             textAlign: "left",
                             padding: "12px 8px",
                             border: "none",
-                            background: "transparent",
+                            background: incompleto ? "#fff7ed" : "transparent",
                             cursor: lastOrderDetailLoading ? "wait" : "pointer",
                             fontSize: 14,
                           }}
                         >
-                          <div style={{ fontWeight: 600 }}>#{num} · € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</div>
+                          <div style={{ fontWeight: 600 }}>
+                            #{num} · € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}
+                            {incompleto ? (
+                              <span style={{ marginLeft: 8, fontSize: 11, color: "#c2410c", fontWeight: 700 }}>
+                                Non concluso
+                              </span>
+                            ) : null}
+                          </div>
                           <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{whenStr}</div>
                         </button>
                       </li>
@@ -3940,15 +4270,39 @@ export default function CassaPage() {
                     const label = formatoNome ? `${nomeProdotto} (${formatoNome})` : nomeProdotto
                     const ing =
                       r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
+                    const modsOnly = extractModificheFromIngredientiSummary(ing)
                     return (
                       <li key={r.id || i} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                          <span>{label} × {r.quantita}</span>
-                          <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                              <span>{label} × {r.quantita}</span>
+                              <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                            </div>
+                            {modsOnly ? (
+                              <div style={{ fontSize: 12, color: "#b71c1c", marginTop: 4, lineHeight: 1.35, fontWeight: 700 }}>
+                                {modsOnly}
+                              </div>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            title="Aggiungi questa riga al carrello (con modifiche)"
+                            style={{
+                              flexShrink: 0,
+                              border: "1px solid #cbd5e1",
+                              background: "#fff",
+                              borderRadius: 8,
+                              padding: "6px 10px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => addHistoryLineToCart(r, lastOrderModalDetail)}
+                          >
+                            Aggiungi
+                          </button>
                         </div>
-                        {ing ? (
-                          <div style={{ fontSize: 12, color: "#555", marginTop: 4, lineHeight: 1.35 }}>{ing}</div>
-                        ) : null}
                       </li>
                     )
                   })}
@@ -3956,6 +4310,13 @@ export default function CassaPage() {
                 <p style={{ fontWeight: 600, marginBottom: 12 }}>Totale: € {typeof lastOrderModalDetail.totale === "number" ? lastOrderModalDetail.totale.toFixed(2) : lastOrderModalDetail.totale ?? "—"}</p>
                 <p style={{ margin: 0, fontSize: 13 }}>Pagamento: {lastOrderModalDetail.tipo_pagamento || "—"}</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+                  <button
+                    type="button"
+                    style={{ ...styles.impostazioniBtn, background: "#0f172a" }}
+                    onClick={() => recallHistoryOrderToCart(lastOrderModalDetail)}
+                  >
+                    Ripeti ordine completo
+                  </button>
                   <button
                     type="button"
                     style={{ ...styles.impostazioniBtn, background: "#1565c0" }}
@@ -4068,6 +4429,7 @@ const styles = {
     flex: 3,
     padding: "20px",
     overflowY: "auto",
+    minHeight: 0,
   },
   topBar: {
     marginBottom: 16,

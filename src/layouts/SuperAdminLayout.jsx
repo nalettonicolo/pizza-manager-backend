@@ -14,6 +14,8 @@ const PIATTAFORMA_ITEMS_BASE = [
   { to: "/superadmin/guide", label: "Documentazione" },
   { to: "/superadmin/auth-email-templates", label: "Template email Auth" },
   { to: "/superadmin/sviluppo", label: "Roadmap" },
+  { to: "/superadmin/agenti-moduli", label: "Moduli agenti" },
+  { to: "/superadmin/checklist-mese", label: "Chek-Sviluppi" },
   { to: "/superadmin/registratore-cassa", label: "Registratore cassa" },
   { to: "/superadmin/test-layout", label: "Test viewport layout" },
   { to: "/superadmin/settings", label: "Sistema" },
@@ -120,7 +122,8 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/Licenses"),
       () => import("@/features/superadmin/pages/SuperadminGoLivePage"),
       () => import("@/features/superadmin/pages/SuperadminGuideHub"),
-      () => import("@/features/superadmin/pages/SuperadminGuideDocPage"),
+      // SuperadminGuideDocPage esclusa apposta: usa react-markdown (~100KB chunk vendor-markdown)
+      // — stesso motivo di ManualeUtentePage in AdminLayout.jsx (vedi commento lì).
       () => import("@/features/superadmin/pages/SviluppoPage"),
       () => import("@/features/superadmin/pages/Settings"),
       () => import("@/features/superadmin/pages/ServizioSchedaPage"),

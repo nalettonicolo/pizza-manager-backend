@@ -15,7 +15,10 @@ function isSaaSHost() {
 export default function HeroStore({ branding, menuTheme, ordiniOnlineVetrinaOk }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, tipoUtente } = useAuth();
+  /** Cliente autenticato: menù a schermo pieno senza fascia hero. */
+  if (user && tipoUtente === "cliente") return null;
+
   const safe = branding ?? {};
   /**
    * `ordiniOnlineVetrinaOk` viene da PublicStore (readOrdiniOnlineVetrinaAllowed) — fonte unica.
@@ -76,24 +79,26 @@ export default function HeroStore({ branding, menuTheme, ordiniOnlineVetrinaOk }
           >
             Ordina Online
           </button>
-          <button
-            type="button"
-            style={{
-              background: "transparent",
-              border: "1px solid white",
-              padding: "12px 20px",
-              borderRadius: 8,
-              color: "white",
-              cursor: "pointer",
-            }}
-            onClick={() =>
-              navigate("/login", {
-                state: { from: `${location.pathname}${location.search || ""}` },
-              })
-            }
-          >
-            Login
-          </button>
+          {!user ? (
+            <button
+              type="button"
+              style={{
+                background: "transparent",
+                border: "1px solid white",
+                padding: "12px 20px",
+                borderRadius: 8,
+                color: "white",
+                cursor: "pointer",
+              }}
+              onClick={() =>
+                navigate("/login", {
+                  state: { from: `${location.pathname}${location.search || ""}` },
+                })
+              }
+            >
+              Accedi
+            </button>
+          ) : null}
         </div>
       )}
     </section>

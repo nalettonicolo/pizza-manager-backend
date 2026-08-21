@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { useTenant } from "@/app/contexts/TenantContext";
 import {
   updateTenantSettings,
-  saveTenantStripeSecret,
-  fetchTenantStripeSecretConfigured,
 } from "@/features/admin/services/adminService";
 import { KEY_TITOLARE_ESERCENTE } from "@/config/legalEntity";
 import { loadGoogleMapsScript } from "@/lib/googleMapsLoader";
@@ -46,9 +44,6 @@ export default function DatiPizzeriaSection() {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
   const [geoResetKey, setGeoResetKey] = useState(0);
-  const [stripeSecretInput, setStripeSecretInput] = useState("");
-  const [stripeSecretSaving, setStripeSecretSaving] = useState(false);
-  const [stripeSecretConfigured, setStripeSecretConfigured] = useState(false);
   const placeAcContainerRef = useRef(null);
   const placeAcCleanupRef = useRef(() => {});
 
@@ -69,22 +64,6 @@ export default function DatiPizzeriaSection() {
       ? `${lat},${lng}`
       : indirizzo.trim() || "Italia";
   const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`;
-
-  useEffect(() => {
-    if (!tenantId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const ok = await fetchTenantStripeSecretConfigured(tenantId);
-        if (!cancelled) setStripeSecretConfigured(!!ok);
-      } catch {
-        if (!cancelled) setStripeSecretConfigured(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantId]);
 
   useEffect(() => {
     if (!GOOGLE_API_KEY || !placeAcContainerRef.current) return;
@@ -231,27 +210,6 @@ export default function DatiPizzeriaSection() {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
-  }
-
-  async function handleSaveStripeSecret() {
-    if (!tenantId) return;
-    const s = String(stripeSecretInput || "").trim();
-    if (!s.startsWith("sk_")) {
-      alert("Incolla la chiave segreta Stripe (inizia con sk_test_ o sk_live_).");
-      return;
-    }
-    try {
-      setStripeSecretSaving(true);
-      await saveTenantStripeSecret(tenantId, s);
-      setStripeSecretInput("");
-      setStripeSecretConfigured(true);
-      alert("Chiave segreta Stripe salvata (non viene mostrata di nuovo).");
-    } catch (err) {
-      console.error(err);
-      alert("Salvataggio chiave Stripe: " + (err?.message || "errore"));
-    } finally {
-      setStripeSecretSaving(false);
-    }
   }
 
   async function handleSave() {
@@ -466,56 +424,27 @@ export default function DatiPizzeriaSection() {
             />
           </label>
           <label>
-            Pagamento online — provider (predisposizione)
-            <select
-              value={settings?.pagamento_online_provider || ""}
-              onChange={(e) => setSettings({ ...settings, pagamento_online_provider: e.target.value || null })}
-            >
-              <option value="">Non configurato</option>
-              <option value="stripe">Stripe</option>
-              <option value="sumup">SumUp</option>
-            </select>
-          </label>
-          <label>
-            Stripe — chiave pubblica (pk_…)
-            <input
-              type="text"
-              value={settings?.stripe_publishable_key || ""}
-              onChange={(e) => setSettings({ ...settings, stripe_publishable_key: e.target.value })}
-              placeholder="pk_live_… o pk_test_…"
-              autoComplete="off"
-            />
-          </label>
-          <div style={{ marginBottom: 12 }}>
-            <label>
-              Stripe — chiave segreta (sk_…) — solo server, non esposta in vetrina
-              <input
-                type="password"
-                value={stripeSecretInput}
-                onChange={(e) => setStripeSecretInput(e.target.value)}
-                placeholder={stripeSecretConfigured ? "•••• già configurata — incolla per sostituire" : "sk_test_… o sk_live_…"}
-                autoComplete="off"
-              />
-            </label>
-            <p className="dati-pizzeria-hint" style={{ marginTop: 6 }}>
-              Salvata in modo riservato sul database (tabella dedicata, non visibile ai clienti). Serve alle Edge Functions per
-              PaymentIntent e rimborsi. Ruolo richiesto: <strong>admin</strong>.
+            Pagamento online
+            <p className="dati-pizzeria-hint" style={{ marginTop: 6, marginBottom: 8 }}>
+              Provider, chiavi Stripe (test/live) e webhook si configurano in{" "}
+              <Link to="/admin/settings/pagamenti-online" style={{ fontWeight: 600 }}>
+                Impostazioni → Pagamenti online
+              </Link>
+              .
+              {settings?.pagamento_online_provider === "stripe" ? (
+                <span style={{ display: "block", marginTop: 6, color: "#166534" }}>
+                  Provider attuale: Stripe
+                  {settings?.stripe_publishable_key
+                    ? ` · ${String(settings.stripe_publishable_key).startsWith("pk_test_") ? "TEST" : String(settings.stripe_publishable_key).startsWith("pk_live_") ? "LIVE" : "chiave impostata"}`
+                    : " · chiave pubblica da completare"}
+                </span>
+              ) : (
+                <span style={{ display: "block", marginTop: 6, color: "#b45309" }}>
+                  Provider non impostato su Stripe.
+                </span>
+              )}
             </p>
-            <button
-              type="button"
-              className="dashboard-settings-btn-secondary"
-              onClick={() => void handleSaveStripeSecret()}
-              disabled={stripeSecretSaving || !String(stripeSecretInput || "").trim().startsWith("sk_")}
-              style={{ marginTop: 8 }}
-            >
-              {stripeSecretSaving ? "Salvataggio…" : "Salva chiave segreta Stripe"}
-            </button>
-            {stripeSecretConfigured ? (
-              <span style={{ marginLeft: 10, fontSize: 13, color: "#166534", fontWeight: 600 }}>Segreto presente</span>
-            ) : (
-              <span style={{ marginLeft: 10, fontSize: 13, color: "#b45309" }}>Segreto mancante — il checkout online non funziona</span>
-            )}
-          </div>
+          </label>
           <label>
             SumUp — merchant / id pubblico
             <input

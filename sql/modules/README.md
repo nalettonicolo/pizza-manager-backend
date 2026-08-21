@@ -1,23 +1,22 @@
-# Moduli SQL (storico manuale)
+# sql/modules — patch incrementali
 
-Esegui **in ordine numerico** su Supabase SQL Editor (o equivalente) se il database non ha ancora questi oggetti.
+Patch **idempotenti** da applicare su DB già in produzione/staging.
 
-| File | Contenuto |
-|------|-----------|
-| `01_fidelity_tenant.sql` | Tabelle fidelity, RLS, default `parametri_operativi` tenant |
-| `02_punti_vendita_core.sql` | `core.punti_vendita`, vista `public.punti_vendita` (base) |
-| `03_ordini_extensions.sql` | Colonne `core.ordini` (coordinate, pagamento misto, PV, …) |
-| `11_rider_delivery_enterprise.sql` | Rider, percorsi, outbox, colonne ordini (**eseguire prima di 04** su DB nuovo) |
-| `04_ordine_view_trigger.sql` | Vista `public."Ordine"`, trigger INSTEAD OF UPDATE (richiede 03 + **11** per le colonne rider) |
-| `05_pm_point_create_order.sql` | `pm_point_in_ring`, `create_order_with_items` |
-| `06_contabilita_movimenti.sql` | Tabella incassi manuali + RLS |
-| `07_magazzino_movimenti.sql` | Tabella movimenti magazzino + RLS |
-| `08_seed_pv_default.sql` | Seed “Sede principale” per tenant senza PV |
-| `09_legal_public_resolve.sql` | Colonne legal/admin tenant, `resolve_public_tenant_by_domain` |
-| `10_punti_vendita_lat_lng_view.sql` | `lat`/`lng` su PV e vista aggiornata |
-| `12_fiscal_outbox_payment_links.sql` | Coda fiscal (`fiscal_outbox`) + pay-by-link (`payment_link_intents`), RLS staff |
-| `14_magazzino_fornitori_ddt.sql` | Fornitori magazzino + DDT in entrata |
-| `15_order_idempotency.sql` | Idempotency `create_order_with_items` (coda offline cassa) |
-| `16_contabilita_estesa.sql` | Fatture passive, spese locale/personale, pagamenti fatture, food cost manuali |
-| `17_stripe_online_confirm.sql` | Webhook secret per tenant, stato setup, lookup PI per webhook |
-Lo schema di riferimento completo è in **`sql/schema_completo_pizzamanager.sql`** (consolidato dalle ex migration). Le **nuove** modifiche incrementali vanno in **`sql/sql_upgrade.sql`** (indice patch) fino a consolidamento.
+## Stato (2026-08-06)
+
+| Range | Stato |
+|-------|--------|
+| `01`–`17`, `39`–`41` | Consolidati in `schema_completo_pizzamanager.sql` — file rimossi |
+| `18`–`38` | Attivi: già applicati su remoto; elenco in `sql/sql_upgrade.sql` |
+
+## Nuova installazione
+
+Usare **`sql/schema_completo_pizzamanager.sql`** + poi applicare i moduli `18`–`38` ancora presenti in questa cartella.
+
+## Applicazione singola patch
+
+```bash
+npm run sql:apply -- sql/modules/NN_descrizione.sql
+```
+
+Dopo consolidamento in `schema_completo`, rimuovere il file modulo e aggiornare `sql_upgrade.sql`.

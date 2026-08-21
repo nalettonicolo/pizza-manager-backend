@@ -9,11 +9,12 @@ import {
 } from "@/utils/cucinaPrepCategoryTheme"
 
 const LABELS = {
-  congelato: { title: "Congelato / surgelati", hint: 'Se il campo «categoria» ingrediente contiene «congel» (es. "congelato").' },
-  affettato: { title: "Affettato", hint: 'Contiene «affett».' },
-  bibite: { title: "Bibite", hint: 'Contiene «bibit».' },
-  fritto: { title: "Fritto", hint: 'Contiene «fritt».' },
-  comune: { title: "Comune (default)", hint: "Tutti gli altri ingredienti con prep. cucina e senza colore personalizzato sull’anagrafica." },
+  congelato: { title: "Congelato / surgelati", hint: 'Tipo «congelato» (o testo con «congel» / «surgel»).' },
+  affettato: { title: "Affettato", hint: 'Tipo «affettato».' },
+  bibite: { title: "Bibita", hint: 'Tipo «bibita» (anche «bibite»).' },
+  fritto: { title: "Fritto", hint: 'Tipo «fritto».' },
+  dolce: { title: "Dolce", hint: 'Tipo «dolce».' },
+  comune: { title: "Comune (default)", hint: "Prep. cucina senza tipo riconosciuto e senza colore personalizzato." },
 }
 
 function isHexColor(s) {
@@ -88,7 +89,7 @@ export default function PrepCucinaColoriPage() {
         <Link to="/admin/menu/ingredienti" style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline" }}>
           Ingredienti
         </Link>
-        ; 2) questi colori in base alla parola contenuta nel campo <strong>categoria</strong> dell&apos;ingrediente; 3) «Comune».
+        ; 2) questi colori in base al <strong>tipo</strong> dell&apos;ingrediente (affettato, fritto, dolce, bibita, congelato); 3) «Comune».
       </p>
 
       <div className="dashboard-box" style={{ padding: 20, maxWidth: 560 }}>

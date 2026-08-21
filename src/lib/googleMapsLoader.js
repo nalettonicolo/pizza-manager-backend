@@ -1,34 +1,75 @@
 /**
- * Carica Google Maps JS una sola volta per pagina (evita "API included multiple times" e errori gmp-*).
- * Le librerie nell'URL sono unificate: `drawing` è sempre inclusa (serve a Area consegna); altre opzionali.
- * Places si può aggiungere con importLibrary("places") dopo il load.
+ * Carica Google Maps JS una sola volta per pagina (evita "API included multiple times").
+ * Non usa più la libreria `drawing` (rimossa da Maps JS API ≥ 3.65).
+ * Places: passare "places" in extraLibraries oppure importLibrary("places") dopo il load.
+ *
+ * Con `loading=async` (loader moderno) `google.maps.Map` NON è disponibile al callback:
+ * esiste `importLibrary`. Non trattarlo come fallimento.
+ *
  * @param {string} apiKey
- * @param {string | null} [extraLibraries] es. "places" o "places,drawing" (drawing è sempre nel bundle URL)
+ * @param {string | null} [extraLibraries] es. "places"
  */
 const SCRIPT_ATTR = "data-pm-google-maps"
 const CB_NAME = "__pmGoogleMapsOnLoad"
 
 function normalizeLibraries(extraLibraries) {
-  const set = new Set(["drawing"])
+  const set = new Set()
   if (extraLibraries) {
     for (const part of String(extraLibraries).split(",")) {
-      const t = part.trim()
-      if (t) set.add(t)
+      const t = part.trim().toLowerCase()
+      if (t && t !== "drawing") set.add(t)
     }
   }
   return [...set].sort().join(",")
 }
 
-function hasLibrariesLoaded(librariesParam) {
-  if (!window.google?.maps?.Map) return false
-  if (librariesParam.includes("drawing") && !window.google.maps?.drawing?.DrawingManager) {
-    return false
-  }
-  return true
+/** Bootstrap pronto: Map legacy OPPURE importLibrary (loading=async). */
+function mapsBootstrapReady() {
+  const maps = window.google?.maps
+  if (!maps) return false
+  return typeof maps.importLibrary === "function" || typeof maps.Map === "function"
 }
 
 /** Promise condivisa: una sola iniezione di script anche con mount concorrenti o route diverse. */
 let loadPromise = null
+/** Ultimo errore auth/billing/referrer (gm_authFailure). */
+let lastAuthError = null
+const authListeners = new Set()
+
+export function getGoogleMapsAuthError() {
+  return lastAuthError
+}
+
+/** Consente un nuovo tentativo dopo auth/referrer fallito (es. pulsante Riprova). */
+export function clearGoogleMapsAuthError() {
+  lastAuthError = null
+  loadPromise = null
+}
+
+/** @param {(msg: string) => void} listener @returns {() => void} */
+export function onGoogleMapsAuthFailure(listener) {
+  authListeners.add(listener)
+  if (lastAuthError) {
+    try {
+      listener(lastAuthError)
+    } catch {
+      /* ignore */
+    }
+  }
+  return () => authListeners.delete(listener)
+}
+
+function notifyAuthFailure(message) {
+  lastAuthError = message
+  loadPromise = null
+  for (const fn of authListeners) {
+    try {
+      fn(message)
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 export function loadGoogleMapsScript(apiKey, extraLibraries = null) {
   if (!apiKey) {
@@ -38,9 +79,13 @@ export function loadGoogleMapsScript(apiKey, extraLibraries = null) {
     return Promise.reject(new Error("Maps solo in browser"))
   }
 
+  if (lastAuthError) {
+    return Promise.reject(new Error(lastAuthError))
+  }
+
   const libraries = normalizeLibraries(extraLibraries)
 
-  if (hasLibrariesLoaded(libraries)) {
+  if (mapsBootstrapReady()) {
     return Promise.resolve()
   }
 
@@ -50,11 +95,22 @@ export function loadGoogleMapsScript(apiKey, extraLibraries = null) {
 
   loadPromise = new Promise((resolve, reject) => {
     const finishOk = () => {
-      if (hasLibrariesLoaded(libraries)) {
+      if (lastAuthError) {
+        reject(new Error(lastAuthError))
+        return true
+      }
+      if (mapsBootstrapReady()) {
         resolve()
         return true
       }
       return false
+    }
+
+    window.gm_authFailure = () => {
+      const msg =
+        "Autenticazione Google Maps fallita (chiave, fatturazione attiva o restrizioni HTTP referrer: aggiungi localhost:5173 e il dominio del sito)."
+      notifyAuthFailure(msg)
+      reject(new Error(msg))
     }
 
     const existing = document.querySelector(`script[${SCRIPT_ATTR}="1"]`)
@@ -78,9 +134,25 @@ export function loadGoogleMapsScript(apiKey, extraLibraries = null) {
       } catch {
         window[CB_NAME] = undefined
       }
-      if (!hasLibrariesLoaded(libraries)) {
-        loadPromise = null
-        reject(new Error("Google Maps caricato ma librerie richieste mancanti"))
+      if (lastAuthError) {
+        reject(new Error(lastAuthError))
+        return
+      }
+      // Con loading=async il callback arriva prima di Map; basta importLibrary.
+      if (!mapsBootstrapReady()) {
+        // Piccolo ritardo: a volte il bootstrap arriva un tick dopo il callback.
+        window.setTimeout(() => {
+          if (lastAuthError) {
+            reject(new Error(lastAuthError))
+            return
+          }
+          if (mapsBootstrapReady()) {
+            resolve()
+            return
+          }
+          loadPromise = null
+          reject(new Error("Google Maps caricato ma API non disponibile"))
+        }, 100)
         return
       }
       resolve()
@@ -99,7 +171,8 @@ export function loadGoogleMapsScript(apiKey, extraLibraries = null) {
       }
       reject(new Error("Caricamento Google Maps fallito"))
     }
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&libraries=${encodeURIComponent(libraries)}&callback=${encodeURIComponent(CB_NAME)}`
+    const libQs = libraries ? `&libraries=${encodeURIComponent(libraries)}` : ""
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async${libQs}&callback=${encodeURIComponent(CB_NAME)}`
     document.head.appendChild(script)
   }).catch((err) => {
     loadPromise = null
@@ -107,4 +180,18 @@ export function loadGoogleMapsScript(apiKey, extraLibraries = null) {
   })
 
   return loadPromise
+}
+
+/** True se il contenitore mappa mostra l’overlay errore nativo Google. */
+export function mapContainerHasGoogleError(el) {
+  if (!el) return false
+  try {
+    return Boolean(
+      el.querySelector(
+        ".gm-err-container, .gm-error-message, [class*='gm-err'], img[src*='maperror'], img[alt*='Oops']",
+      ) || /Spiacenti|Sorry.*problem|non è stata caricata/i.test(el.textContent || ""),
+    )
+  } catch {
+    return false
+  }
 }

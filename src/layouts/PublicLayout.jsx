@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import CookieBanner from "@/features/public/components/CookieBanner"
 import OrdineOnlineDisattivoModal from "@/features/public/components/OrdineOnlineDisattivoModal"
+import ClienteHeaderAccount from "@/features/public/components/ClienteHeaderAccount"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { adminHomeWithSupportSearch } from "@/constants/adminTenantHome"
 import { getIsSaaSClient } from "@/utils/saasHost"
@@ -10,6 +11,10 @@ import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
 import { applyTenantFavicon } from "@/utils/tenantFavicon"
 import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
+import SaHomeButton from "@/components/SaHomeButton"
+import { isDemoGiroSearch, isDemoGiroSessionActive } from "@/utils/demoGiro"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
+import logoPizzaManager from "@/assets/logo/logo-pizzamanager.png"
 import "@/styles/public-layout.css"
 
 const DISMISS_KEY = "pm_ordine_online_modal_dismiss"
@@ -33,6 +38,7 @@ export default function PublicLayout() {
   /** Riga tenant (licenza / piano) per gate ordini online vetrina */
   const [publicTenantRow, setPublicTenantRow] = useState(null)
   const { user, ruolo, tipoUtente, tenantId: authTenantId, loading: authLoading } = useAuth()
+  const clienteLoggato = tipoUtente === "cliente" && Boolean(user)
   const [modalDismissed, setModalDismissed] = useState(() =>
     typeof sessionStorage !== "undefined" && sessionStorage.getItem(DISMISS_KEY) === "1",
   )
@@ -127,10 +133,10 @@ export default function PublicLayout() {
   }
 
   const logoLabel = isLanding ? "PizzaManager" : (tenantName || "PizzaManager")
-  const logoUrl = isLanding ? null : (publicTenantRow?.logo_url ?? null)
+  const logoUrl = isLanding ? logoPizzaManager : (publicTenantRow?.logo_url ?? null)
 
   useEffect(() => {
-    void applyTenantFavicon(logoUrl)
+    void applyTenantFavicon(logoUrl || logoPizzaManager)
   }, [logoUrl])
 
   const prefetchLogin = () => {
@@ -142,12 +148,16 @@ export default function PublicLayout() {
   }
 
   return (
-    <div className="public-layout-root">
+    <PublicCartProvider tenantId={publicTenantId}>
+      <div className={`public-layout-root${clienteLoggato && isVetrinaPage ? " public-layout-root--cliente-menu" : ""}`}>
       <header className={`public-layout-header${isSaaS ? " public-layout-header--saas" : ""}`}>
         <Link to="/" className="public-layout-logo">
-          {logoLabel}
+          {logoUrl ? (
+            <img src={logoUrl} alt="" className="public-layout-logo-img" width={40} height={40} />
+          ) : null}
+          <span className="public-layout-logo-text">{logoLabel}</span>
         </Link>
-        {isVetrinaPage ? (
+        {isVetrinaPage && !clienteLoggato ? (
           <nav className="public-layout-nav-vetrina" aria-label="Menu vetrina">
             <a href="#public-menu" className="public-layout-header-link">
               Menù
@@ -222,31 +232,58 @@ export default function PublicLayout() {
           </>
         ) : null}
         <div className="public-layout-header-trailing">
-          <Link
-            to={vetrinaAccediTo}
-            className="public-layout-btn public-layout-btn--outline"
-            onMouseEnter={staffAdminOnVetrina ? undefined : prefetchLogin}
-            onFocus={staffAdminOnVetrina ? undefined : prefetchLogin}
-          >
-            {staffAdminOnVetrina && isVetrinaPage ? "Admin" : "Accedi"}
-          </Link>
-          {isVetrinaPage && !vetrinaOrdiniOnlineEnabled ? null : (
+          {(isDemoGiroSearch(search) || isDemoGiroSessionActive()) &&
+          isSuperAdminRole(ruolo) &&
+          tipoUtente === "staff" ? (
             <Link
-              to={isVetrinaPage ? `/registrazione${search || ""}` : isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
-              className="public-layout-btn public-layout-btn--primary"
-              onMouseEnter={isSaaS ? undefined : prefetchRegistrazione}
-              onFocus={isSaaS ? undefined : prefetchRegistrazione}
+              to={withPreservedSupportSearch("/operative/dashboard", search)}
+              className="public-layout-btn public-layout-btn--outline"
+              title="Torna all’hub demo operativa"
             >
-              {isVetrinaPage ? "Crea account" : isSaaS ? "Registrati ora" : "Crea account"}
+              Hub demo
             </Link>
+          ) : null}
+          {isSuperAdminRole(ruolo) ? <SaHomeButton compact /> : null}
+          {clienteLoggato ? (
+            <>
+              <ClienteHeaderAccount />
+              {isVetrinaPage && vetrinaOrdiniOnlineEnabled ? (
+                <Link
+                  to={`/ordina${search || ""}`}
+                  className="public-layout-btn public-layout-btn--primary"
+                  title="Vai al checkout per la consegna a domicilio"
+                >
+                  Completa l&apos;ordine
+                </Link>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Link
+                to={vetrinaAccediTo}
+                className="public-layout-btn public-layout-btn--outline"
+                onMouseEnter={staffAdminOnVetrina ? undefined : prefetchLogin}
+                onFocus={staffAdminOnVetrina ? undefined : prefetchLogin}
+              >
+                {staffAdminOnVetrina && isVetrinaPage ? "Admin" : "Accedi"}
+              </Link>
+              {isVetrinaPage && !vetrinaOrdiniOnlineEnabled ? null : (
+                <Link
+                  to={isVetrinaPage ? `/registrazione${search || ""}` : isSaaS ? "/contatti#prova-gratuita" : "/registrazione"}
+                  className="public-layout-btn public-layout-btn--primary"
+                  onMouseEnter={isSaaS ? undefined : prefetchRegistrazione}
+                  onFocus={isSaaS ? undefined : prefetchRegistrazione}
+                >
+                  {isVetrinaPage ? "Crea account" : isSaaS ? "Registrati ora" : "Crea account"}
+                </Link>
+              )}
+            </>
           )}
         </div>
       </header>
 
       <main className="public-layout-main">
-        <PublicCartProvider tenantId={publicTenantId}>
-          <Outlet />
-        </PublicCartProvider>
+        <Outlet />
       </main>
 
       <footer className="public-layout-footer">
@@ -264,6 +301,7 @@ export default function PublicLayout() {
       <CookieBanner />
 
       <OrdineOnlineDisattivoModal open={showOrdineOnlineModal} onDismiss={dismissOrdineOnlineModal} localeNome={tenantName} />
-    </div>
+      </div>
+    </PublicCartProvider>
   )
 }

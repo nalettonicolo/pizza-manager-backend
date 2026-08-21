@@ -26,17 +26,17 @@ export const SERVIZI_ROADMAP_STEPS = [
     stato: "ok",
     percentuale: 95,
     resto:
-      "Turno cassa: parametro tenant, RPC Supabase, gate checkout; ordine collegato al turno (DB+RPC).\nRegistratore telematico / compliance fiscale (XML, chiusure, annulli certificati).\nIntegrazione POS certificati (PAX, Ingenico, protocolli proprietari) + fallback manuale.\nPagamento misto: split illimitato, arrotondamenti, sconti riga e sconto globale con audit.\nOmnicanalità: stesso motore ordine per cassa, kiosk, QR tavolo senza divergenze di totale.\nOsservabilità: metriche latency checkout, errori RPC, tracing distribuito.\nDisaster recovery: coda offline locale con sync idempotente e risoluzione conflitti.\nMulti‑PV: ogni ordine, listino e chiusura legata al PV con report consolidato gruppo.\nPenetration test periodici su RLS e RPC; segregazione dati tra tenant verificata.\nAccessibilità WCAG 2.2 su flussi cassa critici; i18n completa (date, valute, IVA).",
-    nota: "Cassa, planning, annulli, ricevuta, strip incassi, JSON giornata, PV su ordine e in dettaglio ordine, pagamento misto (DB+UI), turni+riconciliazione+ordine↔turno; core indipendente dai gate servizio.",
+      "Turno cassa: parametro tenant, RPC Supabase, gate checkout; ordine collegato al turno (DB+RPC).\nIntegrazione POS certificati (PAX, Ingenico, protocolli proprietari) + fallback manuale.\nPagamento misto: split illimitato, arrotondamenti, sconti riga e sconto globale con audit.\nOmnicanalità: stesso motore ordine per cassa, kiosk, QR tavolo senza divergenze di totale.\nOsservabilità: metriche latency checkout, errori RPC, tracing distribuito.\nDisaster recovery: coda offline locale con sync idempotente e risoluzione conflitti.\nMulti‑PV: ogni ordine, listino e chiusura legata al PV con report consolidato gruppo.\nPenetration test periodici su RLS e RPC; segregazione dati tra tenant verificata.\nAccessibilità WCAG 2.2 su flussi cassa critici; i18n completa (date, valute, IVA).",
+    nota: "Cassa, planning, annulli, ricevuta, strip incassi, JSON giornata, PV su ordine e in dettaglio ordine, pagamento misto (DB+UI), turni+riconciliazione+ordine↔turno; pannello pay-by-link post-conferma; core indipendente dai gate servizio.",
   },
   {
     id: "stampa_comanda",
     titolo: "Stampa comanda (reparti)",
     stato: "ok",
-    percentuale: 90,
+    percentuale: 92,
     resto:
-      "Driver stampa nativi (ESC/POS via bridge) oltre al dialogo browser.\nCode di stampa per reparto con retry, dead letter e alert se stampante offline.\nTemplate versionati (A/B) e anteprima pixel‑perfect per ogni larghezza rotolo.\nTest automatici snapshot HTML comanda/ricevuta su CI.\nTelemetria: tempo stampa, copie per ordine, errori per IP/reparto.\nIntegrazione con bilance / etichettatrici per peso variabile.\nConformità HACCP: tracciamento lotto su stampa ove richiesto.",
-    nota: "Parametri comanda, reparti IP, stampa per reparto; stampa non bloccata se modulo catalogo disattivo. Con stampa comanda automatica in sala, le notifiche email/push su nuovo ordine web non sono prioritarie (flusso alternativo).",
+      "Driver stampa nativi (ESC/POS via bridge) oltre al dialogo browser.\nCode di stampa per reparto con retry, dead letter e alert se stampante offline.\nTemplate versionati (A/B) e anteprima pixel‑perfect per ogni larghezza rotolo.\nTest automatici snapshot HTML comanda/ricevuta su CI.\nTelemetria: tempo stampa, copie per ordine, errori per IP/reparto.",
+    nota: "Parametri comanda, reparti IP, stampa per reparto; ricevuta cortesia con Senza/Aggiunta. Con stampa comanda automatica in sala, le notifiche email/push su nuovo ordine web non sono prioritarie (flusso alternativo).",
   },
   {
     id: "gestione_consegne",
@@ -51,20 +51,20 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "ordini_online",
     titolo: "Ordini online (cliente)",
     stato: "wip",
-    percentuale: 84,
+    percentuale: 86,
     resto:
       "Smoke Stripe live su tenant produzione + rimborsi.\nCAPTCHA opzionale oltre velocity/blocklist.\nSEO + Core Web Vitals; PWA cliente.\nWebhook ordine con firma HMAC verso partner.\nLoad test weekend.",
     nota:
-      "Carrello, checkout, profilo, storico, fidelity; Stripe IN_ATTESA (mod. 25); capacity forno; antifraud 8/ora + blocklist; stampa comanda web auto Francy; pagamenti ancora in modalità test sul tenant.",
+      "Carrello, checkout, profilo, storico, fidelity; modifica pizza in vetrina (mod. 49); Stripe IN_ATTESA (mod. 25); capacity forno; antifraud; pagamenti ancora in modalità test sul tenant.",
   },
   {
     id: "tablet_ruoli",
     titolo: "Schermate tablet / ruoli operativi",
     stato: "wip",
-    percentuale: 72,
+    percentuale: 82,
     resto:
       "Matrice permessi per schermata e azione (non solo area).\nStati ordine con macchina a stati validata server‑side e UI sincrona (Realtime).\nModalità kiosk con logout automatico e sessione corta.\nResilienza: Service Worker, coda azioni offline, risoluzione conflitti.\nAccessibilità touch target 48dp, contrasto, lettura distanza.\nLog strutturati per audit operativo (chi ha cambiato stato e quando).\nDark mode e temi per ambiente cucina/bancone.",
-    nota: "Cucina, bancone, pizzaiolo, delivery, rider PWA; Realtime su core.ordini + polling fallback; da rafforzare audit azione.",
+    nota: "Cucina aggregata per fascia; flag tablet cucina → prep su Bancone; pizzaiolo lead 10′; sidebar ☰; Realtime + polling.",
   },
   {
     id: "report_analisi",
@@ -97,10 +97,10 @@ export const SERVIZI_ROADMAP_STEPS = [
     id: "menu_listini",
     titolo: "Menu e listini",
     stato: "todo",
-    percentuale: 68,
+    percentuale: 72,
     resto:
       "Versioning listino con data effetto e rollback.\nListino dinamico (happy hour, canale delivery vs sala).\nAllergeni e nutrizione con fonte normativa aggiornabile.\nGate `menu_listini` vs listino minimo cassa documentato e testato.\nImport massivo da CSV/Excel con validazione e dry‑run.\nSincronizzazione verso canali esterni (aggregator) da un’unica sorgente.\nBlocco modifiche in finestra di chiusura inventario.",
-    nota: "Admin menu, promozioni calendario, listini backup, export PDF; listino per PV con versioning se richiesto commercialmente.",
+    nota: "Admin menu, badge ingredienti categoria/cottura, prezzi in modifica pizza, promozioni calendario, listini backup, export PDF.",
   },
   {
     id: "magazzino_gestione",
@@ -132,11 +132,11 @@ export const SERVIZI_ROADMAP_STEPS = [
   {
     id: "fidelity_card",
     titolo: "Fidelity Card",
-    stato: "todo",
-    percentuale: 65,
+    stato: "wip",
+    percentuale: 78,
     resto:
       "Regole premio complesse (multi‑livello, partner, scadenze punti).\nCampagne push segmentate; A/B test offerte.\nQR dinamici firmati e anti‑replay.\nFraud detection su accumuli anomali.\nPortale cliente self‑service saldo e storico.\nIntegrazione wallet Apple/Google.\nGDPR: export e cancellazione dati programma.",
-    nota: "Accredito automatico post‑ordine cassa (euro/pizza); iscrizioni e movimenti in DB.",
+    nota: "Accredito post‑ordine; riscatto premio in cassa (scheda/timbri); iscrizioni e movimenti in DB.",
   },
   {
     id: "supporto_prioritario",

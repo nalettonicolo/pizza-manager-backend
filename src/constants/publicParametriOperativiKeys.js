@@ -1,6 +1,6 @@
 /**
  * Chiavi esposte ad anon via pm_public_parametri_operativi (mod. 40).
- * Mantenere allineato a sql/modules/40_public_parametri_whitelist.sql
+ * Mantenere allineato a sql/schema_completo_pizzamanager.sql (pm_public_parametri_operativi).
  */
 export const PUBLIC_PARAMETRI_OPERATIVI_KEYS = [
   "ordini_online_attivi",
@@ -16,6 +16,10 @@ export const PUBLIC_PARAMETRI_OPERATIVI_KEYS = [
   "fidelity_timbri_scheda_totale",
   "fidelity_premi",
   "fidelity_punti_per_euro",
+  "ordini_web_accettazione_mode",
+  "cassa_pagamento_contanti",
+  "cassa_pagamento_carta",
+  "cassa_pagamento_paga_online",
 ]
 
 /** Chiavi sensibili che non devono comparire nella risposta pubblica. */

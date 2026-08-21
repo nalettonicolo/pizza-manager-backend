@@ -11,7 +11,9 @@ import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/pla
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import { sortOrdersByNearestNeighbor } from "@/features/operative/delivery/utils/deliveryRouteUtils"
+import { useRiderPositionSync } from "@/features/operative/delivery/hooks/useRiderPositionSync"
 import ConsegnaProofDialog from "@/features/operative/delivery/components/ConsegnaProofDialog"
+import DeliveryPlanningPanel from "@/features/operative/delivery/components/DeliveryPlanningPanel"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaByOrdineId } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
@@ -123,6 +125,7 @@ export default function DeliveryDashboard(props) {
   const [proofBusy, setProofBusy] = useState(false)
   const [cortesiaBusyId, setCortesiaBusyId] = useState(null)
   const [riderPos, setRiderPos] = useState(null)
+  const [planningOpen, setPlanningOpen] = useState(false)
   const loadSeqRef = useRef(0)
 
   const loadOrders = useCallback(
@@ -172,15 +175,10 @@ export default function DeliveryDashboard(props) {
     pollMs: POLL_FALLBACK_MS,
   })
 
+  const { position: syncedRiderPos } = useRiderPositionSync()
   useEffect(() => {
-    if (!navigator.geolocation) return
-    const watch = navigator.geolocation.watchPosition(
-      (pos) => setRiderPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: false, maximumAge: 60000 },
-    )
-    return () => navigator.geolocation.clearWatch(watch)
-  }, [])
+    if (syncedRiderPos) setRiderPos(syncedRiderPos)
+  }, [syncedRiderPos])
 
   const setAssegnato = async (ordineId) => {
     if (!ordineId) return
@@ -412,16 +410,48 @@ export default function DeliveryDashboard(props) {
               pony/delivery useremo il flusso rider dedicato.
             </p>
           ) : (
-            <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
-              Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
-              segnano l’ordine pronto. Stato consegna su DB: <code>stato_consegna</code> (flusso:{" "}
-              <strong>ASSEGNATO</strong> → <strong>IN_VIAGGIO</strong> → <strong>CONSEGNATO</strong>).
-              {riderPos ? " Ordine suggerito per vicinanza GPS." : null}{" "}
-              <Link to="/operative/delivery/mappa" style={{ color: "#1565c0", fontWeight: 600 }}>
-                Mappa live
-              </Link>
-              {operatoreLabel ? ` · ${operatoreLabel}` : ""}
-            </p>
+            <>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12, alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => setPlanningOpen(true)}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #0d9488",
+                    background: "#0d9488",
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Planning consegne
+                </button>
+                <Link
+                  to="/operative/delivery/mappa"
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #90caf9",
+                    background: "#fff",
+                    color: "#1565c0",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    textDecoration: "none",
+                  }}
+                >
+                  Mappa live
+                </Link>
+              </div>
+              <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
+                Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
+                segnano l’ordine pronto. Flusso consegna:{" "}
+                <strong>Assegnato</strong> → <strong>In viaggio</strong> → <strong>Consegnato</strong>.
+                {riderPos ? " Ordine suggerito per vicinanza GPS." : null}
+                {operatoreLabel ? ` · ${operatoreLabel}` : ""}
+              </p>
+            </>
           )}
         </>
       ) : null}
@@ -435,13 +465,11 @@ export default function DeliveryDashboard(props) {
           <p style={{ color: "#888", fontSize: quadTest ? 12 : undefined }}>Caricamento...</p>
         )
       ) : orders.length === 0 ? (
-        stripQuadChrome ? null : (
-          <p style={{ color: "#888", lineHeight: 1.5, fontSize: quadTest ? 12 : undefined }}>
-            {quadTest
-              ? "Nessuna consegna a domicilio oggi (ordini annullati esclusi)."
-              : "Nessun ordine delivery in stato PRONTO per oggi. Se hai ordini solo \"ritiro in negozio\", restano in Bancone / Pizzaioli; se sono ancora in preparazione, compariranno qui dopo PRONTO."}
-          </p>
-        )
+        <p style={{ color: "#888", lineHeight: 1.5, fontSize: quadTest || embedQuad ? 12 : undefined, padding: stripQuadChrome ? "8px 4px" : undefined }}>
+          {quadTest || embedQuad
+            ? "Nessuna consegna a domicilio oggi (annullati esclusi). Crea un ordine delivery in cassa per popolare questo riquadro."
+            : "Nessun ordine delivery in stato PRONTO per oggi. Se hai ordini solo \"ritiro in negozio\", restano in Bancone / Pizzaioli; se sono ancora in preparazione, compariranno qui dopo PRONTO."}
+        </p>
       ) : quadTest ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {slotOrder.map((slot) => {
@@ -469,6 +497,14 @@ export default function DeliveryDashboard(props) {
         onCancel={() => !proofBusy && setProofOrdine(null)}
         onConfirm={(prove) => void confirmProof(prove)}
       />
+      {!stripQuadChrome ? (
+        <DeliveryPlanningPanel
+          open={planningOpen}
+          onClose={() => setPlanningOpen(false)}
+          tenantId={tenantId}
+          orariSettimana={tenantData?.orari_settimana}
+        />
+      ) : null}
     </div>
   )
 }

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import {
-  getRuoliPizzeria,
-  listStaffPasswordNotes,
+  listArchivioPasswordAccounts,
   upsertStaffPasswordNote,
 } from "@/features/admin/services/adminService"
 import { getTenant } from "@/features/superadmin/services/superadminService"
@@ -60,19 +59,12 @@ export default function SuperadminTenantArchivioPasswordPage() {
     if (!tenantId) return
     setArchivio({ loading: true, error: null, ruoli: [], drafts: {}, savingUserId: null })
     try {
-      const [ruoli, notes] = await Promise.all([
-        getRuoliPizzeria(tenantId),
-        listStaffPasswordNotes(tenantId),
-      ])
-      const byUser = {}
-      for (const n of notes || []) {
-        byUser[n.user_id] = n.password_nota ?? ""
-      }
+      const { accounts, notesByUser } = await listArchivioPasswordAccounts(tenantId)
       const drafts = {}
-      for (const r of ruoli || []) {
-        drafts[r.user_id] = byUser[r.user_id] ?? ""
+      for (const r of accounts || []) {
+        drafts[r.user_id] = notesByUser[r.user_id] ?? ""
       }
-      setArchivio({ loading: false, error: null, ruoli: ruoli || [], drafts, savingUserId: null })
+      setArchivio({ loading: false, error: null, ruoli: accounts || [], drafts, savingUserId: null })
     } catch (err) {
       setArchivio({
         loading: false,
@@ -166,9 +158,10 @@ export default function SuperadminTenantArchivioPasswordPage() {
           ) : null}
         </p>
         <p style={{ marginTop: 8, maxWidth: 720, fontSize: 14, color: "#64748b", lineHeight: 1.55 }}>
-          Qui registri le <strong>note opzionali</strong> (es. password date al dipendente per accedere all&apos;app). Non
-          sono le credenziali tecniche Supabase: il titolare le consulta in <strong>Admin → Ruoli</strong> dopo aver
-          sbloccato l&apos;archivio con la propria password.
+          Qui registri le <strong>note opzionali</strong> (password date allo staff o al Cliente Test). Non sono le
+          credenziali tecniche Supabase: il titolare le consulta in <strong>Admin → Ruoli</strong> dopo aver sbloccato
+          l&apos;archivio con la propria password. Gli account con ruolo <strong>cliente</strong> compaiono se hanno una
+          nota salvata.
         </p>
         <div style={{ marginTop: 16 }}>
           <Link to="/superadmin/tenants" className="sa-table-action">
@@ -214,6 +207,7 @@ export default function SuperadminTenantArchivioPasswordPage() {
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{nomeInSedeOEmail(r)}</div>
                 <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10 }}>
                   {r.email} · ruolo: <strong>{r.ruolo}</strong>
+                  {r.archivio_tipo === "cliente" ? " · area cliente" : ""}
                 </div>
                 <label style={labelStyle}>Nota password (archivio titolare)</label>
                 <textarea

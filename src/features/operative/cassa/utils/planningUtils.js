@@ -62,6 +62,35 @@ export function getTodayOrari(orariSettimana) {
   }
 }
 
+/**
+ * Orari per griglia planning consegne: se oggi ha fascia consegna diversa, usa quella;
+ * altrimenti apertura→chiusura esercizio.
+ * @returns {{ aperto: boolean, apertura: string, chiusura: string, fonte: "consegna"|"apertura" }}
+ */
+export function getTodayOrariConsegna(orariSettimana) {
+  const orari = parseOrari(orariSettimana)
+  if (!orari?.length) {
+    return { aperto: true, apertura: "00:00", chiusura: "23:59", fonte: "apertura" }
+  }
+  const idx = getGiornoIndex(new Date())
+  const row = orari[idx]
+  if (!row) return { aperto: false, apertura: "00:00", chiusura: "00:00", fonte: "apertura" }
+  if (row.consegnaDiversa) {
+    return {
+      aperto: row.aperto,
+      apertura: row.consegnaDa || row.apertura || "00:00",
+      chiusura: row.consegnaA || row.chiusura || "23:59",
+      fonte: "consegna",
+    }
+  }
+  return {
+    aperto: row.aperto,
+    apertura: row.apertura || "00:00",
+    chiusura: row.chiusura || "23:59",
+    fonte: "apertura",
+  }
+}
+
 /** Converte "HH:mm" in minuti da mezzanotte. 00:00 = 0, 24:00 = 1440. */
 function timeToMinutes(str) {
   if (!str || typeof str !== "string") return 0
@@ -203,14 +232,14 @@ export function buildSlotsInOpeningHours(orariOggi, count = 24, options = {}) {
 /**
  * Genera tutte le caselle da apertura a chiusura (fino a mezzanotte).
  * Per il planning lato cassa: griglia completa della giornata.
+ * Sempre popolata (anche se oggi è «chiuso» o senza ordini): serve la tabella orari.
  * orariOggi: { aperto, apertura, chiusura }. Chiusura 00:00 = fine giornata (24:00).
  */
 export function buildSlotsFullDay(orariOggi) {
   const grid = PLANNING_GRID_SLOT_MINUTES
-  if (!orariOggi?.aperto) return []
   const now = new Date()
-  const startMin = timeToMinutes(orariOggi.apertura)
-  let endMin = endMinutesForDay(orariOggi.chiusura)
+  const startMin = timeToMinutes(orariOggi?.apertura || "11:00")
+  let endMin = endMinutesForDay(orariOggi?.chiusura || "23:00")
   if (endMin <= startMin) endMin += 24 * 60
   const lastStart = lastSlotStartInclusive(endMin, grid)
   const slots = []
@@ -278,18 +307,19 @@ export function getWebVetrinaSlotQuarterFilter(parametri) {
 export const WEB_DELIVERY_MORNING_RULE_END_HOUR = 15
 
 /**
- * Vetrina web (consegna): se attivo in parametri, fino a `endHour` (esclusa) mostra solo slot con `minute` scelto
- * (dopo lead-time). Dopo `endHour` valgono tutti i quarti. Non sostituisce il lead-time.
+ * Vetrina web (consegna): se attivo in parametri, le fasce **prima di** `endHour`
+ * (es. 15:00) restano solo al minuto scelto (es. :45); dalle `endHour` in poi valgono
+ * tutti i quarti. La regola si applica all’orario della **fascia**, non all’orologio
+ * di quando apri il checkout. Non sostituisce il lead-time.
  * @param {unknown} parametri — `parametri_operativi` tenant (anche parziale)
  */
-export function filterSlotsWebDeliveryVetrinaQuarter(slots, nowDate, parametri) {
+export function filterSlotsWebDeliveryVetrinaQuarter(slots, _nowDate, parametri) {
   if (!Array.isArray(slots) || !slots.length) return []
   const { enabled, endHour, minute } = getWebVetrinaSlotQuarterFilter(parametri)
   if (!enabled) return slots
-  const d = nowDate instanceof Date ? nowDate : new Date(nowDate)
-  if (d.getHours() >= endHour) return slots
   return slots.filter((s) => {
     const dt = s.date instanceof Date ? s.date : new Date(s.date)
+    if (dt.getHours() >= endHour) return true
     return dt.getMinutes() === minute
   })
 }
@@ -341,9 +371,8 @@ export function isSlotAllowedForWebDeliveryFull(slotDate, nowDate, parametri) {
   if (!isSlotAllowedForWebDelivery(slotDate, nowDate)) return false
   const { enabled, endHour, minute } = getWebVetrinaSlotQuarterFilter(parametri)
   if (!enabled) return true
-  const now = nowDate instanceof Date ? nowDate : new Date(nowDate)
-  if (now.getHours() >= endHour) return true
   const dt = slotDate instanceof Date ? slotDate : new Date(slotDate)
+  if (dt.getHours() >= endHour) return true
   return dt.getMinutes() === minute
 }
 

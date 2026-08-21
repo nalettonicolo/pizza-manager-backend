@@ -105,9 +105,14 @@ export default function ParametriSection() {
       raw.abilita_gestione_listini_multipli === true || raw.listini_multipli === true,
     promozioni_calendario: Array.isArray(raw.promozioni_calendario) ? raw.promozioni_calendario : [],
     stampa_comanda_ordine_web_automatica: raw.stampa_comanda_ordine_web_automatica === true,
+    ordini_web_accettazione_mode:
+      String(raw.ordini_web_accettazione_mode || "auto").toLowerCase() === "manuale" ? "manuale" : "auto",
     chiusura_giornata_automatica: raw.chiusura_giornata_automatica !== false,
     cassa_turno_obbligatorio: raw.cassa_turno_obbligatorio === true,
     cassa_arrotonda_5_cent: raw.cassa_arrotonda_5_cent === true,
+    cassa_pagamento_contanti: raw.cassa_pagamento_contanti !== false,
+    cassa_pagamento_carta: raw.cassa_pagamento_carta !== false,
+    cassa_pagamento_paga_online: raw.cassa_pagamento_paga_online !== false,
     vetrina_consegna_filtro_quarto_attivo: raw.vetrina_consegna_filtro_quarto_attivo !== false,
     vetrina_consegna_filtro_quarto_ora_fine:
       raw.vetrina_consegna_filtro_quarto_ora_fine !== undefined && raw.vetrina_consegna_filtro_quarto_ora_fine !== ""
@@ -178,9 +183,13 @@ export default function ParametriSection() {
         abilita_gestione_listini_multipli: p.abilita_gestione_listini_multipli === true,
         promozioni_calendario: serializePromozioniCalendario(p.promozioni_calendario),
         stampa_comanda_ordine_web_automatica: p.stampa_comanda_ordine_web_automatica === true,
+        ordini_web_accettazione_mode: p.ordini_web_accettazione_mode === "manuale" ? "manuale" : "auto",
         chiusura_giornata_automatica: p.chiusura_giornata_automatica !== false,
         cassa_turno_obbligatorio: p.cassa_turno_obbligatorio === true,
         cassa_arrotonda_5_cent: p.cassa_arrotonda_5_cent === true,
+        cassa_pagamento_contanti: p.cassa_pagamento_contanti !== false,
+        cassa_pagamento_carta: p.cassa_pagamento_carta !== false,
+        cassa_pagamento_paga_online: p.cassa_pagamento_paga_online !== false,
         vetrina_consegna_filtro_quarto_attivo: p.vetrina_consegna_filtro_quarto_attivo !== false,
         vetrina_consegna_filtro_quarto_ora_fine:
           p.vetrina_consegna_filtro_quarto_ora_fine === "" ? 15 : Math.min(23, Math.max(0, Number(p.vetrina_consegna_filtro_quarto_ora_fine) || 15)),
@@ -334,7 +343,70 @@ export default function ParametriSection() {
               In cassa, arrotonda il totale da incassare a 0,05 € (contanti) dopo eventuali sconti a cassa.
             </span>
           </label>
+          <fieldset style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", margin: "12px 0 0" }}>
+            <legend style={{ padding: "0 6px", fontSize: 13, fontWeight: 600 }}>Pagamenti consentiti</legend>
+            <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+              Per gli <strong>ordini online</strong> (vetrina) restano solo Contanti, Carta e Paga online, se attivi qui.
+              In cassa locale restano anche Misto, Da pagare e Altro.
+            </p>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={p.cassa_pagamento_contanti}
+                onChange={(e) => setParam("cassa_pagamento_contanti", e.target.checked)}
+                style={{ marginTop: 4 }}
+              />
+              <span>Contanti</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={p.cassa_pagamento_carta}
+                onChange={(e) => setParam("cassa_pagamento_carta", e.target.checked)}
+                style={{ marginTop: 4 }}
+              />
+              <span>Carta (POS in locale / alla consegna)</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={p.cassa_pagamento_paga_online}
+                onChange={(e) => setParam("cassa_pagamento_paga_online", e.target.checked)}
+                style={{ marginTop: 4 }}
+              />
+              <span>Paga online (link / carta da casa)</span>
+            </label>
+          </fieldset>
           <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Ordini web (vetrina)</h3>
+          <fieldset style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", margin: "0 0 12px" }}>
+            <legend style={{ padding: "0 6px", fontSize: 13, fontWeight: 600 }}>Accettazione ordini</legend>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 10 }}>
+              <input
+                type="radio"
+                name="ordini_web_accettazione_mode"
+                checked={p.ordini_web_accettazione_mode !== "manuale"}
+                onChange={() => setParam("ordini_web_accettazione_mode", "auto")}
+                style={{ marginTop: 4 }}
+              />
+              <span>
+                <strong>Automatica</strong> — il sistema accetta l&apos;ordine in base alla capacità (pizze ogni 15 min /
+                fasce orarie). La cassa riceve comunque l&apos;avviso in sala se configurato.
+              </span>
+            </label>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="ordini_web_accettazione_mode"
+                checked={p.ordini_web_accettazione_mode === "manuale"}
+                onChange={() => setParam("ordini_web_accettazione_mode", "manuale")}
+                style={{ marginTop: 4 }}
+              />
+              <span>
+                <strong>Manuale in cassa</strong> — ogni ordine web resta in attesa: la cassa deve accettarlo, spostare
+                l&apos;orario o rifiutarlo. Non entra in cucina finché non è accettato.
+              </span>
+            </label>
+          </fieldset>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
             <input
               type="checkbox"
@@ -344,7 +416,7 @@ export default function ParametriSection() {
             />
             <span>
               Stampa comanda automatica in sala per nuovi ordini web (se attiva, non vengono accodate notifiche
-              opzionali — configura comunque la stampa in cassa).
+              opzionali — configura comunque la stampa in cassa). In modalità manuale le notifiche restano attive.
             </span>
           </label>
           {!p.stampa_comanda_ordine_web_automatica ? (

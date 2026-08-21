@@ -13,6 +13,63 @@ function extractPaymentIntentId(event: Stripe.Event): string | null {
   return null
 }
 
+/**
+ * Verifica firma Stripe.
+ * Ordine: secret globale → fallback secret per-tenant (da PI già noto nel payload).
+ * Se manca solo il globale ma il tenant ha whsec in Admin, il webhook resta operativo (TEST/multi-tenant).
+ */
+async function constructVerifiedEvent(
+  body: string,
+  sig: string,
+  admin: ReturnType<typeof createClient>,
+  globalWhSecret: string,
+  isProd: boolean,
+): Promise<Stripe.Event> {
+  const stripeProbe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
+
+  if (globalWhSecret) {
+    try {
+      return stripeProbe.webhooks.constructEvent(body, sig, globalWhSecret)
+    } catch {
+      /* prova secret tenant sotto */
+    }
+  }
+
+  let parsed: Stripe.Event
+  try {
+    parsed = JSON.parse(body) as Stripe.Event
+  } catch {
+    throw new Error("Payload webhook non valido")
+  }
+
+  const piId = extractPaymentIntentId(parsed)
+  if (piId) {
+    const { data: tenantId } = await admin.rpc("get_tenant_id_by_stripe_payment_intent", {
+      p_payment_intent_id: piId,
+    })
+    if (tenantId) {
+      const { data: tenantWh } = await admin.rpc("get_stripe_webhook_secret_for_tenant_edge", {
+        p_tenant_id: tenantId,
+      })
+      if (tenantWh && typeof tenantWh === "string" && tenantWh.startsWith("whsec_")) {
+        return stripeProbe.webhooks.constructEvent(body, sig, tenantWh)
+      }
+    }
+  }
+
+  if (!globalWhSecret) {
+    if (isProd) {
+      throw new Error(
+        "Webhook non configurato: imposta STRIPE_WEBHOOK_SECRET (Edge secrets) oppure salva whsec_ in Admin → Pagamenti online",
+      )
+    }
+    console.warn("STRIPE_WEBHOOK_SECRET mancante: evento non verificato (solo dev)")
+    return parsed
+  }
+
+  throw new Error("Firma webhook non valida")
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 })
@@ -25,58 +82,16 @@ Deno.serve(async (req) => {
 
   const body = await req.text()
   const sig = req.headers.get("stripe-signature") || ""
-
   const admin = createClient(supabaseUrl, serviceKey)
 
   let event: Stripe.Event
-  const stripeProbe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
-
   try {
-    let verifySecret = globalWhSecret
-
-    if (!verifySecret) {
-      if (isProd) {
-        console.error("STRIPE_WEBHOOK_SECRET mancante in produzione")
-        return new Response("Webhook non configurato", { status: 503 })
-      }
-      event = JSON.parse(body) as Stripe.Event
-      console.warn("STRIPE_WEBHOOK_SECRET mancante: evento non verificato (solo dev)")
-    } else {
-      try {
-        event = stripeProbe.webhooks.constructEvent(body, sig, verifySecret)
-      } catch {
-        let parsed: Stripe.Event
-        try {
-          parsed = JSON.parse(body) as Stripe.Event
-        } catch {
-          throw new Error("Payload webhook non valido")
-        }
-        const piId = extractPaymentIntentId(parsed)
-        if (piId) {
-          const { data: tenantId } = await admin.rpc("get_tenant_id_by_stripe_payment_intent", {
-            p_payment_intent_id: piId,
-          })
-          if (tenantId) {
-            const { data: tenantWh } = await admin.rpc("get_stripe_webhook_secret_for_tenant_edge", {
-              p_tenant_id: tenantId,
-            })
-            if (tenantWh && typeof tenantWh === "string") {
-              verifySecret = tenantWh
-              event = stripeProbe.webhooks.constructEvent(body, sig, verifySecret)
-            } else {
-              throw new Error("Firma webhook non valida")
-            }
-          } else {
-            throw new Error("Firma webhook non valida")
-          }
-        } else {
-          throw new Error("Firma webhook non valida")
-        }
-      }
-    }
+    event = await constructVerifiedEvent(body, sig, admin, globalWhSecret, isProd)
   } catch (e) {
+    const msg = (e as Error).message || "Webhook error"
     console.error("webhook signature", e)
-    return new Response(`Webhook error: ${(e as Error).message}`, { status: 400 })
+    const status = msg.includes("Webhook non configurato") ? 503 : 400
+    return new Response(`Webhook error: ${msg}`, { status })
   }
 
   try {

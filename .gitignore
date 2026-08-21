@@ -65,6 +65,12 @@ dist/
 # Yarn Integrity file
 .yarn-integrity
 
+# Credenziali locali (non versionare)
+CREDENZIALI_LOCALE.txt
+CREDENZIALI*.txt
+scripts/_tmp_creds*.json
+scripts/_tmp_export_creds.mjs
+
 # dotenv environment variables file
 .env
 .env.local

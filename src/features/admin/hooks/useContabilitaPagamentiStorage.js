@@ -68,7 +68,7 @@ export function useContabilitaPagamentiStorage() {
     return () => {
       cancelled = true;
     };
-  }, [tenantId, localReady, localData.righe]);
+  }, [tenantId, localReady, localData.righe, setLocalData]);
 
   const addRiga = useCallback(
     async (row) => {

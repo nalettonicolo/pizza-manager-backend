@@ -1,23 +1,21 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
+import { Navigate } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
-  getOrderDetail,
   getProdottiByIds,
   getRigheByOrdineIds,
   getProductIngredientiBatch,
-  updateOrderStato,
+  getIngredients,
   updateOrderCucinaPrepStato,
 } from "@/features/admin/services/adminService"
-import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
-import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import {
   buildCucinaPrepTasks,
   slotTabLabel,
-  markIngredientPrepDone,
-  groupOrdersBySlot,
-  mergeCucinaSlotKeys,
+  sortedCucinaSlotTabs,
+  aggregatePrepTasksBySlot,
+  markAggregatedPrepDone,
 } from "@/features/operative/cucina/utils/cucinaPrepTasks"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import {
@@ -25,114 +23,48 @@ import {
   resolvePrepTaskBackgroundColor,
 } from "@/utils/cucinaPrepCategoryTheme"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
-import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
-import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
+import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
-const STATO_PRONTO = "PRONTO"
 const POLL_FALLBACK_MS = 30000
-
-function rigaGroupKey(r) {
-  return `${r.prodottoId ?? r.prodotto_id}|${r.formatoNome ?? r.formato_nome ?? ""}`
-}
-
-/** Righe ordine aggregate come in vista Pizzaiolo: qty, nome, riepilogo ingredienti / lista ricetta. */
-function CucinaRigheComposizione({ righe, productNames, ingredientsByProduct }) {
-  const quad = useRepartiQuadTest()
-  if (!righe?.length) return quad ? null : <p style={fornoStyles.mutedRighe}>Nessuna riga prodotto.</p>
-
-  const aggregated = {}
-  for (const r of righe) {
-    const k = rigaGroupKey(r)
-    if (!aggregated[k]) {
-      aggregated[k] = {
-        pid: r.prodottoId ?? r.prodotto_id,
-        formato: r.formatoNome ?? r.formato_nome,
-        qta: 0,
-        righe: [],
-      }
-    }
-    aggregated[k].qta += Number(r.quantita) || 1
-    aggregated[k].righe.push(r)
-  }
-  const list = Object.values(aggregated)
-
-  return (
-    <div style={fornoStyles.righeWrap}>
-      {list.map((item, idx) => {
-        const nomeBase = productNames[item.pid] ?? "—"
-        const nomeCompleto = item.formato ? `${nomeBase} (${item.formato})` : nomeBase
-        const qtyLabel = `${item.qta}×`
-        const ingListBase = Array.isArray(ingredientsByProduct[item.pid]) ? ingredientsByProduct[item.pid] : []
-        const summaries = Array.from(
-          new Set(
-            (item.righe || [])
-              .map((r) => r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? "")
-              .filter(Boolean),
-          ),
-        )
-        return (
-          <div key={String(item.pid) + (item.formato || "") + idx} style={fornoStyles.rigaRow}>
-            <div style={fornoStyles.rigaTop}>
-              <span style={fornoStyles.rigaQty}>{qtyLabel}</span>
-              <span style={fornoStyles.rigaNome}>{nomeCompleto}</span>
-            </div>
-            {summaries.length > 0 ? (
-              <div style={fornoStyles.rigaIngredienti}>
-                {summaries.map((txt, i) => (
-                  <span key={i} style={fornoStyles.ingNormal}>
-                    {txt}
-                    {i < summaries.length - 1 ? " · " : ""}
-                  </span>
-                ))}
-              </div>
-            ) : ingListBase.length > 0 ? (
-              <div style={fornoStyles.rigaIngredienti}>
-                {ingListBase.map((ing, i) => {
-                  const isBold = ing.vaInCottura === true
-                  return (
-                    <span key={(ing.nome || "") + i} style={isBold ? fornoStyles.ingBold : fornoStyles.ingNormal}>
-                      {ing.nome}
-                      {i < ingListBase.length - 1 ? ", " : ""}
-                    </span>
-                  )
-                })}
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 export default function Cucina() {
   const quad = useRepartiQuadTest()
   const { tenantId, tenantData } = useTenant()
-  const parametri = tenantData?.parametri_operativi || {}
+  const cucinaTabletOn = isCucinaTabletAbilitato(tenantData?.parametri_operativi)
   const prepCategoryColors = useMemo(
     () => mergeCucinaPrepColorsFromParametri(tenantData?.parametri_operativi),
     [tenantData?.parametri_operativi],
   )
-  const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
   const [orders, setOrders] = useState([])
   const [righeAll, setRigheAll] = useState([])
   const [productNames, setProductNames] = useState({})
-  /** Prodotto.prep_cucina (fritti, bibite, dolci con task in cucina). */
   const [productPrepCucinaById, setProductPrepCucinaById] = useState({})
+  const [productPrepMetaById, setProductPrepMetaById] = useState({})
   const [ingredientsByProduct, setIngredientsByProduct] = useState({})
+  const [ingredientiGlobali, setIngredientiGlobali] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [detailOrder, setDetailOrder] = useState(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
-  const [cortesiaBusy, setCortesiaBusy] = useState(false)
-  const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "cucina")
-  const [prepActionId, setPrepActionId] = useState(null)
+  const [prepActionKey, setPrepActionKey] = useState(null)
   const [activeSlot, setActiveSlot] = useState(null)
-  /** Se valorizzata, mostra la sezione «composizione in forno» (dettaglio ordini) per quella fascia. */
-  const [compositionSlot, setCompositionSlot] = useState(null)
   const loadSeqRef = useRef(0)
+
+  /** Catalogo ingredienti completo (nome→categoria/colore): fallback per gli "extra" aggiunti a
+   * una riga che non fanno parte della ricetta base di nessun prodotto già caricato (altrimenti
+   * risultano grigi "comune" anche se in anagrafica hanno una categoria impostata). Cambia raramente:
+   * un fetch per tenant, non ad ogni refresh ordini. */
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    getIngredients(tenantId)
+      .then((list) => {
+        if (!cancelled) setIngredientiGlobali(Array.isArray(list) ? list : [])
+      })
+      .catch((e) => console.warn("[Cucina] getIngredients:", e))
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId])
 
   const loadOrders = useCallback(
     async (opts = {}) => {
@@ -167,6 +99,15 @@ export default function Cucina() {
             {},
           ),
         )
+        setProductPrepMetaById(
+          (prodotti || []).reduce(
+            (acc, p) => ({
+              ...acc,
+              [p.id]: { categoria: p.prep_categoria || p.prepCategoria || "", colore: p.prep_colore || p.prepColore || "" },
+            }),
+            {},
+          ),
+        )
         setIngredientsByProduct(ingBatch || {})
         setError(null)
       } catch (err) {
@@ -187,17 +128,6 @@ export default function Cucina() {
     pollMs: POLL_FALLBACK_MS,
   })
 
-  const righeByOrdineId = useMemo(() => {
-    const m = {}
-    for (const r of righeAll || []) {
-      const oid = r.ordineId ?? r.ordine_id
-      if (!oid) continue
-      if (!m[oid]) m[oid] = []
-      m[oid].push(r)
-    }
-    return m
-  }, [righeAll])
-
   const tasksBySlot = useMemo(
     () =>
       buildCucinaPrepTasks(
@@ -207,16 +137,15 @@ export default function Cucina() {
         ingredientsByProduct,
         PLANNING_GRID_SLOT_MINUTES,
         productPrepCucinaById,
+        productPrepMetaById,
+        ingredientiGlobali,
       ),
-    [orders, righeAll, productNames, ingredientsByProduct, productPrepCucinaById],
+    [orders, righeAll, productNames, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, ingredientiGlobali],
   )
 
-  const ordersBySlot = useMemo(
-    () => groupOrdersBySlot(orders, PLANNING_GRID_SLOT_MINUTES),
-    [orders],
-  )
+  const aggregatedBySlot = useMemo(() => aggregatePrepTasksBySlot(tasksBySlot), [tasksBySlot])
 
-  const slotTabs = useMemo(() => mergeCucinaSlotKeys(tasksBySlot, ordersBySlot), [tasksBySlot, ordersBySlot])
+  const slotTabs = useMemo(() => sortedCucinaSlotTabs(tasksBySlot), [tasksBySlot])
 
   useEffect(() => {
     if (!slotTabs.length) {
@@ -224,88 +153,50 @@ export default function Cucina() {
       return
     }
     if (activeSlot && slotTabs.includes(activeSlot)) return
-    const withPending = slotTabs.find((s) => (tasksBySlot[s] || []).some((t) => !t.done))
+    const withPending = slotTabs.find((s) =>
+      (aggregatedBySlot[s] || []).some((a) => (a.count || 0) > (a.doneCount || 0)),
+    )
     setActiveSlot(withPending ?? slotTabs[0])
-  }, [slotTabs, tasksBySlot, activeSlot])
+  }, [slotTabs, aggregatedBySlot, activeSlot])
 
-  useEffect(() => {
-    if (compositionSlot && !slotTabs.includes(compositionSlot)) {
-      setCompositionSlot(null)
-    }
-  }, [slotTabs, compositionSlot])
-
-  const handleSlotTabClick = useCallback((slot) => {
-    setActiveSlot(slot)
-    setCompositionSlot((prev) => {
-      if (prev === slot) return null
-      return slot
-    })
-  }, [])
-
-  const openDetail = useCallback(
-    async (ordineId) => {
-      if (!tenantId || !ordineId) return
-      setDetailOrder(null)
-      setDetailLoading(true)
+  const handleMarkAggregatedDone = useCallback(
+    async (agg) => {
+      if (!agg?.pendingTasks?.length) return
+      setPrepActionKey(agg.pickKey)
       try {
-        const detail = await getOrderDetail(ordineId)
-        const prodIds = [...new Set((detail.righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean))]
-        const prodotti = prodIds.length ? await getProdottiByIds(tenantId, prodIds) : []
-        const pn = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {})
-        setDetailOrder({ ...detail, productNames: pn })
-      } catch (err) {
-        console.error(err)
-        setError("Errore nel caricamento dettaglio.")
-      } finally {
-        setDetailLoading(false)
-      }
-    },
-    [tenantId],
-  )
-
-  const markAsPronto = useCallback(async (ordineId) => {
-    if (!ordineId) return
-    setActionLoading(true)
-    try {
-      await updateOrderStato(ordineId, STATO_PRONTO)
-      setOrders((prev) => prev.filter((o) => o.id !== ordineId))
-      setDetailOrder(null)
-    } catch (err) {
-      console.error(err)
-      setError("Errore aggiornamento ordine.")
-    } finally {
-      setActionLoading(false)
-    }
-  }, [])
-
-  const handleMarkPrepDone = useCallback(
-    async (task) => {
-      if (!task?.ordineId || task.done) return
-      const ord = orders.find((o) => o.id === task.ordineId)
-      if (!ord) return
-      const actionKey = `${task.ordineId}:${task.rigaId}:${task.ingredienteId}`
-      setPrepActionId(actionKey)
-      try {
-        const next = markIngredientPrepDone(ord.cucina_prep_stato ?? ord.cucinaPrepStato, task.rigaId, task.ingredienteId)
-        await updateOrderCucinaPrepStato(task.ordineId, next)
-        setOrders((prev) => prev.map((o) => (o.id === task.ordineId ? { ...o, cucina_prep_stato: next } : o)))
+        const { nextByOrdineId } = markAggregatedPrepDone(orders, agg.pendingTasks)
+        const entries = Object.entries(nextByOrdineId)
+        await Promise.all(entries.map(([oid, next]) => updateOrderCucinaPrepStato(oid, next)))
+        setOrders((prev) =>
+          prev.map((o) => (nextByOrdineId[o.id] ? { ...o, cucina_prep_stato: nextByOrdineId[o.id] } : o)),
+        )
       } catch (err) {
         console.error(err)
         setError("Errore salvataggio preparazione. Verifica di aver eseguito sql_upgrade (colonna cucina_prep_stato).")
       } finally {
-        setPrepActionId(null)
+        setPrepActionKey(null)
       }
     },
     [orders],
   )
 
-  const tasksInTab = activeSlot ? tasksBySlot[activeSlot] || [] : []
-  const pendingInTab = tasksInTab.filter((t) => !t.done)
-  const doneInTab = tasksInTab.filter((t) => t.done)
+  const itemsInTab = activeSlot ? aggregatedBySlot[activeSlot] || [] : []
+  const pendingInTab = itemsInTab.filter((a) => (a.count || 0) > (a.doneCount || 0))
+  const doneInTab = itemsInTab.filter((a) => (a.doneCount || 0) >= (a.count || 0) && (a.count || 0) > 0)
+
+  if (!cucinaTabletOn && !quad) {
+    return <Navigate to="/operative/bancone" replace />
+  }
 
   return (
     <div style={styles.wrapper} className="operative-mobile-pad">
       {!quad ? <h1 style={styles.title}>Cucina</h1> : null}
+      {!quad ? (
+        <p style={styles.subtitle}>
+          Ingredienti da preparare per fascia oraria (conteggio). Tocca quando pronti. Nessun riepilogo pizza: quello
+          resta al forno (Pizzaioli).
+        </p>
+      ) : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -314,185 +205,110 @@ export default function Cucina() {
       ) : orders.length === 0 ? (
         quad ? null : <p style={styles.muted}>Nessuna lavorazione in coda.</p>
       ) : slotTabs.length === 0 ? (
-        quad ? null : <p style={styles.muted}>Nessuna fascia oraria disponibile.</p>
+        quad ? null : (
+          <p style={styles.muted}>Nessuna preparazione speciale nelle fasce attuali.</p>
+        )
       ) : (
         <>
           <div style={styles.tabRow} role="tablist" aria-label="Fasce orarie">
             {slotTabs.map((slot) => {
-              const pend = (tasksBySlot[slot] || []).filter((t) => !t.done).length
-              const nPiatti = (ordersBySlot[slot] || []).length
+              const pendQty = (aggregatedBySlot[slot] || []).reduce(
+                (s, a) => s + Math.max(0, (a.count || 0) - (a.doneCount || 0)),
+                0,
+              )
               const isActive = slot === activeSlot
-              const compositionOpen = compositionSlot === slot
               return (
                 <button
                   key={slot}
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  aria-expanded={compositionOpen}
-                  title={
-                    compositionOpen
-                      ? "Nascondi dettaglio ordini"
-                      : "Mostra composizione piatti e ordini"
-                  }
                   style={{
                     ...styles.tabBtn,
                     ...(isActive ? styles.tabBtnActive : {}),
-                    ...(compositionOpen ? styles.tabBtnCompositionOpen : {}),
                   }}
-                  onClick={() => handleSlotTabClick(slot)}
+                  onClick={() => setActiveSlot(slot)}
                 >
                   {slotTabLabel(slot)}
-                  {pend > 0 ? <span style={styles.tabBadgePrep}>{pend}</span> : null}
-                  {nPiatti > 0 ? <span style={styles.tabBadgeForno}>{nPiatti}</span> : null}
+                  {pendQty > 0 ? <span style={styles.tabBadgePrep}>{pendQty}</span> : null}
                 </button>
               )
             })}
           </div>
 
-          {pendingInTab.length > 0 || doneInTab.length > 0 ? (
+          {activeSlot ? (
             <section style={styles.prepSection} aria-label="Preparazioni cucina">
               {!quad ? <h2 style={styles.sectionTitle}>Da preparare</h2> : null}
-              <div style={styles.taskList}>
-                {pendingInTab.map((t) => {
-                  const key = `${t.ordineId}:${t.rigaId}:${t.ingredienteId}`
-                  const busy = prepActionId === key
-                  const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
-                  const isVoceProdotto = t.kind === "prodotto"
-                  const prepBg = resolvePrepTaskBackgroundColor(t, prepCategoryColors)
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      style={{
-                        ...styles.taskBtn,
-                      background: prepBg,
-                      borderColor: "#d1d5db",
-                    }}
-                    disabled={busy}
-                    onClick={() => handleMarkPrepDone(t)}
-                  >
-                    <span style={styles.taskMain}>
-                      <strong>{t.ingredienteNome}</strong>
-                      {t.qty > 1 ? <span style={styles.qtyBadge}>×{t.qty}</span> : null}
-                    </span>
-                    <span style={styles.taskSub}>
-                      {isVoceProdotto ? "Voce da preparare (fritto / bibita / dolce)" : `Per: ${titoloProdotto}`}
-                    </span>
-                    <span style={styles.taskAction}>{busy ? "Salvo…" : "Tocca quando pronto"}</span>
-                  </button>
+              {pendingInTab.length === 0 && doneInTab.length === 0 ? (
+                quad ? null : (
+                  <p style={styles.mutedSmall}>Nessuna preparazione speciale in questa fascia.</p>
                 )
-              })}
-              {doneInTab.length > 0 ? (
-                <div style={styles.doneBlock}>
-                  <span style={styles.doneLabel}>Preparazioni completate (questa fascia)</span>
-                  {doneInTab.map((t) => {
-                    const titoloProdotto = t.formatoNome ? `${t.prodottoNome} (${t.formatoNome})` : t.prodottoNome
-                    const isVoceProdotto = t.kind === "prodotto"
+              ) : (
+                <div style={styles.taskList}>
+                  {pendingInTab.map((a) => {
+                    const remaining = Math.max(0, (a.count || 0) - (a.doneCount || 0))
+                    const busy = prepActionKey === a.pickKey
+                    const prepBg = resolvePrepTaskBackgroundColor(
+                      {
+                        ingredienteCategoria: a.categoria,
+                        ingredienteColore: a.colore,
+                        kind: a.kind,
+                      },
+                      prepCategoryColors,
+                    )
                     return (
-                      <div key={`d-${t.ordineId}:${t.rigaId}:${t.ingredienteId}`} style={styles.doneRow}>
-                        <span style={styles.doneStrike}>
-                          {t.ingredienteNome}
-                          {t.qty > 1 ? ` ×${t.qty}` : ""}
+                      <button
+                        key={a.pickKey}
+                        type="button"
+                        style={{
+                          ...styles.taskBtn,
+                          background: prepBg,
+                          border: "1px solid #d1d5db",
+                        }}
+                        disabled={busy}
+                        onClick={() => handleMarkAggregatedDone(a)}
+                      >
+                        <span style={styles.taskMain}>
+                          <strong>{a.label}</strong>
+                          <span style={styles.qtyBadge}>×{remaining}</span>
+                          {a.categoria ? (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                background: prepBg,
+                                border: "1px solid rgba(0,0,0,0.12)",
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {a.categoria}
+                            </span>
+                          ) : null}
                         </span>
-                        <span style={styles.doneMeta}>
-                          {isVoceProdotto ? "Voce prodotto" : titoloProdotto}
-                        </span>
-                      </div>
+                        <span style={styles.taskAction}>{busy ? "Salvo…" : "Tocca quando pronto"}</span>
+                      </button>
                     )
                   })}
-                </div>
-              ) : null}
-            </div>
-          </section>
-          ) : null}
-
-          {compositionSlot ? (
-          <section style={styles.fornoSection} aria-label="Composizione in forno">
-            {!quad ? <h2 style={styles.sectionTitle}>In forno</h2> : null}
-            {(ordersBySlot[compositionSlot] || []).length === 0 ? (
-              quad ? null : <p style={styles.mutedSmall}>Nessun ordine in questa fascia.</p>
-            ) : (
-              <div style={styles.fornoStack}>
-                {(ordersBySlot[compositionSlot] || []).map((ord) => {
-                  const urg =
-                    (ord.tipo_ordine || "").toLowerCase() === "delivery" &&
-                    isDeliveryUrgentForno(ord, parametri, partenzaConsegneMinuti)
-                  const tipoEtichetta =
-                    (ord.tipo_ordine || "").toLowerCase() === "delivery" ? "Consegna" : "Ritiro negozio"
-                  const orario = ord.orario_ritiro ?? ord.orarioRitiro ?? "—"
-                  const righe = righeByOrdineId[ord.id] || []
-                  return (
-                    <div
-                      key={ord.id}
-                      style={{
-                        ...styles.fornoCard,
-                        ...(urg ? styles.fornoCardUrg : {}),
-                      }}
-                    >
-                      {urg ? (
-                        <div style={styles.urgBanner} role="status">
-                          FORNO URGENTE — consegna in finestra critica
+                  {doneInTab.length > 0 ? (
+                    <div style={styles.doneBlock}>
+                      <span style={styles.doneLabel}>Completate (questa fascia)</span>
+                      {doneInTab.map((a) => (
+                        <div key={`d-${a.pickKey}`} style={styles.doneRow}>
+                          <span style={styles.doneStrike}>
+                            {a.label} ×{a.count}
+                          </span>
                         </div>
-                      ) : null}
-                      <div style={styles.fornoMetaRow}>
-                        <span style={styles.fornoOrario}>{orario}</span>
-                        <span style={styles.fornoTipo}>{tipoEtichetta}</span>
-                      </div>
-                      {ord.note ? <p style={styles.fornoNote}>Nota cucina: {ord.note}</p> : null}
-                      <CucinaRigheComposizione
-                        righe={righe}
-                        productNames={productNames}
-                        ingredientsByProduct={ingredientsByProduct}
-                      />
-                      <div style={styles.fornoActions}>
-                        <button
-                          type="button"
-                          style={styles.btnPronto}
-                          disabled={actionLoading}
-                          onClick={() => markAsPronto(ord.id)}
-                        >
-                          {actionLoading ? "Salvo…" : "Fine cucina → PRONTO"}
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.btnScheda}
-                          disabled={actionLoading}
-                          onClick={() => openDetail(ord.id)}
-                        >
-                          Scheda tecnica
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </section>
+                  ) : null}
+                </div>
+              )}
+            </section>
           ) : null}
         </>
-      )}
-
-      {(detailOrder || detailLoading) && (
-        <OrderDetailModal
-          order={detailOrder}
-          loading={detailLoading}
-          onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
-          actionLabel={actionLoading ? "Salvataggio..." : "Segna come pronto"}
-          onAction={markAsPronto}
-          actionDisabled={actionLoading || cortesiaBusy}
-          showPrintCortesia={showPrintCortesia}
-          printCortesiaBusy={cortesiaBusy}
-          onPrintCortesia={() => {
-            if (!detailOrder || cortesiaBusy) return
-            setCortesiaBusy(true)
-            try {
-              printRicevutaCortesiaFromDetail(detailOrder, tenantData)
-            } finally {
-              setCortesiaBusy(false)
-            }
-          }}
-        />
       )}
     </div>
   )
@@ -519,141 +335,53 @@ const styles = {
     border: "1px solid #90a4ae",
     background: "#fff",
     cursor: "pointer",
+    fontSize: 14,
     fontWeight: 600,
-    fontSize: 13,
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
   },
-  tabBtnActive: {
-    background: "#37474f",
-    color: "#fff",
-    borderColor: "#37474f",
-  },
-  /** Fascia con dettaglio ordini aperto (oltre alla selezione per le preparazioni). */
-  tabBtnCompositionOpen: {
-    boxShadow: "0 0 0 2px #ff7043",
-  },
-  tabHint: {
-    margin: "0 0 14px",
-    fontSize: 12,
-    color: "#546e7a",
-    lineHeight: 1.45,
-  },
+  tabBtnActive: { background: "#455a64", color: "#fff", border: "1px solid #455a64" },
   tabBadgePrep: {
-    fontSize: 11,
-    background: "#ff7043",
+    minWidth: 20,
+    height: 20,
+    padding: "0 6px",
+    borderRadius: 999,
+    background: "#ef6c00",
     color: "#fff",
-    padding: "2px 7px",
-    borderRadius: 10,
-    fontWeight: 700,
-  },
-  tabBadgeForno: {
-    fontSize: 11,
-    background: "#78909c",
-    color: "#fff",
-    padding: "2px 7px",
-    borderRadius: 10,
-    fontWeight: 700,
-  },
-  prepSection: {
-    marginBottom: 20,
-    padding: 14,
-    background: "#f1f8e9",
-    border: "1px solid #c5e1a5",
-    borderRadius: 10,
-  },
-  prepHint: { margin: "0 0 12px", fontSize: 13, color: "#33691e", lineHeight: 1.4 },
-  prepLegend: { margin: "0 0 12px", fontSize: 12, color: "#475569", lineHeight: 1.5 },
-  fornoSection: {
-    marginBottom: 20,
-    padding: 14,
-    background: "#eceff1",
-    border: "1px solid #b0bec5",
-    borderRadius: 10,
-  },
-  fornoHint: { margin: "0 0 12px", fontSize: 13, color: "#455a64", lineHeight: 1.4 },
-  fornoStack: { display: "flex", flexDirection: "column", gap: 14 },
-  fornoCard: {
-    padding: 12,
-    background: "#fff",
-    borderRadius: 8,
-    border: "1px solid #cfd8dc",
-  },
-  fornoCardUrg: {
-    border: "2px solid #e65100",
-    boxShadow: "0 0 0 1px rgba(230,81,0,0.25)",
-  },
-  urgBanner: {
     fontSize: 12,
-    fontWeight: 800,
-    color: "#bf360c",
-    background: "#ffe0b2",
-    padding: "6px 8px",
-    borderRadius: 6,
-    marginBottom: 8,
-  },
-  fornoMetaRow: { display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 10, marginBottom: 8 },
-  fornoOrario: { fontSize: 20, fontWeight: 800, color: "#1a237e" },
-  fornoTipo: { fontSize: 13, fontWeight: 600, color: "#546e7a" },
-  fornoNote: { fontSize: 13, fontStyle: "italic", color: "#555", margin: "0 0 10px" },
-  fornoActions: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" },
-  btnPronto: {
-    padding: "10px 16px",
-    background: "#2e7d32",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
     fontWeight: 700,
-    fontSize: 14,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  btnScheda: {
-    padding: "8px 12px",
-    background: "#fff",
-    color: "#455a64",
-    border: "1px solid #b0bec5",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 13,
-  },
+  prepSection: { marginBottom: 20 },
   taskList: { display: "flex", flexDirection: "column", gap: 8 },
   taskBtn: {
-    textAlign: "left",
-    padding: 12,
-    borderRadius: 8,
-    border: "1px solid #dce775",
-    background: "#fff",
-    cursor: "pointer",
     display: "flex",
     flexDirection: "column",
+    alignItems: "flex-start",
     gap: 4,
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    cursor: "pointer",
+    textAlign: "left",
+    width: "100%",
+    boxSizing: "border-box",
   },
-  taskMain: { fontSize: 15, display: "flex", alignItems: "center", gap: 8 },
+  taskMain: { display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 4, fontSize: 16 },
   qtyBadge: {
-    fontSize: 12,
-    fontWeight: 700,
-    background: "#e8f5e9",
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: 800,
+    background: "rgba(0,0,0,0.08)",
     padding: "2px 8px",
     borderRadius: 6,
   },
-  taskSub: { fontSize: 12, color: "#555" },
-  taskAction: { fontSize: 11, color: "#2e7d32", fontWeight: 600 },
-  doneBlock: { marginTop: 10, paddingTop: 10, borderTop: "1px dashed #aed581" },
-  doneLabel: { fontSize: 12, color: "#689f38", fontWeight: 600, display: "block", marginBottom: 6 },
-  doneRow: { fontSize: 13, marginBottom: 4, display: "flex", flexDirection: "column" },
-  doneStrike: { textDecoration: "line-through", color: "#757575" },
-  doneMeta: { fontSize: 11, color: "#9e9e9e" },
-}
-
-const fornoStyles = {
-  righeWrap: { marginTop: 4 },
-  mutedRighe: { fontSize: 13, color: "#888", margin: 0 },
-  rigaRow: { marginBottom: 10, paddingBottom: 8, borderBottom: "1px dashed #e0e0e0" },
-  rigaTop: { display: "flex", alignItems: "baseline", gap: 8 },
-  rigaQty: { fontSize: 14, color: "#555", minWidth: 36, fontWeight: 700 },
-  rigaNome: { fontSize: 16, fontWeight: 700, color: "#212121" },
-  rigaIngredienti: { display: "block", fontSize: 13, color: "#424242", marginTop: 4, lineHeight: 1.45 },
-  ingBold: { fontWeight: 700 },
-  ingNormal: { fontWeight: 400 },
+  taskAction: { fontSize: 12, fontWeight: 700, color: "#2e7d32", marginTop: 2 },
+  doneBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed #cfd8dc" },
+  doneLabel: { display: "block", fontSize: 12, color: "#78909c", marginBottom: 6, fontWeight: 600 },
+  doneRow: { display: "flex", gap: 8, fontSize: 13, color: "#78909c", marginBottom: 4 },
+  doneStrike: { textDecoration: "line-through" },
 }

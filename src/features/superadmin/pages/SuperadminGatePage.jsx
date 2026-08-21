@@ -1,20 +1,26 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Store, LayoutDashboard, LogOut, Presentation } from "lucide-react"
+import { Store, LayoutDashboard, LogOut, Presentation, UserRound } from "lucide-react"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { getTenants } from "@/features/superadmin/services/superadminService"
 import { setSupportTenantOverride, withSupportTenantQuery } from "@/utils/supportTenantOverride"
-import { DEMO_GIRO_STEPS, withDemoGiroQuery } from "@/utils/demoGiro"
+import { withDemoGiroQuery, setDemoGiroSessionActive, clearDemoGiroSession } from "@/utils/demoGiro"
+import { openDemoClienteArea } from "@/utils/demoClienteSession"
 import "@/styles/superadmin-gate.css"
 
+/** Hub iniziale demo: panoramica reparti + admin tenant. */
+const DEMO_START_PATH = "/operative/dashboard"
+const DEMO_CLIENTE_PATH = "/preview"
+
 /**
- * Ingresso privacy Super Admin: vetrina / console / giro demo (senza altri login).
+ * Pagina post-login Super Admin: tre destinazioni — Amministrazione | Vetrina | Area demo.
  */
 export default function SuperadminGatePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [demoStarting, setDemoStarting] = useState(false)
   const [previewStarting, setPreviewStarting] = useState(false)
+  const [clienteStarting, setClienteStarting] = useState(false)
   const [demoError, setDemoError] = useState(null)
 
   const handleLogout = async () => {
@@ -39,18 +45,20 @@ export default function SuperadminGatePage() {
     }
   }
 
+  const busy = demoStarting || previewStarting || clienteStarting
+
   const startDemoGiro = async () => {
     setDemoError(null)
     setDemoStarting(true)
     try {
       const tenantId = await resolveDemoTenantId()
       if (!tenantId) {
-        setDemoError("Nessun tenant disponibile per la demo. Imposta VITE_PUBLIC_DEMO_TENANT_ID o crea un cliente attivo.")
+        setDemoError("Nessun locale di prova disponibile. Contatta chi gestisce la piattaforma.")
         return
       }
       applySupportTenant(tenantId)
-      const first = DEMO_GIRO_STEPS[0]
-      navigate(withDemoGiroQuery(first.path, tenantId, { stepIndex: 0 }))
+      setDemoGiroSessionActive(true)
+      navigate(withDemoGiroQuery(DEMO_START_PATH, tenantId, { stepIndex: 0 }))
     } catch (e) {
       setDemoError(e?.message || "Avvio demo non riuscito.")
     } finally {
@@ -64,15 +72,39 @@ export default function SuperadminGatePage() {
     try {
       const tenantId = await resolveDemoTenantId()
       if (!tenantId) {
-        setDemoError("Nessun tenant disponibile per la vetrina. Imposta VITE_PUBLIC_DEMO_TENANT_ID o crea un cliente attivo.")
+        setDemoError("Nessun locale di prova disponibile. Contatta chi gestisce la piattaforma.")
         return
       }
       applySupportTenant(tenantId)
+      clearDemoGiroSession()
       navigate(withSupportTenantQuery("/preview", tenantId))
     } catch (e) {
       setDemoError(e?.message || "Apertura vetrina non riuscita.")
     } finally {
       setPreviewStarting(false)
+    }
+  }
+
+  const startAreaCliente = async () => {
+    setDemoError(null)
+    setClienteStarting(true)
+    try {
+      const tenantId = await resolveDemoTenantId()
+      if (!tenantId) {
+        setDemoError("Nessun locale di prova disponibile. Contatta chi gestisce la piattaforma.")
+        return
+      }
+      applySupportTenant(tenantId)
+      setDemoGiroSessionActive(true)
+      const login = await openDemoClienteArea(tenantId, DEMO_CLIENTE_PATH)
+      if (!login.ok) {
+        setDemoError(login.error)
+        return
+      }
+    } catch (e) {
+      setDemoError(e?.message || "Apertura area cliente non riuscita.")
+    } finally {
+      setClienteStarting(false)
     }
   }
 
@@ -98,62 +130,74 @@ export default function SuperadminGatePage() {
         <p className="sa-gate-kicker">Accesso riservato</p>
         <h1 className="sa-gate-title">Dove vuoi andare?</h1>
         <p className="sa-gate-lede">
-          Resta loggato come Super Admin. In Demo live hai accesso a <strong>tutti i reparti</strong> e alle potenzialità
-          del locale (cassa, cucina, menu admin, parametri, stampanti USB/IP): usa la sidebar e «4 schermate», senza altri
-          login.
+          Tre destinazioni. Resta loggato come Super Admin: non serve rifare l’accesso.
         </p>
 
         {demoError ? (
-          <p role="alert" style={{ color: "#b91c1c", marginBottom: 16, fontSize: 14 }}>
+          <p role="alert" className="sa-gate-error">
             {demoError}
           </p>
         ) : null}
 
-        <div className="sa-gate-cards">
-          <button
-            type="button"
-            className="sa-gate-card sa-gate-card--preview"
-            disabled={demoStarting || previewStarting}
-            onClick={() => void startDemoGiro()}
-            style={{ cursor: demoStarting ? "wait" : "pointer", textAlign: "left", width: "100%", font: "inherit" }}
-          >
+        <div className="sa-gate-triptych" role="navigation" aria-label="Destinazioni Super Admin">
+          {/* SINISTRA — Amministrazione */}
+          <Link to="/superadmin/dashboard" className="sa-gate-card sa-gate-card--admin sa-gate-card--tri">
             <span className="sa-gate-icon" aria-hidden>
-              <Presentation size={40} strokeWidth={1.75} />
+              <LayoutDashboard size={40} strokeWidth={1.75} />
             </span>
-            <span className="sa-gate-card-label">
-              {demoStarting ? "Avvio demo…" : "Demo live"}
-            </span>
+            <span className="sa-gate-card-label">Amministrazione</span>
             <span className="sa-gate-card-desc">
-              Tutti i reparti operativi, Admin locale, Area cliente, stampanti USB/IP e «4 schermate» — accesso pieno
-              Super Admin sul tenant demo.
+              Console piattaforma: clienti, piani, go-live, documentazione e Chek-Sviluppi.
             </span>
-          </button>
+          </Link>
 
+          {/* CENTRO — Vetrina */}
           <button
             type="button"
-            className="sa-gate-card sa-gate-card--preview"
-            disabled={demoStarting || previewStarting}
+            className="sa-gate-card sa-gate-card--preview sa-gate-card--tri"
+            disabled={busy}
             onClick={() => void startSoloVetrina()}
-            style={{ cursor: previewStarting ? "wait" : "pointer", textAlign: "left", width: "100%", font: "inherit" }}
           >
             <span className="sa-gate-icon" aria-hidden>
               <Store size={40} strokeWidth={1.75} />
             </span>
             <span className="sa-gate-card-label">
-              {previewStarting ? "Apertura vetrina…" : "Solo vetrina"}
+              {previewStarting ? "Apertura vetrina…" : "Vetrina"}
             </span>
             <span className="sa-gate-card-desc">
-              Menù online del tenant demo. Da lì «Admin» / Accedi ti porta subito in amministrazione locale.
+              Menù online del locale di prova, come lo vede chi visita il sito (senza entrare come cliente).
             </span>
           </button>
 
-          <Link to="/superadmin/dashboard" className="sa-gate-card sa-gate-card--admin">
+          {/* DESTRA — Area demo */}
+          <div className="sa-gate-card sa-gate-card--demo-wrap sa-gate-card--tri">
             <span className="sa-gate-icon" aria-hidden>
-              <LayoutDashboard size={40} strokeWidth={1.75} />
+              <Presentation size={40} strokeWidth={1.75} />
             </span>
-            <span className="sa-gate-card-label">Amministrazione</span>
-            <span className="sa-gate-card-desc">Console piattaforma, clienti e Sala QA</span>
-          </Link>
+            <span className="sa-gate-card-label">Area demo</span>
+            <span className="sa-gate-card-desc">
+              Giro operativo sul locale di prova (cassa, forno, cucina…) e, se serve, entrata come Cliente Test.
+            </span>
+            <div className="sa-gate-demo-actions">
+              <button
+                type="button"
+                className="sa-gate-demo-btn sa-gate-demo-btn--primary"
+                disabled={busy}
+                onClick={() => void startDemoGiro()}
+              >
+                {demoStarting ? "Avvio…" : "Apri demo reparti"}
+              </button>
+              <button
+                type="button"
+                className="sa-gate-demo-btn"
+                disabled={busy}
+                onClick={() => void startAreaCliente()}
+              >
+                <UserRound size={16} strokeWidth={2.25} aria-hidden />
+                {clienteStarting ? "Accesso…" : "Entra come Cliente Test"}
+              </button>
+            </div>
+          </div>
         </div>
       </main>
     </div>

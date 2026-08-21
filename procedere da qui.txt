@@ -1,66 +1,22 @@
 ================================================================================
-PROCEDERE DA QUI — stato operativo (aggiornato 2026-08-02)
+PROCEDERE DA QUI — stato operativo (aggiornato 2026-08-20 sera)
 Dominio: https://pizzamanager.it — tutto multi-tenant.
-Programma completo: docs/PROGRAMMA_AFFIDABILITA.md
+Priorità: docs/punto-situazione/11_priorita_operative.md
 ================================================================================
 
-COME LAVORARE
-- Una feature alla volta (agenti product → … → security → supervisor).
-- SQL: sql/modules/NN_*.sql → sql_upgrade → npm run sql:apply → copia in
-  supabase/migrations/YYYYMMDDHHMMSS_*.sql
-- Deploy SPA: npm run deploy:full:ci | Backend: solo server/pizzeria-backend (Nest)
-- Express: server/legacy-express/ = NON SUPPORTATO
+LOCALE
+- Dev: npm run dev → http://localhost:5173/
 
---------------------------------------------------------------------------------
-FASE A — FONDAMENTA (IN CORSO) — fatto oggi
---------------------------------------------------------------------------------
-[x] Presence: tenant solo da identità (moduli 26/30) applicati sul DB remoto
-[x] SECURITY DEFINER: SET search_path batch (modulo 31) + verify notices (32)
-[x] Nest hardening: Helmet, CORS prod, Swagger opt-in, Throttler (+ login/public)
-[x] Express archiviato; supabase/.temp fuori dal tracking
-[x] Migrazioni versionate avviate (supabase/migrations 29–31)
-[x] Matrice ruoli×tenant: sql/scripts/matrice_ruoli_tenant_azioni.sql
-[x] npm audit frontend: high risolte (restano 2 moderate react-router → upgrade v7
-    pianificato, no --force in questo ciclo)
-[ ] npm audit Nest: completare audit fix controllato + regressione build
-[ ] CI RLS con JWT tenant A/B (automatico)
-[ ] Backup/restore staging documentato e provato
-[ ] Gate deploy: schema compatibile con codice (checklist in PROGRAMMA_AFFIDABILITA)
+FATTO OGGI (sera)
+[x] Planning consegne su Delivery (griglia 5 colonne × fasce orari)
+[x] Paga online (ex Link) + pagamenti ordine online Contanti/Carta/Paga online se attivi in Admin → Parametri
+[x] Turno cassa bloccante solo se cassa_turno_obbligatorio = true (Admin)
+[x] SQL 51: whitelist parametri pagamenti in vetrina
 
---------------------------------------------------------------------------------
-FASE B — DATI (prossimo dopo chiusura A)
---------------------------------------------------------------------------------
-- Uscire da localStorage per: magazzino, contabilità, bozze cassa condivise, HR
-- Audit log accessi/supporto SA; classificazione dati
+PROSSIMO
+[ ] Commit + push (su richiesta)
+[ ] Smoke CL-10 / OW-05 carta test su produzione
+[ ] Go-live Francy: Stripe live + DNS
+[ ] npm run sql:apply -- sql/modules/51_public_parametri_pagamenti_ordine_online.sql (se non già applicato)
 
---------------------------------------------------------------------------------
-FASE C — OPERATIVO PREMIUM
---------------------------------------------------------------------------------
-- Split CassaPage / adminService
-- E2E cassa/cucina/bancone/delivery; planning capacità reale
-- Slot orari riepilogo con carico pizze prenotate (critico prodotto)
-
---------------------------------------------------------------------------------
-FASE D — SCALA
---------------------------------------------------------------------------------
-- Release train, observability, feature flag per tenant, KPI
-
---------------------------------------------------------------------------------
-BACKLOG PRODOTTO RESIDUO (non blocca Fase A, ma resta aperto)
---------------------------------------------------------------------------------
-CASSA: slot capacità; domicilio↔ritiro; planning click→riepilogo; merge cliente online
-ADMIN: dipendenti+documenti; food cost mismatch; favicon da logo; copy area consegna
-OPERATIVO: ingressi reparto minimali; cucina↔bancone colori/stato DB; delivery atomico
-UX: zero gergo tecnico su admin/cliente; a11y tooling
-
---------------------------------------------------------------------------------
-SQL MODULI RECENTI (remoto)
---------------------------------------------------------------------------------
-29 go_live_checklist | 30 presence bind | 31 search_path | 32 verify notices
-Smoke: sql/scripts/smoke_rls_cross_tenant.sql
-Presence asserts: sql/tests/30_support_presence_asserts.sql
-search_path check: sql/scripts/verify_security_definer_search_path.sql
-
-================================================================================
-FINE — ad ogni ciclo: sposta in [x], aggiorna docs/PROGRAMMA_AFFIDABILITA.md
 ================================================================================

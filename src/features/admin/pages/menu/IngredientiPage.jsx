@@ -14,6 +14,13 @@ import {
   recalculateAllPizzaPrices,
 } from "@/features/admin/services/adminService";
 import { formatPrice } from "@/utils/format";
+import {
+  INGREDIENTE_CATEGORIA_OPTIONS,
+  INGREDIENTE_CATEGORIA_DEFAULT_COLOR,
+  normalizeIngredienteCategoria,
+  resolveIngredienteCategoriaForSelect,
+  labelIngredienteCategoria,
+} from "@/constants/ingredienteCategoria";
 
 /** Ordine colonne allergeni per Formato B (foglio con spunte). Deve coincidere con GUIDA_CSV_INGREDIENTI.md */
 const ALLERGENE_COLUMN_NAMES = [
@@ -23,6 +30,47 @@ const ALLERGENE_COLUMN_NAMES = [
 
 /** Regola ordine uscita: 0–99 = in cottura, 100+ = a fine cottura. Stesso ordine = stessi passaggi. */
 const ORDINE_USCITA_RULE = "Ordine 0–99 = in cottura, da 100 in poi = a fine cottura. Più ingredienti possono avere lo stesso ordine.";
+
+/** Ordine 0–99 (o assente) → in cottura; da 100 → a fine cottura. */
+function isOrdineInCottura(ordine) {
+  const n = Number(ordine);
+  if (!Number.isFinite(n)) return true;
+  return n < 100;
+}
+
+function normalizeHexColor(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  const withHash = s.startsWith("#") ? s : `#${s}`;
+  if (/^#[0-9a-fA-F]{6}$/.test(withHash)) return withHash.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(withHash)) {
+    const h = withHash.slice(1);
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`.toLowerCase();
+  }
+  return "";
+}
+
+function textColorOnBackground(hex) {
+  const h = normalizeHexColor(hex);
+  if (!h) return "#1e293b";
+  const r = parseInt(h.slice(1, 3), 16);
+  const g = parseInt(h.slice(3, 5), 16);
+  const b = parseInt(h.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.65 ? "#1e293b" : "#ffffff";
+}
+
+const LIST_BADGE_BASE = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "2px 10px",
+  borderRadius: 6,
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
+  border: "1px solid rgba(15, 23, 42, 0.1)",
+  whiteSpace: "nowrap",
+};
 
 function isAllergenChecked(val) {
   const v = (val ?? "").toString().trim().toLowerCase();
@@ -45,6 +93,101 @@ function parseCsvAttivoCell(val) {
   if (raw === "") return undefined;
   if (raw === "0" || raw === "no" || raw === "false" || raw === "off") return false;
   return isAllergenChecked(val);
+}
+
+/** Select + chip per tipo cucina (affettato, fritto, …). */
+function IngredienteCategoriaPicker({ value, onChange, onSuggestColor }) {
+  const selectValue = resolveIngredienteCategoriaForSelect(value);
+  const isKnown = INGREDIENTE_CATEGORIA_OPTIONS.some((o) => o.value === selectValue);
+  const legacy = selectValue && !isKnown ? selectValue : "";
+
+  function pick(next) {
+    const v = next || "";
+    onChange(v);
+    if (v && onSuggestColor) {
+      const hex = INGREDIENTE_CATEGORIA_DEFAULT_COLOR[v];
+      if (hex) onSuggestColor(hex);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        <button
+          type="button"
+          className={!selectValue ? "btn-primary-dashboard" : undefined}
+          onClick={() => pick("")}
+          style={
+            !selectValue
+              ? { padding: "6px 10px", fontSize: 12 }
+              : {
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  color: "#64748b",
+                  cursor: "pointer",
+                }
+          }
+        >
+          Nessuna
+        </button>
+        {INGREDIENTE_CATEGORIA_OPTIONS.map((o) => {
+          const active = selectValue === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => pick(o.value)}
+              className={active ? "btn-primary-dashboard" : undefined}
+              style={
+                active
+                  ? { padding: "6px 10px", fontSize: 12 }
+                  : {
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      background: "#fff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 8,
+                      color: "#334155",
+                      cursor: "pointer",
+                    }
+              }
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <select
+        className="dashboard-search-input"
+        value={isKnown ? selectValue : legacy ? "__legacy__" : ""}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__legacy__") return;
+          pick(v);
+        }}
+        aria-label="Tipo ingrediente"
+        style={{ maxWidth: 280 }}
+      >
+        <option value="">— Seleziona tipo —</option>
+        {INGREDIENTE_CATEGORIA_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+        {legacy ? (
+          <option value="__legacy__" disabled>
+            Altro (vecchio): {legacy}
+          </option>
+        ) : null}
+      </select>
+      <span style={{ fontSize: 11, color: "#64748b" }}>
+        Valori CSV: affettato, fritto, dolce, bibita, congelato
+      </span>
+    </div>
+  );
 }
 
 export default function IngredientiPage() {
@@ -140,7 +283,10 @@ export default function IngredientiPage() {
     if (newCostoPoco !== "") payload.costoPoco = Number(newCostoPoco);
     if (newVaInCottura) payload.vaInCottura = true;
     if (newPrepCucina) payload.prepCucina = true;
-    if (newCategoria.trim()) payload.categoria = newCategoria.trim();
+    {
+      const cat = normalizeIngredienteCategoria(newCategoria);
+      if (cat) payload.categoria = cat;
+    }
     if (newColore.trim()) payload.colore = newColore.trim();
     if (newOrdine !== "" && !Number.isNaN(Number(newOrdine))) payload.ordine = Number(newOrdine);
     try {
@@ -215,7 +361,7 @@ export default function IngredientiPage() {
     setEditCostoPoco(String(ing.costoPoco ?? ing.costo_poco ?? ""));
     setEditVaInCottura(ing.vaInCottura === true || ing.va_in_cottura === true);
     setEditPrepCucina(ing.prepCucina === true || ing.prep_cucina === true);
-    setEditCategoria(ing.categoria != null ? String(ing.categoria) : "");
+    setEditCategoria(resolveIngredienteCategoriaForSelect(ing.categoria));
     setEditColore(ing.colore != null ? String(ing.colore) : "");
     setEditOrdine(ing.ordine !== undefined && ing.ordine !== null ? String(ing.ordine) : "");
     setEditAllergeni(allergeniMap[ing.id] ? [...allergeniMap[ing.id]] : []);
@@ -237,7 +383,7 @@ export default function IngredientiPage() {
         attivo: editAttivo,
         prepCucina: editPrepCucina,
         vaInCottura: editVaInCottura,
-        categoria: editCategoria.trim() || null,
+        categoria: normalizeIngredienteCategoria(editCategoria) || null,
         colore: editColore.trim() || null,
       };
       if (editOrdine !== "" && !Number.isNaN(Number(editOrdine))) updates.ordine = Number(editOrdine);
@@ -327,7 +473,6 @@ export default function IngredientiPage() {
       "prep_cucina",
       ...allergenCols,
       "categoria",
-      "colore",
       "attivo",
     ].join(sep);
     const rows = ingredients.map((ing) => {
@@ -344,10 +489,9 @@ export default function IngredientiPage() {
         const a = allergeni.find((x) => (x.nome || "").trim() === colNome && ids.includes(x.id));
         return a ? "1" : "";
       });
-      const cat = String(ing.categoria ?? "").replace(/"/g, '""').trim();
-      const colr = String(ing.colore ?? "").replace(/"/g, '""').trim();
+      const cat = normalizeIngredienteCategoria(ing.categoria);
       const att = ing.attivo === false ? "0" : "1";
-      return [nome, ordine, costo, abb, senza, poco, vaInCottura, prepCucina, ...allergenCells, cat, colr, att].join(sep);
+      return [nome, ordine, costo, abb, senza, poco, vaInCottura, prepCucina, ...allergenCells, cat, att].join(sep);
     });
     const csv = [header, ...rows].join("\r\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -389,7 +533,6 @@ export default function IngredientiPage() {
       const formatoB = isFormatoB(headerParts);
       const prepIdx = prepCucinaHeaderIndex(headerParts);
       const catI = headerColIndex(headerParts, "categoria");
-      const colI = headerColIndex(headerParts, "colore");
       const attI = headerColIndex(headerParts, "attivo");
       const allergenNameToId = {};
       allergeni.forEach((a) => {
@@ -411,9 +554,12 @@ export default function IngredientiPage() {
 
       let created = 0;
       let updated = 0;
-      for (const row of dataRows) {
+
+      /** Elabora una riga: crea o aggiorna l'ingrediente + allergeni. Righe indipendenti tra
+       * loro, quindi si possono processare in parallelo (a lotti) invece che una alla volta. */
+      async function processRow(row) {
         const nome = (row[0] || "").trim();
-        if (!nome) continue;
+        if (!nome) return null;
         const nomeKey = nome.toLowerCase();
         const ordineVal = row[1] !== "" && row[1] !== undefined ? Number(String(row[1]).replace(",", ".")) : undefined;
         const costo = Number(String(row[2]).replace(",", ".")) || 0;
@@ -431,12 +577,14 @@ export default function IngredientiPage() {
         if (prepCucina) payload.prepCucina = true;
         if (ordineVal !== undefined && !Number.isNaN(ordineVal)) payload.ordine = ordineVal;
         if (catI >= 0 && catI < row.length) {
-          const v = (row[catI] ?? "").trim();
-          if (v) payload.categoria = v;
-        }
-        if (colI >= 0 && colI < row.length) {
-          const v = (row[colI] ?? "").trim();
-          if (v) payload.colore = v;
+          const v = normalizeIngredienteCategoria(row[catI]);
+          if (v) {
+            payload.categoria = v;
+            // Colore non è più una colonna CSV: si deriva sempre dalla categoria (nuovo
+            // ingrediente, quindi nessun colore esistente da preservare/sovrascrivere).
+            const defaultHex = INGREDIENTE_CATEGORIA_DEFAULT_COLOR[v];
+            if (defaultHex) payload.colore = defaultHex;
+          }
         }
         if (attI >= 0 && attI < row.length) {
           const attParsed = parseCsvAttivoCell(row[attI]);
@@ -476,12 +624,11 @@ export default function IngredientiPage() {
             updates.prepCucina = prepCucina;
             if (ordineVal !== undefined && !Number.isNaN(ordineVal)) updates.ordine = ordineVal;
             if (catI >= 0 && catI < row.length) {
-              const v = (row[catI] ?? "").trim();
-              updates.categoria = v.length ? v : null;
-            }
-            if (colI >= 0 && colI < row.length) {
-              const v = (row[colI] ?? "").trim();
-              updates.colore = v.length ? v : null;
+              const raw = (row[catI] ?? "").trim();
+              updates.categoria = raw.length ? normalizeIngredienteCategoria(raw) || null : null;
+              // Colore non più gestito da CSV: sugli ingredienti già esistenti si lascia il
+              // colore attuale (custom o già derivato) invariato — si cambia dal form (Admin →
+              // Ingredienti), che suggerisce il colore categoria ma permette l'override.
             }
             if (attI >= 0 && attI < row.length) {
               const attParsed = parseCsvAttivoCell(row[attI]);
@@ -496,11 +643,11 @@ export default function IngredientiPage() {
             } catch {
               console.warn("Allergeni non aggiornati per", nome);
             }
-            updated++;
+            return "updated";
           } catch (err) {
             console.warn("Ingrediente non aggiornato:", nome, err?.message);
+            return null;
           }
-          continue;
         }
 
         const createPayload = { tenantId, ...payload };
@@ -513,11 +660,25 @@ export default function IngredientiPage() {
               console.warn("Allergeni non salvati per", nome);
             }
           }
-          created++;
+          return "created";
         } catch (err) {
           console.warn("Ingrediente saltato:", nome, err?.message);
+          return null;
         }
       }
+
+      // Righe indipendenti tra loro: elaborate a lotti in parallelo invece che una alla volta
+      // (prima erano N await sequenziali, quindi N × latenza di rete solo per il CSV import).
+      const CONCURRENCY = 6;
+      for (let i = 0; i < dataRows.length; i += CONCURRENCY) {
+        const batch = dataRows.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(batch.map((row) => processRow(row)));
+        for (const r of results) {
+          if (r === "created") created++;
+          else if (r === "updated") updated++;
+        }
+      }
+
       setCsvModalOpen(false);
       load();
       if (tenantId) {
@@ -577,11 +738,12 @@ export default function IngredientiPage() {
       </div>
       <p className="dashboard-menu-intro">
         Nome, prezzo unitario, costi variante (abbondante / senza / poco), <strong>va in cottura</strong> e{" "}
-        <strong>Prep. cucina</strong> (comparsa su monitor Cucina/Bancone con celle colorate). Opzionale:{" "}
-        <strong>categoria</strong> (es. congelato, affettato, fritto, bibite — per la mappa colori di default in Cucina) e{" "}
-        <strong>colore</strong> personalizzato (#rrggbb). Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.{" "}
-        <strong>Export CSV</strong> aggiunge in coda le colonne <code>categoria</code>, <code>colore</code>, <code>attivo</code> così un re-import
-        mantiene colori, categoria e stato attivo/disattivo. I colori di default per tipo (congelato, fritto, …) sulla vista Cucina si
+        <strong>Prep. cucina</strong> (comparsa su monitor Cucina/Bancone con celle colorate — non serve se hai già impostato una{" "}
+        <strong>categoria</strong>, basta quella). Opzionale: <strong>categoria</strong> (tipo: affettato, fritto, dolce, bibita, congelato — chip o
+        tendina). Il <strong>colore</strong> non si imposta a mano: segue sempre la categoria scelta (personalizzabile poi dal form
+        ingrediente, se serve). Ordine di uscita: 0–99 = in cottura, da 100 in poi = a fine cottura.{" "}
+        <strong>Export CSV</strong> aggiunge in coda le colonne <code>categoria</code>, <code>attivo</code> così un re-import
+        mantiene categoria e stato attivo/disattivo (il colore non passa da CSV). I colori di default per tipo sulla vista Cucina si
         regolano in <strong>Menu → Colori prep Cucina</strong>.
       </p>
 
@@ -679,17 +841,16 @@ export default function IngredientiPage() {
             {ORDINE_USCITA_RULE}
           </p>
           <div className="dashboard-form-row" style={{ flexWrap: "wrap", gap: 12 }}>
-            <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>Categoria (Cucina/Bancone)</span>
-              <input
-                type="text"
-                className="dashboard-search-input"
-                placeholder="es. congelato, fritto, bibite"
+            <div style={{ flex: "1 1 280px", display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Tipo (Cucina/Bancone)</span>
+              <IngredienteCategoriaPicker
                 value={editCategoria}
-                onChange={(e) => setEditCategoria(e.target.value)}
-                maxLength={80}
+                onChange={setEditCategoria}
+                onSuggestColor={(hex) => {
+                  if (!editColore.trim()) setEditColore(hex);
+                }}
               />
-            </label>
+            </div>
             <label style={{ flex: "0 1 140px", display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 13, fontWeight: 500 }}>Colore #hex</span>
               <input
@@ -754,13 +915,17 @@ export default function IngredientiPage() {
                 wordBreak: "break-word",
               }}
             >
-              nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;[allergeni];categoria;colore;attivo
+              nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;[allergeni];categoria;attivo
             </code>
             <p style={{ margin: 0, fontSize: 14, color: "#555", lineHeight: 1.35 }}>
-              <strong>prep_cucina</strong> (1/sì = preparazione in cucina, es. scongelare) e opzionale: i file senza quella colonna restano
-              validi. Nelle celle allergeni usa 1, x o sì. <strong>Ordine</strong>: 0-99 = in cottura, 100+ = a fine cottura. Prezzi con 2
-              decimali. Colonne finali opzionali <strong>categoria</strong>, <strong>colore</strong> (#hex), <strong>attivo</strong> (1/0): se
-              presenti vengono aggiornate; se assenti (file vecchi) categoria, colore e attivo non si toccano.
+              <strong>prep_cucina</strong> serve solo per ingredienti <strong>senza categoria</strong> che vanno comunque preparati
+              (es. tagliati, scongelati): se imposti una <strong>categoria</strong>, l'ingrediente compare già in automatico su
+              Cucina/Bancone, non serve anche prep_cucina. Entrambe opzionali: i file senza quelle colonne restano validi. Nelle celle
+              allergeni usa 1, x o sì. <strong>Ordine</strong>: 0-99 = in cottura, 100+ = a fine cottura. Prezzi con 2 decimali.
+              Colonna finale opzionale <strong>categoria</strong> (affettato | fritto | dolce | bibita | congelato) e{" "}
+              <strong>attivo</strong> (1/0): se presenti vengono aggiornate; se assenti (file vecchi) categoria e attivo non si
+              toccano. Il <strong>colore</strong> non è più una colonna CSV: segue sempre la categoria (personalizzabile dal form
+              ingrediente). Sinonimi accettati in import (es. <code>bibite</code>, <code>fritti</code>, <code>surgelato</code>).
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button
@@ -790,14 +955,15 @@ export default function IngredientiPage() {
                     "prep_cucina",
                     ...ALLERGENE_COLUMN_NAMES,
                     "categoria",
-                    "colore",
                     "attivo",
                   ].join(";");
                   const n = ALLERGENE_COLUMN_NAMES.length;
                   const tailAllerg = ";".repeat(n);
                   const examples = [
-                    `Pomodoro;0;0,40;0,20;-0,40;-0,15;1;0${tailAllerg};;1`,
-                    `Mozzarella;0;0,80;0,25;-0,80;-0,20;0;0${";".repeat(5)}1${";".repeat(n - 6)};;1`,
+                    `Pomodoro;0;0,40;0,20;-0,40;-0,15;1;0${tailAllerg};1`,
+                    `Mozzarella;0;0,80;0,25;-0,80;-0,20;0;0${";".repeat(5)}1${";".repeat(n - 6)};affettato;1`,
+                    `Patate surgelate;50;0,50;0,20;-0,50;-0,10;0;1${tailAllerg};congelato;1`,
+                    `Patatine fritte;80;1,20;0,40;-1,20;-0,30;0;1${tailAllerg};fritto;1`,
                   ];
                   const csv = [header, ...examples].join("\r\n");
                   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -816,8 +982,9 @@ export default function IngredientiPage() {
           <div style={{ borderTop: "1px solid #eee", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontWeight: 600 }}>Esporta CSV</span>
             <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
-              Scarica la lista ingredienti in CSV Formato B (fino agli allergeni) più in coda <strong>categoria;colore;attivo</strong> per
-              backup completo. Ordine: 0–99 in cottura, 100+ a fine cottura. Prezzi con 2 decimali.
+              Scarica la lista ingredienti in CSV Formato B (fino agli allergeni) più in coda <strong>categoria;attivo</strong> per
+              backup completo (il colore non è più tra le colonne: segue sempre la categoria). Ordine: 0–99 in cottura, 100+ a fine cottura.
+              Prezzi con 2 decimali.
             </p>
             <button type="button" className="btn-primary-dashboard" onClick={handleExportCsv}>
               Esporta CSV
@@ -912,17 +1079,16 @@ export default function IngredientiPage() {
           {ORDINE_USCITA_RULE}
         </p>
         <div className="dashboard-form-row" style={{ flexWrap: "wrap", gap: 12 }}>
-          <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 500 }}>Categoria (Cucina/Bancone)</span>
-            <input
-              type="text"
-              className="dashboard-search-input"
-              placeholder="es. congelato, fritto, bibite"
+          <div style={{ flex: "1 1 280px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Tipo (Cucina/Bancone)</span>
+            <IngredienteCategoriaPicker
               value={newCategoria}
-              onChange={(e) => setNewCategoria(e.target.value)}
-              maxLength={80}
+              onChange={setNewCategoria}
+              onSuggestColor={(hex) => {
+                if (!newColore.trim()) setNewColore(hex);
+              }}
             />
-          </label>
+          </div>
           <label style={{ flex: "0 1 140px", display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>Colore #hex</span>
             <input
@@ -962,6 +1128,16 @@ export default function IngredientiPage() {
       <ul className="dashboard-list">
         {filteredIngredients.map((ing) => {
           const allergeniConIcona = getAllergeniConIcona(ing.id);
+          const inCottura = isOrdineInCottura(ing.ordine);
+          const catKey = normalizeIngredienteCategoria(ing.categoria);
+          const catLabel = ing.categoria ? labelIngredienteCategoria(ing.categoria) : "";
+          const catBg =
+            catLabel
+              ? normalizeHexColor(ing.colore) ||
+                INGREDIENTE_CATEGORIA_DEFAULT_COLOR[catKey] ||
+                "#e2e8f0"
+              : "";
+          const prepCucina = ing.prepCucina === true || ing.prep_cucina === true;
           return (
             <li key={ing.id} className="dashboard-list-item">
               <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -976,12 +1152,47 @@ export default function IngredientiPage() {
                   </span>
                 )}
               </div>
-              <span className="dashboard-list-item-meta">
-                € {formatPrice(ing.costoUnitario ?? ing.costo_unitario ?? ing.costo)}
-                {ing.vaInCottura === true || ing.va_in_cottura === true ? " · Cottura" : ""}
-                {ing.prepCucina === true || ing.prep_cucina === true ? " · Prep cucina" : ""}
-                {ing.categoria ? ` · ${ing.categoria}` : ""}
-                {ing.colore ? ` · ${ing.colore}` : ""}
+              <span
+                className="dashboard-list-item-meta"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+              >
+                <span>€ {formatPrice(ing.costoUnitario ?? ing.costo_unitario ?? ing.costo)}</span>
+                <span
+                  style={{
+                    ...LIST_BADGE_BASE,
+                    ...(inCottura
+                      ? {
+                          background: "#fff7ed",
+                          color: "#9a3412",
+                          borderColor: "rgba(154, 52, 18, 0.18)",
+                        }
+                      : {
+                          background: "transparent",
+                          color: "#1e40af",
+                          borderColor: "rgba(30, 64, 175, 0.35)",
+                          fontWeight: 600,
+                        }),
+                  }}
+                >
+                  {inCottura ? "In cottura" : "A fine cottura"}
+                </span>
+                {catLabel ? (
+                  <span
+                    style={{
+                      ...LIST_BADGE_BASE,
+                      background: catBg,
+                      color: textColorOnBackground(catBg),
+                    }}
+                    title={ing.colore ? `Colore ${normalizeHexColor(ing.colore) || ing.colore}` : undefined}
+                  >
+                    {catLabel}
+                  </span>
+                ) : null}
+                {prepCucina ? (
+                  <span style={{ ...LIST_BADGE_BASE, background: "#f8fafc", color: "#475569", fontWeight: 600 }}>
+                    Prep cucina
+                  </span>
+                ) : null}
               </span>
               <button type="button" className="btn-primary-dashboard" onClick={() => openEdit(ing)} style={{ marginRight: 8 }}>
                 Modifica

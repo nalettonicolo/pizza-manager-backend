@@ -21,9 +21,13 @@ import { UserProvider } from "@/app/contexts/UserContext"
 import { TenantProvider } from "@/app/contexts/TenantContext"
 import { PvProvider } from "@/app/contexts/PvContext"
 import { ThemeProvider } from "@/app/contexts/ThemeContext"
+import AppDialogHost from "@/components/ui/AppDialogHost"
+import { installAppDialogWindowBridge } from "@/utils/appDialog"
 
 import "@/style.css"
 import "@/styles/cassa-mobile.css"
+
+installAppDialogWindowBridge()
 
 const routerFuture = {
   v7_startTransition: true,
@@ -39,6 +43,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <PvProvider>
               <ThemeProvider>
                 <AppRouter />
+                <AppDialogHost />
               </ThemeProvider>
             </PvProvider>
           </TenantProvider>

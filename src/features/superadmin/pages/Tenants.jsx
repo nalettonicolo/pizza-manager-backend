@@ -5,8 +5,7 @@ import TenantServiziPlanFields from "@/features/superadmin/components/TenantServ
 import { defaultInclusioni, loadPlansResolved } from "@/features/superadmin/catalog/plansStorage";
 import { loadServicesCatalog } from "@/features/superadmin/catalog/servicesStorage";
 import {
-  getRuoliPizzeria,
-  listStaffPasswordNotes,
+  listArchivioPasswordAccounts,
   upsertStaffPasswordNote,
 } from "@/features/admin/services/adminService";
 import {
@@ -237,20 +236,13 @@ export default function Tenants() {
     (async () => {
       setArchivio({ loading: true, error: null, ruoli: [], drafts: {}, savingUserId: null });
       try {
-        const [ruoli, notes] = await Promise.all([
-          getRuoliPizzeria(tenantId),
-          listStaffPasswordNotes(tenantId),
-        ]);
+        const { accounts, notesByUser } = await listArchivioPasswordAccounts(tenantId);
         if (cancelled) return;
-        const byUser = {};
-        for (const n of notes || []) {
-          byUser[n.user_id] = n.password_nota ?? "";
-        }
         const drafts = {};
-        for (const r of ruoli || []) {
-          drafts[r.user_id] = byUser[r.user_id] ?? "";
+        for (const r of accounts || []) {
+          drafts[r.user_id] = notesByUser[r.user_id] ?? "";
         }
-        setArchivio({ loading: false, error: null, ruoli: ruoli || [], drafts, savingUserId: null });
+        setArchivio({ loading: false, error: null, ruoli: accounts || [], drafts, savingUserId: null });
       } catch (err) {
         if (cancelled) return;
         setArchivio({
@@ -751,7 +743,8 @@ export default function Tenants() {
                         >
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{labelFromEmailPrefix(r.email)}</div>
                           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
-                            {r.email} · ruolo: {r.ruolo} · Utente attivo sul tenant
+                            {r.email} · ruolo: {r.ruolo}
+                            {r.archivio_tipo === "cliente" ? " · area cliente" : " · Utente attivo sul tenant"}
                           </div>
                           <label style={labelStyle}>Password archivio (nota interna)</label>
                           <textarea

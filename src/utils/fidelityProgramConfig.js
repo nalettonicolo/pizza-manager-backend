@@ -77,6 +77,31 @@ export function readConsegnaDomicilioAttiva(po) {
 }
 
 /**
+ * Programma fidelity attivo sul locale (parametri_operativi). Default true se chiave assente.
+ * @param {Record<string, unknown>} po
+ */
+export function readFidelityProgrammaAttivo(po) {
+  const raw = po && typeof po === "object" ? po : {}
+  const v = raw.fidelity_attivo
+  if (v === false || v === "false") return false
+  if (v === true || v === "true") return true
+  return true
+}
+
+/**
+ * Nome programma fidelity (fallback generico).
+ * @param {Record<string, unknown>} po
+ * @param {string} [localeNome]
+ */
+export function readFidelityNomeProgramma(po, localeNome = "") {
+  const raw = po && typeof po === "object" ? po : {}
+  const n = String(raw.fidelity_nome_programma || "").trim()
+  if (n) return n
+  const locale = String(localeNome || "").trim()
+  return locale ? `Fidelity ${locale}` : "Programma fedeltà"
+}
+
+/**
  * Fidelity valida anche per clienti che ordinano a domicilio (area cliente / accrediti consegna). Default true se non impostato.
  * @param {Record<string, unknown>} po
  */

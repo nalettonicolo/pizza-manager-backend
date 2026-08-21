@@ -379,7 +379,16 @@ export function buildComandaKitchenHtmlDocument(payload) {
   const righeHtml = righe
     .map((r) => {
       const lines = filterDettagliForPrint(r.dettagli, parametri);
-      const subs = lines.map((d) => `<div class="sub">${escapeHtml(d)}</div>`).join("");
+      const expanded = [];
+      for (const d of lines) {
+        const parts = String(d || "")
+          .split(/\s·\s/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        if (parts.length > 1) expanded.push(...parts);
+        else if (String(d || "").trim()) expanded.push(String(d).trim());
+      }
+      const subs = expanded.map((d) => `<div class="sub">${escapeHtml(d)}</div>`).join("");
       return `<div class="riga"><span class="qty">${escapeHtml(String(r.qty))}×</span><div class="body"><div class="titolo">${escapeHtml(r.titolo)}</div>${subs}</div></div>`;
     })
     .join("");
@@ -465,10 +474,29 @@ export function buildComandaKitchenHtmlDocument(payload) {
       padding-bottom: 5px;
       border-bottom: 1px solid #000;
       color: #000;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
+    .riga .body {
+      flex: 1;
+      min-width: 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .qty { font-weight: 900; font-size: ${qtyScale}em; min-width: 1.8em; flex-shrink: 0; line-height: 1.15; color: #000; }
     .titolo { font-weight: 900; color: #000; }
-    .sub { font-size: ${dettaglioScale}em; font-weight: 600; color: #000; margin-top: 2px; padding-left: 2px; }
+    .sub {
+      font-size: ${dettaglioScale}em;
+      font-weight: 600;
+      color: #000;
+      margin-top: 2px;
+      padding-left: 2px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
     .copy { margin-top: 10px; text-align: center; font-size: 0.9em; font-weight: 700; color: #000; }
     @media print {
       body { padding: 0; color: #000 !important; }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link, Navigate } from "react-router-dom"
+import { Link, Navigate, useLocation } from "react-router-dom"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { useTenantServizi } from "@/app/hooks/useTenantServizi"
@@ -180,14 +181,16 @@ export default function CassaStampantiRepartiPage() {
     }
   }
 
+  const location = useLocation()
+
   if (!okCassa) {
-    return <Navigate to="/operative/cassa" replace />
+    return <Navigate to={withPreservedSupportSearch("/operative/cassa", location.search)} replace />
   }
 
   return (
     <div style={{ maxWidth: 920 }}>
       <p style={{ margin: "0 0 12px 0" }}>
-        <Link to="/operative/cassa" style={{ color: "#1565c0", fontSize: 14 }}>
+        <Link to={withPreservedSupportSearch("/operative/cassa", location.search)} style={{ color: "#1565c0", fontSize: 14 }}>
           ← Torna a Cassa
         </Link>
       </p>

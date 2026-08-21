@@ -11,8 +11,25 @@ import { getIsSaaSClient } from "@/utils/saasHost"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
 import { isViewportLayoutPreviewSearch, isQaSupportSearch } from "@/utils/viewportLayoutPreview"
 import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
-import { readSafeReturnTo } from "@/utils/supportTenantOverride"
+import {
+  DEMO_CLIENTE_FLAG_KEY,
+  DEMO_CLIENTE_QUERY,
+  clearDemoClienteSessionFlags,
+  getDemoClienteCredentials,
+  hasDemoSaStash,
+  resolveDemoClienteTenantIdFromEnv,
+  stripDemoMarkersFromSearch,
+} from "@/utils/demoClienteSession"
+import { setDemoGiroSessionActive, withDemoGiroQuery } from "@/utils/demoGiro"
+import { readSafeReturnTo, setSupportTenantOverride, SUPPORT_TENANT_QUERY } from "@/utils/supportTenantOverride"
+import { resolveClienteVetrinaPath } from "@/utils/clienteVetrinaPath"
 import "@/styles/login.css"
+
+function isDemoClienteAccount(user) {
+  const demoEmail = getDemoClienteCredentials().email
+  if (!demoEmail || !user?.email) return false
+  return String(user.email).trim().toLowerCase() === String(demoEmail).trim().toLowerCase()
+}
 
 export default function Login() {
   const { login, logout, ruolo, tipoUtente, user, loading } = useAuth()
@@ -54,7 +71,121 @@ export default function Login() {
   useEffect(() => {
     if (loading) return
     if (!user) return
-    // Aspetta profilo completo (finestre Sala QA non devono restare sul form).
+
+    const demoCliente =
+      (() => {
+        try {
+          return sessionStorage.getItem("pm_demo_cliente_active") === "1"
+        } catch {
+          return false
+        }
+      })() ||
+      new URLSearchParams(location.search).get("_demo_giro") === "1"
+
+    // Cliente (anche senza ruolo staff): non restare sul form.
+    // Su SaaS (localhost) la demo area cliente deve funzionare; non fare signOut.
+    if (tipoUtente === "cliente") {
+      const saas = getIsSaaSClient()
+      const returnCliente =
+        (returnToQuery && returnToQuery.startsWith("/cliente")) ||
+        (supportReturnTo?.pathname && String(supportReturnTo.pathname).startsWith("/cliente"))
+      const demoAccount = isDemoClienteAccount(user)
+
+      // Cliente Test: login esterno → area cliente reale (vetrina + profilo).
+      // Chrome demo SA solo con stash + entrata esplicita (_demo_cliente), non con stash residuo.
+      if (demoAccount) {
+        const tid = supportTenantId || resolveDemoClienteTenantIdFromEnv()
+        const explicitDemoEntry =
+          new URLSearchParams(location.search).get(DEMO_CLIENTE_QUERY) === "1"
+        const saDemo = hasDemoSaStash() && explicitDemoEntry
+
+        if (!saDemo) {
+          clearDemoClienteSessionFlags()
+          setDemoGiroSessionActive(false)
+        }
+
+        if (tid) setSupportTenantOverride(tid)
+
+        if (saDemo && tid) {
+          try {
+            sessionStorage.setItem(DEMO_CLIENTE_FLAG_KEY, "1")
+          } catch {
+            /* ignore */
+          }
+          setDemoGiroSessionActive(true)
+          let dest = withDemoGiroQuery("/preview", tid)
+          try {
+            const url = new URL(dest, window.location.origin)
+            url.searchParams.set(DEMO_CLIENTE_QUERY, "1")
+            dest = `${url.pathname}${url.search}`
+          } catch {
+            /* keep */
+          }
+          devLog("Login", "redirect → vetrina Cliente Test (demo SA)", { dest })
+          navigate(dest, { replace: true })
+          return
+        }
+
+        let dest = resolveClienteVetrinaPath(stripDemoMarkersFromSearch(location.search || ""))
+        if (tid) {
+          try {
+            const url = new URL(dest, window.location.origin)
+            url.searchParams.set(SUPPORT_TENANT_QUERY, tid)
+            url.searchParams.delete(DEMO_CLIENTE_QUERY)
+            url.searchParams.delete("_demo_giro")
+            url.searchParams.delete("_qa_console")
+            url.searchParams.delete("return_to")
+            dest = `${url.pathname}${url.search}`
+          } catch {
+            /* keep */
+          }
+        }
+        devLog("Login", "redirect → area cliente (Cliente Test)", { dest })
+        navigate(dest, { replace: true })
+        return
+      }
+
+      if (saas && !forceClienteMode && !demoCliente && !returnCliente && !supportTenantId) {
+        setError("Gli account cliente si usano dal sito della tua pizzeria (menu online), non da PizzaManager.")
+        void supabase.auth.signOut()
+        return
+      }
+
+      if (forceClienteMode && returnToQuery && (returnToQuery.startsWith("/preview") || returnToQuery.startsWith("/negozio"))) {
+        navigate(returnToQuery, { replace: true })
+        return
+      }
+      if (
+        forceClienteMode &&
+        supportReturnTo?.pathname &&
+        (supportReturnTo.pathname === "/preview" || supportReturnTo.pathname === "/negozio")
+      ) {
+        navigate(`${supportReturnTo.pathname}${supportReturnTo.search || ""}`, { replace: true })
+        return
+      }
+
+      // Preferisci return_to vetrina / area cliente; altrimenti menù (non hub account).
+      let dest
+      if (returnToQuery && (returnToQuery.startsWith("/preview") || returnToQuery.startsWith("/negozio") || returnToQuery === "/")) {
+        dest = returnToQuery
+      } else if (returnToQuery && returnToQuery.startsWith("/cliente")) {
+        dest = `${returnToQuery.split("?")[0]}${location.search || ""}`
+      } else if (
+        supportReturnTo?.pathname &&
+        (supportReturnTo.pathname.startsWith("/preview") ||
+          supportReturnTo.pathname.startsWith("/negozio") ||
+          supportReturnTo.pathname.startsWith("/cliente"))
+      ) {
+        dest = `${supportReturnTo.pathname}${supportReturnTo.search || location.search || ""}`
+      } else {
+        dest = resolveClienteVetrinaPath(location.search || "")
+      }
+      devLog("Login", "redirect → vetrina cliente", { dest, demoCliente })
+      navigate(dest, { replace: true })
+      return
+    }
+
+    // Aspetta profilo staff completo (cliente già gestito sopra).
     if (!tipoUtente || !ruolo) return
 
     const qaSupport = isQaSupportSearch(location.search) || Boolean(supportTenantId)
@@ -136,36 +267,16 @@ export default function Login() {
 
     const saas = getIsSaaSClient()
 
-    if (saas && tipoUtente === "cliente" && !forceClienteMode) {
-      setError("Gli account cliente si usano dal sito della tua pizzeria (menu online), non da PizzaManager.")
-      void supabase.auth.signOut()
-      return
-    }
-
     if (!saas && tipoUtente === "staff" && !forceClienteMode) {
       window.location.replace(getSaaSLoginUrl())
       return
     }
 
-    if (tipoUtente === "cliente") {
-      if (forceClienteMode && returnToQuery && (returnToQuery.startsWith("/preview") || returnToQuery.startsWith("/negozio"))) {
-        navigate(returnToQuery, { replace: true })
-        return
-      }
-      if (forceClienteMode && supportReturnTo?.pathname && (supportReturnTo.pathname === "/preview" || supportReturnTo.pathname === "/negozio")) {
-        navigate(`${supportReturnTo.pathname}${supportReturnTo.search || ""}`, { replace: true })
-        return
-      }
-      devLog("Login", "redirect → /cliente/dashboard")
-      navigate("/cliente/dashboard", { replace: true })
-      return
-    }
-
     if (tipoUtente === "staff") {
-      const ruoloNorm = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
+      const ruoloNormStaff = ruolo && typeof ruolo === "string" ? ruolo.toLowerCase().trim() : ""
       let targetRoute = "/operative/dashboard"
-      if (ruoloNorm === "superadmin") targetRoute = "/superadmin/ingresso"
-      else if (ruoloNorm === "admin" || ruoloNorm === "owner") targetRoute = ADMIN_TENANT_HOME
+      if (ruoloNormStaff === "superadmin") targetRoute = "/superadmin/ingresso"
+      else if (ruoloNormStaff === "admin" || ruoloNormStaff === "owner") targetRoute = ADMIN_TENANT_HOME
       else targetRoute = getOperativeHomePathForStaff(ruolo, user?.email)
 
       if (returnPathFromState) {
@@ -175,6 +286,12 @@ export default function Login() {
 
       if (returnToQuery && !returnToQuery.startsWith("/superadmin")) {
         navigate(returnToQuery, { replace: true })
+        return
+      }
+
+      // Demo giro con return_to cliente: non mandare in cassa.
+      if (demoCliente && returnToQuery?.startsWith("/cliente")) {
+        navigate(`${returnToQuery.split("?")[0]}${location.search || ""}`, { replace: true })
         return
       }
 
@@ -259,11 +376,6 @@ export default function Login() {
               🍕
             </div>
             <h1 className="login-brand-title">{isSaaS && !forceClienteMode ? "PizzaManager" : "Accedi"}</h1>
-            <p className="login-brand-sub">
-              {isSaaS && !forceClienteMode
-                ? "Accesso per staff e operatori della piattaforma. Account cliente: usa il sito della tua pizzeria."
-                : "Accedi con l’account cliente per ordinare online. Il personale usa il login staff da PizzaManager."}
-            </p>
           </div>
 
           {staffBlockedOnClienteLogin ? (
@@ -390,11 +502,7 @@ export default function Login() {
                   Password dimenticata
                 </Link>
               </>
-            ) : (
-              <p className="login-back" style={{ cursor: "default", textDecoration: "none", color: "#94a3b8", fontSize: 13 }}>
-                Recupero password: solo sul sito della pizzeria (menu online).
-              </p>
-            )}
+            ) : null}
             <Link to={forceClienteMode ? vetrinaReturnPath : "/"} className="login-back">
               {forceClienteMode ? "← Torna alla vetrina" : "← Torna alla home"}
             </Link>

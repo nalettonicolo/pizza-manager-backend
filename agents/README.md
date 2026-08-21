@@ -42,12 +42,15 @@ Obiettivo: far usare all’assistente i **tool MCP** di Supabase (liste tabelle,
 | `security.md` | Threat + mitigazioni |
 | `dataflows.md` | Flussi app ↔ tabelle Supabase (monitoraggio con database + security) |
 
+In Super Admin → **Moduli agenti** (`/superadmin/agenti-moduli`): **aree di sviluppo ancora aperte**
+collegate agli agenti coinvolti (richieste + deliverable per profilo). Vista «Per area» / «Per agente».
+
 Riferimento metodologico: guida interna “Setup AI Team” (adattata al repo corrente).
 
 Documenti di coordinamento e sicurezza (repo):
 
 - `docs/punto-situazione/` — **punto situazione per settore** (output agenti; indice + 01–10).
 - `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` — epic, ordine di lavoro, supervisore.
-- `docs/MIGRAZIONE_MYSQL_E_BACKUP.md` — roadmap stacco Supabase → MySQL e backup.
+- `docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md` — stacco parziale verso Postgres dedicato.
 - `docs/SICUREZZA_HARDENING.md` — blindatura, crittografia, checklist.
 - `sql/scripts/README_VERIFY_RLS.md` — verifiche RLS in staging.

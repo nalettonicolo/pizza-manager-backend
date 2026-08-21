@@ -3,11 +3,17 @@
  * Ordine dei match: tipi più specifici prima di quelli generici (es. Stripe prima di "Carta").
  */
 
+import {
+  isTipoPagamentoPagaOnline,
+  normalizeTipoPagamentoLabel,
+  TIPO_PAGAMENTO_PAGA_ONLINE,
+} from "@/features/operative/cassa/utils/cassaPagamentiOptions"
+
 export function iconTipoPagamentoLista(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
   if (t.includes("misto")) return "🔀"
-  if (t.includes("link") || t.includes("carta da casa") || t.includes("pay-by-link")) return "🔗"
-  if (t.includes("stripe") || t.includes("online") || t.includes("3ds")) return "🛒"
+  if (isTipoPagamentoPagaOnline(t)) return "🔗"
+  if (t.includes("stripe") || (t.includes("online") && !t.includes("paga online")) || t.includes("3ds")) return "🛒"
   if (t.includes("sumup")) return "📲"
   if (t.includes("satispay")) return "📱"
   if (t.includes("bonifico")) return "🏦"
@@ -22,22 +28,26 @@ export function iconTipoPagamentoLista(tipoPagamento) {
 export function labelTipoPagamentoLista(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
   if (t.includes("misto")) return "Misto"
-  if (t.includes("link") || t.includes("carta da casa")) return "Link"
+  if (isTipoPagamentoPagaOnline(t) && !t.includes("stripe") && !t.includes("sumup")) return "Paga online"
   if (t.includes("stripe") || (t.includes("carta") && t.includes("online"))) return "Online"
   if (t.includes("sumup")) return "SumUp"
   if (t.includes("da pagare") || (t.includes("in attesa") && !t.includes("stripe"))) return "Da pag."
   if (t.includes("altro")) return "Altro"
-  const raw = String(tipoPagamento || "—").trim()
+  const raw = normalizeTipoPagamentoLabel(tipoPagamento)
+  if (raw === TIPO_PAGAMENTO_PAGA_ONLINE) return "Paga online"
   if (raw.length > 14) return `${raw.slice(0, 12)}…`
   return raw || "—"
+}
+
+export function isTipoPagamentoLink(tipoPagamento) {
+  return isTipoPagamentoPagaOnline(tipoPagamento)
 }
 
 export function tipoPagamentoInAttesa(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
   return (
     t.includes("da pagare") ||
-    t.includes("link") ||
-    t.includes("carta da casa") ||
+    isTipoPagamentoPagaOnline(t) ||
     (t.includes("stripe") && t.includes("attesa")) ||
     (t.includes("online") && t.includes("attesa"))
   )

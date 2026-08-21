@@ -108,24 +108,50 @@ export function readSafeReturnTo(search) {
 
 /**
  * Conserva marker Sala QA / demo giro (`support_tenant`, `_qa_console`, `_demo_giro`, …) nei NavLink.
+ * Se la demo è attiva in sessione, re-inietta i marker anche dopo navigate() senza query.
  * @param {string} to
  * @param {string} [search] location.search
  */
 export function withPreservedSupportSearch(to, search) {
   const base = String(to || "/").trim() || "/"
-  if (!search || !isSupportOrViewportPreviewSearch(search)) return base
   if (base.includes("?")) return base
-  const q = search.startsWith("?") ? search : `?${search}`
-  // Mantieni anche marker demo giro se presenti
+
+  const raw = typeof search === "string" ? search : ""
+  const q = raw.startsWith("?") ? raw.slice(1) : raw
+  let src
   try {
-    const src = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q)
-    const dst = new URLSearchParams()
-    for (const key of ["support_tenant", "tenant", "_qa_console", "_demo_giro", "_demo_step", "return_to"]) {
-      if (src.has(key)) dst.set(key, src.get(key))
-    }
-    const s = dst.toString()
-    return s ? `${base}?${s}` : base
+    src = new URLSearchParams(q)
   } catch {
-    return `${base}${q}`
+    src = new URLSearchParams()
   }
+
+  const demoFromUrl = src.get("_demo_giro") === "1"
+  let demoActive = demoFromUrl
+  try {
+    demoActive = demoActive || sessionStorage.getItem("pm_sa_demo_giro") === "1"
+  } catch {
+    /* ignore */
+  }
+
+  const supportFromUrl = isSupportOrViewportPreviewSearch(search)
+  const tenantId = resolveSupportTenantOverride(search)
+  if (!demoActive && !supportFromUrl && !tenantId) return base
+
+  const dst = new URLSearchParams()
+  for (const key of ["support_tenant", "tenant", "_qa_console", "_demo_giro", "_demo_cliente", "_demo_step", "return_to"]) {
+    if (src.has(key)) dst.set(key, src.get(key))
+  }
+  if (!dst.has("support_tenant") && tenantId) dst.set(SUPPORT_TENANT_QUERY, tenantId)
+  if (!dst.has("_qa_console") && (demoActive || tenantId)) dst.set("_qa_console", "1")
+  if (!dst.has("_demo_giro") && demoActive) dst.set("_demo_giro", "1")
+  try {
+    if (!dst.has("_demo_cliente") && sessionStorage.getItem("pm_demo_cliente_active") === "1") {
+      dst.set("_demo_cliente", "1")
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const s = dst.toString()
+  return s ? `${base}?${s}` : base
 }

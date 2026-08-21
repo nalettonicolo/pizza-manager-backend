@@ -1,10 +1,11 @@
 /**
- * Attività preparazione cucina: ingredienti con flag prep_cucina sulla ricetta prodotto,
- * stato completamento per riga ordine (indipendente tra ordini e tra righe).
+ * Attività preparazione cucina: ingredienti con flag prep_cucina / categoria / fine cottura,
+ * più aggiunte da riepilogo riga; stato completamento per riga ordine.
  */
 
 import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
+import { normalizeIngredienteCategoria } from "@/constants/ingredienteCategoria"
 
 export const CUCINA_SLOT_SENZA_ORARIO = "__senza_orario__"
 
@@ -52,6 +53,113 @@ export function sortedCucinaSlotTabs(tasksBySlot) {
   return sorted
 }
 
+function normNome(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+}
+
+/**
+ * True se l’ingrediente deve comparire sui monitor Cucina/Bancone.
+ * Flag Prep. cucina, oppure categoria (affettato/fritto/…), oppure a fine cottura.
+ */
+export function ingredientNeedsPrepMonitor(ing) {
+  if (!ing) return false
+  if (ing.prepCucina === true || ing.prep_cucina === true) return true
+  const cat = normalizeIngredienteCategoria(ing.categoria)
+  if (cat) return true
+  if (ing.vaInCottura === false || ing.va_in_cottura === false) return true
+  return false
+}
+
+/**
+ * Estrae nomi da preparare dal riepilogo riga (aggiunte e fine cottura).
+ * @param {string} summary
+ * @returns {{ aggiunte: string[], fineCottura: string[] }}
+ */
+export function extractPrepSignalNamesFromSummary(summary) {
+  const full = String(summary || "").trim()
+  const aggiunte = []
+  const fineCottura = []
+  if (!full) return { aggiunte, fineCottura }
+
+  const pushNames = (chunk, into) => {
+    const raw = String(chunk || "")
+      .replace(/^\+\s*/i, "")
+      .replace(/\(.*?\)/g, "")
+      .trim()
+    if (!raw) return
+    for (const part of raw.split(/,|·/)) {
+      const n = part.replace(/^(in cottura|a fine cottura)\s*:?\s*/i, "").trim()
+      if (n) into.push(n)
+    }
+  }
+
+  for (const piece of full.split(" · ").map((p) => p.trim()).filter(Boolean)) {
+    if (/^Senza:/i.test(piece)) continue
+    if (/^Aggiunta:/i.test(piece)) {
+      pushNames(piece.replace(/^Aggiunta:\s*/i, ""), aggiunte)
+      continue
+    }
+    if (/^\+\s*a fine cottura:/i.test(piece)) {
+      pushNames(piece.replace(/^\+\s*a fine cottura:\s*/i, ""), aggiunte)
+      continue
+    }
+    if (/^\+\s*in cottura:/i.test(piece)) {
+      pushNames(piece.replace(/^\+\s*in cottura:\s*/i, ""), aggiunte)
+      continue
+    }
+    if (/^\+/i.test(piece)) {
+      pushNames(piece, aggiunte)
+      continue
+    }
+    if (/^A fine cottura:/i.test(piece)) {
+      pushNames(piece.replace(/^A fine cottura:\s*/i, ""), fineCottura)
+      continue
+    }
+  }
+  return { aggiunte, fineCottura }
+}
+
+/**
+ * @param {Record<string, object[]>} ingredientsByProduct
+ * @param {object[]} [ingredientiGlobali] — catalogo completo ingredienti tenant (da getIngredients),
+ *   usato solo come fallback per nome: un ingrediente "extra" (aggiunta non presente nella ricetta
+ *   base di nessun prodotto già caricato) altrimenti perde categoria/colore e cade sul grigio
+ *   "comune" anche se in anagrafica ha una categoria impostata.
+ */
+function indexIngredientsByNome(ingredientsByProduct, ingredientiGlobali) {
+  /** @type {Map<string, { id?: string, nome?: string, categoria?: string, colore?: string, prepCucina?: boolean, vaInCottura?: boolean }>} */
+  const map = new Map()
+  for (const list of Object.values(ingredientsByProduct || {})) {
+    for (const ing of list || []) {
+      const k = normNome(ing?.nome)
+      if (k && !map.has(k)) map.set(k, ing)
+    }
+  }
+  for (const ing of ingredientiGlobali || []) {
+    const k = normNome(ing?.nome)
+    if (k && !map.has(k)) map.set(k, ing)
+  }
+  return map
+}
+
+function resolveOrSyntheticIng(byNome, nomeRaw) {
+  const nome = String(nomeRaw || "").trim()
+  if (!nome) return null
+  const hit = byNome.get(normNome(nome))
+  if (hit) return hit
+  return {
+    id: `signal:${normNome(nome)}`,
+    nome,
+    categoria: "",
+    colore: "",
+    prepCucina: true,
+    vaInCottura: true,
+  }
+}
+
 /**
  * @param {object[]} orders — ordini IN_PREPARAZIONE (con cucina_prep_stato)
  * @param {object[]} righeList — righe da getRigheByOrdineIds
@@ -59,6 +167,12 @@ export function sortedCucinaSlotTabs(tasksBySlot) {
  * @param {Record<string, Array<{ id?: string, nome: string, prepCucina?: boolean }>>} ingredientsByProduct
  * @param {number} slotMinutes
  * @param {Record<string, boolean>} productPrepCucinaById — da Prodotto.prep_cucina (fritti, bibite, dolci, …)
+ * @param {Record<string, { categoria?: string, colore?: string }>} [productPrepMetaById] — da
+ *   Prodotto.prep_categoria/prep_colore, per colorare i task "prodotto intero" come gli ingredienti
+ *   (stesso schema congelato/affettato/dolce/fritto/bibita/comune).
+ * @param {object[]} [ingredientiGlobali] — catalogo completo ingredienti tenant (getIngredients),
+ *   fallback per risolvere categoria/colore degli "extra" aggiunti a una riga che non fanno parte
+ *   della ricetta base di nessun prodotto già caricato in ingredientsByProduct.
  */
 export function buildCucinaPrepTasks(
   orders,
@@ -67,6 +181,8 @@ export function buildCucinaPrepTasks(
   ingredientsByProduct,
   slotMinutes = PLANNING_GRID_SLOT_MINUTES,
   productPrepCucinaById = {},
+  productPrepMetaById = {},
+  ingredientiGlobali = [],
 ) {
   const righeByOrd = {}
   for (const r of righeList || []) {
@@ -76,6 +192,7 @@ export function buildCucinaPrepTasks(
     righeByOrd[oid].push(r)
   }
 
+  const byNome = indexIngredientsByNome(ingredientsByProduct, ingredientiGlobali)
   const tasksBySlot = {}
 
   for (const ord of orders || []) {
@@ -92,18 +209,18 @@ export function buildCucinaPrepTasks(
       if (!rigaId) continue
       const pid = riga.prodottoId ?? riga.prodotto_id
       const ingList = ingredientsByProduct[pid] || []
-      const prepIngs = ingList.filter((i) => i.prepCucina === true)
-      if (!prepIngs.length) continue
       const qty = Math.max(1, Number(riga.quantita) || 1)
       const prodottoNome = productNames[pid] || "Prodotto"
       const formato = riga.formatoNome ?? riga.formato_nome
+      const seenIds = new Set()
 
-      for (const ing of prepIngs) {
-        const ingId = ing.id
-        if (!ingId) continue
+      const pushTask = (ing, kind = "ingrediente") => {
+        const ingId = ing?.id
+        if (!ingId || seenIds.has(String(ingId))) return
+        seenIds.add(String(ingId))
         const done = (stato.doneByRiga[String(rigaId)] || []).includes(String(ingId))
         tasksBySlot[slot].push({
-          kind: "ingrediente",
+          kind,
           ordineId: ord.id,
           ordineNumero: ord.numero,
           rigaId: String(rigaId),
@@ -119,25 +236,43 @@ export function buildCucinaPrepTasks(
         })
       }
 
+      for (const ing of ingList) {
+        if (!ingredientNeedsPrepMonitor(ing)) continue
+        pushTask(ing, "ingrediente")
+      }
+
+      const summary = riga.ingredientiCotturaSummary ?? riga.ingredienti_cottura_summary ?? ""
+      const signals = extractPrepSignalNamesFromSummary(summary)
+      for (const nome of [...signals.aggiunte, ...signals.fineCottura]) {
+        const ing = resolveOrSyntheticIng(byNome, nome)
+        if (!ing) continue
+        // Fine cottura già in ricetta: se non aveva flag/categoria, lo forziamo qui.
+        pushTask(ing, signals.aggiunte.includes(nome) ? "extra" : "ingrediente")
+      }
+
       const prepProdotto = productPrepCucinaById[pid] === true
       if (prepProdotto) {
         const prepKey = `prodotto_prep:${pid}`
-        const done = (stato.doneByRiga[String(rigaId)] || []).includes(prepKey)
-        tasksBySlot[slot].push({
-          kind: "prodotto",
-          ordineId: ord.id,
-          ordineNumero: ord.numero,
-          rigaId: String(rigaId),
-          ingredienteId: prepKey,
-          ingredienteNome: prodottoNome,
-          ingredienteCategoria: "",
-          ingredienteColore: "",
-          prodottoNome,
-          formatoNome: formato,
-          qty,
-          done,
-          nomeCliente: ord.nome_cliente ?? ord.nomeCliente ?? "",
-        })
+        if (!seenIds.has(prepKey)) {
+          seenIds.add(prepKey)
+          const done = (stato.doneByRiga[String(rigaId)] || []).includes(prepKey)
+          const meta = productPrepMetaById[pid] || {}
+          tasksBySlot[slot].push({
+            kind: "prodotto",
+            ordineId: ord.id,
+            ordineNumero: ord.numero,
+            rigaId: String(rigaId),
+            ingredienteId: prepKey,
+            ingredienteNome: prodottoNome,
+            ingredienteCategoria: meta.categoria || "",
+            ingredienteColore: meta.colore || "",
+            prodottoNome,
+            formatoNome: formato,
+            qty,
+            done,
+            nomeCliente: ord.nome_cliente ?? ord.nomeCliente ?? "",
+          })
+        }
       }
     }
   }
@@ -173,4 +308,79 @@ export function mergeCucinaSlotKeys(tasksBySlot, ordersBySlot) {
   ])
   const dummy = Object.fromEntries([...keys].map((k) => [k, []]))
   return sortedCucinaSlotTabs(dummy)
+}
+
+/**
+ * Aggrega i task prep per fascia + ingrediente (conteggio, senza associazione pizza).
+ * @returns {Record<string, Array<{
+ *   pickKey: string,
+ *   ingredienteId: string,
+ *   label: string,
+ *   count: number,
+ *   doneCount: number,
+ *   pendingTasks: object[],
+ *   categoria?: string,
+ *   colore?: string,
+ *   kind?: string,
+ * }>>}
+ */
+export function aggregatePrepTasksBySlot(tasksBySlot) {
+  /** @type {Record<string, Array<any>>} */
+  const out = {}
+  for (const [slot, tasks] of Object.entries(tasksBySlot || {})) {
+    /** @type {Map<string, any>} */
+    const map = new Map()
+    for (const t of tasks || []) {
+      const id = String(t.ingredienteId || "")
+      if (!id) continue
+      const pickKey = `prep:${slot}:${id}`
+      const q = Math.max(1, Number(t.qty) || 1)
+      const label =
+        t.kind === "extra" ? `+ ${t.ingredienteNome || "—"}` : String(t.ingredienteNome || "—")
+      const prev = map.get(pickKey)
+      if (!prev) {
+        map.set(pickKey, {
+          pickKey,
+          ingredienteId: id,
+          label,
+          count: q,
+          doneCount: t.done ? q : 0,
+          pendingTasks: t.done ? [] : [t],
+          categoria: t.ingredienteCategoria || "",
+          colore: t.ingredienteColore || "",
+          kind: t.kind || "ingrediente",
+        })
+      } else {
+        prev.count += q
+        if (t.done) prev.doneCount += q
+        else prev.pendingTasks.push(t)
+      }
+    }
+    out[slot] = [...map.values()].sort((a, b) => a.label.localeCompare(b.label, "it"))
+  }
+  return out
+}
+
+/**
+ * Marca come fatti tutti i pending di un aggregato (più ordini/righe).
+ * @returns {{ nextByOrdineId: Record<string, object> }}
+ */
+export function markAggregatedPrepDone(orders, pendingTasks) {
+  /** @type {Record<string, object>} */
+  const nextByOrdineId = {}
+  const byOrd = {}
+  for (const t of pendingTasks || []) {
+    if (!t?.ordineId || !t?.rigaId || !t?.ingredienteId) continue
+    if (!byOrd[t.ordineId]) byOrd[t.ordineId] = []
+    byOrd[t.ordineId].push(t)
+  }
+  for (const [oid, list] of Object.entries(byOrd)) {
+    const ord = (orders || []).find((o) => o.id === oid)
+    let stato = ord?.cucina_prep_stato ?? ord?.cucinaPrepStato
+    for (const t of list) {
+      stato = markIngredientPrepDone(stato, t.rigaId, t.ingredienteId)
+    }
+    nextByOrdineId[oid] = stato
+  }
+  return { nextByOrdineId }
 }

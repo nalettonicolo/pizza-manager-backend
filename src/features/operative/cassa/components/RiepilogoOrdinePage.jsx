@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { formatPrice } from "@/utils/format"
 import CartItem from "./CartItem"
 import {
@@ -6,6 +6,12 @@ import {
   buildSlotsInOpeningHours,
   PLANNING_GRID_SLOT_MINUTES,
 } from "@/features/operative/cassa/utils/planningUtils"
+import { isTipoPagamentoLink } from "@/features/operative/cassa/utils/cassaPaymentDisplay"
+import {
+  CASSA_SLOT_GRACE_AFTER_START_MIN,
+  isCassaSlotLocked,
+  isSlotPast,
+} from "@/features/operative/cassa/utils/slotCapacityUtils"
 
 const TIPI_MISTO_RIGA = ["Contanti", "Carta", "Altro"]
 const TIPI_PAGAMENTO_ORDINE = ["Contanti", "Carta", "Misto", "Da pagare", "Altro"]
@@ -76,6 +82,7 @@ export default function RiepilogoOrdinePage({
   selectedFidelity = null,
   onSelectFidelity,
   onNuovaFidelityCliente,
+  fidelityRedeemInfo = null,
   fidelityRedeemPuntiCost = null,
   fidelityPremioDescrizione = null,
   margheritaPrezzoCatalogo = 0,
@@ -97,10 +104,28 @@ export default function RiepilogoOrdinePage({
       : maxPizzeCanale
 
   const orariOggi = useMemo(() => getTodayOrari(orariSettimana), [orariSettimana])
+  const [slotTick, setSlotTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setSlotTick((n) => n + 1), 30 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
   const slots = useMemo(
     () => buildSlotsInOpeningHours(orariOggi, 24, { staffOverrideClosing }),
     [orariOggi, staffOverrideClosing],
   )
+
+  const nowForSlots = useMemo(() => {
+    void slotTick
+    return new Date()
+  }, [slotTick])
+
+  useEffect(() => {
+    if (!selectedSlot) return
+    if (isCassaSlotLocked(selectedSlot, nowForSlots)) {
+      onSlotSelect?.(null)
+    }
+  }, [selectedSlot, nowForSlots, onSlotSelect])
 
   const pizzePerSlot = useMemo(() => {
     const map = {}
@@ -125,6 +150,7 @@ export default function RiepilogoOrdinePage({
     cart.length > 0 &&
     !loading &&
     selectedSlot &&
+    !isCassaSlotLocked(selectedSlot, nowForSlots) &&
     !noSlotDisponibili &&
     !nomeClienteObbligatorio &&
     mistoOk
@@ -242,10 +268,10 @@ export default function RiepilogoOrdinePage({
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
-        {String(checkoutTipoPagamento || "").toLowerCase().includes("link") ? (
+        {isTipoPagamentoLink(checkoutTipoPagamento) ? (
           <p style={{ fontSize: 13, color: "#1565c0", marginTop: 10, lineHeight: 1.45 }}>
-            Dopo la conferma potrai inviare o registrare il <strong>link di pagamento</strong> (carta da casa), se
-            abilitato nelle impostazioni cassa / pay-by-link.
+            Dopo la conferma compare in basso la finestra per <strong>registrare o inviare</strong> il pagamento online
+            (carta da casa). Se il flusso non è ancora attivo, dalla stessa finestra puoi aprire le impostazioni.
           </p>
         ) : null}
         {isMisto ? (
@@ -395,6 +421,25 @@ export default function RiepilogoOrdinePage({
           {selectedFidelity && (() => {
             const ac = selectedFidelity.anagrafica_clienti
             const a = Array.isArray(ac) ? ac[0] : ac
+            const punti = selectedFidelity.punti ?? 0
+            const redeem = fidelityRedeemInfo || {
+              cost: fidelityRedeemPuntiCost,
+              premioLabel: fidelityPremioDescrizione,
+              premiRaggiunti: [],
+              prossimoPremio: null,
+              suScheda: null,
+              timbriSchedaTotale: 0,
+              puntiSaldo: punti,
+            }
+            const cost = redeem.cost
+            const premioLabel = redeem.premioLabel || fidelityPremioDescrizione
+            const canRedeem = cost != null && Number(punti) >= Number(cost)
+            const canApplySconto = canRedeem && margheritaPrezzoCatalogo > 0
+            const suScheda = redeem.suScheda
+            const totScheda = redeem.timbriSchedaTotale || 0
+            const prossimo = redeem.prossimoPremio
+            const altriRaggiunti = (redeem.premiRaggiunti || []).slice(1)
+
             return (
               <div style={styles.fidelitySelected}>
                 <div style={{ fontWeight: 600 }}>
@@ -402,52 +447,67 @@ export default function RiepilogoOrdinePage({
                 </div>
                 <div style={styles.fidelityMeta}>
                   {a?.telefono ? `${a.telefono} · ` : ""}
-                  {selectedFidelity.punti ?? 0} punti
+                  {punti} punti
+                  {totScheda >= 1 && suScheda != null
+                    ? ` · scheda ${suScheda}/${totScheda} timbri`
+                    : ""}
                   {a?.email ? ` · ${a.email}` : ""}
                 </div>
-                {fidelityRedeemPuntiCost != null &&
-                margheritaPrezzoCatalogo > 0 &&
-                (selectedFidelity.punti ?? 0) >= fidelityRedeemPuntiCost ? (
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 10,
-                      marginTop: 12,
-                      padding: "10px 12px",
-                      background: "#e8f5e9",
-                      borderRadius: 8,
-                      border: "1px solid #a5d6a7",
-                      cursor: "pointer",
-                      fontSize: 14,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={fidelityPremioActive}
-                      onChange={(e) => onFidelityPremioActiveChange?.(e.target.checked)}
-                      style={{ marginTop: 3 }}
-                    />
-                    <span>
-                      <strong>Usa premio fedeltà</strong>
-                      {fidelityPremioDescrizione ? (
-                        <span style={{ display: "block", fontWeight: 500, marginTop: 4 }}>
-                          {fidelityPremioDescrizione}
+
+                {canRedeem ? (
+                  <div style={styles.fidelityPremioBox}>
+                    <div style={styles.fidelityPremioTitle}>Premio raggiunto</div>
+                    <div style={styles.fidelityPremioName}>{premioLabel || "Premio fedeltà"}</div>
+                    {altriRaggiunti.length > 0 ? (
+                      <div style={styles.fidelityPremioSub}>
+                        Altri livelli già superati:{" "}
+                        {altriRaggiunti.map((pr) => pr.descrizione || `soglia ${pr.soglia}`).join(" · ")}
+                      </div>
+                    ) : null}
+                    {canApplySconto ? (
+                      <label style={styles.fidelityPremioCheck}>
+                        <input
+                          type="checkbox"
+                          checked={fidelityPremioActive}
+                          onChange={(e) => onFidelityPremioActiveChange?.(e.target.checked)}
+                          style={{ marginTop: 3 }}
+                        />
+                        <span>
+                          <strong>Usa questo premio sull’ordine</strong>
+                          <span style={{ display: "block", fontSize: 13, color: "#2e7d32", marginTop: 6 }}>
+                            Sconto pari al prezzo listino margherita (€ {formatPrice(margheritaPrezzoCatalogo)});
+                            alla conferma verranno scalati <strong>{cost}</strong> punti.
+                          </span>
                         </span>
-                      ) : null}
-                      <span style={{ display: "block", fontSize: 13, color: "#2e7d32", marginTop: 6 }}>
-                        Sconto sul totale pari al prezzo listino margherita (€ {formatPrice(margheritaPrezzoCatalogo)});
-                        verranno scalati <strong>{fidelityRedeemPuntiCost}</strong> punti alla conferma.
-                      </span>
-                    </span>
-                  </label>
-                ) : margheritaPrezzoCatalogo <= 0 && fidelityRedeemPuntiCost != null ? (
-                  <p style={{ ...styles.fidelityMeta, color: "#b71c1c", marginTop: 8 }}>
-                    Premio disponibile in punti, ma nel listino non risulta un prodotto con nome «margherita» per calcolare
-                    lo sconto.
-                  </p>
-                ) : null}
+                      </label>
+                    ) : (
+                      <p style={{ ...styles.fidelityMeta, color: "#b71c1c", marginTop: 10, marginBottom: 0 }}>
+                        Premio disponibile, ma nel listino non risulta un prodotto con nome «margherita» per calcolare lo
+                        sconto. Aggiungi o rinomina la pizza nel catalogo, poi riprova.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div style={styles.fidelityPremioPending}>
+                    {prossimo ? (
+                      <>
+                        <div style={{ ...styles.fidelityPremioTitle, color: "#f57f17" }}>Prossimo premio</div>
+                        <div style={{ ...styles.fidelityPremioName, color: "#e65100" }}>{prossimo.descrizione}</div>
+                        <div style={styles.fidelityPremioSub}>
+                          {totScheda >= 1 && suScheda != null
+                            ? `Mancano ${Math.max(0, prossimo.soglia - suScheda)} timbri sulla scheda (soglia ${prossimo.soglia}).`
+                            : `Mancano ${Math.max(0, prossimo.soglia - Number(punti))} punti (soglia ${prossimo.soglia}).`}
+                        </div>
+                      </>
+                    ) : (
+                      <p style={{ ...styles.fidelityMeta, margin: 0 }}>
+                        Nessun premio configurato nel programma fedeltà, oppure nessun premio ancora raggiungibile con
+                        questo saldo.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   style={styles.fidelityClearBtn}
@@ -472,12 +532,17 @@ export default function RiepilogoOrdinePage({
           Seleziona un orario (obbligatorio). Fasce su quarti d’ora (:00, :15, :30, :45).{" "}
           {staffOverrideClosing ? (
             <>
-              <strong>Modalità cassa:</strong> puoi prenotare anche dopo l’orario di chiusura del locale (fino a fine giornata) e, se il giorno risulta chiuso in calendario, sono comunque disponibili fasce da adesso per ordini operativi.{" "}
+              <strong>Modalità cassa:</strong> puoi prenotare anche dopo l’orario di chiusura del locale (fino a fine
+              giornata) e, se il giorno risulta chiuso in calendario, sono comunque disponibili fasce da adesso per
+              ordini operativi. Le fasce già passate sono in grigio; dopo {CASSA_SLOT_GRACE_AFTER_START_MIN} minuti
+              dall’orario non sono più selezionabili.{" "}
             </>
           ) : (
             <>Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. </>
           )}
-          Capacità forno: max {maxPizzePerSlot} pizze ogni {PLANNING_GRID_SLOT_MINUTES} min. In ogni fascia vedi le pizze <strong>già prenotate oggi</strong> (consegna + ritiro). Se selezioni una fascia, il conteggio include anche le pizze di <strong>questo ordine</strong>.
+          Capacità forno: max {maxPizzePerSlot} pizze ogni {PLANNING_GRID_SLOT_MINUTES} min. In ogni fascia vedi le pizze{" "}
+          <strong>già prenotate oggi</strong> (consegna + ritiro). Se selezioni una fascia, il conteggio include anche
+          le pizze di <strong>questo ordine</strong>.
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>
@@ -493,20 +558,43 @@ export default function RiepilogoOrdinePage({
             const booked = pizzePerSlot[slot.key] ?? 0
             const isSelected = selectedSlot?.key === slot.key
             const withCart = isSelected ? booked + totalPizzeOrdine : booked
-            const color = slotColor(withCart, maxPizzePerSlot, sogliaGiallo)
-            const full = withCart >= maxPizzePerSlot
+            const past = isSlotPast(slot, nowForSlots)
+            const locked = isCassaSlotLocked(slot, nowForSlots)
+            const color = past ? "#e2e8f0" : slotColor(withCart, maxPizzePerSlot, sogliaGiallo)
+            const full = !past && withCart >= maxPizzePerSlot
             return (
               <button
                 key={slot.key}
                 type="button"
-                onClick={() => onSlotSelect?.(slot)}
+                disabled={locked}
+                onClick={() => {
+                  if (locked) return
+                  onSlotSelect?.(slot)
+                }}
                 style={{
                   ...styles.slotBox,
                   backgroundColor: color,
-                  borderColor: isSelected ? "#1565c0" : full ? "#c62828" : "#81c784",
+                  borderColor: locked
+                    ? "#94a3b8"
+                    : isSelected
+                      ? "#1565c0"
+                      : full
+                        ? "#c62828"
+                        : past
+                          ? "#cbd5e1"
+                          : "#81c784",
                   borderWidth: isSelected ? 3 : 2,
-                  cursor: "pointer",
+                  cursor: locked ? "not-allowed" : "pointer",
+                  opacity: locked ? 0.72 : 1,
+                  color: past || locked ? "#64748b" : undefined,
                 }}
+                title={
+                  locked
+                    ? `Fascia non più selezionabile (oltre ${CASSA_SLOT_GRACE_AFTER_START_MIN} min dall’orario)`
+                    : past
+                      ? "Fascia già passata (ancora selezionabile per pochi minuti)"
+                      : undefined
+                }
               >
                 <div style={styles.slotTime}>{slot.label}</div>
                 <div style={styles.slotCount}>
@@ -516,8 +604,17 @@ export default function RiepilogoOrdinePage({
                       +{totalPizzeOrdine} in questo ordine → {withCart} totali
                     </span>
                   ) : null}
+                  {locked ? (
+                    <span style={{ display: "block", fontSize: 10, marginTop: 2, fontWeight: 600, color: "#64748b" }}>
+                      Non selezionabile
+                    </span>
+                  ) : past ? (
+                    <span style={{ display: "block", fontSize: 10, marginTop: 2, color: "#64748b" }}>Passata</span>
+                  ) : null}
                 </div>
-                {isSelected && <div style={{ fontSize: 11, marginTop: 4, color: "#1565c0", fontWeight: 600 }}>✓</div>}
+                {isSelected && !locked ? (
+                  <div style={{ fontSize: 11, marginTop: 4, color: "#1565c0", fontWeight: 600 }}>✓</div>
+                ) : null}
               </button>
             )
           })}
@@ -775,6 +872,53 @@ const styles = {
     borderRadius: 8,
     background: "#e8f5e9",
     border: "1px solid #a5d6a7",
+  },
+  fidelityPremioBox: {
+    marginTop: 12,
+    padding: "12px 14px",
+    borderRadius: 8,
+    background: "#fff",
+    border: "1px solid #81c784",
+  },
+  fidelityPremioPending: {
+    marginTop: 12,
+    padding: "12px 14px",
+    borderRadius: 8,
+    background: "#fff8e1",
+    border: "1px solid #ffe082",
+  },
+  fidelityPremioTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "#558b2f",
+    marginBottom: 4,
+  },
+  fidelityPremioName: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: "#1b5e20",
+    lineHeight: 1.35,
+  },
+  fidelityPremioSub: {
+    fontSize: 13,
+    color: "#555",
+    marginTop: 6,
+    lineHeight: 1.4,
+  },
+  fidelityPremioCheck: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 12,
+    padding: "10px 12px",
+    background: "#e8f5e9",
+    borderRadius: 8,
+    border: "1px solid #a5d6a7",
+    cursor: "pointer",
+    fontSize: 14,
+    lineHeight: 1.45,
   },
   fidelityClearBtn: {
     marginTop: 8,

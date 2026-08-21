@@ -10,7 +10,8 @@ describe("groupOperativeNavItems", () => {
       "Cucina",
       "Bancone",
       "Pizzaioli",
-      "Delivery",
+      "Delivery / Pony",
+      "Pony (rider)",
     ])
   })
 

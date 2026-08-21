@@ -15,9 +15,18 @@ import {
 } from "@/features/admin/services/adminService";
 import { formatPrice } from "@/utils/format";
 import { sortByOrdine } from "@/utils/sortByOrdine";
+import { INGREDIENTE_CATEGORIA_OPTIONS } from "@/constants/ingredienteCategoria";
+import {
+  resolvePrepTaskBackgroundColor,
+  mergeCucinaPrepColorsFromParametri,
+} from "@/utils/cucinaPrepCategoryTheme";
 
 export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckbox = false }) {
-  const { tenantId } = useTenant();
+  const { tenantId, tenantData } = useTenant();
+  const prepCategoryColors = useMemo(
+    () => mergeCucinaPrepColorsFromParametri(tenantData?.parametri_operativi),
+    [tenantData?.parametri_operativi],
+  );
   const [category, setCategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +35,8 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
   const [newPrice, setNewPrice] = useState("");
   const [newImageUrl, setNewImageUrl] = useState("");
   const [newPrepCucina, setNewPrepCucina] = useState(false);
+  const [newPrepCategoria, setNewPrepCategoria] = useState("");
+  const [newPrepColore, setNewPrepColore] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
@@ -33,6 +44,8 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
   const [editPrice, setEditPrice] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editPrepCucina, setEditPrepCucina] = useState(false);
+  const [editPrepCategoria, setEditPrepCategoria] = useState("");
+  const [editPrepColore, setEditPrepColore] = useState("");
 
   const ensureCategory = useCallback(async () => {
     if (!tenantId) return null;
@@ -109,12 +122,20 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
         prezzo: Number(newPrice) || 0,
         immagine_url: newImageUrl.trim() || null,
         attivo: true,
-        ...(showPrepCucinaCheckbox ? { prepCucina: newPrepCucina } : {}),
+        ...(showPrepCucinaCheckbox
+          ? {
+              prepCucina: newPrepCucina,
+              prep_categoria: newPrepCategoria || null,
+              prep_colore: newPrepColore.trim() || null,
+            }
+          : {}),
       });
       setNewName("");
       setNewPrice("");
       setNewImageUrl("");
       setNewPrepCucina(false);
+      setNewPrepCategoria("");
+      setNewPrepColore("");
       setModalOpen(false);
       load();
     } catch (err) {
@@ -139,6 +160,8 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
     setEditPrice(String(p.prezzo ?? ""));
     setEditImageUrl(p.immagine_url ?? p.imageUrl ?? "");
     setEditPrepCucina(p.prep_cucina === true || p.prepCucina === true);
+    setEditPrepCategoria(p.prep_categoria ?? p.prepCategoria ?? "");
+    setEditPrepColore(p.prep_colore ?? p.prepColore ?? "");
   }
 
   async function handleSaveEdit() {
@@ -148,7 +171,13 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
         nome: editName.trim(),
         prezzo: Number(editPrice) || 0,
         immagine_url: editImageUrl.trim() || null,
-        ...(showPrepCucinaCheckbox ? { prepCucina: editPrepCucina } : {}),
+        ...(showPrepCucinaCheckbox
+          ? {
+              prepCucina: editPrepCucina,
+              prep_categoria: editPrepCategoria || null,
+              prep_colore: editPrepColore.trim() || null,
+            }
+          : {}),
       });
       setEditProduct(null);
       load();
@@ -218,14 +247,33 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
             style={{ minWidth: 180 }}
           />
           {showPrepCucinaCheckbox ? (
-            <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                <input
+                  type="checkbox"
+                  checked={newPrepCucina}
+                  onChange={(e) => setNewPrepCucina(e.target.checked)}
+                />
+                Prep. cucina (slot in Cucina)
+              </label>
+              <select
+                value={newPrepCategoria}
+                onChange={(e) => setNewPrepCategoria(e.target.value)}
+                title="Categoria colore (Cucina/Bancone/Pizzaiolo) per il task «prodotto intero»"
+              >
+                <option value="">Comune (default)</option>
+                {INGREDIENTE_CATEGORIA_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
               <input
-                type="checkbox"
-                checked={newPrepCucina}
-                onChange={(e) => setNewPrepCucina(e.target.checked)}
+                type="color"
+                value={/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(newPrepColore) ? newPrepColore : "#ffffff"}
+                onChange={(e) => setNewPrepColore(e.target.value)}
+                title="Colore diretto (opzionale, ha precedenza sulla categoria)"
+                style={{ width: 36, height: 32, padding: 0, border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer" }}
               />
-              Prep. cucina (slot in Cucina)
-            </label>
+            </>
           ) : null}
           <button type="button" className="btn-primary-dashboard" onClick={handleAdd}>
             Aggiungi
@@ -257,14 +305,33 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
             style={{ minWidth: 180 }}
           />
           {showPrepCucinaCheckbox ? (
-            <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                <input
+                  type="checkbox"
+                  checked={editPrepCucina}
+                  onChange={(e) => setEditPrepCucina(e.target.checked)}
+                />
+                Prep. cucina (slot in Cucina)
+              </label>
+              <select
+                value={editPrepCategoria}
+                onChange={(e) => setEditPrepCategoria(e.target.value)}
+                title="Categoria colore (Cucina/Bancone/Pizzaiolo) per il task «prodotto intero»"
+              >
+                <option value="">Comune (default)</option>
+                {INGREDIENTE_CATEGORIA_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
               <input
-                type="checkbox"
-                checked={editPrepCucina}
-                onChange={(e) => setEditPrepCucina(e.target.checked)}
+                type="color"
+                value={/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(editPrepColore) ? editPrepColore : "#ffffff"}
+                onChange={(e) => setEditPrepColore(e.target.value)}
+                title="Colore diretto (opzionale, ha precedenza sulla categoria)"
+                style={{ width: 36, height: 32, padding: 0, border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer" }}
               />
-              Prep. cucina (slot in Cucina)
-            </label>
+            </>
           ) : null}
           <button type="button" className="btn-primary-dashboard" onClick={handleSaveEdit}>
             Salva modifiche
@@ -284,7 +351,25 @@ export default function CategoryProductsPage({ slug, title, showPrepCucinaCheckb
             <span className="dashboard-list-item-meta">
               € {formatPrice(p.prezzo)}
               {showPrepCucinaCheckbox && (p.prep_cucina === true || p.prepCucina === true) ? (
-                <span style={{ marginLeft: 8, fontSize: 11, color: "#2e7d32", fontWeight: 600 }}>· Prep cucina</span>
+                <>
+                  <span style={{ marginLeft: 8, fontSize: 11, color: "#2e7d32", fontWeight: 600 }}>· Prep cucina</span>
+                  <span
+                    title="Colore categoria preparazione"
+                    style={{
+                      display: "inline-block",
+                      marginLeft: 6,
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      border: "1px solid #cbd5e1",
+                      verticalAlign: "middle",
+                      background: resolvePrepTaskBackgroundColor(
+                        { ingredienteCategoria: p.prep_categoria ?? p.prepCategoria, ingredienteColore: p.prep_colore ?? p.prepColore },
+                        prepCategoryColors,
+                      ),
+                    }}
+                  />
+                </>
               ) : null}
             </span>
             <button type="button" className="btn-primary-dashboard" onClick={() => openEdit(p)} style={{ marginRight: 8 }}>

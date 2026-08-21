@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 import LandingPlansSection from "@/features/public/components/LandingPlansSection"
+import logoPizzaManager from "@/assets/logo/logo-pizzamanager.png"
 import "../../../styles/landing.css"
 
 export default function Landing() {
@@ -168,7 +169,10 @@ export default function Landing() {
 
       <footer className="landing-footer">
         <div className="footer-inner">
-          <span className="footer-brand">PizzaManager</span>
+          <span className="footer-brand">
+            <img src={logoPizzaManager} alt="" className="footer-brand-logo" width={28} height={28} />
+            PizzaManager
+          </span>
           <nav className="footer-legal" aria-label="Informative legali">
             <Link to="/privacy">Privacy</Link>
             <Link to="/cookie">Cookie</Link>

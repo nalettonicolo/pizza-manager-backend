@@ -1,13 +1,17 @@
-import { useMemo, useEffect, useState } from "react"
+import { useMemo, useEffect, useState, useCallback } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import DashboardNavCards from "@/components/dashboard/DashboardNavCards"
+import Modal from "@/components/dashboard/Modal"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { usePv } from "@/app/contexts/PvContext"
 import { usePlan } from "@/app/hooks/usePlan"
+import { useTenantServizi } from "@/app/hooks/useTenantServizi"
 import { getTenantVenditeInsights } from "@/features/admin/services/adminService"
 import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
+import { isDemoGiroSearch } from "@/utils/demoGiro"
+import { ADMIN_HOME_SECTIONS } from "@/constants/adminTenantNav"
 
 export default function Home() {
   const navigate = useNavigate()
@@ -15,27 +19,12 @@ export default function Home() {
   const { ruolo } = useAuth()
   const { tenantData, tenantId } = useTenant()
   const [venditeInsights, setVenditeInsights] = useState(null)
+  const [menuSection, setMenuSection] = useState(null)
   const { pvList, selectPv } = usePv()
   const { plan, isPro, isEnterprise } = usePlan()
+  const { hasServizio, enforcementActive } = useTenantServizi()
+  const inDemoLive = isDemoGiroSearch(location.search)
   const ruoloNorm = normalizeAppRuolo(ruolo)
-  const homeNavItems = useMemo(() => {
-    const items = [
-      { to: "/select-pv", label: "Scegli punto vendita", description: "Seleziona la pizzeria" },
-      {
-        to: withPreservedSupportSearch("/preview", location.search),
-        label: "Anteprima",
-        description: "Apri la vetrina online del locale",
-      },
-    ]
-    return items
-      .filter((item) => !item.to.startsWith("/select-pv") || pvList.length > 1)
-      .map((item) =>
-        item.to.startsWith("/select-pv")
-          ? { ...item, to: withPreservedSupportSearch("/select-pv", location.search) }
-          : item,
-      )
-  }, [pvList, location.search])
-
   const isAdmin = ruoloNorm === "admin" || ruoloNorm === "owner" || isSuperAdminRole(ruolo)
 
   const activePvs = useMemo(
@@ -43,6 +32,73 @@ export default function Home() {
     [pvList],
   )
   const showPanoramicaGruppo = isAdmin && activePvs.length > 1
+
+  const sectionBlocks = useMemo(() => {
+    const withSearch = (to) => withPreservedSupportSearch(to, location.search)
+    return ADMIN_HOME_SECTIONS.map((section) => {
+      const items = section.items
+        .filter((item) => {
+          if (item.contabilita) {
+            if (enforcementActive) {
+              return hasServizio("contabilita_locale") || hasServizio("contabilita_semplice")
+            }
+            return true
+          }
+          return !item.servizioId || hasServizio(item.servizioId)
+        })
+        .map((item) => ({
+          to: withSearch(item.to),
+          label: item.label,
+          description: item.description,
+        }))
+      return { ...section, items }
+    }).filter((s) => s.items.length > 0)
+  }, [location.search, hasServizio, enforcementActive])
+
+  const toolItems = useMemo(() => {
+    const withSearch = (to) => withPreservedSupportSearch(to, location.search)
+    const items = [
+      {
+        to: withSearch("/preview"),
+        label: "Vetrina online",
+        description: "Anteprima del menù pubblico",
+      },
+      {
+        to: withSearch("/admin/manuale"),
+        label: "Guida",
+        description: "Manuale operativo del gestore",
+      },
+    ]
+    if (pvList.length > 1) {
+      items.unshift({
+        to: withSearch("/select-pv"),
+        label: "Cambia sede",
+        description: "Seleziona il punto vendita attivo",
+      })
+    }
+    if (inDemoLive) {
+      items.push({
+        to: withSearch("/operative/dashboard"),
+        label: "Torna alla demo",
+        description: "Hub reparti operativi",
+      })
+    }
+    return items
+  }, [location.search, pvList.length, inDemoLive])
+
+  const closeMenu = useCallback(() => setMenuSection(null), [])
+
+  const openSectionMenu = useCallback((title, items) => {
+    setMenuSection({ title, items })
+  }, [])
+
+  const goToItem = useCallback(
+    (to) => {
+      setMenuSection(null)
+      navigate(to)
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     if (!isAdmin || !tenantId) {
@@ -79,7 +135,14 @@ export default function Home() {
   if (isAdmin) {
     return (
       <div className="admin-tenant-home">
-        <h1 className="dashboard-page-title admin-tenant-home-title">Benvenuto</h1>
+        <h1 className="dashboard-page-title admin-tenant-home-title">
+          {inDemoLive ? "Admin del locale" : "Gestione locale"}
+        </h1>
+        <p className="admin-home-lede">
+          {inDemoLive
+            ? "Pannello del gestore: da qui configuri menu, staff e impostazioni del tenant demo."
+            : "Scegli un’area qui sotto, oppure usa la barra in alto per passare da una sezione all’altra."}
+        </p>
 
         <div className="dashboard-box admin-home-summary">
           <dl className="admin-home-summary-dl">
@@ -95,34 +158,23 @@ export default function Home() {
             )}
             {activePvs.length === 1 && (
               <div>
-                <dt>Sede attiva</dt>
+                <dt>Sede</dt>
                 <dd>{activePvs[0].nome}</dd>
               </div>
             )}
-          </dl>
-          <p className="admin-home-nav-hint">
-            Menu, Magazzino, Contabilità, Impostazioni, Dipendenti e le altre sezioni sono nella{" "}
-            <strong>barra blu in alto</strong>. Qui sotto trovi solo l’anteprima sito e, se serve, il cambio sede.
-          </p>
-          <p className="admin-home-nav-hint admin-home-nav-hint--secondary">
-            Documentazione operativa: <Link to="/admin/manuale">Manuale utente</Link>
-            {" · "}
-            <Link to="/admin/report">Report</Link>
-            {activePvs.length > 1 ? (
-              <>
-                {" · "}
-                <Link to="/select-pv">Cambia sede</Link>
-              </>
+            {inDemoLive ? (
+              <div>
+                <dt>Modalità</dt>
+                <dd>Demo live</dd>
+              </div>
             ) : null}
-          </p>
+          </dl>
         </div>
 
         {showPanoramicaGruppo && (
           <section className="dashboard-box admin-home-pv-strip">
             <h2 className="admin-home-section-title">Sedi attive</h2>
-            <p className="admin-home-section-lede">
-              Scegli il punto vendita con cui lavorare in questa sessione.
-            </p>
+            <p className="admin-home-section-lede">Scegli il punto vendita con cui lavorare in questa sessione.</p>
             <div className="admin-home-pv-grid">
               {activePvs.map((pv) => (
                 <button
@@ -142,16 +194,50 @@ export default function Home() {
           </section>
         )}
 
-        <section className="admin-home-quick-section" aria-label="Anteprima e strumenti">
-          <h2 className="admin-home-section-title">Strumenti</h2>
-          <DashboardNavCards items={homeNavItems} columns={2} />
+        {sectionBlocks.map((section) => (
+          <section key={section.id} className="admin-home-quick-section" aria-labelledby={`admin-sec-${section.id}`}>
+            <div className="admin-home-section-head">
+              <h2 id={`admin-sec-${section.id}`} className="admin-home-section-title">
+                {section.title}
+              </h2>
+              <button
+                type="button"
+                className="admin-home-section-menu-btn"
+                onClick={() => openSectionMenu(section.title, section.items)}
+                aria-haspopup="dialog"
+              >
+                Menu
+              </button>
+            </div>
+            {section.lede ? <p className="admin-home-section-lede">{section.lede}</p> : null}
+            <DashboardNavCards items={section.items} columns={3} variant="hub" />
+          </section>
+        ))}
+
+        <section className="admin-home-quick-section" aria-labelledby="admin-sec-tools">
+          <div className="admin-home-section-head">
+            <h2 id="admin-sec-tools" className="admin-home-section-title">
+              Strumenti
+            </h2>
+            <button
+              type="button"
+              className="admin-home-section-menu-btn"
+              onClick={() => openSectionMenu("Strumenti", toolItems)}
+              aria-haspopup="dialog"
+            >
+              Menu
+            </button>
+          </div>
+          <p className="admin-home-section-lede">Anteprima sito e documentazione.</p>
+          <DashboardNavCards items={toolItems} columns={3} variant="hub" />
         </section>
 
         {venditeInsights && venditeInsights.ordiniAnalizzati > 0 && (
           <section className="dashboard-box admin-home-stats">
             <h3 className="admin-home-section-title">Statistiche vendite (campione recente)</h3>
             <p className="admin-home-stats-note">
-              Basate sugli ultimi {venditeInsights.ordiniAnalizzati} ordini del locale (quantità per prodotto e clienti con più ordini).
+              Basate sugli ultimi {venditeInsights.ordiniAnalizzati} ordini del locale (quantità per prodotto e clienti
+              con più ordini).
             </p>
             <div className="admin-home-stats-grid">
               <div>
@@ -177,6 +263,32 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        <Modal
+          open={Boolean(menuSection)}
+          onClose={closeMenu}
+          title={menuSection ? `${menuSection.title} — scegli` : ""}
+          closeOnOverlayClick
+        >
+          {menuSection ? (
+            <ul className="admin-home-section-menu-list">
+              {menuSection.items.map((item) => (
+                <li key={`${item.to}-${item.label}`}>
+                  <button
+                    type="button"
+                    className="admin-home-section-menu-item"
+                    onClick={() => goToItem(item.to)}
+                  >
+                    <span className="admin-home-section-menu-item-label">{item.label}</span>
+                    {item.description ? (
+                      <span className="admin-home-section-menu-item-desc">{item.description}</span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Modal>
       </div>
     )
   }
@@ -193,7 +305,13 @@ export default function Home() {
             Piano: <span className="font-medium text-gray-700">{pianoLabel}</span>
           </p>
         )}
-        <DashboardNavCards items={homeNavItems} columns={2} />
+        <DashboardNavCards items={toolItems} columns={2} />
+        <p style={{ marginTop: 16, fontSize: 13, color: "#64748b" }}>
+          Per l’area gestione serve un account amministratore del locale.{" "}
+          <Link to="/login" style={{ fontWeight: 600, color: "#1565c0" }}>
+            Accedi
+          </Link>
+        </p>
       </div>
     </div>
   )

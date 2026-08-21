@@ -2,6 +2,7 @@ import { Outlet, NavLink, Navigate, useLocation, useNavigate } from "react-route
 import { useState, useEffect } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
+import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig";
 import { CassaHeaderContext } from "@/app/contexts/CassaHeaderContext";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
 import {
@@ -24,8 +25,12 @@ import { isQaSupportSearch } from "@/utils/viewportLayoutPreview";
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
 import { isSuperAdminRole } from "@/utils/superAdminAccess";
 import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess";
+import { useKioskAutoLogout } from "@/features/operative/hooks/useKioskAutoLogout";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
-import { DEMO_GIRO_ADMIN_LINKS } from "@/utils/demoGiro";
+import { DEMO_GIRO_ADMIN_LINKS, isDemoGiroSessionActive, withDemoGiroQuery } from "@/utils/demoGiro";
+import { openDemoClienteArea } from "@/utils/demoClienteSession";
+import SaHomeButton from "@/components/SaHomeButton";
+import { resolveSupportTenantOverride } from "@/utils/supportTenantOverride";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
 
@@ -61,9 +66,15 @@ export default function OperativeLayout() {
   const { user, logout, ruolo } = useAuth();
   const navigate = useNavigate();
   const { tenantData } = useTenant();
+  const kioskMinuti = Number(tenantData?.parametri_operativi?.kiosk_logout_minuti);
+  useKioskAutoLogout({
+    enabled: Number.isFinite(kioskMinuti) && kioskMinuti > 0,
+    timeoutMin: Number.isFinite(kioskMinuti) && kioskMinuti > 0 ? kioskMinuti : 5,
+  });
   const { hasServizio } = useTenantServizi();
   const location = useLocation();
   const { permessiAreeEffective, inDemoLive, fullDemoAccess } = useOperativeSaDemoAccess();
+  const cucinaTabletOn = isCucinaTabletAbilitato(tenantData?.parametri_operativi);
 
   const resolvedTenantTheme = resolveMenuTheme(tenantData?.parametri_operativi);
   const themeStyle = adminLayoutCssVarsFromTheme(resolvedTenantTheme);
@@ -74,6 +85,20 @@ export default function OperativeLayout() {
   useEffect(() => {
     void applyTenantFavicon(logoUrl);
   }, [logoUrl]);
+
+  /** Ripristina `_demo_giro=1` in URL se perso da navigate() interni (es. Cassa → Stampanti). */
+  useEffect(() => {
+    if (!isDemoGiroSessionActive()) return;
+    try {
+      const q = location.search.startsWith("?") ? location.search.slice(1) : location.search;
+      if (new URLSearchParams(q).get("_demo_giro") === "1") return;
+    } catch {
+      /* ignore */
+    }
+    const tenantId = resolveSupportTenantOverride(location.search);
+    if (!tenantId) return;
+    navigate(withDemoGiroQuery(`${location.pathname}${location.hash || ""}`, tenantId), { replace: true });
+  }, [location.pathname, location.search, location.hash, navigate]);
 
   const ruoloKey = typeof ruolo === "string" ? ruolo.toLowerCase().trim() : "";
   const isSaSupport =
@@ -88,6 +113,7 @@ export default function OperativeLayout() {
     : permessiAreeEffective;
   const navItemsRaw = permessiForNav
     ? ROLE_NAV.filter((item) => {
+        if (item.areaKey === "cucina" && !cucinaTabletOn) return false
         // Demo / SA: non nascondere voci per piano servizi
         if (
           item.servizioId &&
@@ -115,9 +141,12 @@ export default function OperativeLayout() {
     return ROLE_NAV.findIndex((x) => x.to === a.to) - ROLE_NAV.findIndex((x) => x.to === b.to);
   });
   const firstAllowedPath = resolveFirstOperativePath(navItems, defaultPath, permessiForNav, hasServizio);
-  const showQuadLink = isSuperAdminRole(ruolo) || inDemoLive || fullDemoAccess;
-  const showClienteLink = inDemoLive;
-  const showAdminLinks = fullDemoAccess || inDemoLive;
+  const isSaUser = isSuperAdminRole(ruolo);
+  const showQuadLink = isSaUser || inDemoLive || fullDemoAccess;
+  /** Area cliente / vetrina in sidebar: solo Super Admin in Demo live. */
+  const showClienteShortcuts = isSaUser && inDemoLive;
+  const showAdminLinks = fullDemoAccess || inDemoLive || isSaSupport;
+  const clienteShortcutLinks = DEMO_GIRO_ADMIN_LINKS.filter((l) => l.group === "strumenti");
   const navGroups = (() => {
     const byId = new Map(groupOperativeNavItems(navItems).map((g) => [g.id, { ...g, items: [...g.items] }]));
     const ensure = (id, label, extras) => {
@@ -129,21 +158,24 @@ export default function OperativeLayout() {
       }
     };
     ensure("strumenti", "Strumenti", [
-      ...(showQuadLink ? [{ to: "/operative/test-reparti-quad", label: "4 schermate" }] : []),
-      ...(showClienteLink
-        ? DEMO_GIRO_ADMIN_LINKS.filter((l) => l.group === "strumenti").map((l) => ({
-            to: l.path,
-            label: l.label,
-          }))
+      ...(showQuadLink
+        ? [
+            {
+              to: "/operative/test-reparti-quad",
+              label: "4 schermate",
+              description: "Pizzaioli, bancone, cucina e delivery insieme",
+            },
+          ]
         : []),
     ]);
     ensure(
       "admin",
-      "Amministrazione",
+      "Admin del locale",
       showAdminLinks
         ? DEMO_GIRO_ADMIN_LINKS.filter((l) => l.group === "admin").map((l) => ({
             to: l.path === "/admin/home" ? ADMIN_TENANT_HOME : l.path,
             label: l.label,
+            description: l.description || "",
           }))
         : [],
     );
@@ -178,10 +210,12 @@ export default function OperativeLayout() {
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  /** Alias stabile per effetti/HMR (evita ReferenceError se un bundle stale usa il nome precedente). */
+  const setMobileSidebarOpen = setSidebarOpen;
   const narrowViewport = useMediaQuery("(max-width: 900px)");
-  /** Sala QA: drawer ok, ma niente shell cassa-mobile che collassa il contenuto. */
-  const useDrawerSidebar = narrowViewport && !operativeFullBleed;
+  /** Sidebar nascosta di default: si apre con ☰ (desktop e mobile). */
+  const useDrawerSidebar = !operativeFullBleed;
   const matchedNavItem = [...ROLE_NAV]
     .sort((a, b) => b.to.length - a.to.length)
     .find(
@@ -210,11 +244,16 @@ export default function OperativeLayout() {
 
   useEffect(() => {
     setMobileSidebarOpen(false);
-  }, [location.pathname]);
+  }, [location.pathname, setMobileSidebarOpen]);
 
   useEffect(() => {
-    if (!useDrawerSidebar) setMobileSidebarOpen(false);
-  }, [useDrawerSidebar]);
+    if (!sidebarOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setMobileSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen, setMobileSidebarOpen]);
 
   const handleLogout = async () => {
     await logout();
@@ -268,7 +307,7 @@ export default function OperativeLayout() {
       isQuadRepartiTestEmail(user?.email) ? "/operative/pizzaiolo-ingresso" : firstAllowedPath || "/operative/cassa";
     return <Navigate to={`${homeOp}${location.search || ""}`} replace />;
   }
-  if (!canAccessCurrent && firstAllowedPath && ruoloKey !== "superadmin" && !isSaSupport) {
+  if (!canAccessCurrent && firstAllowedPath && ruoloKey !== "superadmin" && !isSaSupport && !fullDemoAccess && !inDemoLive) {
     return <Navigate to={`${firstAllowedPath}${location.search || ""}`} replace />;
   }
   // Sala QA / support_tenant: evita layout cassa-mobile (min-height:0 + overflow hidden)
@@ -289,21 +328,22 @@ export default function OperativeLayout() {
 
   return (
     <div className={wrapClass} style={themeStyle}>
-      {useDrawerSidebar && mobileSidebarOpen ? (
+      {useDrawerSidebar && sidebarOpen ? (
         <button
           type="button"
           className="operative-drawer-backdrop"
           aria-label="Chiudi menu"
-          onClick={() => setMobileSidebarOpen(false)}
+          onClick={() => setSidebarOpen(false)}
         />
       ) : null}
       {!operativeFullBleed && (
         <aside
-          className={`dashboard-sidebar${useDrawerSidebar ? " dashboard-sidebar--drawer" : ""}${mobileSidebarOpen ? " is-open" : ""}`}
+          className={`dashboard-sidebar${useDrawerSidebar ? " dashboard-sidebar--drawer" : ""}${sidebarOpen ? " is-open" : ""}`}
+          aria-hidden={useDrawerSidebar && !sidebarOpen ? true : undefined}
         >
           {useDrawerSidebar ? (
             <div className="operative-sidebar-drawer-close">
-              <button type="button" onClick={() => setMobileSidebarOpen(false)} aria-label="Chiudi menu">
+              <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Chiudi menu">
                 ✕
               </button>
             </div>
@@ -317,17 +357,58 @@ export default function OperativeLayout() {
             {inDemoLive ? "Demo live" : "Area operativa"}
           </h2>
           {inDemoLive ? (
-            <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8", lineHeight: 1.35 }}>
-              Naviga i reparti dai menu sotto. Usa «4 schermate» in Strumenti.
+            <p className="operative-demo-lede">
+              Qui sotto: vista <strong>cliente</strong>. Più in basso: reparti sala e admin del locale.
             </p>
           ) : null}
-          <nav id="operative-sidebar-nav" className="operative-sidebar-nav">
+          {showClienteShortcuts ? (
+            <div className="operative-sa-demo-shortcuts" aria-label="Vista cliente">
+              <p className="operative-sa-demo-shortcuts-kicker">Vista cliente</p>
+              {clienteShortcutLinks.map((l) => (
+                <NavLink
+                  key={`${l.label}:${l.path}`}
+                  to={withPreservedSupportSearch(l.path, location.search)}
+                  className={({ isActive }) =>
+                    `operative-sa-demo-shortcut${isActive ? " active" : ""}`
+                  }
+                  onClick={(e) => {
+                    if (!l.demoClienteLogin) {
+                      setSidebarOpen(false)
+                      return
+                    }
+                    e.preventDefault()
+                    void (async () => {
+                      const tid =
+                        resolveSupportTenantOverride() ||
+                        String(import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID || "").trim()
+                      const login = await openDemoClienteArea(tid, "/preview")
+                      if (!login.ok) {
+                        alert(login.error)
+                        return
+                      }
+                      setSidebarOpen(false)
+                    })()
+                  }}
+                >
+                  <span className="operative-sa-demo-shortcut-label">{l.label}</span>
+                  {l.description ? (
+                    <span className="operative-sa-demo-shortcut-desc">{l.description}</span>
+                  ) : null}
+                </NavLink>
+              ))}
+            </div>
+          ) : null}
+          <nav
+            id="operative-sidebar-nav"
+            className={`operative-sidebar-nav${inDemoLive ? " operative-sidebar-nav--demo-cards" : ""}`}
+          >
             {navGroups.map((group) => {
               const hasActive = group.items.some((item) => pathMatchesNavTo(location.pathname, item.to));
               const defaultOpen =
                 hasActive ||
                 group.id === "panoramica" ||
                 group.id === "reparti" ||
+                (inDemoLive && (group.id === "admin" || group.id === "strumenti")) ||
                 (group.id === "cassa" &&
                   (location.pathname === "/operative/cassa" ||
                     location.pathname.startsWith("/operative/cassa/") ||
@@ -336,21 +417,40 @@ export default function OperativeLayout() {
                 <OperativeNavGroup
                   key={`${group.id}-${location.pathname}`}
                   id={group.id}
-                  label={group.label}
+                  label={inDemoLive && group.id === "admin" ? "Admin del locale" : group.label}
                   open={defaultOpen}
                 >
                   {group.id === "cassa" && isCassaPage && cassaSidebar ? (
-                    <div className="operative-nav-group-cassa-slot">{cassaSidebar}</div>
+                    <div
+                      className={`operative-nav-group-cassa-slot${inDemoLive ? " operative-nav-group-cassa-slot--demo" : ""}`}
+                    >
+                      {cassaSidebar}
+                    </div>
                   ) : null}
                   {group.items.map((item) => (
                     <NavLink
                       key={item.to}
                       to={withPreservedSupportSearch(item.to, location.search)}
                       end={item.to === "/operative/cassa"}
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setMobileSidebarOpen(false)}
+                      className={({ isActive }) =>
+                        inDemoLive
+                          ? `operative-sa-demo-shortcut${isActive ? " active" : ""}`
+                          : isActive
+                            ? "active"
+                            : ""
+                      }
+                      onClick={() => setSidebarOpen(false)}
                     >
-                      {item.label}
+                      {inDemoLive ? (
+                        <>
+                          <span className="operative-sa-demo-shortcut-label">{item.label}</span>
+                          {item.description ? (
+                            <span className="operative-sa-demo-shortcut-desc">{item.description}</span>
+                          ) : null}
+                        </>
+                      ) : (
+                        item.label
+                      )}
                     </NavLink>
                   ))}
                 </OperativeNavGroup>
@@ -364,15 +464,10 @@ export default function OperativeLayout() {
                 Ruolo: {RUOLO_SIDEBAR_LABEL[ruoloKey] ?? ruoloKey}
               </p>
             ) : null}
-            {inDemoLive ? (
-              <button
-                type="button"
-                className="btn-logout btn-logout-red"
-                style={{ marginTop: 10, width: "100%" }}
-                onClick={() => navigate("/superadmin/ingresso", { replace: true })}
-              >
-                Esci demo
-              </button>
+            {isSaUser || inDemoLive ? (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                <SaHomeButton mode={inDemoLive ? "demoHub" : "ingresso"} />
+              </div>
             ) : null}
           </div>
         </aside>
@@ -392,6 +487,7 @@ export default function OperativeLayout() {
                   ⛶
                 </button>
               )}
+              {isSaUser ? <SaHomeButton compact mode={inDemoLive ? "demoHub" : "ingresso"} /> : null}
               <button type="button" className="btn-logout btn-logout-red" onClick={() => void handleLogout()}>
                 Esci
               </button>
@@ -403,24 +499,31 @@ export default function OperativeLayout() {
                 <button
                   type="button"
                   className="operative-mobile-menu-btn"
-                  onClick={() => setMobileSidebarOpen(true)}
-                  aria-expanded={mobileSidebarOpen}
+                  onClick={() => setSidebarOpen((v) => !v)}
+                  aria-expanded={sidebarOpen}
                   aria-controls="operative-sidebar-nav"
-                  aria-label="Apri menu di navigazione"
+                  aria-label={sidebarOpen ? "Chiudi menu di navigazione" : "Apri menu di navigazione"}
                 >
-                  ☰
+                  <span className="operative-hamburger-icon" aria-hidden>
+                    <span />
+                    <span />
+                    <span />
+                  </span>
                 </button>
               ) : null}
-              <h1 className="dashboard-header-title">{useDrawerSidebar ? headerTitleCompact : headerTitle}</h1>
+              <h1 className="dashboard-header-title">{narrowViewport ? headerTitleCompact : headerTitle}</h1>
               {isCassaPage && (
                 <div
-                  className={`dashboard-header-toolbar${useDrawerSidebar ? " cassa-header-toolbar-scroll" : ""}`}
+                  className={`dashboard-header-toolbar${narrowViewport ? " cassa-header-toolbar-scroll" : ""}`}
                   style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, margin: "0 16px", justifyContent: "flex-start" }}
                 >
                   {cassaToolbar}
                 </div>
               )}
               <div className="dashboard-header-actions">
+                {isSaUser ? (
+                  <SaHomeButton compact={narrowViewport} mode={inDemoLive ? "demoHub" : "ingresso"} />
+                ) : null}
                 <button type="button" className="btn-logout btn-logout-red" onClick={() => void handleLogout()}>
                   Esci
                 </button>

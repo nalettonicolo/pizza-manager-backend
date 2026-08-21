@@ -60,8 +60,9 @@ Se un ingrediente contiene uno di questi allergeni, indicarlo nel file (nella co
 | **senza**           | No  | Sconto in euro per variante “senza” (solitamente valore negativo). | `-0,80` |
 | **poco**            | No  | Sconto in euro per variante “poco” (solitamente negativo). | `-0,15` |
 | **va_in_cottura**   | No  | Se l’ingrediente va in cottura: `1` o `si`; altrimenti `0` o vuoto. | `1` oppure `0` |
-| **prep_cucina**     | No  | Se l’ingrediente richiede preparazione in cucina (es. scongelare), visibile in schermata Cucina: `1` o `si`; altrimenti `0` o vuoto. Colonna opzionale: se manca, vale no. | `1` oppure `0` |
+| **prep_cucina**     | No  | Serve **solo** per ingredienti **senza categoria** che vanno comunque preparati (es. tagliati, scongelati): `1` o `si`; altrimenti `0` o vuoto. Se l’ingrediente ha già una **categoria** (vedi riga sotto), compare in automatico su Cucina/Bancone — non serve anche `prep_cucina`. Colonna opzionale: se manca, vale no. | `1` oppure `0` |
 | **allergeni**       | No  | Nomi degli allergeni associati, separati da **virgola** `,` nella stessa cella. Usare solo i nomi della tabella §2. | `Latte` oppure `Latte,Glutine` |
+| **categoria**       | No  | Tipo ingrediente per Cucina/Bancone/Pizzaiolo: `affettato` \| `fritto` \| `dolce` \| `bibita` \| `congelato` (sinonimi accettati: bibite, fritti, surgelato, …). Il **colore** non si imposta da CSV: segue sempre questa categoria (personalizzabile poi dal form ingrediente in Admin → Ingredienti). Vuoto = nessuna categoria specifica. | `affettato` |
 
 - **Obbligatorie:** `nome_ingrediente` e `costo_eur`.
 - **Opzionali:** le altre; si possono lasciare vuote rispettando l’ordine delle colonne.
@@ -69,10 +70,10 @@ Se un ingrediente contiene uno di questi allergeni, indicarlo nel file (nella co
 ### Intestazione (prima riga)
 
 ```text
-nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni
+nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni;categoria
 ```
 
-(Senza colonna **prep_cucina** il file resta valido: usare `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni` come prima.)
+(Senza colonna **prep_cucina** il file resta valido: usare `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;allergeni` come prima. `categoria` in coda è sempre opzionale; se assente, la categoria degli ingredienti esistenti non si tocca.)
 
 ---
 
@@ -101,6 +102,8 @@ nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucin
 File **senza** colonna `prep_cucina` (subito prima degli allergeni) sono ancora supportati: la settima colonna dopo `va_in_cottura` può essere direttamente **Glutine**.
 
 Puoi copiare la riga qui sopra e incollarla nella prima riga del foglio Excel/Google Fogli. Nel pacchetto è disponibile anche un **file template** già pronto: `docs/template_ingredienti_formato_b.csv` (puoi aprirlo con Excel o Google Fogli e compilare le righe dati; dalla pagina Ingredienti → CSV puoi anche **Scarica template** per ottenere lo stesso file).
+
+Dopo l'ultima colonna allergene puoi aggiungere, sempre opzionale, **categoria** (affettato | fritto | dolce | bibita | congelato) — vedi §11 per l'intestazione completa con questa colonna in coda. Non esiste più una colonna colore: il colore segue sempre la categoria.
 
 ### Come compilare le righe dati (da riga 2 in poi)
 
@@ -171,13 +174,19 @@ Gorgonzola;0,55;0,30;-0,55;-0,20;;Latte
 Wurstel;0,40;0,25;-0,40;-0,15;;Glutine,Latte
 ```
 
-**File completo di esempio (3 righe + intestazione):**
+**Ingrediente con categoria (colore assegnato in automatico; niente `prep_cucina`, la categoria basta da sola):**
 
 ```text
-nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni
-Pomodoro;0,40;0,20;-0,40;-0,15;1;0;
-Mozzarella;0,80;0,25;-0,80;-0,20;0;0;Latte
-Tonno;0,65;0,35;-0,65;-0,25;0;0;Pesce
+Patate surgelate;0,50;0,20;-0,50;-0,10;0;0;;congelato
+```
+
+**File completo di esempio (3 righe + intestazione, con categoria in coda):**
+
+```text
+nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni;categoria
+Pomodoro;0,40;0,20;-0,40;-0,15;1;0;;
+Mozzarella;0,80;0,25;-0,80;-0,20;0;0;Latte;
+Patate surgelate;0,50;0,20;-0,50;-0,10;0;0;;congelato
 ```
 
 ---
@@ -190,8 +199,9 @@ Tonno;0,65;0,35;-0,65;-0,25;0;0;Pesce
 4. **Virgola o punto decimale:** in Italia spesso si usa la virgola (0,80). Se il programma che genera il CSV usa il punto (0.80), va bene ugualmente.
 5. **Allergeni:** scrivere **esattamente** i nomi degli allergeni già presenti nel sistema. Nella **stessa cella** separare più allergeni con **virgola** (es. `Latte,Glutine`). Eventuali nomi sconosciuti vengono ignorati.
 6. **Va in cottura:** nella colonna `va_in_cottura` usare `1` o `si`/`sì` per sì, `0` o vuoto per no.
-7. **Prep. cucina:** nella colonna `prep_cucina` (se presente) stessi valori di `va_in_cottura` per sì/no; serve alla schermata Cucina per ingredienti da preparare prima (es. scongelati).
-8. **Righe vuote:** le righe completamente vuote vengono ignorate.
+7. **Prep. cucina:** nella colonna `prep_cucina` (se presente) stessi valori di `va_in_cottura` per sì/no. Usarla **solo** per ingredienti senza `categoria` che vanno comunque preparati (es. scongelati): se hai già impostato una categoria, l'ingrediente compare da solo su Cucina/Bancone.
+8. **Categoria e colore:** la colonna `categoria` (se presente) assegna il tipo (affettato/fritto/dolce/bibita/congelato) e il **colore segue sempre in automatico** quella categoria — non esiste una colonna colore nel CSV. Per un colore diverso dal default, cambialo dal form ingrediente in Admin → Ingredienti dopo l'import.
+9. **Righe vuote:** le righe completamente vuote vengono ignorate.
 
 ---
 
@@ -249,17 +259,20 @@ Tonno;0,65;0,35;-0,65;-0,25;0;0;Pesce
 
 ## 11. Riepilogo template
 
-- **Intestazione Formato A (prima riga, con prep opzionale):**  
-  `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni`
+- **Intestazione Formato A (prima riga, con prep e categoria opzionali):**  
+  `nome_ingrediente;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;allergeni;categoria`
 
 - **Intestazione Formato B (foglio con spunte, prima riga — come export portale):**  
-  `nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;Glutine;Crostacei;Uova;Pesce;Soia;Latte;Frutta a guscio;Sedano;Senape;Sesamo;Solfiti;Lupini;Molluschi`  
-  (Senza `prep_cucina`: dopo `va_in_cottura` segue subito **Glutine**.)
+  `nome_ingrediente;ordine;costo_eur;abbondante;senza;poco;va_in_cottura;prep_cucina;Glutine;…;Molluschi;categoria;attivo`  
+  (Senza `prep_cucina`: dopo `va_in_cottura` segue subito **Glutine**. Colonne finali opzionali. **Non esiste più una colonna colore**: segue sempre la categoria.)
+
+- **categoria (valori consigliati):** `affettato` | `fritto` | `dolce` | `bibita` | `congelato`  
+  (In import sono accettati anche sinonimi: bibite, fritti, surgelato, …). Il colore si assegna sempre in automatico dalla categoria — per personalizzarlo si usa il form ingrediente in Admin → Ingredienti, non il CSV.
 
 - **Riga tipo (Formato A):**  
-  `NomeIngrediente;0,00;0,00;-0,00;-0,00;0;0;Allergene1,Allergene2`
+  `NomeIngrediente;0,00;0,00;-0,00;-0,00;0;0;Allergene1,Allergene2;categoria`
 
-- **Riga tipo (Formato B):** campi base + `prep_cucina` + colonne allergeni con `1`/`x`/`sì` o vuoto.
+- **Riga tipo (Formato B):** campi base + `prep_cucina` + colonne allergeni con `1`/`x`/`sì` o vuoto + opzionale `categoria;attivo`.
 
 - **Separatore colonne:** `;`  
 - **Separatore allergeni (nella stessa cella):** `,`  
@@ -277,7 +290,9 @@ Se segui questa guida, il file sarà compilato in modo corretto e il caricamento
 |------|------|
 | 2026-04-03 | Allineamento con set guide progetto (nessuna modifica alle regole Formato A/B). |
 | 2026-04-10 | Colonna opzionale **prep_cucina** (schermata Cucina); export e template Formato B aggiornati; compatibilità file senza colonna. |
+| 2026-08-06 | Tipi **categoria** fissi (affettato/fritto/dolce/bibita/congelato) in UI e CSV; sinonimi in import. |
+| 2026-08-21 | Rimossa la colonna **colore** dal CSV (import ed export): il colore segue sempre la categoria, non si imposta più da file. Chiarito che `prep_cucina` serve solo per ingredienti senza categoria. |
 
 ---
 
-*Ultima revisione: 2026-04-10*
+*Ultima revisione: 2026-08-21*

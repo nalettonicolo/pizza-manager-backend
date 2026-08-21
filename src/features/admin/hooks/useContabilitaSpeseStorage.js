@@ -69,7 +69,7 @@ export function useContabilitaSpeseStorage(ambito, localKey) {
     return () => {
       cancelled = true;
     };
-  }, [tenantId, localReady, localData.spese, ambito]);
+  }, [tenantId, localReady, localData.spese, ambito, setLocalData]);
 
   const addSpesa = useCallback(
     async (row) => {

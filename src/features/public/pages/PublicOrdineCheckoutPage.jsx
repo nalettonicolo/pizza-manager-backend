@@ -17,6 +17,7 @@ import {
   cartPizzeCount,
   isSlotFull,
   filterSlotsExcludingFull,
+  filterSlotsExcludingPast,
 } from "@/features/operative/cassa/utils/slotCapacityUtils"
 import { maybeNotifyNewWebOrder } from "@/utils/webOrderNotifications"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
@@ -27,10 +28,21 @@ import {
   tenantHasOrdiniOnlineServizioLicenza,
 } from "@/utils/ordiniOnlineAttivi"
 import { resolveMatchingPuntiVendita } from "@/utils/resolvePvForDelivery"
-import { OnlinePaymentPlaceholder, describePaymentProvider } from "@/features/public/components/OnlinePaymentPlaceholder"
+import {
+  OnlinePaymentPlaceholder,
+  OnlinePaymentProviderPicker,
+} from "@/features/public/components/OnlinePaymentPlaceholder"
+import { getCheckoutLiveProviders } from "@/constants/onlinePaymentProviders"
 import StripePaymentForm from "@/features/public/components/StripePaymentForm"
-import { createStripePaymentIntentForOrdine, finalizeStripeCheckoutOrdine } from "@/features/public/services/onlinePaymentService"
+import { createStripePaymentIntentForOrdine, createSumUpCheckoutForOrdine, finalizeStripeCheckoutOrdine } from "@/features/public/services/onlinePaymentService"
 import { createOrder, fetchVetrinaSlotCaricoOggi } from "@/features/admin/services/adminService"
+import {
+  isCassaPagamentoContantiAbilitato,
+  isCassaPagamentoCartaAbilitato,
+  isCassaPagamentoPagaOnlineAbilitato,
+  TIPO_PAGAMENTO_CONTANTI,
+  TIPO_PAGAMENTO_CARTA,
+} from "@/features/operative/cassa/utils/cassaPagamentiOptions"
 
 const PARAMETRI_OPERATIVI_VUOTI = {}
 
@@ -56,7 +68,7 @@ export default function PublicOrdineCheckoutPage() {
   const [coords, setCoords] = useState(null)
   const [geoBusy, setGeoBusy] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState(null)
-  const [paymentMode, setPaymentMode] = useState("cash")
+  const [paymentMode, setPaymentMode] = useState("contanti")
   const [puntiVendita, setPuntiVendita] = useState([])
   const [selectedPvId, setSelectedPvId] = useState(null)
   const [pvMatchIds, setPvMatchIds] = useState([])
@@ -64,7 +76,21 @@ export default function PublicOrdineCheckoutPage() {
   const [slotTick, setSlotTick] = useState(0)
   /** Checkout online: dopo creazione ordine, clientSecret per Stripe Elements */
   const [stripeCheckout, setStripeCheckout] = useState(null)
+  const [selectedOnlineProvider, setSelectedOnlineProvider] = useState("")
   const [slotCarico, setSlotCarico] = useState({})
+
+  const checkoutLiveProviders = useMemo(() => getCheckoutLiveProviders(tenant), [tenant])
+
+  useEffect(() => {
+    if (checkoutLiveProviders.length === 1) {
+      setSelectedOnlineProvider(checkoutLiveProviders[0].provider_key)
+    } else if (
+      selectedOnlineProvider &&
+      !checkoutLiveProviders.some((p) => p.provider_key === selectedOnlineProvider)
+    ) {
+      setSelectedOnlineProvider("")
+    }
+  }, [checkoutLiveProviders, selectedOnlineProvider])
 
   useEffect(() => {
     let c = false
@@ -73,7 +99,11 @@ export default function PublicOrdineCheckoutPage() {
         const t = await getPublicTenantInfo()
         if (!c) setTenant(t)
         if (user?.id) {
-          const { data } = await supabase.from("clienti").select("nome, indirizzo, telefono").eq("id", user.id).maybeSingle()
+          const { data } = await supabase
+            .from("clienti")
+            .select("nome, indirizzo, telefono, email, latitudine, longitudine")
+            .eq("id", user.id)
+            .maybeSingle()
           if (!c && data) {
             setClienteRow(data)
             setAddress((data.indirizzo || "").trim())
@@ -139,11 +169,27 @@ export default function PublicOrdineCheckoutPage() {
     const po = tenant?.parametri_operativi
     return po && typeof po === "object" ? po : PARAMETRI_OPERATIVI_VUOTI
   }, [tenant?.parametri_operativi])
+  const payContantiOk = isCassaPagamentoContantiAbilitato(parametri)
+  const payCartaOk = isCassaPagamentoCartaAbilitato(parametri)
+  const payOnlineOk =
+    isCassaPagamentoPagaOnlineAbilitato(parametri) && checkoutLiveProviders.length > 0
+
+  useEffect(() => {
+    const allowed = []
+    if (payContantiOk) allowed.push("contanti")
+    if (payCartaOk) allowed.push("carta")
+    if (payOnlineOk) allowed.push("online")
+    if (!allowed.length) return
+    if (!allowed.includes(paymentMode)) setPaymentMode(allowed[0])
+  }, [payContantiOk, payCartaOk, payOnlineOk, paymentMode])
+
   const consegnaOn = readConsegnaDomicilioAttiva(parametri)
   const ordiniVetrinaConsentiti = readOrdiniOnlineVetrinaAllowed(parametri, tenant)
   const closedToday = isTodayClosed(tenant?.orari_settimana)
   const calendarClosed = closedToday || !orariOggi.aperto
   const quarterFilterUi = useMemo(() => getWebVetrinaSlotQuarterFilter(parametri), [parametri])
+  const accettazioneManualeCassa =
+    String(parametri.ordini_web_accettazione_mode || "auto").toLowerCase() === "manuale"
 
   const slots = useMemo(() => {
     void slotTick
@@ -156,7 +202,8 @@ export default function PublicOrdineCheckoutPage() {
     }
     const cartPizze = cartPizzeCount(items)
     const maxPerSlot = maxPizzePerSlot(parametri)
-    return filterSlotsExcludingFull(raw, slotCarico, cartPizze, maxPerSlot)
+    const notPast = filterSlotsExcludingPast(raw, now)
+    return filterSlotsExcludingFull(notPast, slotCarico, cartPizze, maxPerSlot)
   }, [calendarClosed, ordiniVetrinaConsentiti, orariOggi, slotTick, parametri, slotCarico, items])
 
   useEffect(() => {
@@ -172,15 +219,26 @@ export default function PublicOrdineCheckoutPage() {
   const verifyAddress = async () => {
     const addr = address.trim()
     if (!addr) {
-      setError("Indica l’indirizzo di consegna.")
+      setError("Completa l’indirizzo nel profilo prima di confermare.")
       return
     }
     setGeoBusy(true)
     setError(null)
     try {
-      const c = await geocodeAddressForDelivery(addr)
+      const latSaved = Number(clienteRow?.latitudine)
+      const lngSaved = Number(clienteRow?.longitudine)
+      let c =
+        Number.isFinite(latSaved) &&
+        Number.isFinite(lngSaved) &&
+        Math.abs(latSaved) <= 90 &&
+        Math.abs(lngSaved) <= 180
+          ? { lat: latSaved, lng: lngSaved }
+          : null
       if (!c) {
-        setError("Non siamo riusciti a localizzare l’indirizzo. Prova con via, civico e città.")
+        c = await geocodeAddressForDelivery(addr)
+      }
+      if (!c) {
+        setError("Non siamo riusciti a localizzare l’indirizzo del profilo. Aggiornalo dal profilo e riprova.")
         setCoords(null)
         setPvMatchIds([])
         setSelectedPvId(null)
@@ -251,7 +309,30 @@ export default function PublicOrdineCheckoutPage() {
     return (meta?.nome || "").trim() || (user?.email || "").split("@")[0] || "Cliente"
   }, [clienteRow?.nome, user])
 
+  const telefonoCliente = useMemo(
+    () => String(clienteRow?.telefono || "").trim(),
+    [clienteRow?.telefono],
+  )
+
+  const emailCliente = useMemo(
+    () => String(clienteRow?.email || user?.email || "").trim(),
+    [clienteRow?.email, user?.email],
+  )
+
+  const profiloCompleto = Boolean(address.trim() && nomeCliente && telefonoCliente)
+
   const tenantOk = tenant?.id && authTenantId && tenant.id === authTenantId
+
+  /** Verifica automatica dell’indirizzo dal profilo. */
+  useEffect(() => {
+    if (!address.trim() || !tenantOk) return
+    if (coords) return
+    const t = window.setTimeout(() => {
+      void verifyAddress()
+    }, 200)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto solo su indirizzo/tenant/PV
+  }, [address, tenantOk, puntiVendita.length])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -292,30 +373,50 @@ export default function PublicOrdineCheckoutPage() {
       return
     }
     if (!coords) {
-      setError('Verifica l’indirizzo con il pulsante "Verifica indirizzo" prima di confermare.')
+      setError(
+        address.trim()
+          ? "L’indirizzo del profilo non risulta ancora verificato nell’area di consegna. Attendi la verifica o aggiorna l’indirizzo dal profilo."
+          : "Completa indirizzo e telefono nel profilo prima di confermare.",
+      )
       return
     }
     if (puntiVendita.length > 0 && !selectedPvId) {
       setError("L’indirizzo ricade in più zone: scegli la sede in cui vuoi ricevere la consegna.")
       return
     }
-    const provider = describePaymentProvider(tenant)
+    const provider =
+      paymentMode === "online"
+        ? selectedOnlineProvider || (checkoutLiveProviders.length === 1 ? checkoutLiveProviders[0].provider_key : "")
+        : ""
     if (paymentMode === "online" && !provider) {
-      setError("Pagamento online non ancora configurato dal locale. Scegli pagamento alla consegna oppure riprova più tardi.")
+      setError(
+        checkoutLiveProviders.length > 1
+          ? "Seleziona un gestore di pagamento online."
+          : "Pagamento online non ancora configurato dal locale. Scegli pagamento alla consegna oppure riprova più tardi.",
+      )
       return
     }
 
     setSubmitting(true)
     try {
       const statoFinale = paymentMode === "online" ? "IN_ATTESA" : "IN_PREPARAZIONE"
-      const tipoPag =
-        paymentMode === "online"
-          ? provider === "stripe"
+      let tipoPag
+      let notePay
+      if (paymentMode === "online") {
+        tipoPag =
+          provider === "stripe"
             ? "Carta (Stripe — in attesa)"
             : provider === "sumup"
               ? "Carta (SumUp — in attesa)"
               : "Carta (online — in attesa)"
-          : "Da pagare"
+        notePay = "Ordine web · consegna · pagamento online da confermare"
+      } else if (paymentMode === "carta") {
+        tipoPag = TIPO_PAGAMENTO_CARTA
+        notePay = "Ordine web · consegna · pagamento carta alla consegna"
+      } else {
+        tipoPag = TIPO_PAGAMENTO_CONTANTI
+        notePay = "Ordine web · consegna · pagamento contanti alla consegna"
+      }
 
       const orderId = await createOrder(authTenantId, {
         totale: total,
@@ -325,16 +426,15 @@ export default function PublicOrdineCheckoutPage() {
           quantita: p.qty,
           prezzo: p.prezzo,
           formatoNome: p.formatoNome,
+          ingredientiCotturaSummary: p.ingredientiCotturaSummary || null,
         })),
-        note:
-          paymentMode === "online"
-            ? "Ordine web · consegna · pagamento online da confermare"
-            : "Ordine web · consegna · pagamento alla consegna",
+        note: notePay,
         tipoPagamento: tipoPag,
         tipoOrdine: "delivery",
         nomeCliente,
         orarioRitiro: selectedSlot.label,
         indirizzoConsegna: address.trim(),
+        telefonoRitiro: String(clienteRow?.telefono || "").trim() || undefined,
         consegnaLng: coords.lng,
         consegnaLat: coords.lat,
         puntoVenditaId: puntiVendita.length > 0 ? selectedPvId : null,
@@ -356,10 +456,13 @@ export default function PublicOrdineCheckoutPage() {
       }
 
       if (paymentMode === "online" && provider === "sumup") {
-        setError(
-          "SumUp non è ancora collegato da questo flusso: usa pagamento alla consegna oppure Stripe. (Endpoint placeholder: payment-sumup-placeholder.)",
-        )
-        setSubmitting(false)
+        const redirectUrl = `${window.location.origin}/cliente/ordini?nuovo=${encodeURIComponent(orderId)}&sumup=1`
+        const { hostedCheckoutUrl } = await createSumUpCheckoutForOrdine(orderId, redirectUrl)
+        if (!hostedCheckoutUrl) {
+          throw new Error("Risposta SumUp incompleta (manca URL checkout).")
+        }
+        clearCart()
+        window.location.assign(hostedCheckoutUrl)
         return
       }
 
@@ -443,40 +546,81 @@ export default function PublicOrdineCheckoutPage() {
         </p>
       ) : null}
 
-      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <form
+        onSubmit={submit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && stripeCheckout && paymentMode === "online") {
+            e.preventDefault()
+          }
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 20 }}
+      >
         <section>
-          <h2 style={{ fontSize: 16, marginBottom: 8 }}>Indirizzo di consegna</h2>
-          <textarea
-            value={address}
-            onChange={(e) => {
-              setAddress(e.target.value)
-              setCoords(null)
-              setPvMatchIds([])
-              setSelectedPvId(null)
-            }}
-            rows={3}
-            placeholder="Via, numero civico, citofono, città…"
-            style={{ width: "100%", padding: 12, borderRadius: 8, border: "1px solid #cbd5e1", boxSizing: "border-box" }}
-          />
-          <button
-            type="button"
-            onClick={() => void verifyAddress()}
-            disabled={geoBusy}
+          <h2 style={{ fontSize: 16, marginBottom: 8 }}>Dati di consegna</h2>
+          <div
             style={{
-              marginTop: 10,
-              padding: "10px 16px",
+              padding: "10px 12px",
               borderRadius: 8,
-              border: "1px solid #0f766e",
-              background: geoBusy ? "#94a3b8" : "#0f766e",
-              color: "#fff",
-              fontWeight: 600,
-              cursor: geoBusy ? "default" : "pointer",
+              border: "1px solid #e2e8f0",
+              background: "#f8fafc",
+              fontSize: 14,
+              lineHeight: 1.45,
+              color: "#0f172a",
             }}
           >
-            {geoBusy ? "Verifica in corso…" : "Verifica indirizzo nell’area di consegna"}
-          </button>
+            <div style={{ fontWeight: 700 }}>
+              {nomeCliente}
+              {telefonoCliente ? (
+                <span style={{ fontWeight: 500, color: "#334155" }}> — {telefonoCliente}</span>
+              ) : null}
+            </div>
+            <div style={{ marginTop: 4, color: "#334155" }}>
+              {address.trim() || (
+                <span style={{ color: "#b45309" }}>Indirizzo mancante — aggiorna il profilo</span>
+              )}
+            </div>
+            {emailCliente ? (
+              <div style={{ marginTop: 4, color: "#64748b", fontSize: 13 }}>{emailCliente}</div>
+            ) : null}
+          </div>
+          <p style={{ margin: "8px 0 0", fontSize: 13, color: "#64748b" }}>
+            Per modificare questi dati vai al{" "}
+            <Link to="/cliente/profilo" style={{ color: "#0f766e", fontWeight: 600 }}>
+              profilo
+            </Link>
+            .
+          </p>
+          {!profiloCompleto ? (
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#b45309" }}>
+              Nome, telefono e indirizzo sono necessari per completare l’ordine.
+            </p>
+          ) : null}
+          {geoBusy ? (
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#64748b" }}>Verifica area di consegna…</p>
+          ) : null}
           {coords ? (
-            <p style={{ marginTop: 10, fontSize: 13, color: "#166534", fontWeight: 600 }}>Indirizzo ok per la consegna.</p>
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#166534", fontWeight: 600 }}>
+              Indirizzo ok per la consegna.
+            </p>
+          ) : null}
+          {address.trim() && !coords && !geoBusy ? (
+            <button
+              type="button"
+              onClick={() => void verifyAddress()}
+              style={{
+                marginTop: 8,
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid #0f766e",
+                background: "#fff",
+                color: "#0f766e",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Riprova verifica indirizzo
+            </button>
           ) : null}
           {coords && pvMatchIds.length > 1 ? (
             <div style={{ marginTop: 14 }}>
@@ -521,13 +665,15 @@ export default function PublicOrdineCheckoutPage() {
         <section>
           <h2 style={{ fontSize: 16, marginBottom: 8 }}>Fascia oraria</h2>
           <p style={{ fontSize: 13, color: "#64748b", marginBottom: 10, lineHeight: 1.45 }}>
-            Le prime fasce troppo vicine all’orario attuale non sono selezionabili (tempo minimo di preparazione).
-            {quarterFilterUi.enabled && new Date().getHours() < quarterFilterUi.endHour ? (
+            Solo fasce ancora disponibili: quelle piene o già passate non compaiono. L’elenco si aggiorna con
+            l’orario.
+            {quarterFilterUi.enabled ? (
               <>
                 {" "}
-                Fino alle <strong>{quarterFilterUi.endHour}:00</strong> le consegne sono proposte solo ai minuti{" "}
-                <strong>:{String(quarterFilterUi.minute).padStart(2, "0")}</strong> (es. 11:{String(quarterFilterUi.minute).padStart(2, "0")}),
-                compatibilmente con i tempi di preparazione e consegna. Configurabile in Amministrazione → Parametri operativi.
+                Prima delle <strong>{quarterFilterUi.endHour}:00</strong> le consegne sono proposte solo ai minuti{" "}
+                <strong>:{String(quarterFilterUi.minute).padStart(2, "0")}</strong>; dalle{" "}
+                <strong>{quarterFilterUi.endHour}:00</strong> in poi tutti i quarti d’ora. Configurabile in
+                Amministrazione → Parametri operativi.
               </>
             ) : null}
           </p>
@@ -535,33 +681,28 @@ export default function PublicOrdineCheckoutPage() {
             <p style={{ color: "#b45309" }}>
               Nessuna fascia disponibile
               {calendarClosed && ordiniVetrinaConsentiti
-                ? " nelle ore rimanenti di oggi (tempi di preparazione o filtri orari)."
-                : " (orario di chiusura o giorno chiuso)."}
+                ? " nelle ore rimanenti di oggi (tempi di preparazione, capacità o filtri orari)."
+                : " (orario di chiusura, giorno chiuso o fasce piene)."}
             </p>
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {slots.map((s) => {
                 const sel = selectedSlot?.key === s.key
-                const full = isSlotFull(s.key, slotCarico, cartPizzeCount(items), maxPizzePerSlot(parametri))
                 return (
                   <button
                     key={s.key}
                     type="button"
-                    disabled={full}
-                    onClick={() => !full && setSelectedSlot(s)}
+                    onClick={() => setSelectedSlot(s)}
                     style={{
                       padding: "10px 14px",
                       borderRadius: 8,
                       border: sel ? "2px solid #0f766e" : "1px solid #cbd5e1",
-                      background: full ? "#f1f5f9" : sel ? "#ecfdf5" : "#fff",
-                      color: full ? "#94a3b8" : undefined,
-                      cursor: full ? "not-allowed" : "pointer",
+                      background: sel ? "#ecfdf5" : "#fff",
+                      cursor: "pointer",
                       fontWeight: sel ? 700 : 500,
                     }}
-                    title={full ? "Fascia al completo (capacità forno)" : undefined}
                   >
                     {s.label}
-                    {full ? " · pieno" : ""}
                   </button>
                 )
               })}
@@ -571,30 +712,69 @@ export default function PublicOrdineCheckoutPage() {
 
         <section>
           <h2 style={{ fontSize: 16, marginBottom: 8 }}>Pagamento</h2>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer" }}>
-            <input
-              type="radio"
-              name="pay"
-              checked={paymentMode === "cash"}
-              onChange={() => setPaymentMode("cash")}
-            />
-            Pagamento alla consegna (contanti o POS in pizzeria)
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <input
-              type="radio"
-              name="pay"
-              checked={paymentMode === "online"}
-              onChange={() => setPaymentMode("online")}
-            />
-            Pagamento online (carta)
-          </label>
+          {!payContantiOk && !payCartaOk && !payOnlineOk ? (
+            <p style={{ color: "#b45309", fontSize: 14 }}>
+              Nessun metodo di pagamento attivo per gli ordini online. Contatta la pizzeria.
+            </p>
+          ) : null}
+          {payContantiOk ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="pay"
+                checked={paymentMode === "contanti"}
+                onChange={() => setPaymentMode("contanti")}
+              />
+              Contanti (alla consegna)
+            </label>
+          ) : null}
+          {payCartaOk ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="pay"
+                checked={paymentMode === "carta"}
+                onChange={() => setPaymentMode("carta")}
+              />
+              Carta (POS alla consegna)
+            </label>
+          ) : null}
+          {isCassaPagamentoPagaOnlineAbilitato(parametri) ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="pay"
+                checked={paymentMode === "online"}
+                onChange={() => setPaymentMode("online")}
+                disabled={checkoutLiveProviders.length === 0}
+              />
+              Paga online (carta)
+            </label>
+          ) : null}
           {paymentMode === "online" ? (
             <>
-              <OnlinePaymentPlaceholder tenant={tenant} totalEuro={total} />
-              {stripeCheckout?.clientSecret && describePaymentProvider(tenant) === "stripe" ? (
+              <OnlinePaymentProviderPicker
+                tenant={tenant}
+                selectedKey={selectedOnlineProvider}
+                onChange={setSelectedOnlineProvider}
+                totalEuro={total}
+              />
+              <OnlinePaymentPlaceholder
+                tenant={tenant}
+                totalEuro={total}
+                selectedProviderKey={selectedOnlineProvider}
+              />
+              {stripeCheckout?.clientSecret && selectedOnlineProvider === "stripe" ? (
+                <div
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.preventDefault()
+                  }}
+                >
                 <StripePaymentForm
-                  publishableKey={tenant?.stripe_publishable_key}
+                  publishableKey={
+                    checkoutLiveProviders.find((p) => p.provider_key === "stripe")?.public_config
+                      ?.stripe_publishable_key || tenant?.stripe_publishable_key
+                  }
                   clientSecret={stripeCheckout.clientSecret}
                   onSuccess={async () => {
                     const oid = stripeCheckout?.orderId
@@ -602,9 +782,12 @@ export default function PublicOrdineCheckoutPage() {
                     setSubmitting(true)
                     setError(null)
                     try {
-                      await finalizeStripeCheckoutOrdine(oid)
+                      const fin = await finalizeStripeCheckoutOrdine(oid)
                       clearCart()
-                      navigate(`/cliente/ordini?nuovo=${encodeURIComponent(oid)}`)
+                      const q = fin?.deferred
+                        ? `nuovo=${encodeURIComponent(oid)}&pay=pending`
+                        : `nuovo=${encodeURIComponent(oid)}`
+                      navigate(`/cliente/ordini?${q}`)
                     } catch (e) {
                       setError(e?.message || "Conferma pagamento in attesa")
                     } finally {
@@ -613,6 +796,7 @@ export default function PublicOrdineCheckoutPage() {
                   }}
                   onError={(msg) => setError(msg)}
                 />
+                </div>
               ) : null}
             </>
           ) : null}
@@ -624,16 +808,31 @@ export default function PublicOrdineCheckoutPage() {
           </p>
         ) : null}
 
+        {accettazioneManualeCassa ? (
+          <p
+            style={{
+              margin: 0,
+              padding: 12,
+              background: "#fff7ed",
+              border: "1px solid #fdba74",
+              borderRadius: 8,
+              color: "#9a3412",
+              fontSize: 14,
+              lineHeight: 1.45,
+            }}
+          >
+            Dopo l&apos;invio, l&apos;ordine resta in attesa di conferma da parte del locale (accettazione in cassa).
+            Riceverai l&apos;aggiornamento quando verrà accettato.
+          </p>
+        ) : null}
+
         <button
           type="submit"
           disabled={
             submitting ||
             Boolean(stripeCheckout && paymentMode === "online") ||
             !consegnaOn ||
-            (calendarClosed && !ordiniVetrinaConsentiti) ||
-            !slots.length ||
-            !coords ||
-            (puntiVendita.length > 0 && !selectedPvId)
+            (calendarClosed && !ordiniVetrinaConsentiti)
           }
           style={{
             padding: "14px 20px",
@@ -652,6 +851,15 @@ export default function PublicOrdineCheckoutPage() {
               ? "Ordine creato — completa il pagamento sopra"
               : "Conferma ordine"}
         </button>
+        {!stripeCheckout && (!coords || !slots.length || (puntiVendita.length > 0 && !selectedPvId)) ? (
+          <p style={{ margin: "-8px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+            Prima di confermare
+            {!coords ? ": attendi la verifica dell’indirizzo del profilo (o aggiornalo dal profilo)" : ""}
+            {!slots.length ? `${!coords ? "," : ":"} attendi le fasce disponibili` : ""}
+            {puntiVendita.length > 0 && !selectedPvId ? " e scegli la sede" : ""}
+            . Se manca qualcosa, il pulsante ti mostrerà il messaggio preciso.
+          </p>
+        ) : null}
       </form>
 
       <p style={{ marginTop: 20 }}>

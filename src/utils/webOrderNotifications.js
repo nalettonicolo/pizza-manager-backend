@@ -11,6 +11,9 @@ import { supabase } from "@/lib/supabaseClient"
 
 export function shouldQueueWebOrderEmailNotification(parametri) {
   if (!parametri || typeof parametri !== "object") return true
+  const mode = String(parametri.ordini_web_accettazione_mode || "auto").toLowerCase()
+  // In modalità manuale la cassa deve sempre essere avvisata (anche con stampa auto).
+  if (mode === "manuale") return true
   if (parametri.stampa_comanda_ordine_web_automatica === true) return false
   return true
 }

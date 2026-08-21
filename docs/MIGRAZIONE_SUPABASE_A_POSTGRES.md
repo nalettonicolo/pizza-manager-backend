@@ -1,7 +1,7 @@
 # Migrazione da Supabase (hosted) a PostgreSQL dedicato
 
 Obiettivo: usare **PostgreSQL sotto il tuo controllo** (es. server casa `ServerCasaNaletto`, porta 5432 in LAN) mantenendo **schema e dati** compatibili con quanto oggi gira su **Supabase Postgres**.  
-Questo percorso **non** richiede di cambiare Prisma da `postgresql` a MySQL: vedi differenza rispetto a `docs/MIGRAZIONE_MYSQL_E_BACKUP.md`.
+Questo percorso mantiene **PostgreSQL** (Prisma `postgresql`); non prevede migrazione a MySQL.
 
 Per **eliminare del tutto** Supabase (hosted e client in SPA), roadmap e fasi: **`docs/STACCO_SUPABASE_TOTALE.md`**.
 
@@ -101,8 +101,7 @@ pg_restore -h 127.0.0.1 -p 5432 -U postgres -d pizzamanager \
 
 | Documento | Contenuto |
 |-----------|-----------|
-| `docs/MIGRAZIONE_MYSQL_E_BACKUP.md` | Stacco completo verso **MySQL** (altro animale: Prisma provider diverso). |
-| `docs/GUIDA_OPERATIVITA_SQL_MYSQL_DEPLOY.md` | Workflow **`sql/schema_completo_pizzamanager.sql`** / `sql_upgrade.sql`. |
+| `sql/schema_completo_pizzamanager.sql` / `sql/sql_upgrade.sql` | Baseline e indice patch incrementali (`sql/modules/18–38`). |
 | `docs/FASE_0_RETE_SELFHOST.md` / `docs/FASE_1_AUTH_E_API_SELFHOST.md` | Rete sicura + API Nest in produzione. |
 | `docs/COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md` | Ordine epic e criteri di cutover. |
 

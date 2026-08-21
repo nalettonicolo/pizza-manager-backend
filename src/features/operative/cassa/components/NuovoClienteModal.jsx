@@ -3,6 +3,7 @@ import Modal from "@/components/dashboard/Modal"
 import { createAnagraficaCliente, updateAnagraficaCliente } from "@/features/admin/services/adminService"
 import { getDeliveryPolygonOuterRing } from "@/utils/deliveryArea"
 import { formatIndirizzoFromNominatim, formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { useDebounce } from "@/hooks/useDebounce"
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 const inputStyle = {
@@ -11,15 +12,6 @@ const inputStyle = {
   borderRadius: 6,
   border: "1px solid #ddd",
   fontSize: 14,
-}
-
-function useDebounce(value, delay) {
-  const [debouncedValue, setDebouncedValue] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedValue(value), delay)
-    return () => clearTimeout(t)
-  }, [value, delay])
-  return debouncedValue
 }
 
 async function searchAddress(query) {

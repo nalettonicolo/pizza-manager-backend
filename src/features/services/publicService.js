@@ -407,6 +407,40 @@ export async function getPublicMenuIngredientNames(tenantId, productIds) {
 }
 
 /**
+ * Bundle ricetta + cataloghi per «Modifica pizza» in vetrina (RPC SECURITY DEFINER).
+ * @returns {Promise<{
+ *   product_ingredienti: object[],
+ *   ingredienti: object[],
+ *   impasti: object[],
+ *   formati: object[],
+ *   cottura: object[],
+ * } | null>}
+ */
+export async function getPublicModificaPizzaBundle(tenantId, productId) {
+  if (!tenantId || !productId) return null;
+  const { data, error } = await supabase.rpc("get_public_modifica_pizza_bundle", {
+    p_tenant_id: tenantId,
+    p_product_id: productId,
+  });
+  if (error) {
+    if (isRpcMissingError(error)) return null;
+    logSupabaseError("publicService.getPublicModificaPizzaBundle", error, {
+      tenantId,
+      productId,
+    });
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  return {
+    product_ingredienti: Array.isArray(data.product_ingredienti) ? data.product_ingredienti : [],
+    ingredienti: Array.isArray(data.ingredienti) ? data.ingredienti : [],
+    impasti: Array.isArray(data.impasti) ? data.impasti : [],
+    formati: Array.isArray(data.formati) ? data.formati : [],
+    cottura: Array.isArray(data.cottura) ? data.cottura : [],
+  };
+}
+
+/**
  * Info tenant per home pubblica (chiuso oggi, branding, carrello).
  * @param {{ tenantId?: string | null, tenantSlug?: string | null, search?: string }} [options]
  * — `search`: tipicamente `location.search` per `?tenant=` / `?support_tenant=` / `?slug=`

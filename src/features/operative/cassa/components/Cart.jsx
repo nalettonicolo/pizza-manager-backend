@@ -21,6 +21,32 @@ export default function Cart({
     <div style={mobile ? styles.wrapperMobile : styles.wrapper}>
       <h3 style={mobile ? { margin: "0 0 12px", fontSize: 20 } : undefined}>Carrello</h3>
 
+      <div style={{ display: "flex", gap: mobile ? 12 : 8, marginBottom: mobile ? 16 : 12 }}>
+        {onClear && (
+          <button
+            type="button"
+            style={{
+              ...styles.checkout,
+              background: "#666",
+              flex: 1,
+              marginTop: 0,
+              ...(mobile ? styles.checkoutMobile : {}),
+            }}
+            onClick={onClear}
+          >
+            Svuota
+          </button>
+        )}
+        <button
+          type="button"
+          style={{ ...styles.checkout, flex: 1, marginTop: 0, ...(mobile ? styles.checkoutMobile : {}) }}
+          disabled={!cart.length || loading}
+          onClick={onCheckout}
+        >
+          {loading ? "Conferma in corso..." : "Conferma Ordine"}
+        </button>
+      </div>
+
       {cart.length > 0 && tipoOrdine && (
         <p style={{ fontSize: mobile ? 14 : 12, color: "#666", marginBottom: 8, lineHeight: 1.45 }}>
           {tipoOrdine === "negozio" ? "Ritiro in negozio" : `Consegna${deliverySearch ? `: ${deliverySearch}` : ""}`}
@@ -56,31 +82,6 @@ export default function Cart({
           {checkoutError}
         </div>
       )}
-
-      <div style={{ display: "flex", gap: mobile ? 12 : 8, marginTop: mobile ? 16 : 12 }}>
-        {onClear && (
-          <button
-            type="button"
-            style={{
-              ...styles.checkout,
-              background: "#666",
-              flex: 1,
-              ...(mobile ? styles.checkoutMobile : {}),
-            }}
-            onClick={onClear}
-          >
-            Svuota
-          </button>
-        )}
-        <button
-          type="button"
-          style={{ ...styles.checkout, flex: 1, ...(mobile ? styles.checkoutMobile : {}) }}
-          disabled={!cart.length || loading}
-          onClick={onCheckout}
-        >
-          {loading ? "Conferma in corso..." : "Conferma Ordine"}
-        </button>
-      </div>
     </div>
   )
 }

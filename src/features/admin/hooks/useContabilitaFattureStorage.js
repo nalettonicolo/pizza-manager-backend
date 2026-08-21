@@ -67,7 +67,7 @@ export function useContabilitaFattureStorage() {
     return () => {
       cancelled = true;
     };
-  }, [tenantId, localReady, localData.fatture]);
+  }, [tenantId, localReady, localData.fatture, setLocalData]);
 
   const addFattura = useCallback(
     async (row) => {

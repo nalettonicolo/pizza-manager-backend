@@ -71,7 +71,7 @@ export function useMagazzinoDdtStorage() {
     return () => {
       cancelled = true;
     };
-  }, [tenantId, localReady, localData.righe]);
+  }, [tenantId, localReady, localData.righe, setLocalData]);
 
   const addRow = useCallback(
     async (row) => {

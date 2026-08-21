@@ -4,6 +4,7 @@
 
 import { printHtmlDocument } from "@/utils/printHtmlDocument"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { extractModificheFromIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 
 function escapeHtml(s) {
   if (s == null || s === "") return ""
@@ -34,7 +35,11 @@ export function ricevutaRigheFromCartSnapshot(snapshotCart) {
     const qty = item.qty || 1
     const prezzo = Number(item.prezzo || 0)
     const titolo = item.formatoNome ? `${item.nome || "—"} (${item.formatoNome})` : item.nome || "—"
-    return { qty, titolo, prezzoUnit: prezzo, importo: prezzo * qty }
+    const full = String(item.ingredientiCotturaSummary || item.ingredienti_cottura_summary || "").trim()
+    const dettaglio =
+      String(item.ingredientiModificheClienteSummary || "").trim() ||
+      extractModificheFromIngredientiSummary(full)
+    return { qty, titolo, prezzoUnit: prezzo, importo: prezzo * qty, dettaglio }
   })
 }
 
@@ -48,7 +53,9 @@ export function ricevutaRigheFromOrdineDetail(detail) {
     const titolo = formatoNome ? `${nomeBase} (${formatoNome})` : nomeBase
     const qty = r.quantita || 1
     const prezzo = Number(r.prezzo || 0)
-    return { qty, titolo, prezzoUnit: prezzo, importo: prezzo * qty }
+    const full = String(r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? "").trim()
+    const dettaglio = extractModificheFromIngredientiSummary(full)
+    return { qty, titolo, prezzoUnit: prezzo, importo: prezzo * qty, dettaglio }
   })
 }
 
@@ -133,12 +140,16 @@ export function buildRicevutaHtmlDocument(payload) {
   const showId = parametri?.comanda_mostra_id_ordine === true || parametri?.comanda_mostra_id_ordine === "true"
 
   const righeHtml = righe
-    .map(
-      (r) => `<div class="riga">
-      <div class="riga-main"><span class="qty">${escapeHtml(String(r.qty))}×</span> <span class="titolo">${escapeHtml(r.titolo)}</span></div>
+    .map((r) => {
+      const det = String(r.dettaglio || "").trim()
+      const detHtml = det
+        ? `<div class="dettaglio">${escapeHtml(det)}</div>`
+        : ""
+      return `<div class="riga">
+      <div class="riga-main"><span class="qty">${escapeHtml(String(r.qty))}×</span> <span class="titolo">${escapeHtml(r.titolo)}</span>${detHtml}</div>
       <div class="importo">€ ${Number(r.importo).toFixed(2)}</div>
-    </div>`,
-    )
+    </div>`
+    })
     .join("")
 
   const widthRule =
@@ -172,7 +183,20 @@ export function buildRicevutaHtmlDocument(payload) {
     headerParts.push(`<div><strong>Indirizzo</strong> ${escapeHtml(indFmt)}</div>`)
   }
   if (tipoPagamento) headerParts.push(`<div><strong>Pagamento</strong> ${escapeHtml(String(tipoPagamento))}</div>`)
-  if (note) headerParts.push(`<div class="note"><strong>Note</strong> ${escapeHtml(String(note))}</div>`)
+
+  // Sconto cassa: riga dedicata (non solo nelle note)
+  const noteStr = note != null ? String(note) : ""
+  const scontoMatch = noteStr.match(/\[Sconto cassa €\s*([0-9]+(?:[.,][0-9]{1,2})?)\s*\]/i)
+  let noteClean = noteStr
+  let scontoEuro = null
+  if (scontoMatch) {
+    scontoEuro = Number(String(scontoMatch[1]).replace(",", "."))
+    noteClean = noteStr.replace(scontoMatch[0], "").replace(/\s{2,}/g, " ").trim()
+  }
+  if (Number.isFinite(Number(payload.scontoCassaEuro)) && Number(payload.scontoCassaEuro) > 0) {
+    scontoEuro = Number(payload.scontoCassaEuro)
+  }
+  if (noteClean) headerParts.push(`<div class="note"><strong>Note</strong> ${escapeHtml(noteClean)}</div>`)
 
   const headerHtml = headerParts.join("")
 
@@ -216,6 +240,14 @@ export function buildRicevutaHtmlDocument(payload) {
     .meta-id { font-size: 0.85em; font-weight: 600; color: #000; }
     .meta-tipo { font-weight: 900; margin: 2px 0; }
     .note { margin-top: 4px; font-weight: 700; color: #000; }
+    .sconto {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed #000;
+      font-weight: 900;
+      text-align: right;
+      color: #000;
+    }
     .righe { margin-top: 8px; border-top: 2px solid #000; padding-top: 6px; }
     .riga {
       display: flex;
@@ -230,6 +262,14 @@ export function buildRicevutaHtmlDocument(payload) {
     .riga-main { flex: 1; min-width: 0; }
     .qty { font-weight: 900; color: #000; }
     .titolo { font-weight: 900; color: #000; }
+    .dettaglio {
+      margin-top: 2px;
+      font-size: 0.92em;
+      font-weight: 700;
+      color: #000;
+      line-height: 1.3;
+      white-space: pre-wrap;
+    }
     .importo { font-weight: 900; flex-shrink: 0; color: #000; }
     .totale {
       margin-top: 10px;
@@ -249,13 +289,18 @@ export function buildRicevutaHtmlDocument(payload) {
     }
     @media print {
       body { padding: 0; color: #000 !important; }
-      .banner, .when, .qty, .titolo, .importo, .totale, .footer, .testata, .testata * {
+      .banner, .when, .qty, .titolo, .dettaglio, .importo, .totale, .footer, .testata, .testata * {
         color: #000 !important;
       }
     }
   </style></head><body>
     <div class="testata">${headerHtml}</div>
     <div class="righe">${righeHtml || "<p>Nessuna riga.</p>"}</div>
+    ${
+      scontoEuro != null && Number.isFinite(scontoEuro) && scontoEuro > 0
+        ? `<div class="sconto"><strong>Sconto cassa</strong> − € ${scontoEuro.toFixed(2)}</div>`
+        : ""
+    }
     <div class="totale">Totale € ${Number(totale).toFixed(2)}</div>
     <div class="footer">Documento di cortesia — non fiscale</div>
   </body></html>`

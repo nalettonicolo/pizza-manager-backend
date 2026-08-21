@@ -322,6 +322,11 @@ export default function SviluppoPage() {
           Avanzamento complessivo
         </h2>
         <ProgressBar label="Sviluppo prodotto (media su tutti i servizi del catalogo)" percent={overall} />
+        <p style={{ margin: "12px 0 0", fontSize: 13 }}>
+          <Link to="/superadmin/agenti-moduli" style={{ color: "#1565c0", fontWeight: 600 }}>
+            Moduli agenti — requisiti di intake per area
+          </Link>
+        </p>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24, alignItems: "center" }}>

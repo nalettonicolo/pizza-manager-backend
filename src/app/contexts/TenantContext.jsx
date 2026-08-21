@@ -44,7 +44,7 @@ function buildSyntheticTenantRow(tenantId, nomeHint) {
 }
 
 export function TenantProvider({ children }) {
-  const { tenantId, user, nestTenantNome, loading: authLoading } = useAuth()
+  const { tenantId, user, tipoUtente, nestTenantNome, loading: authLoading } = useAuth()
 
   const [tenantData, setTenantData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -106,7 +106,7 @@ export function TenantProvider({ children }) {
       let resolved = data
       if (error) {
         if (isPgrst116ZeroRows(error)) {
-          warnTenantRowMissing(tenantId)
+          if (tipoUtente !== "cliente") warnTenantRowMissing(tenantId)
           resolved = null
         } else {
           logSupabaseError("TenantContext.loadTenantData", error, {
@@ -116,7 +116,7 @@ export function TenantProvider({ children }) {
           resolved = null
         }
       } else if (!data) {
-        warnTenantRowMissing(tenantId)
+        if (tipoUtente !== "cliente") warnTenantRowMissing(tenantId)
         resolved = null
       }
 
@@ -136,6 +136,11 @@ export function TenantProvider({ children }) {
         resolved = buildSyntheticTenantRow(tenantId, nestTenantNome)
       }
 
+      // Cliente: RLS spesso non espone public.tenants; sintetico evita warn e blocchi vetrina.
+      if (!resolved && tipoUtente === "cliente") {
+        resolved = buildSyntheticTenantRow(tenantId, nestTenantNome)
+      }
+
       const pendingNestNomeHint =
         resolved == null &&
         isNestAuthEnabled() &&
@@ -152,7 +157,7 @@ export function TenantProvider({ children }) {
       setLoading(false)
       loadInFlightRef.current = false
     }
-  }, [tenantId, nestTenantNome])
+  }, [tenantId, nestTenantNome, tipoUtente])
 
   // ====================================
   // REAGISCE A CAMBIO AUTH

@@ -1,6 +1,0 @@
--- =============================================================================
--- 13) telefono_ritiro — NOTA
--- =============================================================================
--- La patch completa (colonna + vista "Ordine" + create_order_with_items) è
--- inclusa in sql/sql_upgrade.sql. Mantieni i file 03/04/05 allineati al repo;
--- per applicare solo questa evoluzione su Supabase, esegui sql_upgrade.sql.

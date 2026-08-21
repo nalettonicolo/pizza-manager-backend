@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useLayoutEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
+import { usePreservedNavigate } from "@/hooks/usePreservedNavigate"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 import { useTenantServizi } from "@/app/hooks/useTenantServizi"
@@ -23,7 +25,8 @@ const TIPO_ORDINE = { NEGOZIO: "negozio", DELIVERY: "delivery" }
 
 export default function ProdottiEsauritiPage() {
   const { tenantId, tenantData, refreshTenant } = useTenant()
-  const navigate = useNavigate()
+  const location = useLocation()
+  const navigate = usePreservedNavigate()
   const { hasServizio, enforcementActive } = useTenantServizi()
   const fidelityServizioOk = !enforcementActive || hasServizio("fidelity_card")
   const [ingredients, setIngredients] = useState([])
@@ -242,7 +245,7 @@ export default function ProdottiEsauritiPage() {
   return (
     <div style={styles.wrapper}>
       <p style={{ margin: "0 0 12px 0" }}>
-        <Link to="/operative/cassa" style={{ color: "#1565c0", fontSize: 14 }}>← Torna a Cassa</Link>
+        <Link to={withPreservedSupportSearch("/operative/cassa", location.search)} style={{ color: "#1565c0", fontSize: 14 }}>← Torna a Cassa</Link>
       </p>
       <h2 style={styles.title}>Prodotti esauriti</h2>
       <p style={styles.hint}>

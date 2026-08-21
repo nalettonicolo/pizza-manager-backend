@@ -26,7 +26,7 @@ function labelFromPath(pathname) {
  * non inviamo p_tenant_id come autorizzazione.
  */
 export function useSupportPresenceHeartbeat() {
-  const { user, ruolo, isSupportTenantMode } = useAuth()
+  const { user, ruolo, tipoUtente, isSupportTenantMode } = useAuth()
   const location = useLocation()
   const lastSent = useRef("")
 
@@ -34,6 +34,7 @@ export function useSupportPresenceHeartbeat() {
     if (!user?.id) return
     // Super Admin: non pubblica presence (né in console SA né in override supporto).
     if (ruolo === "superadmin") return
+    if (tipoUtente === "cliente") return
     if (isSupportTenantMode) return
 
     const path = `${location.pathname}${location.search || ""}`
@@ -57,5 +58,5 @@ export function useSupportPresenceHeartbeat() {
     if (lastSent.current !== key) void send()
     const t = window.setInterval(() => void send(), HEARTBEAT_MS)
     return () => window.clearInterval(t)
-  }, [user?.id, ruolo, isSupportTenantMode, location.pathname, location.search])
+  }, [user?.id, ruolo, tipoUtente, isSupportTenantMode, location.pathname, location.search])
 }

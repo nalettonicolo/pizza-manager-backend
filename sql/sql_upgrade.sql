@@ -1,41 +1,59 @@
 -- =============================================================================
--- PizzaManager — SQL UPGRADE (nuove implementazioni incrementali)
+-- PizzaManager — SQL UPGRADE (patch incrementali non ancora in schema_completo)
 -- =============================================================================
 --
 -- Stato:
--- - Patch 15/16 consolidate in schema_completo (CONSOLIDAMENTO 2026-05-30-b).
--- - Questo file deve contenere SOLO nuove modifiche non ancora consolidate.
+-- - Moduli 01–17 e 39–41: consolidati in sql/schema_completo_pizzamanager.sql
+--   (file rimossi da sql/modules/ il 2026-08-06).
+-- - Moduli 18–38: applicati su DB remoto; da consolidare in schema_completo al
+--   prossimo ciclo, poi rimuovere anche questi file.
 --
--- Regole operative:
--- 1) Aggiungere qui solo patch incrementali idempotenti.
--- 2) Dopo applicazione e verifica su Supabase/staging, consolidare in schema_completo.
--- 3) Poi svuotare di nuovo questo file mantenendo il template.
+-- Applicazione:
+--   npm run sql:apply -- sql/modules/NN_descrizione.sql
+--   oppure MCP Supabase apply_migration
 --
--- Per applicare le patch già pronte (prima installazione o DB non aggiornato):
---   sql/modules/15_order_idempotency.sql
---   sql/modules/16_contabilita_estesa.sql
---   sql/modules/17_stripe_online_confirm.sql   ← pagamenti online Stripe
---   sql/modules/18_clienti_geolocalizzazione_note.sql  ← lat/lng + note consegna clienti
---   sql/modules/19_cliente_update_proprio_profilo.sql  ← RPC modifica profilo cliente
---   sql/modules/20_cliente_ordini_propri.sql  ← storico ordini cliente (RPC)
---   sql/modules/21_fase4_fidelity_notifiche.sql  ← fidelity cliente + notifiche ordine web
---   sql/modules/22_fase5_sa_catalog_snapshot.sql  ← catalogo SA su DB + export fiscal outbox
---   sql/modules/23_notifiche_worker_delivery_stati.sql  ← worker notifiche + stati delivery
---   sql/modules/24_notifiche_canale_parametri.sql  ← canale notifica da parametri_operativi
---   sql/modules/25_ordini_web_capacity_antifraud_delivery_proof.sql  ← Stripe IN_ATTESA, capacity, proof delivery
---   sql/modules/26_support_presence.sql  ← presence live per Sala QA Super Admin
---   sql/modules/27_security_invoker_views.sql  ← advisor security_definer_view + auth users exposed
---   sql/modules/28_security_invoker_views_batch2.sql  ← resto viste public (tenants, menu, righe, …)
---   sql/modules/29_go_live_checklist.sql  ← checklist go-live condivisa (Super Admin)
---   sql/modules/30_support_presence_tenant_bind.sql  ← presence: tenant solo da identità
---   sql/modules/31_security_definer_search_path.sql  ← SET search_path su SECURITY DEFINER
---   sql/modules/32_verify_hardening_notices.sql  ← verifica read-only post-hardening
---   sql/modules/33_sa_support_punti_vendita.sql  ← SA legge PV di qualsiasi tenant (Sala QA)
---   sql/modules/34_revoke_edge_secrets_and_search_path.sql  ← REVOKE edge/secrets/fiscal + search_path pm_*
---   sql/modules/35_revoke_anon_auth_required_rpcs.sql  ← REVOKE anon su RPC che richiedono login
---   sql/modules/36_realtime_ordini_publication.sql  ← Realtime core.ordini (cucina/bancone)
---   sql/modules/37_storage_consegna_prove.sql  ← bucket Storage privato firma/foto delivery
---   sql/modules/38_advisor_residuals_turni_search_path.sql  ← policy turni_operatori + search_path pm_storage
---   sql/modules/39_public_tenant_by_id.sql  ← RPC anteprima SaaS (anon) get_public_tenant_by_id
---   sql/modules/40_public_parametri_whitelist.sql  ← whitelist parametri_operativi RPC pubbliche
+-- Moduli pendenti (ordine consigliato):
+--   sql/modules/18_clienti_geolocalizzazione_note.sql
+--   sql/modules/19_cliente_update_proprio_profilo.sql
+--   sql/modules/20_cliente_ordini_propri.sql
+--   sql/modules/21_fase4_fidelity_notifiche.sql
+--   sql/modules/22_fase5_sa_catalog_snapshot.sql
+--   sql/modules/23_notifiche_worker_delivery_stati.sql
+--   sql/modules/24_notifiche_canale_parametri.sql
+--   sql/modules/25_ordini_web_capacity_antifraud_delivery_proof.sql
+--   sql/modules/26_support_presence.sql
+--   sql/modules/27_security_invoker_views.sql
+--   sql/modules/28_security_invoker_views_batch2.sql
+--   sql/modules/29_go_live_checklist.sql
+--   sql/modules/30_support_presence_tenant_bind.sql
+--   sql/modules/31_security_definer_search_path.sql
+--   sql/modules/32_verify_hardening_notices.sql  (solo verifica, opzionale)
+--   sql/modules/33_sa_support_punti_vendita.sql
+--   sql/modules/34_revoke_edge_secrets_and_search_path.sql
+--   sql/modules/35_revoke_anon_auth_required_rpcs.sql
+--   sql/modules/36_realtime_ordini_publication.sql
+--   sql/modules/37_storage_consegna_prove.sql
+--   sql/modules/38_advisor_residuals_turni_search_path.sql
+--   sql/modules/42_sumup_online_checkout.sql
+--   sql/modules/43_online_payment_providers_multi.sql
+--   sql/modules/44_cliente_iscriviti_fidelity.sql
+--   sql/modules/45_ordini_web_accettazione_cassa.sql
+--   sql/modules/46_ordini_web_accettazione_public_param.sql
+--   sql/modules/47_delivery_rpc_superadmin_demo.sql
+--   sql/modules/48_utenti_ruoli_select_superadmin.sql
+--   sql/modules/49_public_modifica_pizza_bundle.sql
+--   sql/modules/50_clienti_select_admin_sa.sql
+--   sql/modules/51_public_parametri_pagamenti_ordine_online.sql
+--   sql/modules/52_prodotti_prep_categoria_colore.sql
+--
+-- Moduli 41-50 "reali" (rider capacità/routing/OAuth/tavoli/audit, applicati stasera
+-- direttamente su Supabase da un'altra chat, MAI salvati come file sql/modules/ locali):
+-- vedi cronologia in supabase_migrations.schema_migrations (project flfhrwzlrftuhkrfwzse) —
+-- 41_rider_capacita_ritardi_assegnazione, 41b_fix_search_path_calcola_stato_ritardo,
+-- 42_rider_posizione_sync_e_notifiche_cliente, 42b_fix_rider_upsert_posizione_rimuovi_fallback_rotto,
+-- 43_assegnazione_due_fasi_routing_stradale, 44_api_oauth_client_credentials,
+-- 45_audit_azioni_reparto_e_kiosk_mode, 46_fix_performance_rls_initplan,
+-- 47_fix_vista_ordine_security_invoker, 48_magazzino_giacenza_valorizzata,
+-- 49_gestione_tavoli, 50_password_nota_richiesta_conferma.
+-- TODO: esportarle come file sql/modules/ locali per non dipendere solo dalla cronologia remota.
 -- =============================================================================

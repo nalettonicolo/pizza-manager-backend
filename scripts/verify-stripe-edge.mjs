@@ -49,8 +49,10 @@ async function main() {
   }
 
   console.log(
-    "\nNota: questo script NON verifica chiavi live / webhook secret. " +
-      "Usa Admin → Pagamenti online + docs/GO_LIVE_FRANCY_RUNBOOK.md",
+    "\nNota: NON verifica chiavi TEST/live né firma webhook. " +
+      "Configura Admin → Pagamenti online (pk_test_/sk_test_/whsec_). " +
+      "Webhook può rispondere 503 senza secret globale e senza payload con PI: ok per reachability. " +
+      "Vedi docs/GO_LIVE_FRANCY_RUNBOOK.md § Stripe TEST.",
   )
   process.exit(failed ? 1 : 0)
 }

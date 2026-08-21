@@ -2,10 +2,11 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useTenant } from "@/app/contexts/TenantContext"
 import { getOrders, updateOrderStato } from "@/features/admin/services/adminService"
+import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
-const POLL_MS = 10000
+const POLL_FALLBACK_MS = 30000
 
 export default function Pony() {
   const { operatoreLabel } = useOutletContext() || {}
@@ -32,9 +33,13 @@ export default function Pony() {
 
   useEffect(() => {
     loadOrders()
-    const t = setInterval(() => loadOrders({ silent: true }), POLL_MS)
-    return () => clearInterval(t)
   }, [loadOrders])
+
+  useOperativeOrdersLiveRefresh({
+    tenantId,
+    onRefresh: () => loadOrders({ silent: true }),
+    pollMs: POLL_FALLBACK_MS,
+  })
 
   const markConsegnato = async (ordineId) => {
     if (!ordineId) return

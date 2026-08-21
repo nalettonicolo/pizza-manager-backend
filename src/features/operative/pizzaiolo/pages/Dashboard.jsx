@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
@@ -7,7 +7,9 @@ import {
   getRigheAggregateByOrdineIds,
   getRigheByOrdineIds,
   getProductIngredientiBatch,
+  getIngredients,
   updateOrderStato,
+  updateOrderCucinaPrepStato,
 } from "@/features/admin/services/adminService"
 import OrderDetailModal from "@/features/operative/components/OrderDetailModal"
 import {
@@ -17,6 +19,9 @@ import {
   slotPizzeCount,
   sortedSlotLabels,
   orarioToMinutes,
+  minutesToOrario,
+  kitchenDeadlineMinutes,
+  readPizzaioloLeadTimeConsegnaMin,
 } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
@@ -25,6 +30,17 @@ import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTes
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
+import {
+  buildCucinaPrepTasks,
+  slotTabLabel,
+  sortedCucinaSlotTabs,
+  aggregatePrepTasksBySlot,
+  markAggregatedPrepDone,
+} from "@/features/operative/cucina/utils/cucinaPrepTasks"
+import {
+  mergeCucinaPrepColorsFromParametri,
+  resolvePrepTaskBackgroundColor,
+} from "@/utils/cucinaPrepCategoryTheme"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
@@ -42,20 +58,46 @@ export default function PizzaioloDashboard() {
   const [orders, setOrders] = useState([])
   const [pizzePerOrdine, setPizzePerOrdine] = useState({})
   const [righePerOrdine, setRighePerOrdine] = useState({})
+  const [righeAll, setRigheAll] = useState([])
   const [productNames, setProductNames] = useState({})
+  const [productPrepCucinaById, setProductPrepCucinaById] = useState({})
+  const [productPrepMetaById, setProductPrepMetaById] = useState({})
   const [ingredientsByProduct, setIngredientsByProduct] = useState({})
+  const [ingredientiGlobali, setIngredientiGlobali] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [cortesiaBusy, setCortesiaBusy] = useState(false)
+
+  /** Catalogo ingredienti completo (nome→categoria/colore): fallback per gli "extra" aggiunti a
+   * una riga che non fanno parte della ricetta base di nessun prodotto già caricato (altrimenti
+   * risultano grigi "comune" nel pannello "Ingredienti fuori linea" anche se in anagrafica hanno
+   * una categoria impostata). Cambia raramente: un fetch per tenant, non ad ogni refresh ordini. */
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    getIngredients(tenantId)
+      .then((list) => {
+        if (!cancelled) setIngredientiGlobali(Array.isArray(list) ? list : [])
+      })
+      .catch((e) => console.warn("[Pizzaiolo] getIngredients:", e))
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId])
+  const [prepActionKey, setPrepActionKey] = useState(null)
   const loadSeqRef = useRef(0)
 
   const parametri = tenantData?.parametri_operativi || {}
   const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "pizzaiolo")
   const minutiVisibili = Number(parametri.pizzaiolo_ordini_visibili_minuti) || 45
-  const partenzaConsegneMinuti = Number(parametri.pizzaiolo_partenza_consegne_minuti) || 30
+  const leadTimeConsegnaMin = readPizzaioloLeadTimeConsegnaMin(parametri)
+  const prepCategoryColors = useMemo(
+    () => mergeCucinaPrepColorsFromParametri(tenantData?.parametri_operativi),
+    [tenantData?.parametri_operativi],
+  )
   const loadOrders = useCallback(async (opts = {}) => {
     const silent = opts.silent === true
     if (!tenantId) return
@@ -74,6 +116,7 @@ export default function PizzaioloDashboard() {
       if (seq !== loadSeqRef.current) return
       setOrders(data || [])
       setPizzePerOrdine(pizze)
+      setRigheAll(righe || [])
 
       const righePerOrd = {}
       const prodIds = new Set()
@@ -93,16 +136,24 @@ export default function PizzaioloDashboard() {
       ])
       if (seq !== loadSeqRef.current) return
       setProductNames((prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p.nome || "—" }), {}))
-      const ingMap = {}
-      for (const pid of pIds) {
-        ingMap[pid] = (ingBatch[pid] || []).map((ing) => ({
-          id: ing.id,
-          nome: ing.nome,
-          vaInCottura: ing.vaInCottura === true,
-          prepCucina: ing.prepCucina === true,
-        }))
-      }
-      setIngredientsByProduct(ingMap)
+      setProductPrepCucinaById(
+        (prodotti || []).reduce(
+          (acc, p) => ({ ...acc, [p.id]: p.prep_cucina === true || p.prepCucina === true }),
+          {},
+        ),
+      )
+      setProductPrepMetaById(
+        (prodotti || []).reduce(
+          (acc, p) => ({
+            ...acc,
+            [p.id]: { categoria: p.prep_categoria || p.prepCategoria || "", colore: p.prep_colore || p.prepColore || "" },
+          }),
+          {},
+        ),
+      )
+      // Forma grezza (id/nome/categoria/colore/vaInCottura/prepCucina): serve sia al riepilogo
+      // ingredienti per riga qui sotto sia al pannello "fuori linea" (buildCucinaPrepTasks).
+      setIngredientsByProduct(ingBatch || {})
       setError(null)
     } catch (err) {
       console.error(err)
@@ -135,8 +186,8 @@ export default function PizzaioloDashboard() {
 
   /* Riepilogo pizze per slot: tutti gli ordini in cottura del giorno (come carico API), non solo la finestra oraria delle colonne. */
   const slotPizze = useMemo(
-    () => slotPizzeCount(orders, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES),
-    [orders, pizzePerOrdine],
+    () => slotPizzeCount(orders, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES, leadTimeConsegnaMin),
+    [orders, pizzePerOrdine, leadTimeConsegnaMin],
   )
   const slotLabels = useMemo(
     () => sortedSlotLabels(slotPizze).filter((label) => (slotPizze[label] || 0) > 0),
@@ -149,6 +200,54 @@ export default function PizzaioloDashboard() {
     }
     return n
   }, [orders, pizzePerOrdine])
+
+  /**
+   * Ingredienti "fuori linea" (congelati, affettati, dolci, fritti, generici — stessa logica
+   * colore/rilevamento di Cucina): il pizzaiolo li vede per non dimenticarli, anche se la
+   * preparazione fisica spetta a Cucina/Bancone. Click = "pronto", stesso `cucina_prep_stato`
+   * dell'ordine: coordinato con Cucina/Bancone, non una checklist separata.
+   */
+  const tasksBySlot = useMemo(
+    () =>
+      buildCucinaPrepTasks(
+        orders,
+        righeAll,
+        productNames,
+        ingredientsByProduct,
+        PLANNING_GRID_SLOT_MINUTES,
+        productPrepCucinaById,
+        productPrepMetaById,
+        ingredientiGlobali,
+      ),
+    [orders, righeAll, productNames, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, ingredientiGlobali],
+  )
+  const fuoriLineaBySlot = useMemo(() => aggregatePrepTasksBySlot(tasksBySlot), [tasksBySlot])
+  const fuoriLineaSlotKeys = useMemo(() => sortedCucinaSlotTabs(tasksBySlot), [tasksBySlot])
+  const hasFuoriLinea = useMemo(
+    () => Object.values(fuoriLineaBySlot).some((arr) => (arr || []).some((a) => (a.count || 0) > (a.doneCount || 0))),
+    [fuoriLineaBySlot],
+  )
+
+  const handleMarkFuoriLineaDone = useCallback(
+    async (agg) => {
+      if (!agg?.pendingTasks?.length) return
+      setPrepActionKey(agg.pickKey)
+      try {
+        const { nextByOrdineId } = markAggregatedPrepDone(orders, agg.pendingTasks)
+        const entries = Object.entries(nextByOrdineId)
+        await Promise.all(entries.map(([oid, next]) => updateOrderCucinaPrepStato(oid, next)))
+        setOrders((prev) =>
+          prev.map((o) => (nextByOrdineId[o.id] ? { ...o, cucina_prep_stato: nextByOrdineId[o.id] } : o)),
+        )
+      } catch (err) {
+        console.error(err)
+        setError("Errore nell'aggiornamento preparazione.")
+      } finally {
+        setPrepActionKey(null)
+      }
+    },
+    [orders],
+  )
 
   const openDetail = useCallback(
     async (ordineId) => {
@@ -190,11 +289,14 @@ export default function PizzaioloDashboard() {
   )
 
   const renderCard = (ord, isDelivery) => {
-    const ritardo = getRitardoMinuti(ord, partenzaConsegneMinuti)
-    const urgForno = isDelivery && isDeliveryUrgentForno(ord, parametri, partenzaConsegneMinuti)
+    const ritardo = getRitardoMinuti(ord, leadTimeConsegnaMin)
+    const urgForno = isDelivery && isDeliveryUrgentForno(ord, parametri, leadTimeConsegnaMin)
     const mapsUrl = isDelivery ? googleMapsUrl(ord.indirizzo_consegna) : null
     const righe = righePerOrdine[ord.id] || []
     const pagamento = (ord.tipo_pagamento || "").trim()
+    const orarioCliente = ord.orario_ritiro ?? ord.orarioRitiro
+    const deadlineMin = isDelivery ? kitchenDeadlineMinutes(ord, leadTimeConsegnaMin) : null
+    const orarioPronte = deadlineMin != null ? minutesToOrario(deadlineMin) : null
     return (
       <div
         key={ord.id}
@@ -218,7 +320,13 @@ export default function PizzaioloDashboard() {
             }}
             onClick={(e) => { e.stopPropagation(); markAsPronto(ord.id); }}
             disabled={actionLoading}
-            title={ritardo > 0 ? `${ritardo} min ritardo` : "Segna come pronto"}
+            title={
+              ritardo > 0
+                ? `${ritardo} min oltre la scadenza forno${orarioPronte ? ` (${orarioPronte})` : ""}`
+                : isDelivery && orarioPronte
+                  ? `Pronte entro ${orarioPronte} (consegna ${orarioCliente || "—"})`
+                  : "Segna come pronto"
+            }
           >
             {ritardo > 0 ? `${ritardo} min ritardo` : "In forno"}
           </button>
@@ -229,44 +337,56 @@ export default function PizzaioloDashboard() {
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && openDetail(ord.id)}
           >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <strong>{ord.nome_cliente || "—"}</strong>
+              {urgForno ? (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: "#bf360c",
+                    background: "#ffe0b2",
+                    padding: "2px 8px",
+                    borderRadius: 6,
+                  }}
+                  title={
+                    orarioPronte
+                      ? `Mandare al forno: pizze pronte entro ${orarioPronte}`
+                      : "Consegna: mandare al forno con urgenza (finestra critica)"
+                  }
+                >
+                  FORNO URGENTE
+                </span>
+              ) : null}
+            </div>
+            {orarioCliente ? (
+              <span style={styles.orarioPagamentoRow}>
+                <span style={styles.orarioCard}>{orarioCliente}</span>
+                {isDelivery && orarioPronte ? (
+                  <span style={styles.pagamentoCard}> · forno ≤ {orarioPronte}</span>
+                ) : null}
+                {pagamento ? <span style={styles.pagamentoCard}> · {pagamento}</span> : null}
+              </span>
+            ) : pagamento ? (
+              <span style={styles.orarioPagamentoRow}>
+                <span style={styles.pagamentoCard}>{pagamento}</span>
+              </span>
+            ) : null}
             {isDelivery && mapsUrl ? (
-              <>
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={styles.mapsLink} onClick={(e) => e.stopPropagation()}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <strong>{ord.nome_cliente || "—"}</strong>
-                    {urgForno ? (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 800,
-                          color: "#bf360c",
-                          background: "#ffe0b2",
-                          padding: "2px 8px",
-                          borderRadius: 6,
-                        }}
-                        title="Consegna: mandare al forno con urgenza (finestra critica)"
-                      >
-                        FORNO URGENTE
-                      </span>
-                    ) : null}
-                  </div>
-                  <br />
-                  <span style={styles.indirizzo}>
-                    {ord.indirizzo_consegna ? formatIndirizzoDisplayItaliano(ord.indirizzo_consegna) : "—"}
-                  </span>
-                </a>
-              </>
-            ) : (
-              <>
-                <strong>{ord.nome_cliente || "—"}</strong>
-                {ord.orario_ritiro && (
-                  <span style={styles.orarioPagamentoRow}>
-                    <span style={styles.orarioCard}>{ord.orario_ritiro}</span>
-                    {pagamento && <span style={styles.pagamentoCard}> · {pagamento}</span>}
-                  </span>
-                )}
-              </>
-            )}
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={styles.mapsLink}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span style={styles.indirizzo}>
+                  {ord.indirizzo_consegna ? formatIndirizzoDisplayItaliano(ord.indirizzo_consegna) : "—"}
+                </span>
+              </a>
+            ) : isDelivery && ord.indirizzo_consegna ? (
+              <div style={styles.indirizzo}>{formatIndirizzoDisplayItaliano(ord.indirizzo_consegna)}</div>
+            ) : null}
           </div>
         </div>
         {righe.length > 0 && (() => {
@@ -363,6 +483,46 @@ export default function PizzaioloDashboard() {
           ) : null}
         </div>
       )}
+
+      {/* Ingredienti fuori linea (congelati, affettati, dolci, fritti, generici — stessi colori
+          e stato "pronto" condiviso con Cucina/Bancone; per non dimenticarli in fase di stesura). */}
+      {hasFuoriLinea && !quad ? (
+        <div style={styles.fuoriLineaWrap}>
+          <h2 style={styles.fuoriLineaTitle}>Ingredienti fuori linea</h2>
+          {fuoriLineaSlotKeys.map((slot) => {
+            const pending = (fuoriLineaBySlot[slot] || []).filter((a) => (a.count || 0) > (a.doneCount || 0))
+            if (pending.length === 0) return null
+            return (
+              <div key={slot} style={styles.fuoriLineaSlotRow}>
+                <span style={styles.fuoriLineaSlotLabel}>{slotTabLabel(slot)}</span>
+                <div style={styles.pickChipWrap}>
+                  {pending.map((agg) => {
+                    const bg = resolvePrepTaskBackgroundColor(
+                      { ingredienteColore: agg.colore, ingredienteCategoria: agg.categoria },
+                      prepCategoryColors,
+                    )
+                    const busy = prepActionKey === agg.pickKey
+                    const remaining = Math.max(0, (agg.count || 0) - (agg.doneCount || 0))
+                    return (
+                      <button
+                        key={agg.pickKey}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleMarkFuoriLineaDone(agg)}
+                        style={{ ...styles.fuoriLineaChip, background: bg }}
+                        title="Tocca quando l'hai preso/preparato."
+                      >
+                        {remaining > 1 ? `${remaining}× ` : ""}
+                        {agg.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
 
       {/* Due colonne */}
       <div className="pizzaiolo-dashboard-columns">
@@ -468,4 +628,24 @@ const styles = {
   rigaIngredienti: { display: "block", fontSize: 11, color: "#444", marginTop: 2 },
   ingBold: { fontWeight: 700 },
   ingNormal: { fontWeight: 400 },
+  fuoriLineaWrap: {
+    marginBottom: 14,
+    padding: 12,
+    background: "#fafafa",
+    border: "1px solid #e0e0e0",
+    borderRadius: 8,
+  },
+  fuoriLineaTitle: { margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#334155" },
+  fuoriLineaSlotRow: { marginBottom: 8 },
+  fuoriLineaSlotLabel: { display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 },
+  pickChipWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
+  fuoriLineaChip: {
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: "1px solid #cbd5e1",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#1a1a1a",
+    cursor: "pointer",
+  },
 }

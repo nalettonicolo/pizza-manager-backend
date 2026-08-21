@@ -11,7 +11,9 @@ import {
 import { getFormatiSpecialiParametri, getFormatiSpecialiList, calcPrezzoFamiglia, FORMATO_SPECIALE_ID } from "@/features/operative/cassa/utils/formatiSpeciali"
 import FamigliaModal from "@/features/operative/cassa/components/FamigliaModal"
 import MezzoMetroMetroModal from "@/features/operative/cassa/components/MezzoMetroMetroModal"
-import { buildComandaIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
+import { buildComandaIngredientiSummary, buildModificheClienteSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
+import { sortIngredientsByPizzaAffinity } from "@/features/operative/cassa/utils/ingredientAffinity"
+import { getPublicModificaPizzaBundle } from "@/features/services/publicService"
 
 const VARIANTI = [
   { value: "normale", label: "Normale" },
@@ -30,10 +32,56 @@ function toNum(v) {
   const n = Number(String(v).replace(",", "."))
   return Number.isNaN(n) ? 0 : n
 }
+
+function readCostoField(ing, ...keys) {
+  if (!ing) return 0
+  for (const k of keys) {
+    if (ing[k] != null && ing[k] !== "") return toNum(ing[k])
+  }
+  return 0
+}
+
+/** Supplemento/prezzo della variante rispetto al listino (allineato a `prezzoTotale`). */
+function prezzoVarianteIngrediente(ing, variante, { isExtra = false } = {}) {
+  const unit = readCostoField(ing, "costo_unitario", "costoUnitario", "costo")
+  const senza = readCostoField(ing, "costo_senza", "costoSenza")
+  const poco = readCostoField(ing, "costo_poco", "costoPoco")
+  const abb = Math.max(0, readCostoField(ing, "costo_abbondante", "costoAbbondante"))
+  if (variante === "senza") return senza
+  if (variante === "poco") return isExtra ? unit + poco : poco
+  if (variante === "abbondante") return isExtra ? unit + abb : abb
+  // normale: base pizza = già incluso; extra = costo unitario
+  return isExtra ? unit : 0
+}
+
 function formatEuro(n) {
   const v = toNum(n)
   if (v >= 0) return `+${v.toFixed(2)}€`
   return `${v.toFixed(2)}€`
+}
+
+/** Etichetta prezzo sempre visibile (anche 0.00). */
+function priceLabelAlways(amount) {
+  return ` (${formatEuro(amount)})`
+}
+
+function enrichIngredienteCosts(ing, fromCatalog) {
+  const pick = (...keys) => {
+    for (const src of [ing, fromCatalog]) {
+      if (!src) continue
+      for (const k of keys) {
+        if (src[k] != null && src[k] !== "") return toNum(src[k])
+      }
+    }
+    return 0
+  }
+  return {
+    ...ing,
+    costo_unitario: pick("costo_unitario", "costoUnitario", "costo"),
+    costo_abbondante: pick("costo_abbondante", "costoAbbondante"),
+    costo_senza: pick("costo_senza", "costoSenza"),
+    costo_poco: pick("costo_poco", "costoPoco"),
+  }
 }
 
 function normName(v) {
@@ -149,7 +197,9 @@ const s = {
   impastoChip: {
     padding: "6px 12px",
     borderRadius: 20,
-    border: "2px solid #e0e0e0",
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: "#e0e0e0",
     background: "#fff",
     cursor: "pointer",
     fontSize: 13,
@@ -219,7 +269,9 @@ const s = {
   chip: {
     padding: "6px 12px",
     borderRadius: 20,
-    border: "2px solid #e0e0e0",
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: "#e0e0e0",
     background: "#fff",
     cursor: "pointer",
     fontSize: 12,
@@ -231,7 +283,7 @@ const s = {
     borderColor: "#2e7d32",
   },
   chipSenza: { borderColor: "#c62828", color: "#c62828" },
-  chipSenzaActive: { background: "#c62828", color: "#fff" },
+  chipSenzaActive: { background: "#c62828", color: "#fff", borderColor: "#c62828" },
   extraChip: {
     display: "inline-flex",
     alignItems: "center",
@@ -304,6 +356,8 @@ export default function ModificaPizzaModal({
   onConfirm,
   /** Se true, `product` è una riga carrello: ripristina modifiche salvate */
   prefillFromProduct = false,
+  /** Vetrina cliente: carica dati via RPC pubblica (no RLS staff). */
+  publicMode = false,
 }) {
   const [productIngredienti, setProductIngredienti] = useState([])
   const [allIngredients, setAllIngredients] = useState([])
@@ -327,33 +381,52 @@ export default function ModificaPizzaModal({
     let cancelled = false
     setLoading(true)
     setExpandedIngId(null)
-    Promise.all([
-      getProductIngredienti(tenantId, product.id),
-      getIngredients(tenantId),
-      getImpasti(tenantId),
-      getFormati(tenantId).catch(() => []),
-      getCottura(tenantId).catch(() => []),
-    ]).then(([ingProd, ingAll, impastiList, formatiList, cotturaData]) => {
+    const load = publicMode
+      ? getPublicModificaPizzaBundle(tenantId, product.id).then((bundle) => {
+          if (!bundle) return [[], [], [], [], []]
+          return [
+            bundle.product_ingredienti || [],
+            bundle.ingredienti || [],
+            bundle.impasti || [],
+            bundle.formati || [],
+            bundle.cottura || [],
+          ]
+        })
+      : Promise.all([
+          getProductIngredienti(tenantId, product.id),
+          getIngredients(tenantId),
+          getImpasti(tenantId),
+          getFormati(tenantId).catch(() => []),
+          getCottura(tenantId).catch(() => []),
+        ])
+    load.then(([ingProd, ingAll, impastiList, formatiList, cotturaData]) => {
       if (cancelled) return
       const ingAllList = (ingAll || []).map((ing) => normalizeIngredientRow(ing))
-      const ingProdList = (ingProd || []).map((ing) => normalizeIngredientRow(ing))
+      const byCatalogId = new Map(ingAllList.map((ing) => [ing.id, ing]))
+      const ingProdList = (ingProd || [])
+        .map((ing) => normalizeIngredientRow(ing))
+        .map((ing) => enrichIngredienteCosts(ing, byCatalogId.get(ing.id)))
       const hasProductRecipe = ingProdList.length > 0
       const legacyNames = hasProductRecipe ? [] : parseLegacyIngredientNames(product)
       const byName = new Map(ingAllList.map((ing) => [normName(ing.nome), ing]))
       const fallbackFromLegacy = legacyNames.map((name, idx) => {
         const found = byName.get(normName(name))
         if (found) {
-          return {
-            ...found,
-            nome: found.nome ?? name,
-            vaInCottura: found.vaInCottura === true || found.va_in_cottura === true,
-            prepCucina: found.prepCucina === true || found.prep_cucina === true,
-          }
+          return enrichIngredienteCosts(
+            {
+              ...found,
+              nome: found.nome ?? name,
+              vaInCottura: found.vaInCottura === true || found.va_in_cottura === true,
+              prepCucina: found.prepCucina === true || found.prep_cucina === true,
+            },
+            found,
+          )
         }
         return {
           id: `legacy:${normName(name) || idx}`,
           nome: name,
           vaInCottura: true,
+          costo_unitario: 0,
           costo_senza: 0,
           costo_poco: 0,
           costo_abbondante: 0,
@@ -361,7 +434,7 @@ export default function ModificaPizzaModal({
       })
       const effectiveProductIngredienti = hasProductRecipe ? ingProdList : fallbackFromLegacy
       setProductIngredienti(effectiveProductIngredienti)
-      setAllIngredients(ingAllList)
+      setAllIngredients(ingAllList.map((ing) => enrichIngredienteCosts(ing, ing)))
       const activeImpasti = (impastiList || []).filter((i) => i.attivo !== false)
       setImpasti(activeImpasti)
       const activeFormati = (formatiList || []).filter((f) => f.attivo !== false)
@@ -417,16 +490,16 @@ export default function ModificaPizzaModal({
       setSearchExtra("")
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [open, product?.id, tenantId, tipoOrdine, parametri, prefillFromProduct, product])
+  }, [open, product?.id, tenantId, tipoOrdine, parametri, prefillFromProduct, product, publicMode])
 
   useEffect(() => {
-    if (!showFamigliaModal || !tenantId) return
+    if (!showFamigliaModal || !tenantId || publicMode) return
     let cancelled = false
     getProducts(tenantId).then((list) => {
       if (!cancelled) setFamigliaProductsList(list || [])
     })
     return () => { cancelled = true }
-  }, [showFamigliaModal, tenantId])
+  }, [showFamigliaModal, tenantId, publicMode])
 
   const productIngIds = useMemo(
     () => new Set((productIngredienti || []).map((i) => i.id)),
@@ -434,10 +507,17 @@ export default function ModificaPizzaModal({
   )
   const filteredAllForExtra = useMemo(() => {
     const q = (searchExtra || "").toLowerCase().trim()
-    return (allIngredients || []).filter(
-      (i) => !productIngIds.has(i.id) && (!q || (i.nome || "").toLowerCase().includes(q))
+    const base = (allIngredients || []).filter(
+      (i) =>
+        !productIngIds.has(i.id) &&
+        !extraIngredienti.some((e) => e.id === i.id) &&
+        (!q || (i.nome || "").toLowerCase().includes(q)),
     )
-  }, [allIngredients, productIngIds, searchExtra])
+    return sortIngredientsByPizzaAffinity(base, {
+      productName: product?.nome,
+      recipeIngredientNames: (productIngredienti || []).map((i) => i.nome),
+    })
+  }, [allIngredients, productIngIds, searchExtra, extraIngredienti, product?.nome, productIngredienti])
 
   const prezzoTotale = useMemo(() => {
     /* Prezzo listino (no promo calendario): la promo non si somma alle modifiche ingredienti. */
@@ -448,17 +528,11 @@ export default function ModificaPizzaModal({
       (productIngredienti || []).reduce((s, ing) => {
         const m = modifiche[ing.id]
         if (!m) return s
-        if (m.variante === "senza") return s + toNum(ing.costo_senza)
-        if (m.variante === "poco") return s + toNum(ing.costo_poco)
-        if (m.variante === "abbondante") return s + Math.max(0, toNum(ing.costo_abbondante))
-        return s
+        return s + prezzoVarianteIngrediente(ing, m.variante, { isExtra: false })
       }, 0) +
       (extraIngredienti || []).reduce((s, e) => {
         const ing = allIngredients.find((i) => i.id === e.id)
-        if (e.variante === "senza") return s + toNum(ing?.costo_senza)
-        if (e.variante === "poco") return s + toNum(ing?.costo_poco)
-        if (e.variante === "abbondante") return s + Math.max(0, toNum(ing?.costo_abbondante))
-        return s + (ing ? toNum(ing.costo_unitario) : 0)
+        return s + prezzoVarianteIngrediente(ing, e.variante || "normale", { isExtra: true })
       }, 0)
 
     const selectedFormato = formati.find((f) => f.id === selectedFormatoId)
@@ -555,6 +629,11 @@ export default function ModificaPizzaModal({
         modifiche,
         extraIngredienti,
       ),
+      ingredientiModificheClienteSummary: buildModificheClienteSummary(
+        productIngredienti,
+        modifiche,
+        extraIngredienti,
+      ),
       impastoId: selectedImpastoId || undefined,
       impastoNome: selectedImpasto?.nome ?? undefined,
       formatoId: selectedFormatoId || undefined,
@@ -591,7 +670,11 @@ export default function ModificaPizzaModal({
             <div style={s.chipsRow}>
               {productIngredienti.map((ing) => {
                 const m = modifiche[ing.id] || { variante: "normale", cottura: "in_cottura" }
-                const label = m.variante !== "normale" ? `${ing.nome} (${m.variante})` : ing.nome
+                const delta = prezzoVarianteIngrediente(ing, m.variante, { isExtra: false })
+                const label =
+                  m.variante !== "normale"
+                    ? `${ing.nome} (${m.variante})${priceLabelAlways(delta)}`
+                    : ing.nome
                 return (
                   <button
                     key={ing.id}
@@ -616,10 +699,11 @@ export default function ModificaPizzaModal({
                     {VARIANTI.map((v) => {
                       const isSenza = v.value === "senza"
                       const isActive = m.variante === v.value
-                      let priceLabel = ""
-                      if (v.value === "senza" && (ing.costo_senza != null || ing.costo_senza === 0)) priceLabel = ` (${formatEuro(ing.costo_senza)})`
-                      else if (v.value === "poco" && (ing.costo_poco != null || ing.costo_poco === 0)) priceLabel = ` (${formatEuro(ing.costo_poco)})`
-                      else if (v.value === "abbondante" && (ing.costo_abbondante != null || ing.costo_abbondante === 0)) priceLabel = ` (${formatEuro(ing.costo_abbondante)})`
+                      const delta = prezzoVarianteIngrediente(ing, v.value, { isExtra: false })
+                      const priceLabel =
+                        v.value === "normale"
+                          ? " (incluso)"
+                          : priceLabelAlways(delta)
                       return (
                         <button
                           key={v.value}
@@ -768,7 +852,9 @@ export default function ModificaPizzaModal({
             </div>
             {filteredAllForExtra.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                {filteredAllForExtra.slice(0, 10).map((ing) => (
+                {filteredAllForExtra.slice(0, 10).map((ing) => {
+                  const unit = prezzoVarianteIngrediente(ing, "normale", { isExtra: true })
+                  return (
                   <button
                     key={ing.id}
                     type="button"
@@ -785,16 +871,22 @@ export default function ModificaPizzaModal({
                     onClick={() => addExtraIngredient(ing)}
                   >
                     + {ing.nome}
+                    {priceLabelAlways(unit)}
                     {(ing.prepCucina === true || ing.prep_cucina === true) ? " · prep cucina" : ""}
                   </button>
-                ))}
+                  )
+                })}
               </div>
             )}
             {extraIngredienti.length > 0 && (
               <div style={{ marginBottom: 12 }}>
-                {extraIngredienti.map((e) => (
+                {extraIngredienti.map((e) => {
+                  const ing = allIngredients.find((i) => i.id === e.id) || e
+                  const delta = prezzoVarianteIngrediente(ing, e.variante || "normale", { isExtra: true })
+                  return (
                   <span key={e.id} style={s.extraChip}>
-                    {e.nome}
+                    <strong>{e.nome}</strong>
+                    <span style={{ fontWeight: 700, color: "#1b5e20" }}>{priceLabelAlways(delta).trim()}</span>
                     <select
                       value={e.cottura}
                       onChange={(ev) => setExtraModifica(e.id, "cottura", ev.target.value)}
@@ -811,9 +903,14 @@ export default function ModificaPizzaModal({
                       style={{ padding: "2px 6px", borderRadius: 6, border: "1px solid #a5d6a7", fontSize: 12 }}
                       onClick={(ev) => ev.stopPropagation()}
                     >
-                      {VARIANTI.map((v) => (
-                        <option key={v.value} value={v.value}>{v.label}</option>
-                      ))}
+                      {VARIANTI.map((v) => {
+                        const p = prezzoVarianteIngrediente(ing, v.value, { isExtra: true })
+                        return (
+                          <option key={v.value} value={v.value}>
+                            {v.label} ({formatEuro(p)})
+                          </option>
+                        )
+                      })}
                     </select>
                     <button
                       type="button"
@@ -824,7 +921,8 @@ export default function ModificaPizzaModal({
                       ✕
                     </button>
                   </span>
-                ))}
+                  )
+                })}
               </div>
             )}
 

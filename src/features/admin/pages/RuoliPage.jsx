@@ -219,6 +219,12 @@ export default function RuoliPage() {
       for (const row of rows) {
         map[row.user_id] = row.password_nota ?? "";
       }
+      if ((ruoli?.length || 0) > 0 && Object.keys(map).length === 0) {
+        setReauthError(
+          "Nessuna password archivio leggibile con questo account. Usa Super Admin → Clienti → Archivio password, oppure un admin del locale. (Le note non sono cancellate sul server.)",
+        );
+        return;
+      }
       setNoteByUserId(map);
       setArchivioUnlockUntil(Date.now() + ARCHIVIO_PASSWORD_MS);
       setReauthOpen(false);

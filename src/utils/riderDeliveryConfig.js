@@ -56,15 +56,15 @@ export function readRiderPartenzaBufferMin(po) {
 }
 
 /**
- * Minuti rimanenti alla scadenza “pizze pronte per partenza rider” (orario − partenza consegna).
+ * Minuti rimanenti alla scadenza “pizze pronte per partenza rider” (orario − tempo viaggio).
  * @returns {number|null} minuti (negativo = già in ritardo rispetto a quella scadenza)
  */
-export function minutesUntilKitchenDeadlineForDelivery(ordine, partenzaConsegneMinuti) {
+export function minutesUntilKitchenDeadlineForDelivery(ordine, leadTimeConsegnaMin) {
   const isDelivery = (ordine.tipo_ordine || "").toLowerCase() === "delivery"
   if (!isDelivery) return null
   const om = orarioToMinutes(ordine.orario_ritiro ?? ordine.orarioRitiro)
   if (om == null) return null
-  const p = Math.max(0, Number(partenzaConsegneMinuti) || 30)
+  const p = Math.max(0, Number(leadTimeConsegnaMin) || 10)
   const deadline = om - p
   return deadline - nowMinutes()
 }

@@ -1,16 +1,19 @@
-import { Navigate, Link } from "react-router-dom"
+import { Navigate, Link, useLocation } from "react-router-dom"
+import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { useTenantServizi } from "@/app/hooks/useTenantServizi"
 import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess"
 import FidelityCardPage from "@/features/admin/pages/FidelityCardPage"
 
 /** Fidelity da area operativa Cassa (stesso modulo admin, route dedicata). */
 export default function CassaFidelityPage() {
+  const location = useLocation()
   const { hasServizio, enforcementActive } = useTenantServizi()
   const { permessiAreeEffective, fullDemoAccess } = useOperativeSaDemoAccess()
   const okCassa = fullDemoAccess || permessiAreeEffective?.cassa === true
+  const backCassa = withPreservedSupportSearch("/operative/cassa", location.search)
 
   if (!okCassa) {
-    return <Navigate to="/operative/cassa" replace />
+    return <Navigate to={backCassa} replace />
   }
 
   const fidelityManca = !fullDemoAccess && enforcementActive && !hasServizio("fidelity_card")
@@ -18,7 +21,7 @@ export default function CassaFidelityPage() {
     return (
       <div style={{ maxWidth: 560 }}>
         <p style={{ margin: "0 0 12px 0" }}>
-          <Link to="/operative/cassa" style={{ color: "#1565c0", fontSize: 14 }}>
+          <Link to={backCassa} style={{ color: "#1565c0", fontSize: 14 }}>
             ← Torna a Cassa
           </Link>
         </p>
@@ -36,7 +39,7 @@ export default function CassaFidelityPage() {
   return (
     <div>
       <p style={{ margin: "0 0 12px 0" }}>
-        <Link to="/operative/cassa" style={{ color: "#1565c0", fontSize: 14 }}>
+        <Link to={backCassa} style={{ color: "#1565c0", fontSize: 14 }}>
           ← Torna a Cassa
         </Link>
       </p>

@@ -24,6 +24,7 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 - **CI keep-alive Supabase**: retry e check secret (workflow verde).
 - **Macrofasi 1–5**: core completato (vedi `MACROFASI_SVILUPPO.md`); **Fase 6** = produzione hard + adapter reali.
 - **2026-08-03**: hardening RPC (34–35); Realtime ordini (36); magazzino hub DB; stampa comanda web Francy; guide DNS; SA gate + Sala QA; proof Storage (37); advisor residui (38); deploy hosting produzione.
+- **2026-08-20**: batch Chek-Sviluppi CA-10/11/12/14, CL-09/10, OP-07, OW-05; checkout profilo + geocode Nominatim-first; logo landing; priorità in `docs/punto-situazione/11_priorita_operative.md`.
 
 ---
 

@@ -4,7 +4,71 @@ Usala dopo deploy o prima di una release. Per ogni voce: **OK** / **KO** e breve
 
 **Come usarla:** account tenant admin reale o di staging; stesso dominio del deploy (es. `pizzamanager.it`). Dove serve il piano, usa un tenant con/senza servizio indicato.
 
-_Ultimo aggiornamento contenuti: 2026-05-15 (unificata smoke operativa multi-reparto)._
+_Ultimo aggiornamento contenuti: 2026-08-21 (aggiunta sezione novità sessione rider/OAuth/tavoli/colori prep)._
+
+---
+
+## Novità sessione 20–21/08 (rider, OAuth, tavoli, colori preparazione)
+
+Sezione aggiuntiva per le feature/fix costruiti in questa sessione, non ancora passati da un backtest reale. Da eseguire **prima** delle sezioni sopra, non in sostituzione.
+
+### Rider — posizione e auto-assegnazione
+
+Precondizioni: tenant con almeno un rider (`core.rider`, campo `auth_user_id` collegato a un account che può loggarsi), turno rider aperto su un punto vendita.
+
+- [ ] Login come rider (o account con `auth_user_id` associato) → aprire **Delivery Dashboard**: la posizione GPS locale continua a funzionare come prima (ordinamento nearest-neighbor).
+- [ ] Con turno rider aperto: dopo qualche minuto verificare in DB (`core.rider_posizione`) che la riga del rider si sia aggiornata (RPC `rider_upsert_posizione`, sync ogni ~60s).
+- [ ] Login come **staff non-rider** (es. admin/cassa) su Delivery Dashboard: nessun errore in console per la sync posizione (deve fallire in silenzio, "rider non trovato").
+- [ ] Bottone **"Assegna auto"** su un ordine delivery con coordinate di consegna valide: assegna un rider con turno aperto e nessuna consegna già in corso; verificare `stato_delivery` → `ASSEGNATO` e riga in `core.ordine_consegna_evento`.
+- [ ] Stesso bottone su ordine **senza** rider disponibile (nessun turno aperto): messaggio di errore leggibile, nessun crash.
+- [ ] Se `ORS_API_KEY` non è impostata: l'assegnazione funziona comunque (fallback Haversine via `assegna_ordine_rider_auto`), nessun errore bloccante.
+
+### API partner OAuth (`oauth-token`, `api-v1-ordini`)
+
+Precondizioni: un client OAuth creato via `superadmin_create_oauth_client` (nessuna UI ancora — da SQL/console Supabase).
+
+- [ ] `POST /functions/v1/oauth-token` con `client_id`/`client_secret` validi → risponde `access_token` + `expires_in`; con credenziali sbagliate → `401 invalid_client` (non 500).
+- [ ] `GET /functions/v1/api-v1-ordini` con token valido e scope `read:ordini` → lista ordini del tenant corretto; con token scaduto o scope mancante → errore esplicito, non elenco vuoto silenzioso.
+
+### Gestione tavoli (backend pronto, nessuna UI ancora collegata)
+
+- [ ] `tavoliService.js` (`getTavoli`, `apriContoTavolo`, `aggiungiGiroTavolo`, `chiudiContoTavolo`, ecc.) — se già richiamato da qualche pagina, verificare che apra/chiuda un conto senza errori RPC. **Se nessuna pagina lo usa ancora, segnare N/A** e non considerarlo testato.
+
+### Kiosk auto-logout
+
+Precondizioni: `parametri_operativi.kiosk_logout_minuti` impostato a un numero > 0 su un tenant di test (**non collegato di default** — se il parametro non è impostato, questa voce non si applica).
+
+- [ ] Con `kiosk_logout_minuti` impostato: nessuna interazione (click/tap/tasto) per il tempo configurato → logout automatico e redirect a `/login`.
+- [ ] Toccando/cliccando/digitando prima della scadenza: il timer si resetta, nessun logout prematuro.
+- [ ] Con il parametro **non impostato** (o 0): nessun logout automatico — comportamento invariato rispetto a prima.
+
+### Cucina / Bancone / Pizzaiolo — colori preparazione e routing
+
+Precondizioni: tenant con almeno un prodotto flaggato "Prep. cucina" con categoria impostata (es. una bibita), e ingredienti con categoria (congelato/affettato/dolce/fritto).
+
+- [ ] **Colori coerenti**: uno stesso ingrediente/prodotto con la stessa categoria mostra **lo stesso colore** sia in Cucina che in Bancone (prima erano due mappe colore diverse).
+- [ ] **Con reparto Cucina attivo** (`cucina_tablet_abilitato`): il pannello ingredienti (non bibite) **sparisce da Bancone** — resta solo la sezione Bibite; Cucina mostra tutto il resto.
+- [ ] **Senza reparto Cucina**: Bancone torna a mostrare sia ingredienti sia bibite, come prima.
+- [ ] **Pizzaiolo**: compare il nuovo pannello "Ingredienti fuori linea" quando ci sono task pendenti; cliccando un chip risulta "pronto" **anche** in Cucina/Bancone (stesso stato condiviso, non 3 checklist separate).
+- [ ] **Colore prodotto** (Admin → Menù → categoria con "Prep. cucina", es. Bibite/Dolci/Fritti): impostando una categoria colore sul prodotto, il task "prodotto intero" in Cucina/Bancone/Pizzaiolo prende quel colore invece del grigio "comune".
+
+### CSV ingredienti — colore rimosso
+
+- [ ] **Import**: un CSV con colonna `categoria` (senza `colore`) crea un nuovo ingrediente con il colore di default della categoria assegnato in automatico.
+- [ ] **Import su ingrediente esistente**: il colore attuale (custom o di default) **non viene toccato** dal CSV, anche cambiando categoria.
+- [ ] **Export**: il file scaricato non contiene più la colonna `colore`.
+- [ ] Import di un file grande (30+ righe): tempo di caricamento sensibilmente più rapido rispetto a prima (elaborazione a lotti in parallelo, non più una riga alla volta).
+
+### Cassa / Pony — aggiornamento in tempo reale
+
+- [ ] **Cassa**: un cambio ordine fatto da un altro reparto (es. Cucina segna pronto) si riflette in Cassa senza dover aspettare ~40s (Realtime attivo, non solo polling).
+- [ ] **Pony**: stesso comportamento; nessuna regressione sul flusso "segna consegnato".
+- [ ] Colonna carrello in Cassa: pulsanti **"Svuota"** e **"Conferma Ordine"** in cima alla lista prodotti (non più in fondo).
+
+### Bug corretti da verificare
+
+- [ ] **Turni cassa → "Apri turno"**: non deve più dare l'errore `column pv.deleted_at does not exist` — il turno si apre correttamente.
+- [ ] **Logo** in header/footer vetrina pubblica: nitido, nessuna differenza visibile rispetto a prima (solo più leggero da caricare).
 
 ---
 

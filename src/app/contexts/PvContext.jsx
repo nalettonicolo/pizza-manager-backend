@@ -9,7 +9,7 @@ import { useTenant } from "@/app/contexts/TenantContext"
 const PvContext = createContext()
 
 export function PvProvider({ children }) {
-  const { user, ruolo, loading: authLoading, isSupportTenantMode } = useAuth()
+  const { user, ruolo, tipoUtente, loading: authLoading, isSupportTenantMode } = useAuth()
   const { tenantId, tenantData } = useTenant()
 
   const [activePv, setActivePv] = useState(null)
@@ -77,6 +77,14 @@ export function PvProvider({ children }) {
       return
     }
 
+    // Account cliente: niente punti_vendita (RLS staff). La vetrina non usa activePv.
+    if (tipoUtente === "cliente") {
+      setPvList([])
+      setActivePv(null)
+      setLoading(false)
+      return
+    }
+
     if (pvLoadInFlightRef.current) {
       return
     }
@@ -117,7 +125,7 @@ export function PvProvider({ children }) {
       pvLoadInFlightRef.current = false
       setLoading(false)
     }
-  }, [tenantId, applyPvRows])
+  }, [tenantId, tipoUtente, applyPvRows])
 
   // ======================================
   // SET DB CONTEXT (RLS)

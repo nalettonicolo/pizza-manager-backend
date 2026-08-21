@@ -1,12 +1,14 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/app/contexts/AuthContext";
 import HeroStore from "@/features/public/components/HeroStore";
+import PublicStoreCartSidebar from "@/features/public/components/PublicStoreCartSidebar";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid";
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs";
+import ModificaPizzaModal from "@/features/operative/cassa/components/ModificaPizzaModal";
 
 import {
   getPublicMenu,
@@ -40,13 +42,17 @@ function pickParametriOperativi(tenant) {
 }
 
 export default function PublicStore() {
-  const { user } = useAuth();
+  const { user, tipoUtente, tenantId: authTenantId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { addItem, totalQty } = usePublicCart();
+  const { addItem, replaceLine } = usePublicCart();
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [productToAdd, setProductToAdd] = useState(null);
+  const [pizzaModalEditCartLine, setPizzaModalEditCartLine] = useState(null);
+  const [pizzaModalEditKey, setPizzaModalEditKey] = useState(null);
   const [closedToday, setClosedToday] = useState(false);
   const [tenantName, setTenantName] = useState(null);
   const [branding, setBranding] = useState(null);
@@ -61,9 +67,78 @@ export default function PublicStore() {
   /** Nomi ingredienti per prodotto (ricetta); opzionale se RLS anon non consente la lettura. */
   const [ingredientiRicercaMap, setIngredientiRicercaMap] = useState({});
 
+  const clienteLoggato = Boolean(user) && tipoUtente === "cliente";
+  const vetrinaTenantId = vetrinaTenant?.id || authTenantId || null;
+
   const vetrinaOrdiniOk = useMemo(
     () => readOrdiniOnlineVetrinaAllowed(tenantParametri, vetrinaTenant),
     [tenantParametri, vetrinaTenant],
+  );
+
+  const closePizzaModal = useCallback(() => {
+    setProductModalOpen(false);
+    setProductToAdd(null);
+    setPizzaModalEditCartLine(null);
+    setPizzaModalEditKey(null);
+  }, []);
+
+  const openModificaPizza = useCallback((product, editLine = null, editKey = null) => {
+    if (!user) {
+      const qs = new URLSearchParams(location.search || "");
+      qs.set("cliente", "1");
+      qs.set("return_to", `${location.pathname}${location.search || ""}`);
+      navigate(`/login?${qs.toString()}`, {
+        state: { from: location, pendingProductId: product?.id ?? null },
+      });
+      return;
+    }
+    setPizzaModalEditCartLine(editLine);
+    setPizzaModalEditKey(editKey);
+    setProductToAdd(editLine ? { ...editLine } : { ...product });
+    setProductModalOpen(true);
+  }, [user, navigate, location]);
+
+  const confirmModificaPizza = useCallback(
+    (modsPayload) => {
+      if (!productToAdd) return;
+      const summary = modsPayload?.ingredientiCotturaSummary ?? "";
+      const nextKey = modsPayload
+        ? JSON.stringify({
+            m: modsPayload.ingredientiModifiche,
+            e: modsPayload.extraIngredienti,
+            i: modsPayload.impastoId ?? null,
+            f: modsPayload.formatoId ?? null,
+            c: modsPayload.cotturaId ?? null,
+          })
+        : "";
+      const linePayload = {
+        id: productToAdd.id,
+        nome: productToAdd.nome,
+        prezzo:
+          modsPayload?.prezzoCalcolato != null
+            ? modsPayload.prezzoCalcolato
+            : productToAdd.prezzo,
+        qty: pizzaModalEditCartLine ? Math.max(1, Number(pizzaModalEditCartLine.qty) || 1) : 1,
+        formatoNome: modsPayload?.formatoNome,
+        formatoId: modsPayload?.formatoId,
+        ingredientiCotturaSummary: summary,
+        ingredientiModifiche: modsPayload?.ingredientiModifiche,
+        extraIngredienti: modsPayload?.extraIngredienti,
+        impastoId: modsPayload?.impastoId,
+        impastoNome: modsPayload?.impastoNome,
+        cotturaId: modsPayload?.cotturaId,
+        cotturaNome: modsPayload?.cotturaNome,
+        _modsKey: nextKey,
+        _lineId: pizzaModalEditCartLine?._lineId,
+      };
+      if (pizzaModalEditKey) {
+        replaceLine(pizzaModalEditKey, linePayload);
+      } else {
+        addItem(linePayload);
+      }
+      closePizzaModal();
+    },
+    [productToAdd, pizzaModalEditCartLine, pizzaModalEditKey, addItem, replaceLine, closePizzaModal],
   );
 
   useEffect(() => {
@@ -144,6 +219,13 @@ export default function PublicStore() {
 
   const activeCategoryId = selectedCategoryId ?? defaultCategoryId;
 
+  const showModificaCategoria = useMemo(() => {
+    if (!clienteLoggato || !vetrinaOrdiniOk) return false;
+    const cat = categories.find((c) => c.id === activeCategoryId);
+    const nome = String(cat?.nome || "").toLowerCase().trim();
+    return !["fritti", "dolci", "bibite"].includes(nome);
+  }, [clienteLoggato, vetrinaOrdiniOk, categories, activeCategoryId]);
+
   useEffect(() => {
     if (selectedCategoryId && !categories.some((c) => c.id === selectedCategoryId)) {
       setSelectedCategoryId(null);
@@ -207,9 +289,70 @@ export default function PublicStore() {
   if (loading) return <Loader />;
   if (error) return <ErrorState message={error} />;
 
+  const menuBody = (
+    <>
+      {!vetrinaOrdiniOk ? (
+        <div style={styles.browseOnlyBanner}>
+          <strong>Menù in consultazione.</strong> Gli ordini online non sono attivi per questo locale (licenza o
+          impostazioni). Puoi consultare liberamente il menù; per ordinare contatta la pizzeria.
+        </div>
+      ) : null}
+      <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          type="text"
+          placeholder="Cerca pizza..."
+          value={searchPizza}
+          onChange={(e) => setSearchPizza(e.target.value)}
+          style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+      </div>
+      {categories.length > 0 ? (
+        <CategoryTabs
+          categories={categories}
+          activeCategory={activeCategoryId}
+          onSelect={setSelectedCategoryId}
+          accentColor={accent}
+        />
+      ) : (
+        <div style={styles.menuHeaderRow}>
+          <span style={{ ...styles.menuTitleFallback, color: accent }}>Menù</span>
+        </div>
+      )}
+      {vetrinaOrdiniOk && !user ? <p style={styles.loginHint}>Accedi per aggiungere al carrello.</p> : null}
+      {!menu.length && (
+        <p style={styles.emptyMenuHint}>
+          {location.pathname.startsWith("/preview") || location.pathname.startsWith("/negozio") ? (
+            <>
+              Nessun piatto in vetrina per la pizzeria selezionata. Verifica in{" "}
+              <strong>Admin → Menu</strong> che i prodotti siano <strong>attivi</strong> e{" "}
+              <strong>visibili online</strong>. Su ambiente demo la vetrina usa il tenant con slug{" "}
+              <code style={{ fontSize: 12 }}>demo</code>, oppure imposta{" "}
+              <code style={{ fontSize: 12 }}>VITE_PUBLIC_DEMO_TENANT_ID</code> nel file{" "}
+              <code style={{ fontSize: 12 }}>.env</code>, oppure aggiungi{" "}
+              <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> o{" "}
+              <code style={{ fontSize: 12 }}>?support_tenant=&lt;uuid&gt;</code> all&apos;URL.
+            </>
+          ) : (
+            <>Al momento non ci sono piatti disponibili online.</>
+          )}
+        </p>
+      )}
+      <ProductGrid
+        products={filteredProducts}
+        ingredientiMap={ingredientiMap}
+        rowBackground={menuRowBackground}
+        canAdd={vetrinaOrdiniOk}
+        onAdd={handleAddProduct}
+        onModifica={(p) => openModificaPizza(p)}
+        showModifica={showModificaCategoria}
+        storefront={!vetrinaOrdiniOk}
+      />
+    </>
+  );
+
   return (
     <div
-      className="public-store-page"
+      className={`public-store-page${clienteLoggato ? " public-store-page--cliente" : ""}`}
       style={{
         ...styles.wrapper,
         ...(pageBg ? { background: pageBg } : {}),
@@ -227,79 +370,34 @@ export default function PublicStore() {
         </div>
       ) : null}
 
-      <div id="public-menu" style={styles.menuSection}>
-        {!vetrinaOrdiniOk ? (
-          <div style={styles.browseOnlyBanner}>
-            <strong>Menù in consultazione.</strong> Gli ordini online non sono attivi per questo locale (licenza o
-            impostazioni). Puoi consultare liberamente il menù; per ordinare contatta la pizzeria.
+      {clienteLoggato ? (
+        <div className="public-store-shell">
+          <div id="public-menu" className="public-store-menu-col">
+            {menuBody}
           </div>
-        ) : null}
-        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="text"
-            placeholder="Cerca pizza..."
-            value={searchPizza}
-            onChange={(e) => setSearchPizza(e.target.value)}
-            style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid #ddd" }}
+          <PublicStoreCartSidebar
+            canCheckout={vetrinaOrdiniOk}
+            accent={accent}
+            onEditPizza={(item, key) => openModificaPizza(item, item, key)}
           />
         </div>
-        {categories.length > 0 ? (
-          <CategoryTabs
-            categories={categories}
-            activeCategory={activeCategoryId}
-            onSelect={setSelectedCategoryId}
-            accentColor={accent}
-          />
-        ) : (
-          <div style={styles.menuHeaderRow}>
-            <span style={{ ...styles.menuTitleFallback, color: accent }}>Menù</span>
-          </div>
-        )}
-        {vetrinaOrdiniOk && !user ? <p style={styles.loginHint}>Accedi per aggiungere al carrello.</p> : null}
-        {user && totalQty > 0 && vetrinaOrdiniOk ? (
-          <div style={styles.cartBar}>
-            <span>
-              Carrello: <strong>{totalQty}</strong> {totalQty === 1 ? "articolo" : "articoli"}
-            </span>
-            <Link to="/ordina" style={styles.cartBarBtn}>
-              Procedi all&apos;ordine (consegna)
-            </Link>
-          </div>
-        ) : null}
-        {user && totalQty > 0 && !vetrinaOrdiniOk ? (
-          <p style={styles.cartBlockedHint}>
-            Carrello con articoli: gli <strong>ordini online</strong> non sono disponibili (piano licenza o impostazioni del
-            locale).
-          </p>
-        ) : null}
-        {!menu.length && (
-          <p style={styles.emptyMenuHint}>
-            {location.pathname.startsWith("/preview") || location.pathname.startsWith("/negozio") ? (
-              <>
-                Nessun piatto in vetrina per la pizzeria selezionata. Verifica in{" "}
-                <strong>Admin → Menu</strong> che i prodotti siano <strong>attivi</strong> e{" "}
-                <strong>visibili online</strong>. Su ambiente demo la vetrina usa il tenant con slug{" "}
-                <code style={{ fontSize: 12 }}>demo</code>, oppure imposta{" "}
-                <code style={{ fontSize: 12 }}>VITE_PUBLIC_DEMO_TENANT_ID</code> nel file{" "}
-                <code style={{ fontSize: 12 }}>.env</code>, oppure aggiungi{" "}
-                <code style={{ fontSize: 12 }}>?tenant=&lt;uuid&gt;</code> o{" "}
-                <code style={{ fontSize: 12 }}>?support_tenant=&lt;uuid&gt;</code> all&apos;URL.
-              </>
-            ) : (
-              <>Al momento non ci sono piatti disponibili online.</>
-            )}
-          </p>
-        )}
-        <ProductGrid
-          products={filteredProducts}
-          ingredientiMap={ingredientiMap}
-          rowBackground={menuRowBackground}
-          canAdd={vetrinaOrdiniOk}
-          onAdd={handleAddProduct}
-          showModifica={false}
-          storefront={!vetrinaOrdiniOk}
-        />
-      </div>
+      ) : (
+        <div id="public-menu" style={styles.menuSection}>
+          {menuBody}
+        </div>
+      )}
+
+      <ModificaPizzaModal
+        open={productModalOpen}
+        onClose={closePizzaModal}
+        product={productToAdd}
+        tenantId={vetrinaTenantId}
+        tipoOrdine="consegna"
+        parametri={tenantParametri}
+        onConfirm={confirmModificaPizza}
+        prefillFromProduct={Boolean(pizzaModalEditCartLine)}
+        publicMode
+      />
     </div>
   );
 }
@@ -362,39 +460,6 @@ const styles = {
     background: "#f8fafc",
     borderRadius: 8,
     border: "1px solid #e2e8f0",
-  },
-  cartBar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 16,
-    padding: "12px 14px",
-    background: "#ecfdf5",
-    border: "1px solid #a7f3d0",
-    borderRadius: 8,
-    fontSize: 14,
-    color: "#14532d",
-  },
-  cartBarBtn: {
-    padding: "8px 14px",
-    background: "#0f766e",
-    color: "#fff",
-    borderRadius: 8,
-    fontWeight: 700,
-    textDecoration: "none",
-    fontSize: 14,
-  },
-  cartBlockedHint: {
-    marginBottom: 16,
-    padding: "12px 14px",
-    background: "#fef2f2",
-    border: "1px solid #fecaca",
-    borderRadius: 8,
-    fontSize: 14,
-    color: "#991b1b",
-    lineHeight: 1.5,
   },
   browseOnlyBanner: {
     marginBottom: 18,

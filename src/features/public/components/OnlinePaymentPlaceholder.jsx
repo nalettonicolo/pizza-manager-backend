@@ -1,64 +1,105 @@
-/**
- * Predisposizione pagamenti online (Stripe / SumUp): niente segreti in client;
- * chiavi pubbliche da tenant o da .env per test.
- */
-export function describePaymentProvider(tenant) {
-  const t = tenant && typeof tenant === "object" ? tenant : {}
-  const p = String(t.pagamento_online_provider || "").toLowerCase().trim()
-  if (p === "stripe") return "stripe"
-  if (p === "sumup") return "sumup"
-  return ""
-}
+import {
+  ONLINE_PAYMENT_PROVIDER_BY_KEY,
+  detectProviderMode,
+  getCheckoutLiveProviders,
+} from "@/constants/onlinePaymentProviders"
+import { isStripePublishableTestKey } from "@/constants/onlinePaymentTestCards"
+import OnlinePaymentTestCardsHint from "@/features/public/components/OnlinePaymentTestCardsHint"
 
-export function OnlinePaymentPlaceholder({ tenant, totalEuro }) {
-  const provider = describePaymentProvider(tenant)
-  const pk = String(tenant?.stripe_publishable_key || "").trim()
-  const sumupId = String(tenant?.sumup_merchant_public_id || "").trim()
+/**
+ * Selettore gestore pagamento in checkout vetrina.
+ */
+export function OnlinePaymentProviderPicker({ tenant, selectedKey, onChange, totalEuro }) {
+  const providers = getCheckoutLiveProviders(tenant)
+  if (providers.length === 0) {
+    return (
+      <p className="online-pay-picker-empty">
+        Nessun gestore online attivo. Scegli pagamento alla consegna o riprova più tardi.
+      </p>
+    )
+  }
+
+  if (providers.length === 1) {
+    const key = providers[0].provider_key
+    const def = ONLINE_PAYMENT_PROVIDER_BY_KEY[key]
+    return (
+      <p className="online-pay-picker-single">
+        Pagamento con <strong>{def?.label || key}</strong> · totale{" "}
+        <strong>€ {Number(totalEuro).toFixed(2)}</strong>
+      </p>
+    )
+  }
 
   return (
-    <div
-      style={{
-        padding: 16,
-        borderRadius: 10,
-        border: "1px solid #e2e8f0",
-        background: "#f8fafc",
-        fontSize: 14,
-        lineHeight: 1.55,
-        color: "#334155",
-      }}
-    >
-      <strong style={{ color: "#0f172a" }}>Pagamento online</strong>
-      <p style={{ margin: "10px 0 0" }}>
-        <strong>Stripe</strong> è integrato con Edge Functions (PaymentIntent), webhook e Payment Element (3DS).{" "}
-        <strong>SumUp</strong> resta in roadmap (endpoint placeholder <code>payment-sumup-placeholder</code>).
-      </p>
-      {provider === "stripe" && pk ? (
-        <p style={{ margin: "10px 0 0", fontSize: 13 }}>
-          Provider: <strong>Stripe</strong> · chiave pubblica presente (pk_…). Totale ordine:{" "}
-          <strong>€ {Number(totalEuro).toFixed(2)}</strong>. Dopo «Conferma ordine» si apre il form carta (serve anche la chiave
-          segreta sk_ salvata in Amministrazione).
+    <div className="online-pay-picker">
+      <p className="online-pay-picker-label">Scegli come pagare</p>
+      <div className="online-pay-picker-options">
+        {providers.map((row) => {
+          const key = row.provider_key
+          const def = ONLINE_PAYMENT_PROVIDER_BY_KEY[key]
+          const sel = selectedKey === key
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`online-pay-picker-option${sel ? " online-pay-picker-option--selected" : ""}`}
+              style={{ "--online-pay-accent": def?.accent || "#64748b" }}
+              onClick={() => onChange(key)}
+            >
+              <span className="online-pay-picker-option-dot" aria-hidden />
+              <span className="online-pay-picker-option-text">
+                <strong>{def?.label || key}</strong>
+                <span>{def?.description}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function OnlinePaymentPlaceholder({ tenant, totalEuro, selectedProviderKey }) {
+  const providers = getCheckoutLiveProviders(tenant)
+  const key = selectedProviderKey || (providers.length === 1 ? providers[0].provider_key : "")
+  const def = ONLINE_PAYMENT_PROVIDER_BY_KEY[key]
+  const row = providers.find((p) => p.provider_key === key)
+  const cfg = row?.public_config || {}
+  const stripePk = cfg.stripe_publishable_key || tenant?.stripe_publishable_key
+  const stripeTest =
+    key === "stripe" &&
+    (isStripePublishableTestKey(stripePk) ||
+      detectProviderMode("stripe", { ...cfg, stripe_publishable_key: stripePk }, Boolean(row?.secret_configured)) ===
+        "test")
+  const showTestCards =
+    (key === "stripe" && stripeTest) ||
+    key === "sumup" ||
+    key === "nexi" ||
+    key === "paypal" ||
+    key === "satispay"
+
+  return (
+    <div className="online-pay-checkout-box">
+      <strong className="online-pay-checkout-box-title">Pagamento online</strong>
+      {!key ? (
+        <p className="online-pay-checkout-box-hint">Seleziona un gestore di pagamento sopra.</p>
+      ) : (
+        <p className="online-pay-checkout-box-body">
+          {def?.label || key}
+          {key === "stripe" && stripePk ? <> · form carta dopo «Conferma ordine»</> : null}
+          {key === "sumup" && (cfg.sumup_merchant_public_id || tenant?.sumup_merchant_public_id) ? (
+            <> · redirect pagina sicura SumUp</>
+          ) : null}
+          {" · "}
+          Totale <strong>€ {Number(totalEuro).toFixed(2)}</strong>
         </p>
-      ) : provider === "stripe" ? (
-        <p style={{ margin: "10px 0 0", color: "#b45309" }}>
-          Provider impostato su <strong>Stripe</strong>: aggiungi la chiave pubblica tenant (<code>stripe_publishable_key</code>) in
-          database o in Admin.
-        </p>
-      ) : null}
-      {provider === "sumup" && sumupId ? (
-        <p style={{ margin: "10px 0 0", fontSize: 13 }}>
-          Provider: <strong>SumUp</strong> · merchant id configurato. Totale: <strong>€ {Number(totalEuro).toFixed(2)}</strong>.
-        </p>
-      ) : provider === "sumup" ? (
-        <p style={{ margin: "10px 0 0", color: "#b45309" }}>
-          Provider impostato su <strong>SumUp</strong>: aggiungi <code>sumup_merchant_public_id</code> in database.
-        </p>
-      ) : null}
-      {!provider ? (
-        <p style={{ margin: "10px 0 0", fontSize: 13, color: "#64748b" }}>
-          Nessun provider selezionato sul tenant: usa &quot;Pagamento alla consegna&quot; oppure imposta{" "}
-          <code>pagamento_online_provider</code> a <code>stripe</code> o <code>sumup</code>.
-        </p>
+      )}
+      {showTestCards && key ? (
+        <OnlinePaymentTestCardsHint providerKey={key} compact title={`Carte di pagamento test (${def?.label || key})`} />
       ) : null}
     </div>
   )
 }
+
+/** @deprecated import from @/constants/onlinePaymentProviders */
+export { describePaymentProvider, getCheckoutLiveProviders } from "@/constants/onlinePaymentProviders"

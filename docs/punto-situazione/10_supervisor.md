@@ -61,4 +61,10 @@ Agente: **solo Supervisore** (`@agents/supervisor.md`).
 
 ---
 
-*Documento Supervisore — 2026-08-05*
+## Delta operativo (2026-08-20) — non riesame Supervisore
+
+Batch **Chek-Sviluppi** (CA-10/11/12/14, CL-09/10, OP-07, OW-05), logo landing, checkout profilo, deploy hosting, backup locale completo. Priorità aggiornate in `11_priorita_operative.md`. Residui aperti: **commit/push**, smoke Stripe TEST/live Francy, DNS menu.
+
+---
+
+*Documento Supervisore — 2026-08-05 · delta note 2026-08-20*

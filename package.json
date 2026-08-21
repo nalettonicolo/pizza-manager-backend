@@ -34,6 +34,8 @@
     "supabase:auth:apply": "node scripts/supabase-auth-remote.mjs apply-all",
     "supabase:auth:sync-redirects": "node scripts/supabase-auth-remote.mjs sync-redirects --from-db",
     "sql:apply": "node scripts/apply-sql-module.mjs",
+    "demo:cliente": "node scripts/ensure-demo-cliente.mjs",
+    "demo:cliente:sumup": "node scripts/ensure-demo-cliente.mjs --sumup",
     "verify:public-po": "node scripts/verify-public-parametri-whitelist.mjs",
     "verify:rls-inventory": "node scripts/verify-rls-inventory.mjs",
     "verify:rls-jwt-ab": "node scripts/smoke-rls-jwt-ab.mjs",
@@ -41,7 +43,10 @@
     "e2e:install": "playwright install chromium",
     "e2e:smoke": "playwright test",
     "e2e": "playwright test",
-    "supabase:functions:deploy:notifiche": "npx supabase functions deploy notifiche-outbox-processor --no-verify-jwt"
+    "supabase:functions:deploy:notifiche": "npx supabase functions deploy notifiche-outbox-processor --no-verify-jwt",
+    "supabase:functions:deploy:oauth-token": "npx supabase functions deploy oauth-token --no-verify-jwt",
+    "supabase:functions:deploy:api-v1-ordini": "npx supabase functions deploy api-v1-ordini --no-verify-jwt",
+    "supabase:functions:deploy:delivery-assegna-auto": "npx supabase functions deploy delivery-assegna-ordine-auto"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

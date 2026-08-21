@@ -98,9 +98,7 @@ Vedi **`docs/SICUREZZA_HARDENING.md`** e script / note in **`sql/scripts/README_
 3. **Cutover** per modulo (es. solo report) poi core ordini.
 4. **Spegnere** Supabase solo quando auth, pagamenti, RLS-equivalente e backup sono certificati.
 
-Dettaglio dedicato: **`docs/MIGRAZIONE_MYSQL_E_BACKUP.md`**.
-
-Se l’obiettivo è **indipendenza senza cambiare motore SQL** (restare su **PostgreSQL** e togliere hosted + client Supabase), usare **`docs/STACCO_SUPABASE_TOTALE.md`** e **`docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md`** invece del percorso MySQL sopra.
+Dettaglio dedicato: **`docs/STACCO_SUPABASE_TOTALE.md`** e **`docs/MIGRAZIONE_SUPABASE_A_POSTGRES.md`** (PostgreSQL dedicato, senza cambiare dialetto Prisma).
 
 ---
 

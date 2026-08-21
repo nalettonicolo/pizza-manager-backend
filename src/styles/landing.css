@@ -909,9 +909,19 @@
 }
 
 .footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-weight: 800;
   color: #f1f5f9;
   letter-spacing: -0.02em;
+}
+
+.footer-brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
 }
 
 .footer-copy {

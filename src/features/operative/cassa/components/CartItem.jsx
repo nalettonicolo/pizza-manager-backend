@@ -1,4 +1,5 @@
 import { formatPrice } from "@/utils/format"
+import { extractModificheFromIngredientiSummary } from "@/features/operative/cassa/utils/comandaIngredientiSummary"
 
 function IconGear({ size = 18, color = "#334155" }) {
   return (
@@ -37,6 +38,9 @@ export default function CartItem({
   const metaFs = mobile ? 13 : 11
   const btnStyle = mobile ? styles.actionBtnMobile : styles.actionBtn
   const legacyMods = Boolean(item._modsKey || item.ingredientiModifiche || item.ingredientiCotturaSummary)
+  const modsCliente = String(item.ingredientiModificheClienteSummary || "").trim()
+  const modsDisplay =
+    modsCliente || extractModificheFromIngredientiSummary(item.ingredientiCotturaSummary || "")
   /** Mostra modifica se non disabilitata esplicitamente (bibite/fritti/dolci). Include righe senza flag (bozze/ripristino). */
   const showEditGear =
     typeof onEditPizza === "function" &&
@@ -61,11 +65,19 @@ export default function CartItem({
             Cottura: {item.cotturaNome}
           </div>
         )}
-        {item.ingredientiCotturaSummary && (
-          <div style={{ fontSize: metaFs, color: "#666", marginTop: 2 }}>
-            {item.ingredientiCotturaSummary}
+        {modsDisplay ? (
+          <div
+            style={{
+              fontSize: metaFs,
+              color: "#b71c1c",
+              marginTop: 4,
+              fontWeight: 700,
+              lineHeight: 1.35,
+            }}
+          >
+            {modsDisplay}
           </div>
-        )}
+        ) : null}
         <div style={{ fontSize: mobile ? 15 : undefined, marginTop: 4 }}>
           € {formatPrice(item.prezzo)} x {item.qty}
         </div>

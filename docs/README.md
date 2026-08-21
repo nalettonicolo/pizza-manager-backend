@@ -12,6 +12,7 @@ Indice degli artifact in questa cartella. I comandi operative di deploy vivono n
 | [ARCHITETTURA_E_STATO.md](./ARCHITETTURA_E_STATO.md) | Route/admin/operativo vs implementazione |
 | [ARCHITETTURA_API_E_RUOLI.md](./ARCHITETTURA_API_E_RUOLI.md) | Supabase vs API Nest (`VITE_API_URL`), ruoli |
 | [BACKLOG_E_STATO_SVILUPPO.md](./BACKLOG_E_STATO_SVILUPPO.md) | Backlog e ordine di lavoro |
+| [ROADMAP_VELOCITA.md](./ROADMAP_VELOCITA.md) | **Come** lavorare più in fretta (agente, scope, deploy on-demand) |
 | [MACROFASI_SVILUPPO.md](./MACROFASI_SVILUPPO.md) | Piano macrofasi 1–5 e Definition of Done |
 | [ROADMAP_CASSA_ENTERPRISE.md](./ROADMAP_CASSA_ENTERPRISE.md) | Cassa stabile → offline → fiscale IT |
 
@@ -24,6 +25,7 @@ Indice degli artifact in questa cartella. I comandi operative di deploy vivono n
 | [GUIDA_SUPERADMIN.md](./GUIDA_SUPERADMIN.md) | Piattaforma, tenant, pubblicazione dominio |
 | [GUIDA_ADMIN.md](./GUIDA_ADMIN.md) | Area admin tenant |
 | [GUIDA_CSV_INGREDIENTI.md](./GUIDA_CSV_INGREDIENTI.md) | Import ingredienti CSV |
+| [GUIDA_TEST_PAGAMENTI_ONLINE.md](./GUIDA_TEST_PAGAMENTI_ONLINE.md) | Cliente Test + Stripe/SumUp/Satispay/Nexi/PayPal |
 
 ---
 
@@ -42,9 +44,8 @@ Indice degli artifact in questa cartella. I comandi operative di deploy vivono n
 |-----------|-----------|
 | [COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md](./COORDINAMENTO_EPIC_E_INFRASTRUTTURA.md) | Epic e ordinamento |
 | [STACCO_SUPABASE_MILESTONE_PLAN.md](./STACCO_SUPABASE_MILESTONE_PLAN.md), [STACCO_SUPABASE_TOTALE.md](./STACCO_SUPABASE_TOTALE.md) | Piani di migrazione / stacco |
-| [MIGRAZIONE_SUPABASE_A_POSTGRES.md](./MIGRAZIONE_SUPABASE_A_POSTGRES.md), [MIGRAZIONE_MYSQL_E_BACKUP.md](./MIGRAZIONE_MYSQL_E_BACKUP.md) | Opzioni DB e backup |
+| [MIGRAZIONE_SUPABASE_A_POSTGRES.md](./MIGRAZIONE_SUPABASE_A_POSTGRES.md) | Postgres dedicato (stacco parziale da Supabase hosted) |
 | [FASE_0_RETE_SELFHOST.md](./FASE_0_RETE_SELFHOST.md), [FASE_1_AUTH_E_API_SELFHOST.md](./FASE_1_AUTH_E_API_SELFHOST.md) | Rete e auth/API self-hosted |
-| [GUIDA_OPERATIVITA_SQL_MYSQL_DEPLOY.md](./GUIDA_OPERATIVITA_SQL_MYSQL_DEPLOY.md) | Operatività DB / MySQL deploy (lungo ciclo migratorio) |
 | [CURSOR_WORKFLOW_SERVER_CASA.md](./CURSOR_WORKFLOW_SERVER_CASA.md) | Workflow Cursor e server casa |
 
 ---

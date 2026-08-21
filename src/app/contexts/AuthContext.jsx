@@ -18,6 +18,12 @@ import {
   supabaseLoginNetworkHelpMessage,
 } from "@/lib/supabaseEnv.js"
 import { resolveSupportTenantOverride } from "@/utils/supportTenantOverride"
+import {
+  getDemoClienteAuthBootstrap,
+  getDemoClienteCredentials,
+  isDemoClienteSessionActive,
+  resolveDemoClienteTenantIdFromEnv,
+} from "@/utils/demoClienteSession"
 
 const AuthContext = createContext()
 
@@ -31,12 +37,16 @@ function mapCoreRuoloToApp(ruolo) {
   return normalizeRuoloOperativo(ruolo)
 }
 
-/** getSession() — timeout più stretto per UI più reattiva (rete lenta può comunque fallire e ripetere login) */
-const GET_SESSION_TIMEOUT_MS = 6000
+/** getSession() — timeout generoso: con navigator.locks (tab in background) può superare 6s */
+const GET_SESSION_TIMEOUT_MS = 12000
 /** Oltre questo tempo il gate auth si chiude comunque (evita "Accesso in corso..." infinito) */
-const AUTH_LOADING_FAILSAFE_MS = 14000
+const AUTH_LOADING_FAILSAFE_MS = 16000
+/** Evita "Caricamento profilo..." infinito se utenti_ruoli/clienti non rispondono */
+const PROFILE_READY_FAILSAFE_MS = 12000
 const LOAD_USER_DATA_TIMEOUT_MS = 8000
-const LOAD_USER_DATA_RETRY_DELAY_MS = 150
+const LOAD_USER_DATA_RETRY_DELAY_MS = 400
+/** Timeout corto per path demo (lock Auth spesso blocca PostgREST finché getSession non finisce). */
+const DEMO_CLIENTE_QUERY_TIMEOUT_MS = 2500
 /** Micro-ritardo dopo sessione: 0 = nessuna attesa artificiale tra getSession e load profilo */
 const SESSION_PROPAGATION_DELAY_MS = 0
 
@@ -49,17 +59,41 @@ function withTimeout(promise, ms, label) {
   ])
 }
 
+function readDemoClienteFlag() {
+  return isDemoClienteSessionActive()
+}
+
+function resolveDemoClienteTenantId() {
+  return resolveDemoClienteTenantIdFromEnv()
+}
+
+/** Account «Cliente Test»: non deve mai risolversi come staff (evita redirect in cassa). */
+function isDemoClienteEmail(email) {
+  const demo = getDemoClienteCredentials().email
+  if (!demo || !email) return false
+  return String(email).trim().toLowerCase() === String(demo).trim().toLowerCase()
+}
+
+function shouldPreferClienteProfile(userEmail) {
+  return readDemoClienteFlag() || isDemoClienteEmail(userEmail)
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [tipoUtente, setTipoUtente] = useState(null) // "staff" | "cliente"
+  const demoBoot =
+    typeof window !== "undefined" ? getDemoClienteAuthBootstrap() : null
+
+  const [user, setUser] = useState(() => demoBoot?.user ?? null)
+  const [tipoUtente, setTipoUtente] = useState(() => (demoBoot?.ready ? "cliente" : null))
   const [ruolo, setRuolo] = useState(null)
-  const [tenantId, setTenantId] = useState(null)
+  const [tenantId, setTenantId] = useState(() =>
+    demoBoot?.ready ? demoBoot.tenantId : null,
+  )
   const [permessiAree, setPermessiAree] = useState(null) // aree operative calcolate: ruolo + accesso_* true (null = non staff / non caricato)
   /** Nome tenant dall’API Nest (`/me`, login): usato da TenantContext se `public.tenants` non è leggibile senza sessione Supabase. */
   const [nestTenantNome, setNestTenantNome] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !(demoBoot?.ready))
   /** True dopo il primo tentativo di risoluzione profilo (staff/cliente/nessuno). */
-  const [profileReady, setProfileReady] = useState(false)
+  const [profileReady, setProfileReady] = useState(() => Boolean(demoBoot?.ready))
   /** Override tenant attivo solo per Super Admin (Sala QA / supporto live). */
   const [supportTenantOverride, setSupportTenantOverride] = useState(() => {
     if (typeof window === "undefined") return null
@@ -68,9 +102,29 @@ export function AuthProvider({ children }) {
   })
   const retryPendingRef = useRef(false)
   const loadUserDataInProgressRef = useRef(false)
-  const lastLoadedUserIdRef = useRef(null)
-  const latestUserIdRef = useRef(null)
+  const lastLoadedUserIdRef = useRef(demoBoot?.user?.id ?? null)
+  const latestUserIdRef = useRef(demoBoot?.user?.id ?? null)
+  const latestUserEmailRef = useRef(demoBoot?.user?.email ?? null)
   const retryTimeoutIdRef = useRef(null)
+  const profileReadyRef = useRef(Boolean(demoBoot?.ready))
+  /** Generazione load: i timeout/retry obsoleti non devono cancellare un profilo già ok. */
+  const loadUserDataGenRef = useRef(0)
+
+  useEffect(() => {
+    if (demoBoot?.ready) {
+      devLog("Auth", "bootstrap demo cliente (sincrono)", {
+        userId: demoBoot.user?.id,
+        tenant_id: demoBoot.tenantId,
+      })
+    }
+    // solo al mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const markProfileReady = useCallback(() => {
+    profileReadyRef.current = true
+    setProfileReady(true)
+  }, [])
 
   const setLoadingSafe = useCallback((value) => {
     if (value === false && retryPendingRef.current) return
@@ -82,6 +136,18 @@ export function AuthProvider({ children }) {
     retryPendingRef.current = false
     setLoading(false)
   }, [])
+
+  /** Failsafe: non lasciare ProtectedRoute su "Caricamento profilo..." per sempre. */
+  useEffect(() => {
+    if (profileReady || !user) return undefined
+    const id = window.setTimeout(() => {
+      if (profileReadyRef.current) return
+      devWarn("Auth", "failsafe profileReady=true (profilo non risolto in tempo)")
+      markProfileReady()
+      forceLoadingFalse()
+    }, PROFILE_READY_FAILSAFE_MS)
+    return () => window.clearTimeout(id)
+  }, [profileReady, user, markProfileReady, forceLoadingFalse])
 
   useEffect(() => {
     const sync = () => {
@@ -129,19 +195,82 @@ export function AuthProvider({ children }) {
       setPermessiAree(computePermessiAree(normalized, ruoloNorm))
     }
     setNestTenantNome(profile.tenantNome != null ? String(profile.tenantNome) : null)
-    setProfileReady(true)
-  }, [])
+    markProfileReady()
+  }, [markProfileReady])
 
   // ===============================
   // LOAD USER DATA
   // ===============================
 
   const loadUserData = useCallback(async (userId, isRetry = false) => {
-    if (loadUserDataInProgressRef.current && !isRetry) return
+    // Già risolto: non rifare la query (SIGNED_IN da recoverAndRefresh / focus tab).
+    if (
+      !isRetry &&
+      lastLoadedUserIdRef.current === userId &&
+      profileReadyRef.current
+    ) {
+      devLog("Auth", "loadUserData skip: profilo già pronto", { userId })
+      forceLoadingFalse()
+      return
+    }
+    if (loadUserDataInProgressRef.current && !isRetry) {
+      // Demo: la query precedente può restare bloccata dal lock Auth — interrompi e risolvi subito.
+      if (readDemoClienteFlag() && !profileReadyRef.current) {
+        loadUserDataGenRef.current += 1
+        loadUserDataInProgressRef.current = false
+      } else {
+        devLog("Auth", "loadUserData skip: già in corso", { userId })
+        return
+      }
+    }
+    const gen = ++loadUserDataGenRef.current
     loadUserDataInProgressRef.current = true
-    if (!isRetry) setProfileReady(false)
-    devLog("Auth", "loadUserData inizio", { userId, isRetry })
+    const softRefresh =
+      !isRetry &&
+      lastLoadedUserIdRef.current === userId &&
+      profileReadyRef.current
+    // Demo: non spegnere profileReady (evita di nuovo «Verifica accesso…»).
+    if (!isRetry && !softRefresh && !readDemoClienteFlag()) {
+      profileReadyRef.current = false
+      setProfileReady(false)
+    }
+    devLog("Auth", "loadUserData inizio", { userId, isRetry, softRefresh })
+    const isStale = () => gen !== loadUserDataGenRef.current
+
     try {
+      // Demo / Cliente Test: priorità cliente (mai staff → cassa).
+      if (shouldPreferClienteProfile(latestUserEmailRef.current)) {
+        const demoTid = resolveDemoClienteTenantId()
+        lastLoadedUserIdRef.current = userId
+        setTipoUtente("cliente")
+        setRuolo(null)
+        if (demoTid) setTenantId(demoTid)
+        setPermessiAree(null)
+        markProfileReady()
+        retryPendingRef.current = false
+        forceLoadingFalse()
+        loadUserDataInProgressRef.current = false
+        // Non impostare pm_demo_cliente_active qui: senza stash SA il tasto Super Admin
+        // mostrerebbe un errore. Il flag lo setta solo openDemoClienteArea.
+        devLog("Auth", "utente CLIENTE (demo preferito)", {
+          tenant_id: demoTid,
+          userId,
+          email: latestUserEmailRef.current,
+        })
+
+        void withTimeout(
+          supabase.from("clienti").select("tenant_id").eq("id", userId).maybeSingle(),
+          DEMO_CLIENTE_QUERY_TIMEOUT_MS,
+          "clienti-demo-bg",
+        )
+          .then(({ data }) => {
+            if (isStale()) return
+            if (data?.tenant_id) setTenantId(data.tenant_id)
+          })
+          .catch(() => {})
+        return
+      }
+
       const staffPromise = supabase
         .from("utenti_ruoli")
         .select("ruolo, tenant_id, attivo, accesso_riepilogo, accesso_cassa, accesso_cucina, accesso_bancone, accesso_delivery, accesso_pony, accesso_pizzaiolo")
@@ -156,6 +285,11 @@ export function AuthProvider({ children }) {
         devWarn("Auth", "utenti_ruoli query TIMEOUT o errore", err?.message ?? err)
         return { data: null, error: err }
       })
+
+      if (isStale()) {
+        devLog("Auth", "loadUserData stale dopo utenti_ruoli", { userId, gen })
+        return
+      }
 
       let staffData = staffDataRaw
       let staffErrResolved = staffErr
@@ -207,7 +341,7 @@ export function AuthProvider({ children }) {
           const normalized = normalizeLegacyAllAccessTrue(staffData)
           setPermessiAree(computePermessiAree(normalized, ruoloNorm))
         }
-        setProfileReady(true)
+        markProfileReady()
         retryPendingRef.current = false
         setLoadingSafe(false)
         return
@@ -216,12 +350,36 @@ export function AuthProvider({ children }) {
         devLog("Auth", "utente STAFF disabilitato (attivo=false), nessun accesso")
       }
 
-      if (staffErrResolved && !isRetry && staffErrResolved?.message?.includes("timeout")) {
+      const staffTimedOut = Boolean(staffErrResolved?.message?.includes("timeout"))
+      // Se un altro path ha già risolto lo stesso user, non ritentare / non cancellare.
+      if (lastLoadedUserIdRef.current === userId && profileReadyRef.current) {
+        retryPendingRef.current = false
+        setLoadingSafe(false)
+        return
+      }
+      if (staffTimedOut && !isRetry) {
         loadUserDataInProgressRef.current = false
         retryPendingRef.current = true
+        const retryGen = gen
         retryTimeoutIdRef.current = setTimeout(() => {
+          if (retryGen !== loadUserDataGenRef.current) {
+            retryPendingRef.current = false
+            retryTimeoutIdRef.current = null
+            return
+          }
+          if (lastLoadedUserIdRef.current === userId && profileReadyRef.current) {
+            retryPendingRef.current = false
+            forceLoadingFalse()
+            retryTimeoutIdRef.current = null
+            return
+          }
           const currentId = latestUserIdRef.current
-          if (currentId) loadUserData(currentId, true)
+          if (currentId) void loadUserData(currentId, true)
+          else {
+            retryPendingRef.current = false
+            markProfileReady()
+            forceLoadingFalse()
+          }
           retryTimeoutIdRef.current = null
         }, LOAD_USER_DATA_RETRY_DELAY_MS)
         return
@@ -244,6 +402,11 @@ export function AuthProvider({ children }) {
         return { data: null, error: err }
       })
 
+      if (isStale()) {
+        devLog("Auth", "loadUserData stale dopo clienti", { userId, gen })
+        return
+      }
+
       if (clienteErr) {
         devWarn("Auth", "clienti query error", clienteErr.message, clienteErr)
       }
@@ -253,7 +416,7 @@ export function AuthProvider({ children }) {
         setTipoUtente("cliente")
         setRuolo(null)
         setTenantId(clienteData.tenant_id)
-        setProfileReady(true)
+        markProfileReady()
         retryPendingRef.current = false
         setLoadingSafe(false)
         return
@@ -261,19 +424,26 @@ export function AuthProvider({ children }) {
 
       devLog("Auth", "nessun profilo in utenti_ruoli/clienti per userId", userId)
     } catch (e) {
-      devWarn("Auth", "loadUserData eccezione", e?.message || e, e)
+      if (!isStale()) devWarn("Auth", "loadUserData eccezione", e?.message || e, e)
     } finally {
-      loadUserDataInProgressRef.current = false
+      if (!isStale()) loadUserDataInProgressRef.current = false
+    }
+    if (isStale()) return
+    // Non cancellare un profilo già ok (timeout in ritardo dopo successo parallelo).
+    if (lastLoadedUserIdRef.current === userId && profileReadyRef.current) {
+      retryPendingRef.current = false
+      setLoadingSafe(false)
+      return
     }
     setTipoUtente(null)
     setRuolo(null)
     setTenantId(null)
-    setProfileReady(true)
+    markProfileReady()
     if (isRetry) {
       retryPendingRef.current = false
     }
     setLoadingSafe(false)
-  }, [setLoadingSafe])
+  }, [setLoadingSafe, markProfileReady, forceLoadingFalse])
 
   // ===============================
   // INIT SESSION
@@ -311,14 +481,14 @@ export function AuthProvider({ children }) {
             setTenantId(null)
             setPermessiAree(null)
             setNestTenantNome(null)
-            setProfileReady(true)
+            markProfileReady()
             latestUserIdRef.current = null
             lastLoadedUserIdRef.current = null
           }
         } finally {
           if (!cancelled) {
             clearTimeout(failsafeId)
-            setProfileReady(true)
+            markProfileReady()
             forceLoadingFalse()
             devLog("Auth", "init Nest completato")
           }
@@ -356,44 +526,77 @@ export function AuthProvider({ children }) {
     }, AUTH_LOADING_FAILSAFE_MS)
 
     const init = async () => {
+      let deferForAuthListener = false
       try {
         devLog("Auth", "getSession() in corso...")
-        const { data, error } = await withTimeout(
+        const sessionResult = await withTimeout(
           supabase.auth.getSession(),
           GET_SESSION_TIMEOUT_MS,
           "getSession"
         ).catch((err) => {
           devWarn("Auth", "getSession timeout o errore", err?.message ?? err)
-          return { data: { session: null }, error: err }
+          return { data: { session: null }, error: err, timedOut: true }
         })
         if (cancelled) return
+        const error = sessionResult.error
+        const timedOut = Boolean(
+          sessionResult.timedOut || String(error?.message || "").includes("timeout"),
+        )
         if (error) {
           devWarn("Auth", "getSession segnalazione", error?.message ?? error)
         }
-        const currentUser = data?.session?.user ?? null
+        const currentUser = sessionResult.data?.session?.user ?? null
         devLog("Auth", "getSession risultato", {
-          haSessione: !!data?.session,
+          haSessione: !!sessionResult.data?.session,
           userId: currentUser?.id,
           email: currentUser?.email,
+          timedOut,
         })
+
+        // Timeout tipico con navigator.locks (tab in background / Strict Mode):
+        // non forzare "non autenticato" — onAuthStateChange (INITIAL_SESSION/SIGNED_IN) è la fonte di verità.
+        if (timedOut && !currentUser) {
+          if (latestUserIdRef.current) {
+            devLog("Auth", "getSession timeout ma user già da onAuthStateChange", {
+              userId: latestUserIdRef.current,
+            })
+            if (!profileReadyRef.current) {
+              await loadUserData(latestUserIdRef.current)
+            }
+          } else {
+            deferForAuthListener = true
+            devWarn("Auth", "getSession timeout: attendo onAuthStateChange (no logout forzato)")
+          }
+          return
+        }
+
+        // Non sovrascrivere con null se il listener ha già impostato l'utente.
+        if (!currentUser && latestUserIdRef.current) {
+          devLog("Auth", "getSession senza sessione ma user già presente da listener — skip clear")
+          return
+        }
+
         setUser(currentUser)
         latestUserIdRef.current = currentUser?.id ?? null
+        latestUserEmailRef.current = currentUser?.email ?? null
         if (currentUser) {
           if (SESSION_PROPAGATION_DELAY_MS > 0) {
             await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
           }
           await loadUserData(currentUser.id)
         } else {
-          setProfileReady(true)
+          markProfileReady()
           forceLoadingFalse()
         }
       } catch (err) {
         if (!cancelled) devWarn("Auth", "init eccezione", err?.message || err, err)
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !deferForAuthListener) {
           clearTimeout(failsafeId)
           forceLoadingFalse()
           devLog("Auth", "init completato, loading=false")
+        } else if (!cancelled && deferForAuthListener) {
+          devLog("Auth", "init in attesa listener (loading resta fino a failsafe / INITIAL_SESSION)")
         }
       }
     }
@@ -408,16 +611,33 @@ export function AuthProvider({ children }) {
           const currentUser = session?.user ?? null
           setUser(currentUser)
           latestUserIdRef.current = currentUser?.id ?? null
+          latestUserEmailRef.current = currentUser?.email ?? null
           if (retryTimeoutIdRef.current) {
             clearTimeout(retryTimeoutIdRef.current)
             retryTimeoutIdRef.current = null
           }
           if (currentUser) {
-            if (event === "INITIAL_SESSION" && lastLoadedUserIdRef.current === currentUser.id) {
+            // Stesso utente già in sessione: non rilanciare il profilo (TOKEN_REFRESHED al focus tab,
+            // INITIAL_SESSION, USER_UPDATED…). Evita schermata bianca / attesa ~8s.
+            if (
+              lastLoadedUserIdRef.current === currentUser.id &&
+              profileReadyRef.current &&
+              event !== "SIGNED_OUT"
+            ) {
               forceLoadingFalse()
               return
             }
-            loadUserDataInProgressRef.current = false
+            // Query profilo bloccata dal lock Auth: in demo sblocca subito senza attendere.
+            if (loadUserDataInProgressRef.current && latestUserIdRef.current === currentUser.id) {
+              if (readDemoClienteFlag() && !profileReadyRef.current) {
+                loadUserDataGenRef.current += 1
+                loadUserDataInProgressRef.current = false
+                await loadUserData(currentUser.id)
+              } else {
+                forceLoadingFalse()
+              }
+              return
+            }
             if (SESSION_PROPAGATION_DELAY_MS > 0) {
               await new Promise((r) => setTimeout(r, SESSION_PROPAGATION_DELAY_MS))
             }
@@ -429,11 +649,12 @@ export function AuthProvider({ children }) {
             setTenantId(null)
             setPermessiAree(null)
             setNestTenantNome(null)
-            setProfileReady(true)
+            markProfileReady()
             forceLoadingFalse()
           }
         } catch (e) {
           devWarn("Auth", "onAuthStateChange errore (evita promise rejection non gestita)", e?.message ?? e, e)
+          markProfileReady()
           forceLoadingFalse()
         }
       }
@@ -448,7 +669,7 @@ export function AuthProvider({ children }) {
       }
       listener?.subscription?.unsubscribe?.()
     }
-  }, [applyNestProfile, forceLoadingFalse, loadUserData])
+  }, [applyNestProfile, forceLoadingFalse, loadUserData, markProfileReady])
 
   // ===============================
   // AUTH ACTIONS
@@ -456,6 +677,9 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     devLog("Auth", "login attempt", { email })
+    if (isDemoClienteEmail(email)) {
+      latestUserEmailRef.current = String(email).trim()
+    }
     if (isNestAuthEnabled()) {
       const result = await nestAuthLogin(email, password)
       if (result.error) {
@@ -464,6 +688,7 @@ export function AuthProvider({ children }) {
         const u = result.data.user
         setUser({ id: u.id, email: u.email })
         latestUserIdRef.current = u.id
+        latestUserEmailRef.current = u.email ?? null
         applyNestProfile(u)
         devLog("Auth", "login Nest ok", { userId: u.id })
       }
@@ -529,9 +754,18 @@ export function AuthProvider({ children }) {
     setTenantId(null)
     setPermessiAree(null)
     setNestTenantNome(null)
+    profileReadyRef.current = true
     setProfileReady(true)
     lastLoadedUserIdRef.current = null
     latestUserIdRef.current = null
+    latestUserEmailRef.current = null
+    try {
+      sessionStorage.removeItem("pm_demo_cliente_active")
+      sessionStorage.removeItem("pm_sa_session_before_demo_cliente")
+      sessionStorage.removeItem("pm_sa_demo_giro")
+    } catch {
+      /* ignore */
+    }
     forceLoadingFalse()
   }
 

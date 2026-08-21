@@ -4,12 +4,22 @@ import { googlePathToGeoJsonPolygon, densifyPolygonRingLngLat } from "@/utils/de
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
+const POLY_STYLE = {
+  fillColor: "#e65100",
+  fillOpacity: 0.22,
+  strokeColor: "#bf360c",
+  strokeWeight: 2,
+}
+
 /**
+ * Disegno area consegna senza DrawingManager (rimosso da Maps JS API ≥ 3.65).
+ * Click per aggiungere vertici; doppio click o «Chiudi poligono» per terminare.
+ *
  * @param {{ lat?: number | null, lng?: number | null }} props.center — sede / punto vendita
  * @param {object | null} props.value — GeoJSON Polygon
  * @param {(gj: object | null) => void} props.onChange
- * @param {(lat: number, lng: number) => void} [props.onCenterMarkerDrag] — se impostato, marcatore sede trascinabile
- * @param {number} [props.densifyExtraPerEdge=2] — punti aggiunti su ogni lato dopo il disegno (sagomatura)
+ * @param {(lat: number, lng: number) => void} [props.onCenterMarkerDrag]
+ * @param {number} [props.densifyExtraPerEdge=2]
  */
 export default function DeliveryAreaMapEditor({
   center,
@@ -23,10 +33,16 @@ export default function DeliveryAreaMapEditor({
   const mapRef = useRef(null)
   const markerRef = useRef(null)
   const polygonRef = useRef(null)
-  const dmRef = useRef(null)
+  const draftPathRef = useRef(null)
+  const draftLineRef = useRef(null)
+  const drawListenersRef = useRef([])
   const listenersRef = useRef([])
+  const drawModeRef = useRef(false)
   const [loadError, setLoadError] = useState(null)
   const [mapReady, setMapReady] = useState(false)
+  const [drawMode, setDrawMode] = useState(false)
+  const [draftCount, setDraftCount] = useState(0)
+  const [hasArea, setHasArea] = useState(false)
 
   const lat = Number(center?.lat)
   const lng = Number(center?.lng)
@@ -41,6 +57,17 @@ export default function DeliveryAreaMapEditor({
       }
     }
     listenersRef.current = []
+  }, [])
+
+  const clearDrawListeners = useCallback(() => {
+    for (const l of drawListenersRef.current) {
+      try {
+        window.google.maps.event.removeListener(l)
+      } catch {
+        /* ignore */
+      }
+    }
+    drawListenersRef.current = []
   }, [])
 
   const syncFromPolygon = useCallback(
@@ -80,6 +107,94 @@ export default function DeliveryAreaMapEditor({
     [densifyExtraPerEdge],
   )
 
+  const clearDraft = useCallback(() => {
+    draftPathRef.current = null
+    setDraftCount(0)
+    if (draftLineRef.current) {
+      draftLineRef.current.setMap(null)
+      draftLineRef.current = null
+    }
+  }, [])
+
+  const stopDrawMode = useCallback(() => {
+    drawModeRef.current = false
+    setDrawMode(false)
+    clearDrawListeners()
+    clearDraft()
+    const map = mapRef.current
+    if (map) map.setOptions({ draggableCursor: null })
+  }, [clearDrawListeners, clearDraft])
+
+  const finishPolygonFromDraft = useCallback(() => {
+    const map = mapRef.current
+    const pts = draftPathRef.current
+    if (!map || !pts || pts.length < 3) return
+
+    if (polygonRef.current) {
+      polygonRef.current.setMap(null)
+      clearPolygonListeners()
+    }
+
+    const poly = new window.google.maps.Polygon({
+      paths: pts,
+      editable: true,
+      draggable: true,
+      ...POLY_STYLE,
+      map,
+    })
+    polygonRef.current = poly
+    setHasArea(true)
+    densifyGooglePolygonPath(poly)
+    attachPathListeners(poly)
+    syncFromPolygon(poly)
+    stopDrawMode()
+  }, [
+    attachPathListeners,
+    clearPolygonListeners,
+    densifyGooglePolygonPath,
+    stopDrawMode,
+    syncFromPolygon,
+  ])
+
+  const startDrawMode = useCallback(() => {
+    const map = mapRef.current
+    if (!map || !window.google?.maps) return
+
+    stopDrawMode()
+    drawModeRef.current = true
+    setDrawMode(true)
+    draftPathRef.current = []
+    setDraftCount(0)
+    map.setOptions({ draggableCursor: "crosshair" })
+
+    const line = new window.google.maps.Polyline({
+      path: [],
+      strokeColor: POLY_STYLE.strokeColor,
+      strokeWeight: 2,
+      map,
+    })
+    draftLineRef.current = line
+
+    const onClick = window.google.maps.event.addListener(map, "click", (e) => {
+      if (!drawModeRef.current || !e.latLng) return
+      const pts = draftPathRef.current || []
+      pts.push(e.latLng)
+      draftPathRef.current = pts
+      line.setPath(pts)
+      setDraftCount(pts.length)
+    })
+
+    const onDbl = window.google.maps.event.addListener(map, "dblclick", (e) => {
+      if (!drawModeRef.current) return
+      e?.stop?.()
+      if ((draftPathRef.current || []).length >= 3) {
+        finishPolygonFromDraft()
+      }
+    })
+
+    drawListenersRef.current = [onClick, onDbl]
+  }, [finishPolygonFromDraft, stopDrawMode])
+
   const buildPolygonFromValue = useCallback(
     (map, gj) => {
       if (gj?.type !== "Polygon" || !Array.isArray(gj.coordinates?.[0])) return null
@@ -89,10 +204,7 @@ export default function DeliveryAreaMapEditor({
         paths: path,
         editable: true,
         draggable: true,
-        fillColor: "#e65100",
-        fillOpacity: 0.22,
-        strokeColor: "#bf360c",
-        strokeWeight: 2,
+        ...POLY_STYLE,
         map,
       })
       attachPathListeners(poly)
@@ -105,7 +217,7 @@ export default function DeliveryAreaMapEditor({
     if (!GOOGLE_API_KEY || !mapElRef.current) return
     let cancelled = false
 
-    loadGoogleMapsScript(GOOGLE_API_KEY, "drawing")
+    loadGoogleMapsScript(GOOGLE_API_KEY, null)
       .then(() => {
         if (cancelled || !mapElRef.current) return
 
@@ -115,8 +227,8 @@ export default function DeliveryAreaMapEditor({
           zoom: centerOk ? 14 : 6,
           mapTypeControl: false,
           streetViewControl: false,
-          /** Rotella = zoom quando il cursore è sulla mappa (default API: cooperative = serve Ctrl+rotella). */
           gestureHandling: "greedy",
+          disableDoubleClickZoom: true,
         })
         mapRef.current = map
 
@@ -143,41 +255,6 @@ export default function DeliveryAreaMapEditor({
           })
         }
 
-        const dm = new window.google.maps.drawing.DrawingManager({
-          drawingMode: null,
-          drawingControl: true,
-          drawingControlOptions: {
-            position: window.google.maps.ControlPosition.TOP_CENTER,
-            drawingModes: [window.google.maps.drawing.OverlayType.POLYGON],
-          },
-          polygonOptions: {
-            fillColor: "#e65100",
-            fillOpacity: 0.22,
-            strokeColor: "#bf360c",
-            strokeWeight: 2,
-            editable: true,
-            draggable: true,
-          },
-        })
-        dm.setMap(map)
-        dmRef.current = dm
-
-        window.google.maps.event.addListener(dm, "overlaycomplete", (e) => {
-          if (e.type !== window.google.maps.drawing.OverlayType.POLYGON) return
-          if (polygonRef.current) {
-            polygonRef.current.setMap(null)
-            clearPolygonListeners()
-          }
-          const overlay = e.overlay
-          polygonRef.current = overlay
-          overlay.setEditable(true)
-          overlay.setDraggable(true)
-          densifyGooglePolygonPath(overlay)
-          attachPathListeners(overlay)
-          dm.setDrawingMode(null)
-          syncFromPolygon(overlay)
-        })
-
         setMapReady(true)
       })
       .catch((err) => {
@@ -187,6 +264,8 @@ export default function DeliveryAreaMapEditor({
     return () => {
       cancelled = true
       clearPolygonListeners()
+      clearDrawListeners()
+      clearDraft()
       if (polygonRef.current) {
         polygonRef.current.setMap(null)
         polygonRef.current = null
@@ -195,12 +274,9 @@ export default function DeliveryAreaMapEditor({
         markerRef.current.setMap(null)
         markerRef.current = null
       }
-      if (dmRef.current) {
-        dmRef.current.setMap(null)
-        dmRef.current = null
-      }
       mapRef.current = null
       setMapReady(false)
+      setDrawMode(false)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,10 +288,6 @@ export default function DeliveryAreaMapEditor({
     markerRef.current.setDraggable(Boolean(onCenterMarkerDrag))
   }, [mapReady, lat, lng, centerOk, onCenterMarkerDrag])
 
-  /**
-   * Sincronizza `value` esterno → mappa solo se non c’è già un poligono attivo (es. caricamento iniziale o “rimuovi”).
-   * Durante modifica utente polygonRef è valorizzato → non sovrascriviamo.
-   */
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
     const has =
@@ -229,13 +301,18 @@ export default function DeliveryAreaMapEditor({
         polygonRef.current = null
         clearPolygonListeners()
       }
+      setHasArea(false)
       return
     }
 
-    if (polygonRef.current) return
+    if (polygonRef.current) {
+      setHasArea(true)
+      return
+    }
 
     const poly = buildPolygonFromValue(mapRef.current, value)
     polygonRef.current = poly
+    setHasArea(Boolean(poly))
     if (poly) {
       const b = new window.google.maps.LatLngBounds()
       poly.getPath().forEach((p) => b.extend(p))
@@ -270,10 +347,56 @@ export default function DeliveryAreaMapEditor({
             lineHeight: 1.5,
           }}
         >
-          Centro sede non impostato: la mappa apre una vista generale dell'Italia. Imposta prima lat/lng della sede o trascina
+          Centro sede non impostato: la mappa apre una vista generale dell&apos;Italia. Imposta prima lat/lng della sede o trascina
           il marcatore verde e poi salva.
         </div>
       ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
+        {!drawMode ? (
+          <button
+            type="button"
+            onClick={startDrawMode}
+            disabled={!mapReady}
+            style={btnPrimary}
+          >
+            Disegna area
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={finishPolygonFromDraft}
+              disabled={draftCount < 3}
+              style={btnPrimary}
+            >
+              Chiudi poligono ({draftCount} punti)
+            </button>
+            <button type="button" onClick={stopDrawMode} style={btnSecondary}>
+              Annulla disegno
+            </button>
+          </>
+        )}
+        {hasArea || value?.type === "Polygon" ? (
+          <button
+            type="button"
+            onClick={() => {
+              stopDrawMode()
+              if (polygonRef.current) {
+                polygonRef.current.setMap(null)
+                polygonRef.current = null
+                clearPolygonListeners()
+              }
+              setHasArea(false)
+              onChange?.(null)
+            }}
+            style={btnSecondary}
+          >
+            Rimuovi area
+          </button>
+        ) : null}
+      </div>
+
       <div
         ref={mapElRef}
         style={{
@@ -287,10 +410,32 @@ export default function DeliveryAreaMapEditor({
       <p style={{ fontSize: 12, color: "#64748b", marginTop: 8, lineHeight: 1.55 }}>
         <strong>Marcatore verde</strong>: punto di riferimento della sede.{" "}
         {onCenterMarkerDrag ? "Trascinalo per posizionare correttamente il punto vendita sulla mappa. " : null}
-        Disegna il poligono con lo strumento in alto; al termine il perimetro viene arricchito con punti intermedi così puoi
-        sagomare meglio. Puoi cliccare su un lato del poligono per aggiungere vertici. Chiudi il perimetro cliccando sul primo
-        punto.
+        Premi <strong>Disegna area</strong>, poi clicca sulla mappa per i vertici (almeno 3). Termina con{" "}
+        <strong>doppio clic</strong> o «Chiudi poligono». Il perimetro viene arricchito con punti intermedi; puoi
+        trascinare i vertici per sagomare.
       </p>
     </div>
   )
+}
+
+const btnPrimary = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "none",
+  background: "#e65100",
+  color: "#fff",
+  fontWeight: 600,
+  fontSize: 13,
+  cursor: "pointer",
+}
+
+const btnSecondary = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#334155",
+  fontWeight: 600,
+  fontSize: 13,
+  cursor: "pointer",
 }

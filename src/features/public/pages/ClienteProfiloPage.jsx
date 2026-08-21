@@ -1,23 +1,30 @@
 import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
 import Loader from "@/components/feedback/Loader"
 import { getIsSaaSClient } from "@/utils/saasHost"
 import { getPublicTenantInfo } from "@/features/services/publicService"
-import { updateClienteProfilo, getClienteFidelityProfile } from "@/features/public/services/clienteAuthService"
+import { updateClienteProfilo, getClienteFidelityProfile, iscriviClienteFidelity } from "@/features/public/services/clienteAuthService"
 import ClienteIndirizzoMappaField from "@/features/public/components/ClienteIndirizzoMappaField"
+import { resolveClienteVetrinaPath } from "@/utils/clienteVetrinaPath"
+import {
+  readFidelityNomeProgramma,
+  readFidelityProgrammaAttivo,
+} from "@/utils/fidelityProgramConfig"
 import "@/styles/login.css"
 
 export default function ClienteProfiloPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [tenant, setTenant] = useState(null)
   const [row, setRow] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(() => searchParams.get("edit") === "1")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [fidelity, setFidelity] = useState(null)
+  const [enrollingFidelity, setEnrollingFidelity] = useState(false)
   const [form, setForm] = useState({
     nome: "",
     telefono: "",
@@ -25,10 +32,85 @@ export default function ClienteProfiloPage() {
     noteConsegna: "",
     coords: null,
   })
+  const menuTo = resolveClienteVetrinaPath(
+    typeof window !== "undefined" ? window.location.search : "",
+  )
+  const parametri =
+    tenant?.parametri_operativi && typeof tenant.parametri_operativi === "object"
+      ? tenant.parametri_operativi
+      : {}
+  const fidelityProgrammaOn = readFidelityProgrammaAttivo(parametri)
+  const fidelityNome = readFidelityNomeProgramma(parametri, tenant?.nome)
 
   useEffect(() => {
-    getPublicTenantInfo().then((t) => setTenant(t && typeof t === "object" ? t : null))
+    getPublicTenantInfo({ search: typeof window !== "undefined" ? window.location.search : "" }).then(
+      (t) => setTenant(t && typeof t === "object" ? t : null),
+    )
   }, [])
+
+  useEffect(() => {
+    if (!user?.id) return
+    let c = false
+    getClienteFidelityProfile().then(({ data }) => {
+      if (!c && data) setFidelity(data)
+    })
+    return () => {
+      c = true
+    }
+  }, [user?.id])
+
+  // Completa iscrizione fidelity richiesta in registrazione (email confirm / metadata).
+  useEffect(() => {
+    if (!user?.id || !fidelityProgrammaOn) return
+    if (fidelity?.attivo) return
+    const want = Boolean(user.user_metadata?.iscrivi_fidelity)
+    if (!want) return
+    let c = false
+    ;(async () => {
+      const { data, error } = await iscriviClienteFidelity()
+      if (c) return
+      if (!error && data) {
+        setFidelity({
+          attivo: true,
+          punti: data.punti ?? 0,
+          codice_carta: data.codice_carta,
+          movimenti: [],
+        })
+        try {
+          await supabase.auth.updateUser({ data: { iscrivi_fidelity: false } })
+        } catch {
+          /* ignore */
+        }
+      }
+    })()
+    return () => {
+      c = true
+    }
+  }, [user?.id, user?.user_metadata?.iscrivi_fidelity, fidelityProgrammaOn, fidelity?.attivo])
+
+  async function handleEnrollFidelity() {
+    setEnrollingFidelity(true)
+    setMessage(null)
+    try {
+      const { data, error } = await iscriviClienteFidelity()
+      if (error) throw error
+      setFidelity({
+        attivo: true,
+        punti: data?.punti ?? 0,
+        codice_carta: data?.codice_carta,
+        movimenti: [],
+      })
+      setMessage(
+        data?.codice_carta
+          ? `Iscrizione completata. Tessera: ${data.codice_carta}`
+          : "Iscrizione al programma fedeltà completata.",
+      )
+    } catch (e) {
+      setMessage(e?.message || "Iscrizione fidelity non riuscita.")
+    } finally {
+      setEnrollingFidelity(false)
+    }
+  }
 
   useEffect(() => {
     if (!user?.id) {
@@ -59,17 +141,6 @@ export default function ClienteProfiloPage() {
           setLoading(false)
         }
       })
-    return () => {
-      c = true
-    }
-  }, [user?.id])
-
-  useEffect(() => {
-    if (!user?.id) return
-    let c = false
-    getClienteFidelityProfile().then(({ data }) => {
-      if (!c && data) setFidelity(data)
-    })
     return () => {
       c = true
     }
@@ -112,8 +183,17 @@ export default function ClienteProfiloPage() {
   if (loading) return <Loader />
 
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px 48px" }}>
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Profilo</h1>
+    <div style={{ maxWidth: "min(920px, 100%)", margin: "0 auto", padding: "24px clamp(12px, 3vw, 24px) 48px", boxSizing: "border-box" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <h1 style={{ fontSize: 22, margin: 0 }}>Profilo</h1>
+        <Link
+          to={resolveClienteVetrinaPath(typeof window !== "undefined" ? window.location.search : "")}
+          className="public-layout-btn public-layout-btn--outline"
+          style={{ textDecoration: "none" }}
+        >
+          ← Torna al menù
+        </Link>
+      </div>
 
       {message ? (
         <p
@@ -261,6 +341,30 @@ export default function ClienteProfiloPage() {
             </ul>
           ) : null}
         </section>
+      ) : fidelityProgrammaOn ? (
+        <section
+          style={{
+            marginBottom: 24,
+            padding: 16,
+            borderRadius: 10,
+            border: "1px solid #e9d5ff",
+            background: "#faf5ff",
+          }}
+        >
+          <h2 style={{ margin: "0 0 8px", fontSize: 16, color: "#5b21b6" }}>{fidelityNome}</h2>
+          <p style={{ margin: "0 0 12px", fontSize: 14, color: "#6b21a8", lineHeight: 1.5 }}>
+            Non sei ancora iscritto. Iscriviti per accumulare punti o timbri sugli ordini di questo locale.
+          </p>
+          <button
+            type="button"
+            className="login-submit"
+            style={{ width: "auto", padding: "10px 18px", background: "#7c3aed", borderColor: "#7c3aed" }}
+            disabled={enrollingFidelity}
+            onClick={() => void handleEnrollFidelity()}
+          >
+            {enrollingFidelity ? "Iscrizione…" : "Iscrivimi al programma"}
+          </button>
+        </section>
       ) : null}
 
       <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16 }}>
@@ -272,8 +376,8 @@ export default function ClienteProfiloPage() {
           </>
         ) : null}
       </p>
-      <Link to="/cliente/dashboard" style={{ color: "#c0392b", fontWeight: 600 }}>
-        ← Torna all’area cliente
+      <Link to={menuTo} style={{ color: "#c0392b", fontWeight: 600 }}>
+        ← Torna al menù
       </Link>
     </div>
   )

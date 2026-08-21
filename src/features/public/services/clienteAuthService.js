@@ -6,7 +6,7 @@ function originOrEmpty() {
 
 function clientePostConfirmUrl(origin) {
   if (!origin) return undefined
-  return `${origin}/cliente/dashboard`
+  return `${origin}/preview`
 }
 
 /**
@@ -22,6 +22,7 @@ export async function signUpCliente({
   latitudine = null,
   longitudine = null,
   noteConsegna = "",
+  iscriviFidelity = false,
 }) {
   if (!tenantId) return { data: null, error: new Error("Tenant non disponibile. Ricarica la pagina.") }
   const origin = originOrEmpty()
@@ -40,6 +41,7 @@ export async function signUpCliente({
         ...(lat != null ? { latitudine: lat } : {}),
         ...(lng != null ? { longitudine: lng } : {}),
         note_consegna: noteConsegna != null ? String(noteConsegna).trim() : "",
+        iscrivi_fidelity: Boolean(iscriviFidelity),
       },
     },
   })
@@ -109,6 +111,16 @@ export async function getClienteOrdineDettaglio(ordineId) {
 /** Saldo fidelity e ultimi movimenti (RPC tenant-safe). */
 export async function getClienteFidelityProfile() {
   const { data, error } = await supabase.rpc("cliente_get_fidelity_profile")
+  if (error) return { data: null, error }
+  return { data: data && typeof data === "object" ? data : null, error: null }
+}
+
+/**
+ * Iscrizione self-service al programma fidelity del tenant del cliente.
+ * @returns {Promise<{ data: object|null, error: Error|null }>}
+ */
+export async function iscriviClienteFidelity() {
+  const { data, error } = await supabase.rpc("cliente_iscriviti_fidelity")
   if (error) return { data: null, error }
   return { data: data && typeof data === "object" ? data : null, error: null }
 }

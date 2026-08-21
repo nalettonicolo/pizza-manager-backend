@@ -1,5 +1,5 @@
 import { lazy as reactLazy, Suspense } from "react";
-import { Routes, Route, Navigate, Outlet, useSearchParams } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation } from "react-router-dom";
 import { createLazyWithChunkReload } from "@/utils/lazyWithReload";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 import { isSaaSHostname } from "@/utils/saasHost";
@@ -69,6 +69,8 @@ function RedirectToGoLive() {
 const SuperadminGuideHub = lazy(() => import("@/features/superadmin/pages/SuperadminGuideHub"));
 const SuperadminGuideDocPage = lazy(() => import("@/features/superadmin/pages/SuperadminGuideDocPage"));
 const SviluppoPage = lazy(() => import("@/features/superadmin/pages/SviluppoPage"));
+const SuperadminAgentiModuliPage = lazy(() => import("@/features/superadmin/pages/SuperadminAgentiModuliPage"));
+const SuperadminChecklistMesePage = lazy(() => import("@/features/superadmin/pages/SuperadminChecklistMesePage"));
 const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/ServizioSchedaPage"));
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
@@ -89,6 +91,7 @@ const PagamentiOnlinePage = lazy(() => import("@/features/admin/pages/settings/P
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
 const OrariSection = lazy(() => import("@/features/admin/pages/settings/OrariSection"));
 const ParametriSection = lazy(() => import("@/features/admin/pages/settings/ParametriSection"));
+const StampaOperativaSection = lazy(() => import("@/features/admin/pages/settings/StampaOperativaSection"));
 const AreaConsegnaSection = lazy(() => import("@/features/admin/pages/settings/AreaConsegnaSection"));
 const CategoriePage = lazy(() => import("@/features/admin/pages/menu/CategoriePage"));
 const FormatiPage = lazy(() => import("@/features/admin/pages/menu/FormatiPage"));
@@ -166,6 +169,13 @@ function RootResolver() {
       {isSupportHost ? <Support /> : isSaaS ? <Landing /> : <PublicStore />}
     </Suspense>
   );
+}
+
+/** Redirect che mantiene query demo / support_tenant. */
+function NavigatePreserveSearch({ to }) {
+  const location = useLocation();
+  const path = String(to || "/").trim() || "/";
+  return <Navigate to={`${path}${location.search || ""}`} replace />;
 }
 
 /* =========================================================
@@ -419,6 +429,22 @@ export default function AppRouter() {
             />
             <Route path="/superadmin/sviluppo" element={<Suspense fallback={<PageFallback />}><SviluppoPage /></Suspense>} />
             <Route
+              path="/superadmin/agenti-moduli"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminAgentiModuliPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/checklist-mese"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminChecklistMesePage />
+                </Suspense>
+              }
+            />
+            <Route
               path="/superadmin/registratore-cassa"
               element={
                 <Suspense fallback={<PageFallback />}>
@@ -530,13 +556,14 @@ export default function AppRouter() {
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
           <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
           <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
-            <Route index element={<Navigate to="parametri" replace />} />
-            <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
+            <Route index element={<Navigate to="dati-pizzeria" replace />} />
             <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />
             <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
-            <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
             <Route path="area-consegna" element={<Suspense fallback={<PageFallback />}><AreaConsegnaSection /></Suspense>} />
             <Route path="pagamenti-online" element={<Suspense fallback={<PageFallback />}><PagamentiOnlinePage /></Suspense>} />
+            <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
+            <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
+            <Route path="stampa-operativa" element={<Suspense fallback={<PageFallback />}><StampaOperativaSection /></Suspense>} />
           </Route>
           <Route path="/admin/menu" element={<Navigate to="/admin/menu/categorie" replace />} />
           <Route path="/admin/menu/categorie" element={<Suspense fallback={<PageFallback />}><CategoriePage /></Suspense>} />
@@ -575,13 +602,13 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         >
-          <Route path="/operative" element={<Navigate to="/operative/dashboard" replace />} />
+          <Route path="/operative" element={<NavigatePreserveSearch to="/operative/dashboard" />} />
           <Route path="/operative/dashboard" element={<Suspense fallback={<PageFallback />}><OperativeDashboard /></Suspense>} />
           <Route path="/operative/cassa" element={<Suspense fallback={<PageFallback />}><RouteErrorBoundary><CassaPage /></RouteErrorBoundary></Suspense>} />
           <Route path="/operative/cassa/fidelity" element={<Suspense fallback={<PageFallback />}><CassaFidelityPage /></Suspense>} />
           <Route path="/operative/cassa/stampanti-reparti" element={<Suspense fallback={<PageFallback />}><CassaStampantiRepartiPage /></Suspense>} />
           <Route path="/operative/cassa/prodotti-esauriti" element={<Suspense fallback={<PageFallback />}><ProdottiEsauritiPage /></Suspense>} />
-          <Route path="/operative/cassa/ingredienti-esauriti" element={<Navigate to="/operative/cassa/prodotti-esauriti" replace />} />
+          <Route path="/operative/cassa/ingredienti-esauriti" element={<NavigatePreserveSearch to="/operative/cassa/prodotti-esauriti" />} />
           <Route path="/operative/turni" element={<Suspense fallback={<PageFallback />}><OperativeTurniPage /></Suspense>} />
           <Route path="/operative/cucina" element={<Suspense fallback={<PageFallback />}><Cucina /></Suspense>} />
           <Route path="/operative/bancone" element={<Suspense fallback={<PageFallback />}><Bancone /></Suspense>} />
@@ -589,7 +616,7 @@ export default function AppRouter() {
           <Route path="/operative/delivery" element={<Suspense fallback={<PageFallback />}><DeliveryDashboard /></Suspense>} />
           <Route path="/operative/delivery/mappa" element={<Suspense fallback={<PageFallback />}><DeliveryCommandMapPage /></Suspense>} />
           <Route path="/operative/rider" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
-          <Route path="/operative/pony" element={<Navigate to="/operative/delivery" replace />} />
+          <Route path="/operative/pony" element={<NavigatePreserveSearch to="/operative/delivery" />} />
           <Route
             path="/operative/pizzaiolo-ingresso"
             element={

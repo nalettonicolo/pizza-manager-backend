@@ -595,6 +595,25 @@ export async function updateOrder(ordineId, updates) {
   if (error) throw error
 }
 
+/** Cassa/admin: accetta ordine web in attesa → IN_PREPARAZIONE. */
+export async function staffAccettaOrdineWeb(ordineId) {
+  if (!ordineId) throw new Error("ordineId mancante")
+  const { data, error } = await supabase.rpc("staff_accetta_ordine_web", { p_ordine_id: ordineId })
+  if (error) throw error
+  return data
+}
+
+/** Cassa/admin: rifiuta ordine web in attesa → ANNULLATO. */
+export async function staffRifiutaOrdineWeb(ordineId, motivo = null) {
+  if (!ordineId) throw new Error("ordineId mancante")
+  const { data, error } = await supabase.rpc("staff_rifiuta_ordine_web", {
+    p_ordine_id: ordineId,
+    p_motivo: motivo || null,
+  })
+  if (error) throw error
+  return data
+}
+
 /**
  * Sostituisce tutte le righe di un ordine (RPC replace_order_items).
  * Richiede sql_upgrade con la funzione; azzera cucina_prep_stato lato server.
@@ -1664,6 +1683,66 @@ export async function listStaffPasswordNotes(tenantId) {
   return data || []
 }
 
+/**
+ * Account per Archivio password: staff (ruoli_pizzeria) + clienti con nota password
+ * (es. Cliente Test senza riga in utenti_ruoli).
+ * @returns {Promise<{ accounts: object[], notesByUser: Record<string, string> }>}
+ */
+export async function listArchivioPasswordAccounts(tenantId) {
+  if (!tenantId) return { accounts: [], notesByUser: {} }
+  const [ruoli, notes] = await Promise.all([
+    getRuoliPizzeria(tenantId),
+    listStaffPasswordNotes(tenantId),
+  ])
+  const notesByUser = {}
+  for (const n of notes || []) {
+    if (n?.user_id) notesByUser[n.user_id] = n.password_nota ?? ""
+  }
+  const staffIds = new Set((ruoli || []).map((r) => r.user_id).filter(Boolean))
+  const orphanIds = (notes || [])
+    .map((n) => n.user_id)
+    .filter((id) => id && !staffIds.has(id))
+
+  /** @type {object[]} */
+  const accounts = (ruoli || []).map((r) => ({
+    ...r,
+    archivio_tipo: "staff",
+  }))
+
+  if (orphanIds.length) {
+    const { data: clientiRows, error: clientiErr } = await supabase
+      .from("clienti")
+      .select("id, email, nome")
+      .eq("tenant_id", tenantId)
+      .in("id", orphanIds)
+    if (clientiErr) {
+      console.warn("[adminService] listArchivioPasswordAccounts clienti:", clientiErr.message)
+    }
+    const byId = new Map((clientiRows || []).map((c) => [c.id, c]))
+    for (const uid of orphanIds) {
+      const c = byId.get(uid)
+      accounts.push({
+        user_id: uid,
+        email: c?.email || "",
+        ruolo: "cliente",
+        nome_visualizzato: c?.nome || null,
+        attivo: true,
+        tenant_id: tenantId,
+        archivio_tipo: "cliente",
+      })
+    }
+  }
+
+  accounts.sort((a, b) => {
+    const ta = a.archivio_tipo === "cliente" ? 1 : 0
+    const tb = b.archivio_tipo === "cliente" ? 1 : 0
+    if (ta !== tb) return ta - tb
+    return String(a.email || "").localeCompare(String(b.email || ""), "it")
+  })
+
+  return { accounts, notesByUser }
+}
+
 export async function upsertStaffPasswordNote(tenantId, userId, passwordNota) {
   if (!tenantId || !userId) throw new Error("tenant o utente mancante.")
   const trimmed = typeof passwordNota === "string" ? passwordNota.trim() : ""
@@ -1686,6 +1765,25 @@ export async function upsertStaffPasswordNote(tenantId, userId, passwordNota) {
     { onConflict: "user_id,tenant_id" },
   )
   if (error) throw mapStaffPasswordNoteError(error)
+}
+
+/**
+ * Richiede la nota password di un dipendente con audit: a differenza di un semplice select su
+ * staff_password_note, passa dalla RPC `admin_richiedi_password_nota` (modulo SQL 50) che
+ * registra chi/quando/come l'ha richiesta in core.audit_logs. Il superadmin passa diretto; un
+ * tenant_admin deve confermare la propria password (`passwordConferma`, verificata via bcrypt
+ * contro auth.users) — se omessa o errata la RPC solleva `conferma_password_richiesta` /
+ * `password_non_valida`.
+ */
+export async function richiediPasswordNota(tenantId, userId, passwordConferma = null) {
+  if (!tenantId || !userId) throw new Error("tenant o utente mancante.")
+  const { data, error } = await supabase.rpc("admin_richiedi_password_nota", {
+    p_user_id: userId,
+    p_tenant_id: tenantId,
+    p_password_conferma: passwordConferma,
+  })
+  if (error) throw mapStaffPasswordNoteError(error)
+  return data ?? ""
 }
 
 function mapStaffPasswordNoteError(error) {
@@ -2237,7 +2335,7 @@ export async function getProdottiByIds(tenantId, ids) {
   if (!ids?.length) return []
   let { data, error } = await supabase
     .from("Prodotto")
-    .select("id, nome, categoria_id, prep_cucina")
+    .select("id, nome, categoria_id, prep_cucina, prep_categoria, prep_colore")
     .eq("tenant_id", tenantId)
     .in("id", ids)
   if (
@@ -2515,9 +2613,12 @@ export async function getProductIngredientiBatch(tenantId, productIds) {
           prepCucina: ing.prep_cucina === true,
           categoria: ing.categoria ?? ing.Categoria ?? undefined,
           colore: ing.colore ?? undefined,
-          costo_unitario: ing.costo_unitario,
-          costoUnitario: ing.costo_unitario,
+          costo_unitario: ing.costo_unitario ?? cu ?? 0,
+          costoUnitario: ing.costo_unitario ?? cu ?? 0,
           costo: cu,
+          costo_abbondante: ing.costo_abbondante ?? ing.costoAbbondante ?? 0,
+          costo_senza: ing.costo_senza ?? ing.costoSenza ?? 0,
+          costo_poco: ing.costo_poco ?? ing.costoPoco ?? 0,
         }
       })
     }
@@ -2593,10 +2694,10 @@ export async function getProductIngredienti(tenantId, productId) {
       nome: ing.nome ?? "",
       vaInCottura: ing.va_in_cottura === true,
       prepCucina: ing.prep_cucina === true,
-      costo_unitario: ing.costo_unitario,
-      costo_abbondante: ing.costo_abbondante,
-      costo_senza: ing.costo_senza,
-      costo_poco: ing.costo_poco,
+      costo_unitario: ing.costo_unitario ?? ing.costoUnitario ?? ing.costo ?? 0,
+      costo_abbondante: ing.costo_abbondante ?? ing.costoAbbondante ?? 0,
+      costo_senza: ing.costo_senza ?? ing.costoSenza ?? 0,
+      costo_poco: ing.costo_poco ?? ing.costoPoco ?? 0,
       posizione_cottura: normalizePosizioneCottura(posById.get(ing.id)),
     }))
     _productIngredientiCache.set(productIngredientiCacheKey(tenantId, productId), result)
@@ -3321,6 +3422,24 @@ export async function logCassaAuditEvent(tenantId, { ordineId, eventType, payloa
   }
 }
 
+/** Ultime voci audit cassa (RLS tenant). */
+export async function listCassaAuditEvents(tenantId, { eventType, limit = 20 } = {}) {
+  if (!tenantId) return []
+  let q = supabase
+    .from("cassa_ordine_audit")
+    .select("id, tenant_id, ordine_id, user_id, event_type, payload, created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(100, Math.max(1, Number(limit) || 20)))
+  if (eventType) q = q.eq("event_type", eventType)
+  const { data, error } = await q
+  if (error) {
+    logSupabaseError("admin.listCassaAuditEvents", error, { tenantId, eventType })
+    throw error
+  }
+  return data || []
+}
+
 ///////////////////////////////////////////////////////////
 // ===================== TENANT SETTINGS ================
 ///////////////////////////////////////////////////////////
@@ -3333,7 +3452,13 @@ export {
   fetchTenantStripeSecretConfigured,
   fetchTenantStripeWebhookConfigured,
   saveTenantStripeWebhookSecret,
+  saveTenantSumupSecret,
+  fetchTenantSumupSecretConfigured,
   fetchTenantOnlinePaymentSetupStatus,
+  listTenantOnlinePaymentProviders,
+  upsertTenantOnlinePaymentProvider,
+  saveTenantPaymentProviderSecret,
   getStripeWebhookUrl,
   STRIPE_EDGE_FUNCTIONS,
+  SUMUP_EDGE_FUNCTIONS,
 } from "./onlinePaymentsAdminService.js"

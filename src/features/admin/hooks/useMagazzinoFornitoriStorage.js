@@ -69,7 +69,7 @@ export function useMagazzinoFornitoriStorage() {
     return () => {
       cancelled = true;
     };
-  }, [tenantId, localReady, localData.fornitori]);
+  }, [tenantId, localReady, localData.fornitori, setLocalData]);
 
   const persistFornitori = useCallback(
     async (nextList) => {

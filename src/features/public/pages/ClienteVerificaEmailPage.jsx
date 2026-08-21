@@ -20,7 +20,7 @@ export default function ClienteVerificaEmailPage() {
         email: user.email,
         options: {
           emailRedirectTo:
-            typeof window !== "undefined" ? `${window.location.origin}/cliente/dashboard` : undefined,
+            typeof window !== "undefined" ? `${window.location.origin}/preview` : undefined,
         },
       })
       if (error) throw error

@@ -36,7 +36,7 @@ Tra fine luglio e inizio agosto 2026 è stata chiusa una **ondata di hardening**
 
 **Vietato senza richiesta esplicita:** `DROP TABLE`, `TRUNCATE`, `DELETE` massivi, `DROP COLUMN` su dati produttivi.
 
-Riferimenti operativi: `agents/database.md`, `docs/GUIDA_OPERATIVITA_SQL_MYSQL_DEPLOY.md`, `sql/scripts/README_VERIFY_RLS.md`.
+Riferimenti operativi: `agents/database.md`, `sql/modules/README.md`, `sql/scripts/README_VERIFY_RLS.md`.
 
 ---
 

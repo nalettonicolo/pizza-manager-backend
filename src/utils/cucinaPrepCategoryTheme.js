@@ -3,14 +3,17 @@
  * Valori di default; override per tenant in `parametri_operativi.cucina_prep_colori_categoria`.
  */
 
-export const CUCINA_PREP_CATEGORY_COLOR_KEYS = ["congelato", "affettato", "bibite", "fritto", "comune"]
+export const CUCINA_PREP_CATEGORY_COLOR_KEYS = ["congelato", "affettato", "bibite", "fritto", "dolce", "comune"]
 
 export const DEFAULT_CUCINA_PREP_CATEGORY_COLORS = {
   congelato: "#dbeafe",
   affettato: "#dcfce7",
   bibite: "#ffffff",
   fritto: "#fef9c3",
-  comune: "#fce7f3",
+  dolce: "#fce7f3",
+  // Prima #f1f5f9 (quasi bianco, la chip risultava invisibile sullo sfondo pagina): reso più
+  // evidente così anche le voci senza categoria si distinguono come chip presente.
+  comune: "#e2e8f0",
 }
 
 function isHexColor(s) {
@@ -45,9 +48,10 @@ export function resolvePrepTaskBackgroundColor(task, categoryColors) {
   const custom = String(task?.ingredienteColore || "").trim()
   if (custom) return custom
   const cat = String(task?.ingredienteCategoria || "").trim().toLowerCase()
-  if (cat.includes("congel")) return map.congelato
+  if (cat.includes("congel") || cat.includes("surgel")) return map.congelato
   if (cat.includes("affett")) return map.affettato
-  if (cat.includes("bibit")) return map.bibite
+  if (cat.includes("bibit") || cat.includes("bevan")) return map.bibite
   if (cat.includes("fritt")) return map.fritto
+  if (cat.includes("dolc")) return map.dolce ?? map.comune
   return map.comune
 }

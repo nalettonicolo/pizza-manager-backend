@@ -3,12 +3,14 @@ import { Link, useSearchParams } from "react-router-dom"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
 import { listClienteOrdini, getClienteOrdineDettaglio } from "@/features/public/services/clienteAuthService"
+import { finalizeSumUpCheckoutOrdine } from "@/features/public/services/onlinePaymentService"
 import {
   clientePagamentoLabel,
   clienteStatoOrdineLabel,
   clienteTipoOrdineLabel,
 } from "@/utils/clienteOrdineStato"
 import { formatPrice } from "@/utils/format"
+import { resolveClienteVetrinaPath } from "@/utils/clienteVetrinaPath"
 
 function formatDateTime(iso) {
   if (!iso) return "—"
@@ -37,6 +39,7 @@ function statoBadgeStyle(stato) {
 export default function ClienteOrdiniPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const nuovoId = searchParams.get("nuovo")
+  const sumupReturn = searchParams.get("sumup") === "1"
 
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +47,8 @@ export default function ClienteOrdiniPage() {
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(null)
+  const [sumupConfirming, setSumupConfirming] = useState(false)
+  const [sumupMessage, setSumupMessage] = useState(null)
 
   useEffect(() => {
     let c = false
@@ -69,6 +74,36 @@ export default function ClienteOrdiniPage() {
     if (!nuovoId) return
     openDetail(nuovoId)
   }, [nuovoId])
+
+  useEffect(() => {
+    if (!sumupReturn || !nuovoId) return
+    let cancelled = false
+    ;(async () => {
+      setSumupConfirming(true)
+      setSumupMessage(null)
+      try {
+        await finalizeSumUpCheckoutOrdine(nuovoId)
+        if (cancelled) return
+        setSumupMessage("Pagamento SumUp confermato. Il tuo ordine è in preparazione.")
+        const { data } = await listClienteOrdini()
+        if (!cancelled && data) setOrders(data)
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete("sumup")
+          return next
+        }, { replace: true })
+      } catch (err) {
+        if (!cancelled) {
+          setSumupMessage(err?.message || "Conferma pagamento SumUp non riuscita.")
+        }
+      } finally {
+        if (!cancelled) setSumupConfirming(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sumupReturn, nuovoId, setSearchParams])
 
   async function openDetail(ordineId) {
     setDetailLoading(true)
@@ -101,7 +136,29 @@ export default function ClienteOrdiniPage() {
         Storico ordini effettuati online con il tuo account.
       </p>
 
-      {nuovoId && !detail && !detailLoading ? (
+      {sumupConfirming ? (
+        <p role="status" style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 14 }}>
+          Conferma pagamento SumUp in corso…
+        </p>
+      ) : null}
+      {sumupMessage ? (
+        <p
+          role="status"
+          style={{
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 8,
+            background: sumupMessage.includes("confermato") ? "#ecfdf5" : "#fef2f2",
+            border: `1px solid ${sumupMessage.includes("confermato") ? "#bbf7d0" : "#fecaca"}`,
+            color: sumupMessage.includes("confermato") ? "#166534" : "#991b1b",
+            fontSize: 14,
+          }}
+        >
+          {sumupMessage}
+        </p>
+      ) : null}
+
+      {nuovoId && !detail && !detailLoading && !sumupReturn ? (
         <p
           role="status"
           style={{
@@ -134,7 +191,7 @@ export default function ClienteOrdiniPage() {
             Non hai ancora ordini online collegati a questo account. Quando ordini dal menù, li troverai qui.
           </p>
           <Link
-            to="/negozio"
+            to={resolveClienteVetrinaPath(typeof window !== "undefined" ? window.location.search : "")}
             style={{ display: "inline-block", marginTop: 12, color: "#c0392b", fontWeight: 600 }}
           >
             Vai al menù →
@@ -302,8 +359,11 @@ export default function ClienteOrdiniPage() {
       ) : null}
 
       <p style={{ marginTop: 28 }}>
-        <Link to="/cliente/dashboard" style={{ color: "#c0392b", fontWeight: 600 }}>
-          ← Torna all’area cliente
+        <Link
+          to={resolveClienteVetrinaPath(typeof window !== "undefined" ? window.location.search : "")}
+          style={{ color: "#c0392b", fontWeight: 600 }}
+        >
+          ← Torna al menù
         </Link>
       </p>
     </div>

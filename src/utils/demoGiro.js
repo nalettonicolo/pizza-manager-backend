@@ -1,12 +1,35 @@
-import { SUPPORT_TENANT_QUERY } from "@/utils/supportTenantOverride"
-
 /**
  * Marker e helper per Demo live Super Admin (stesso account, dati tenant reali).
- * Navigazione: sidebar operativa + «4 schermate» (niente overlay).
+ * Avvio: hub «Aree di lavoro»; navigazione sidebar + «4 schermate» + Admin tenant.
  */
-export const DEMO_GIRO_QUERY = "_demo_giro"
+import { SUPPORT_TENANT_QUERY } from "@/utils/supportTenantOverride"
 
-/** Percorsi tipici usati all’avvio demo (prima schermata = Cassa). */
+export const DEMO_GIRO_QUERY = "_demo_giro"
+const DEMO_GIRO_SESSION_KEY = "pm_sa_demo_giro"
+
+/** Sessione demo SA: sopravvive a navigate() che non propagano la query. */
+export function setDemoGiroSessionActive(active) {
+  try {
+    if (active) sessionStorage.setItem(DEMO_GIRO_SESSION_KEY, "1")
+    else sessionStorage.removeItem(DEMO_GIRO_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isDemoGiroSessionActive() {
+  try {
+    return sessionStorage.getItem(DEMO_GIRO_SESSION_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+export function clearDemoGiroSession() {
+  setDemoGiroSessionActive(false)
+}
+
+/** Percorsi tipici usati nel giro demo (ordine navigazione / step index). */
 export const DEMO_GIRO_STEPS = [
   { path: "/operative/cassa", label: "Cassa" },
   { path: "/operative/pizzaioli", label: "Pizzaioli" },
@@ -15,22 +38,46 @@ export const DEMO_GIRO_STEPS = [
   { path: "/operative/delivery", label: "Delivery / Pony" },
 ]
 
-/** Voci extra in sidebar Demo live (oltre ai reparti): potenzialità admin sul tenant. */
+/**
+ * Voci extra in sidebar Demo live: strumenti + Admin del locale (tenant).
+ * Poche voci chiare → hub admin; il resto si apre dalla home admin.
+ */
 export const DEMO_GIRO_ADMIN_LINKS = [
-  { path: "/cliente/dashboard", label: "Area cliente", group: "strumenti" },
-  { path: "/admin/home", label: "Admin locale", group: "admin" },
-  { path: "/admin/menu", label: "Menu (admin)", group: "admin" },
-  { path: "/admin/settings/parametri", label: "Parametri", group: "admin" },
+  {
+    path: "/preview",
+    label: "Area cliente",
+    description: "Menù e ordini come Cliente Test",
+    group: "strumenti",
+    demoClienteLogin: true,
+  },
+  {
+    path: "/registrazione",
+    label: "Registrazione cliente",
+    description: "Form iscrizione sito (+ fidelity se attivo)",
+    group: "strumenti",
+  },
+  {
+    path: "/preview",
+    label: "Vetrina online",
+    description: "Menù pubblico come lo vede il cliente",
+    group: "strumenti",
+  },
+  { path: "/admin/home", label: "Gestione locale", description: "Hub admin: menu, staff, impostazioni", group: "admin" },
+  { path: "/admin/menu", label: "Menu", description: "Categorie, pizze, listini", group: "admin" },
+  { path: "/admin/ordini", label: "Ordini", description: "Storico e gestione ordini", group: "admin" },
+  { path: "/admin/settings", label: "Impostazioni", description: "Sede, orari, area consegna, parametri", group: "admin" },
+  { path: "/admin/dipendenti", label: "Staff", description: "Dipendenti e accessi", group: "admin" },
 ]
 
 export function isDemoGiroSearch(search) {
   const raw = typeof search === "string" ? search : ""
   const q = raw.startsWith("?") ? raw.slice(1) : raw
   try {
-    return new URLSearchParams(q).get(DEMO_GIRO_QUERY) === "1"
+    if (new URLSearchParams(q).get(DEMO_GIRO_QUERY) === "1") return true
   } catch {
-    return false
+    /* ignore */
   }
+  return isDemoGiroSessionActive()
 }
 
 /**
