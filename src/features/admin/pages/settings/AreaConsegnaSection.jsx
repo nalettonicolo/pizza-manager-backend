@@ -190,12 +190,16 @@ export default function AreaConsegnaSection() {
     const c = pvCoords[pvId]
     setSavingId(pvId)
     try {
-      const payload = {
-        consegna_area_poligono: gj && gj.type === "Polygon" ? gj : null,
-        lat: c != null && Number.isFinite(c.lat) ? c.lat : null,
-        lng: c != null && Number.isFinite(c.lng) ? c.lng : null,
-      }
-      const { error } = await supabase.from("punti_vendita").update(payload).eq("id", pvId).eq("tenant_id", tenantId)
+      // public.punti_vendita è una view di sola lettura (SELECT) per authenticated/anon: la
+      // scrittura passa dall'RPC admin_update_punto_vendita_area (verifica admin/superadmin
+      // internamente), non da un update diretto sulla view — vedi mod. 54.
+      const { error } = await supabase.rpc("admin_update_punto_vendita_area", {
+        p_pv_id: pvId,
+        p_tenant_id: tenantId,
+        p_lat: c != null && Number.isFinite(c.lat) ? c.lat : null,
+        p_lng: c != null && Number.isFinite(c.lng) ? c.lng : null,
+        p_consegna_area_poligono: gj && gj.type === "Polygon" ? gj : null,
+      })
       if (error) throw error
       window.alert("Area di consegna e posizione sede salvate.")
       await load()

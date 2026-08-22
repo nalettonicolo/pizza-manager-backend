@@ -45,6 +45,8 @@
 --   sql/modules/50_clienti_select_admin_sa.sql
 --   sql/modules/51_public_parametri_pagamenti_ordine_online.sql
 --   sql/modules/52_prodotti_prep_categoria_colore.sql
+--   sql/modules/53_enable_rls_legacy_backup_tables.sql
+--   sql/modules/54_admin_update_punto_vendita_area.sql
 --
 -- Moduli 41-50 "reali" (rider capacità/routing/OAuth/tavoli/audit, applicati stasera
 -- direttamente su Supabase da un'altra chat, MAI salvati come file sql/modules/ locali):
