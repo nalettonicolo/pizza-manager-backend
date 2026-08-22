@@ -137,7 +137,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Clic Super Admin → torni all’hub demo operativa in pochi secondi, senza passare dal login",
     ],
     noteTraccia:
-      "2026-08-07 feedback: DM-02 — se clicco Super Admin mi manda fuori al login seppur sia loggato come SA; problema già riscontrato e troppo lento il passaggio. Fix in corso: verify getSession post-restore + replace verso /operative/dashboard.",
+      "2026-08-07 feedback: DM-02 — se clicco Super Admin mi manda fuori al login seppur sia loggato come SA; problema già riscontrato e troppo lento il passaggio. Fix in corso: verify getSession post-restore + replace verso /operative/dashboard.\n" +
+      "2026-08-21/22 nuovo riscontro (area admin, non area cliente): dal pannello Admin del locale in giro demo, il tasto «Home Super Admin» rimandava di nuovo in area demo invece che a /superadmin/ingresso, con ~5s di latenza. Causa in SaHomeButton.jsx: il tenant di supporto restava salvato in localStorage (pm_sa_support_tenant) anche dopo il click; solo il flag _demo_giro in sessionStorage veniva pulito. Fix: click ora pulisce anche il localStorage (clearSupportTenantOverride). Verificato live in Chrome: /superadmin/ingresso pulito, nessun bounce, nessun support_tenant residuo in URL.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -281,7 +282,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Si può comunque salvare l’indirizzo scritto a mano",
     ],
     noteTraccia:
-      "2026-08-07 Foto 7 / CL-01+CL-07 profilo: non si vedeva l’area di consegna né il simbolo posizione esatta nonostante indirizzo Via Pontedera 4. Richiesto geocode + marker trascinabile + poligono area.",
+      "2026-08-07 Foto 7 / CL-01+CL-07 profilo: non si vedeva l’area di consegna né il simbolo posizione esatta nonostante indirizzo Via Pontedera 4. Richiesto geocode + marker trascinabile + poligono area.\n" +
+      "2026-08-21/22: stesso indirizzo (Via Pontedera 4, Padova 35124) ancora in errore: «La mappa interattiva non si è avviata correttamente». Chiave VITE_GOOGLE_MAPS_API_KEY presente e valida nel codice (nessun bug di codice trovato) — il messaggio stesso indica la causa: su Google Cloud manca Maps JavaScript API e/o Places API abilitate, fatturazione attiva, o le restrizioni della chiave non includono l'origine (http://localhost:5173/* in locale, dominio reale in produzione). Azione solo lato titolare account Google Cloud, non risolvibile da codice. Fallback (indirizzo scritto a mano + anteprima statica) funziona correttamente nel frattempo.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -317,6 +319,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Cliente: Ultimi ordini → apri → Aggiungi o Ripeti",
       "Cassa: storico cliente → stessi controlli",
     ],
+    noteTraccia:
+      "2026-08-21/22: su «cliente test» (demo) il richiamo ordine non riusciva; da Cassa su un altro cliente funziona ma poco chiaro. L'elenco Cassa (Storico ordini) mostra già numero+totale+data per riga, cliccabile per il dettaglio prodotti (non un ID nudo) — probabilmente non notato durante il test. Richiesta aggiuntiva: un menu a tendina/espandibile per aprire più rapidamente senza il giro lista→dettaglio→«Torna all'elenco». Non ancora implementato: serve conferma se si vuole questo redesign (rischio di toccare un flusso cassa già in uso) prima di procedere.",
     urgenza: "media",
     prontoDaProvare: true,
   },
@@ -493,6 +497,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Vedi Senza: … e/o Aggiunta: … sotto la riga",
       "In carrello riepilogo le modifiche in evidenza",
     ],
+    noteTraccia:
+      "2026-08-21/22: segnalato che su una stampa resta solo il nome pizza (senza Senza/Aggiunta) mentre sulle altre è corretto — non specificato quale delle 3 (comanda cucina, ricevuta cliente, ricevuta di cortesia). Verificato il codice: printComanda.js e printRicevuta.js includono entrambi ingredientiCotturaSummary, e printRicevutaCortesiaFromDetail in CassaPage.jsx riceve ordineDetail già arricchito da enrichOrdineDetailIngredientiSummaries — nessun bug trovato a lettura statica. Serve uno screenshot dello scontrino/comanda col problema per individuare il punto esatto prima di toccare codice di stampa (file critico, in uso operativo).",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -849,7 +855,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Non finisci su /superadmin/ingresso né sul login",
     ],
     noteTraccia:
-      "2026-08-07 Foto 4: Se dentro un’area tipo cucina clicco Home Super Admin voglio la schermata hub; rinominare il pulsante DEMO.",
+      "2026-08-07 Foto 4: Se dentro un’area tipo cucina clicco Home Super Admin voglio la schermata hub; rinominare il pulsante DEMO.\n" +
+      "2026-08-21/22: rinomina/routing corretti (pulsante DEMO → /operative/dashboard funziona), ma segnalata lentezza: da Delivery, clic DEMO tornava alla pagina giusta ma con un reload completo della pagina (window.location.assign) invece di una navigazione client-side. Fix: ora usa navigate() di react-router. Verificato live: cambio pagina istantaneo, nessun reload del bundle.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -960,7 +967,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Si può comunque cercare qualsiasi ingrediente",
     ],
     noteTraccia:
-      "2026-08-07 Foto 6: ingredienti suggeriti per affinità ricetta (sortIngredientsByPizzaAffinity). Capricciosa: olive/capperi/salamino prima di gamberetti.",
+      "2026-08-07 Foto 6: ingredienti suggeriti per affinità ricetta (sortIngredientsByPizzaAffinity). Capricciosa: olive/capperi/salamino prima di gamberetti.\n" +
+      "2026-08-21/22: titolare non ha ancora riverificato il risultato in giro demo — nessuna azione di codice, resta da testare.",
     urgenza: "media",
     prontoDaProvare: true,
   },
@@ -978,7 +986,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Console senza warning borderColor vs border su ModificaPizzaModal",
     ],
     noteTraccia:
-      "2026-08-07 Foto 6: checkout — Conferma non più silenziosamente disabilitata; Enter isolato su Stripe; finalize soft se webhook lento. borderColor già fix.",
+      "2026-08-07 Foto 6: checkout — Conferma non più silenziosamente disabilitata; Enter isolato su Stripe; finalize soft se webhook lento. borderColor già fix.\n" +
+      "2026-08-21/22: Foto 3 (schermata conferma ordine) confermata OK dal titolare — l'area di consegna/verifica indirizzo profilo era già presente e funzionante come da richiesta. Nessuna azione di codice per questo giro.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
