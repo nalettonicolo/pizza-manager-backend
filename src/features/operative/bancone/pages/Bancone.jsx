@@ -97,11 +97,11 @@ export default function Bancone() {
       setError(null)
     }
     try {
+      // IN_PREPARAZIONE serve sempre, anche con Cucina attiva: Bancone ora mostra in sola
+      // lettura cosa sta preparando la Cucina (vedi ingredientsBySlot/readOnlyPrep sotto).
       const [dataPronto, dataPrep] = await Promise.all([
         getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 100 }),
-        cucinaTabletOn
-          ? Promise.resolve([])
-          : getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 }),
+        getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 }),
       ])
       const prontoList = dataPronto || []
       const prepExtra = dataPrep || []
@@ -201,7 +201,7 @@ export default function Bancone() {
     } finally {
       if (seq === loadSeqRef.current && !silent) setLoading(false)
     }
-  }, [tenantId, cucinaTabletOn])
+  }, [tenantId])
 
   useOperativeOrdersLiveRefresh({
     tenantId,
@@ -282,18 +282,23 @@ export default function Bancone() {
     [prepOrders, ordiniVisibili]
   )
 
-  const ingredientsBySlot = useMemo(() => {
-    // Con Cucina abilitata se ne occupa lei di tutti gli ingredienti fuori/in cottura: a Bancone
-    // restano solo le bibite (pannello separato sotto). Senza Cucina, torna tutto qui.
-    if (cucinaTabletOn) return {}
-    return aggregateBanconeIngredientsBySlot(
-      prepOrders.length ? prepOrders : ordiniVisibili,
-      Object.keys(righePrepPerOrdine).length ? righePrepPerOrdine : righePerOrdine,
-      ingredientsByProduct,
-      PLANNING_GRID_SLOT_MINUTES,
-      { productPrepCucinaById, productPrepMetaById, productNames, ingredientiGlobali },
-    )
-  }, [cucinaTabletOn, prepOrders, ordiniVisibili, righePrepPerOrdine, righePerOrdine, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, productNames, ingredientiGlobali])
+  // Con Cucina abilitata se ne occupa lei della preparazione (tocca quando pronto): a Bancone
+  // restano interattivi solo le bibite. Il resto lo mostriamo comunque, in sola visualizzazione
+  // (stesso stato "fatto" condiviso via cucina_prep_stato), così chi è al bancone sa cosa sta
+  // arrivando senza poter marcare pronto un task che non è suo — evita che due reparti si
+  // pestino i piedi sullo stesso ingrediente.
+  const readOnlyPrep = cucinaTabletOn
+  const ingredientsBySlot = useMemo(
+    () =>
+      aggregateBanconeIngredientsBySlot(
+        prepOrders.length ? prepOrders : ordiniVisibili,
+        Object.keys(righePrepPerOrdine).length ? righePrepPerOrdine : righePerOrdine,
+        ingredientsByProduct,
+        PLANNING_GRID_SLOT_MINUTES,
+        { productPrepCucinaById, productPrepMetaById, productNames, ingredientiGlobali },
+      ),
+    [prepOrders, ordiniVisibili, righePrepPerOrdine, righePerOrdine, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, productNames, ingredientiGlobali],
+  )
 
   const bibiteBySlot = useMemo(
     () =>
@@ -566,7 +571,7 @@ export default function Bancone() {
           <h1 style={styles.title}>Bancone</h1>
           <p style={styles.subtitle}>
             {cucinaTabletOn
-              ? "Ordini pronti per il ritiro"
+              ? "Ordini pronti per il ritiro + anteprima preparazioni Cucina"
               : "Preparazioni cucina + ordini pronti (tablet cucina non attivo: prep integrate qui)"}
           </p>
         </>
@@ -603,11 +608,11 @@ export default function Bancone() {
             {!quad ? (
               <>
                 <h2 style={styles.pickColumnTitle}>
-                  {cucinaTabletOn ? "Bibite per orario" : "Da preparare (per orario)"}
+                  {cucinaTabletOn ? "Bibite e preparazioni per orario" : "Da preparare (per orario)"}
                 </h2>
                 <p style={styles.pickHint}>
                   {cucinaTabletOn
-                    ? "Con Cucina attiva gli ingredienti (congelati, affettati, dolci, fritti, generici) si preparano lì: qui restano solo le bibite. Tocca quando l'hai presa."
+                    ? "Le bibite le prepara il Bancone (tocca quando l'hai presa). Gli altri ingredienti li prepara la Cucina: qui li vedi in sola lettura, per sapere cosa sta arrivando — il tocco \"pronto\" resta solo in Cucina."
                     : "Conteggi per fascia (stesso ingrediente = un solo chip con quantità). Compare appena l'ordine è in preparazione. Tocca quando pronto."}
                 </p>
               </>
@@ -625,15 +630,36 @@ export default function Bancone() {
                   {ingList.length > 0 ? (
                     <div style={styles.pickChipWrap}>
                       {ingList.map((item) => {
-                        // Questa lista è popolata solo quando !cucinaTabletOn (vedi useMemo di
-                        // ingredientsBySlot): con Cucina attiva se ne occupa lei, qui restano solo
-                        // le bibite (mappa separata sotto) — nessun caso "in cottura" da gestire qui.
-                        const picked = pickedBanconeKeys.has(item.pickKey)
                         const fullBg = resolvePrepTaskBackgroundColor(
                           { ingredienteColore: item.colore, ingredienteCategoria: item.categoria },
                           prepCategoryColors,
                         )
                         const showCount = item.count
+                        if (readOnlyPrep) {
+                          // In sola lettura: "fatto" viene dallo stato condiviso cucina_prep_stato
+                          // (scritto dalla Cucina), non dal toggle locale pickedBanconeKeys — qui
+                          // il Bancone guarda soltanto, non marca nulla come pronto.
+                          const doneCount = item.doneCount || 0
+                          const remaining = Math.max(0, showCount - doneCount)
+                          const allDone = remaining === 0
+                          return (
+                            <span
+                              key={item.pickKey}
+                              style={{
+                                ...styles.pickChip,
+                                cursor: "default",
+                                ...(allDone
+                                  ? { background: "#e2e8f0", color: "#94a3b8", textDecoration: "line-through" }
+                                  : { background: fullBg, color: "#1a1a1a" }),
+                              }}
+                              title="In preparazione in Cucina (sola visualizzazione)."
+                            >
+                              {remaining > 1 ? `${remaining}× ` : ""}
+                              {item.label}
+                            </span>
+                          )
+                        }
+                        const picked = pickedBanconeKeys.has(item.pickKey)
                         return (
                           <button
                             key={item.pickKey}
