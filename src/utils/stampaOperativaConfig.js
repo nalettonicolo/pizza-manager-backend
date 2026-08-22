@@ -54,14 +54,14 @@ export function readStampaQuando(parametri, kind) {
   const key = kind === "ricevuta" ? "cassa_stampa_ricevuta_quando" : "comanda_stampa_quando"
   const raw = String(parametri?.[key] ?? "").trim().toLowerCase()
   if (raw === "auto" || raw === "manuale" || raw === "mai") return raw
-  // Legacy boolean
-  if (kind === "comanda") {
-    const auto = parametri?.comanda_stampa_auto === true || parametri?.comanda_stampa_auto === "true"
-    return auto ? "auto" : "manuale"
-  }
-  const autoR =
-    parametri?.cassa_stampa_ricevuta_auto === true || parametri?.cassa_stampa_ricevuta_auto === "true"
-  return autoR ? "auto" : "manuale"
+  // Legacy boolean, rispettato solo se impostato esplicitamente (true o false). Se il tenant
+  // non ha mai configurato nulla: stampa subito alla conferma ordine, senza uno step manuale
+  // in più — default richiesto esplicitamente, non più "manuale" silenzioso.
+  const legacyKey = kind === "comanda" ? "comanda_stampa_auto" : "cassa_stampa_ricevuta_auto"
+  const legacyRaw = parametri?.[legacyKey]
+  if (legacyRaw === true || legacyRaw === "true") return "auto"
+  if (legacyRaw === false || legacyRaw === "false") return "manuale"
+  return "auto"
 }
 
 /**

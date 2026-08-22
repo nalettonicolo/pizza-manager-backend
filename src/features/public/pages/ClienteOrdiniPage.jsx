@@ -12,10 +12,16 @@ import {
 import { formatPrice } from "@/utils/format"
 import { resolveClienteVetrinaPath } from "@/utils/clienteVetrinaPath"
 
-function formatDateTime(iso) {
-  if (!iso) return "—"
+function formatDateTime(value) {
+  if (!value) return "—"
+  const raw = String(value).trim()
+  // orario_ritiro può essere un semplice orario "HH:MM" (es. impostato da Cassa con "Sposta
+  // orario"), non una data completa — new Date("19:15") è Invalid Date in JS. Mostralo com'è.
+  if (/^\d{1,2}:\d{2}$/.test(raw)) return raw
   try {
-    return new Date(iso).toLocaleString("it-IT", {
+    const d = new Date(raw)
+    if (Number.isNaN(d.getTime())) return raw
+    return d.toLocaleString("it-IT", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -23,7 +29,7 @@ function formatDateTime(iso) {
       minute: "2-digit",
     })
   } catch {
-    return String(iso)
+    return raw
   }
 }
 
