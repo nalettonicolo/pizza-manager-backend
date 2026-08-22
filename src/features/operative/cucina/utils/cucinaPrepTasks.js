@@ -243,11 +243,21 @@ export function buildCucinaPrepTasks(
 
       const summary = riga.ingredientiCotturaSummary ?? riga.ingredienti_cottura_summary ?? ""
       const signals = extractPrepSignalNamesFromSummary(summary)
-      for (const nome of [...signals.aggiunte, ...signals.fineCottura]) {
+      // Aggiunta (extra rispetto alla ricetta base): segnala solo se l'ingrediente ha davvero
+      // bisogno di attenzione (prep_cucina o categoria impostati) — un'aggiunta comune "in linea"
+      // (es. capperi/olive/salamino senza categoria) il pizzaiolo la gestisce da sé in cottura,
+      // non deve comparire come task da preparare.
+      for (const nome of signals.aggiunte) {
+        const ing = resolveOrSyntheticIng(byNome, nome)
+        if (!ing || !ingredientNeedsPrepMonitor(ing)) continue
+        pushTask(ing, "extra")
+      }
+      // Fine cottura: per definizione va aggiunto dopo la cottura, quindi segnalato sempre
+      // anche senza flag/categoria specifici (non può stare "in linea" col resto).
+      for (const nome of signals.fineCottura) {
         const ing = resolveOrSyntheticIng(byNome, nome)
         if (!ing) continue
-        // Fine cottura già in ricetta: se non aveva flag/categoria, lo forziamo qui.
-        pushTask(ing, signals.aggiunte.includes(nome) ? "extra" : "ingrediente")
+        pushTask(ing, "ingrediente")
       }
 
       const prepProdotto = productPrepCucinaById[pid] === true

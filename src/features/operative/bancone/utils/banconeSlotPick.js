@@ -131,21 +131,22 @@ export function aggregateBanconeIngredientsBySlot(
 
       const summary = r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
       const signals = extractPrepSignalNamesFromSummary(summary)
+      // Aggiunta: solo se l'ingrediente ha davvero bisogno di attenzione (prep_cucina o
+      // categoria) — un'aggiunta comune "in linea" (es. capperi/olive/salamino senza
+      // categoria) il pizzaiolo la gestisce da sé in cottura, non è un task da preparare.
       for (const nome of signals.aggiunte) {
         const key = String(nome || "")
           .trim()
           .toLowerCase()
           .replace(/\s+/g, " ")
         const hit = byNome.get(key)
-        addIng(
-          hit || {
-            id: `signal:${key}`,
-            nome: String(nome).trim(),
-            categoria: "",
-            colore: "",
-            vaInCottura: true,
-          },
-        )
+        // Non trovato nel catalogo (nome non riconosciuto): fallback prudente, segnala comunque
+        // — meglio un falso positivo che perdere un ingrediente da preparare per un nome ignoto.
+        const ing =
+          hit ||
+          { id: `signal:${key}`, nome: String(nome).trim(), categoria: "", colore: "", prepCucina: true, vaInCottura: true }
+        if (!ingredientNeedsPrepMonitor(ing)) continue
+        addIng(ing)
       }
       for (const nome of signals.fineCottura) {
         const key = String(nome || "")

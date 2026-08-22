@@ -54,6 +54,14 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 | **API pubbliche** | Todo ~42% | Nest OAuth token su `api_oauth_clients`. |
 | **Fiscale IT** | Parziale | Completare `rt-sdi.ts` quando vendor scelto. |
 
+**Idea segnalata 2026-08-22 (non ancora implementata):** dal pannello "Paga online" in Cassa, se l'ordine è stato registrato da Cassa e il cliente ha chiesto pagamento online, aggiungere un tasto che apre WhatsApp (`https://wa.me/<numero>?text=<link>`) con il link di pagamento pre-compilato nel messaggio, oltre all'invio SMS/altro canale già previsto. Richiede solo il numero cliente (già presente nel modulo "Telefono destinatario") e il link pay-by-link già generato — nessuna nuova infrastruttura, solo un pulsante in più nel pannello esistente.
+
+**Stati ordine delivery da rivedere (segnalato 2026-08-22, esplicitamente rimandato — "da sistemare più tardi"):** il pannello Delivery/Pony mostra "IN_PREPARAZIONE" subito dopo l'accettazione cassa. Il flusso voluto invece è:
+1. Ordine ricevuto e accettato → stato "In attesa" (non ancora "in preparazione").
+2. Stato passa a "In preparazione" solo quando mancano ~30 minuti all'orario di consegna previsto (transizione basata sul tempo, non sull'accettazione).
+3. Gli stati successivi ("In forno" / "In consegna") restano affidati ai tablet operativi (cucina/pizzaioli) o al pony che prende in carico la consegna — non cambia.
+Richiede probabilmente un nuovo stato intermedio (o un calcolo a display basato su `consegna_prevista_at - now()`) sul pannello Delivery — da progettare con calma, non un fix immediato.
+
 ---
 
 ## 5. Ordine di lavoro consigliato (ora)
