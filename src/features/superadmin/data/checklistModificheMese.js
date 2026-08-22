@@ -208,7 +208,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Puoi aprire profilo e ordinare come un cliente reale",
     ],
     noteTraccia:
-      "2026-08-07 Foto 7: login credenziali test / profilo — area consegna e pin mancanti (legato a CL-06). Login esterno non deve mostrare chrome demo.",
+      "2026-08-07 Foto 7: login credenziali test / profilo — area consegna e pin mancanti (legato a CL-06). Login esterno non deve mostrare chrome demo.\n" +
+      "2026-08-22: verificato via lettura codice — ClienteHeaderAccount.jsx mostra il pulsante Super Admin/«Esci (riapri demo)» solo se isDemoClienteSessionActive() è vera (sessione demo salvata), non per un login esterno diretto da /login. Sembra già corretto — da riconfermare con un test reale (logout completo + login diretto) prima di chiudere.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -893,7 +894,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Admin o Super Admin: configura i sistemi dalla propria area",
     ],
     noteTraccia:
-      "2026-08-07 Foto 1: molto confusionale — creare punto checklist. → Catalogo in Admin → Pagamenti online (PosPaymentIntegrationsPanel).",
+      "2026-08-07 Foto 1: molto confusionale — creare punto checklist. → Catalogo in Admin → Pagamenti online (PosPaymentIntegrationsPanel).\n" +
+      "2026-08-22: verificato via lettura codice — PosPaymentIntegrationsPanel.jsx è importato solo da admin/pages/settings/PagamentiOnlinePage.jsx, nessun riferimento nell'area operativa cassa. Già spostato, da riconfermare visivamente in Cassa → Impostazioni prima di chiudere.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -911,7 +913,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Admin/SA: può impostare organizzazione, tablet cucina, copie, timing",
     ],
     noteTraccia:
-      "2026-08-07 Foto 2: troppe cose che non devono essere viste dall’operatività di cassa. → Admin Impostazioni → Stampa operativa.",
+      "2026-08-07 Foto 2: troppe cose che non devono essere viste dall’operatività di cassa. → Admin Impostazioni → Stampa operativa.\n" +
+      "2026-08-22: verificato via lettura codice — StampaOperativaSection.jsx vive solo sotto admin/pages/settings/, nessun riferimento nell'area operativa cassa. Già spostato, da riconfermare visivamente prima di chiudere.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -929,7 +932,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Dopo una modifica compare nel report/audit",
     ],
     noteTraccia:
-      "2026-08-07 Foto 3: unici parametri che operatore cassa può vedere e modificare; segnalare su report automatico. Audit event_type parametri_cassa_operatore.",
+      "2026-08-07 Foto 3: unici parametri che operatore cassa può vedere e modificare; segnalare su report automatico. Audit event_type parametri_cassa_operatore.\n" +
+      "2026-08-22: verificato via lettura codice — CassaImpostazioniPage.jsx usa già \"parametri_cassa_operatore\" come audit event_type. Da riconfermare visivamente (elenco campi mostrati + comparsa nel report) prima di chiudere.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -949,7 +953,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Annotare esito nel report / note voce",
     ],
     noteTraccia:
-      "2026-08-07: TEST PAGAMENTI — carte test in Admin Pagamenti; CL-10 soft finalize Stripe; smoke manuale Stripe/SumUp/pay-by-link da annotare in note voce.",
+      "2026-08-07: TEST PAGAMENTI — carte test in Admin Pagamenti; CL-10 soft finalize Stripe; smoke manuale Stripe/SumUp/pay-by-link da annotare in note voce.\n" +
+      "2026-08-22: questa voce è un promemoria di test manuale (smoke pagamenti reali), non un bug di codice — nessuna modifica possibile da parte mia senza eseguire tu stesso un pagamento di prova. Resta da fare quando hai le chiavi live/sandbox pronte.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -1005,7 +1010,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Vedi riga Sconto cassa, totale già scontato",
     ],
     noteTraccia:
-      "2026-08-07 Foto 8: se eseguo uno sconto dalla cassa voglio che venga segnato nella ricevuta di cortesia.",
+      "2026-08-07 Foto 8: se eseguo uno sconto dalla cassa voglio che venga segnato nella ricevuta di cortesia.\n" +
+      "2026-08-22: verificato via lettura codice — printRicevuta.js ha già un blocco dedicato <div class=\"sconto\">Sconto cassa − € X</div>, renderizzato solo se scontoEuro > 0, separato dalle note. Sembra già implementato, da riconfermare con una stampa reale prima di chiudere.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
@@ -1024,7 +1030,8 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
       "Layout leggibile tipo tabella",
     ],
     noteTraccia:
-      "2026-08-07 Foto 9: troppo dispersivo; tabella; ↑↓ tra pony; strip carico + righe pony a 0 in ogni fascia.",
+      "2026-08-07 Foto 9: troppo dispersivo; tabella; ↑↓ tra pony; strip carico + righe pony a 0 in ogni fascia.\n" +
+      "2026-08-22: confermato dal vivo in Cassa durante il backtest — CassaPlanningBoard.jsx mostra già tabella compatta (colonne Orario/Consegne-ritiri/Forno), tab Pony A/B con conteggio consegne, e Pony B compariva visibile anche con «0 consegne». Sembra già risolto; manca solo riconfermare il riassegno ↑↓ tra pony.",
     urgenza: "alta",
     prontoDaProvare: true,
   },
