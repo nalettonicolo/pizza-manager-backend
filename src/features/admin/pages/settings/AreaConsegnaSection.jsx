@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useOutletContext } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useTenant } from "@/app/contexts/TenantContext"
+import { useTenantServizi } from "@/app/hooks/useTenantServizi"
 import DeliveryAreaMapEditor from "@/features/admin/components/DeliveryAreaMapEditor"
 import Loader from "@/components/feedback/Loader"
 import { updateTenantSettings } from "@/features/admin/services/adminService"
@@ -14,6 +15,7 @@ import {
 export default function AreaConsegnaSection() {
   const { settings, setSettings } = useOutletContext()
   const { tenantId } = useTenant()
+  const { hasServizio } = useTenantServizi()
 
   const [loadingPv, setLoadingPv] = useState(true)
   const [punti, setPunti] = useState([])
@@ -215,7 +217,222 @@ export default function AreaConsegnaSection() {
     }
   }
 
+  // Multi-sede attivo solo se il piano/servizio "multi_sede" è abilitato da Super Admin per
+  // il tenant. Con un solo punto vendita (o servizio non attivo) la pagina mostra un'unica
+  // mappa/area, senza il concetto di "poligono globale di fallback" (inutile con 1 sola sede).
+  // Se per qualche disallineamento di dati esistessero già più PV pur senza il servizio attivo,
+  // non nascondiamo nulla: si torna comunque alla vista completa multi-sede.
+  const isMultiSede = hasServizio("multi_sede")
+  const singleSedeMode = !isMultiSede && punti.length <= 1
+
+  const saveSingleSede = async () => {
+    if (!tenantId || !settings) return
+    setSavingGlobal(true)
+    try {
+      const payload = {
+        ...(settings?.parametri_operativi || {}),
+        velocita_pony_kmh: pDelivery.velocita_pony_kmh === "" ? 0 : Number(pDelivery.velocita_pony_kmh) || 0,
+        consegna_stima_raggio_minuti:
+          pDelivery.consegna_stima_raggio_minuti === "" ? 15 : Math.max(1, Number(pDelivery.consegna_stima_raggio_minuti) || 15),
+      }
+      await updateTenantSettings(tenantId, { parametri_operativi: payload })
+      setSettings({ ...settings, parametri_operativi: payload })
+    } catch (e) {
+      console.error(e)
+      window.alert(e?.message || "Salvataggio parametri non riuscito.")
+      setSavingGlobal(false)
+      return
+    }
+    setSavingGlobal(false)
+    const pv = punti[0]
+    if (pv) {
+      await savePv(pv.id) // gestisce già il proprio alert di esito
+    } else {
+      window.alert("Parametri di stima salvati. Aggiungi un punto vendita (Impostazioni → Dati pizzeria) per mappa e area di consegna.")
+    }
+  }
+
   if (loadingPv) return <Loader />
+
+  // Blocco marcatore + poligono per UN punto vendita — condiviso tra vista mono-sede
+  // (l'unica sezione della pagina) e vista multi-sede (una per ogni riga in "Punti vendita").
+  const renderPvBlock = (pv, { asOwnSection = true } = {}) => {
+    const cc = centerForPv(pv)
+    const body = (
+      <>
+        {asOwnSection ? (
+          <h3 style={{ fontSize: 16, marginBottom: 8 }}>
+            {pv.nome || "Sede"}
+            {pv.attivo === false ? <span style={{ marginLeft: 8, fontSize: 12, color: "#b45309" }}>(non attiva)</span> : null}
+          </h3>
+        ) : null}
+        <div style={{ marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => copyTenantCoordsToPv(pv.id)}
+            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #0f766e", background: "#ecfdf5", cursor: "pointer", fontSize: 13 }}
+          >
+            Usa coordinate da Dati pizzeria
+          </button>
+          <button
+            type="button"
+            onClick={() => generaAreaCircolareStima(pv)}
+            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #c2410c", background: "#fff7ed", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+            title="Sostituisce il poligono con un cerchio centrato sul marcatore"
+          >
+            Genera area da stima moto (~{stimaConsegna.vel} km/h × {stimaConsegna.minuti} min → ~{stimaConsegna.raggioKm.toFixed(1)} km)
+          </button>
+          <button
+            type="button"
+            onClick={() => setPoly(pv.id, null)}
+            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #ccc", background: "#f5f5f5", cursor: "pointer", fontSize: 13 }}
+          >
+            Rimuovi area
+          </button>
+        </div>
+        {asOwnSection ? (
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 10px", lineHeight: 1.5, maxWidth: 720 }}>
+            La stima usa i valori nella sezione <strong>Area globale</strong> (salva prima se li hai modificati). Poi adatta il
+            poligono alla rete stradale.
+          </p>
+        ) : null}
+        <DeliveryAreaMapEditor
+          center={cc}
+          value={editing[pv.id] ?? null}
+          onChange={(gj) => setPoly(pv.id, gj)}
+          onCenterMarkerDrag={(la, lo) => setPvCoords((prev) => ({ ...prev, [pv.id]: { lat: la, lng: lo } }))}
+          height={asOwnSection ? 380 : 440}
+        />
+        <p style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>
+          Centro mappa:{" "}
+          {cc.lat != null && cc.lng != null ? (
+            <>
+              {Number(cc.lat).toFixed(5)}, {Number(cc.lng).toFixed(5)}
+            </>
+          ) : (
+            "— (imposta coordinate in Dati pizzeria o trascina il marcatore dopo aver salvato lat/lng sul DB)"
+          )}
+        </p>
+        {cc.lat == null || cc.lng == null ? (
+          <p
+            style={{
+              fontSize: 12,
+              color: "#92400e",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 8,
+              padding: "8px 10px",
+              marginTop: 8,
+              maxWidth: 720,
+              lineHeight: 1.5,
+            }}
+          >
+            Mappa apparentemente vuota: non e' un errore. Manca il centro della sede; imposta prima le coordinate o usa il marcatore verde.
+          </p>
+        ) : null}
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className="btn-primary-dashboard"
+            disabled={asOwnSection ? savingId === pv.id : savingGlobal}
+            onClick={() => void (asOwnSection ? savePv(pv.id) : saveSingleSede())}
+          >
+            {(asOwnSection ? savingId === pv.id : savingGlobal) ? "Salvataggio…" : "Salva area di consegna"}
+          </button>
+        </div>
+      </>
+    )
+    return asOwnSection ? (
+      <section key={pv.id} className="dashboard-box dashboard-settings-section" style={{ marginTop: 24, maxWidth: 900 }}>
+        {body}
+      </section>
+    ) : (
+      body
+    )
+  }
+
+  const stimaFieldsBlock = (
+    <div className="dashboard-settings-fields" style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 420 }}>
+      <label>
+        Velocità stimata consegna (km/h)
+        <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 4, lineHeight: 1.45 }}>
+          Usata per il cerchio di partenza sotto e per la pianificazione operativa; default indicativo ~20 km/h.
+        </span>
+        <input
+          type="number"
+          min={1}
+          step={0.5}
+          placeholder="es. 20"
+          value={pDelivery.velocita_pony_kmh === "" ? "" : pDelivery.velocita_pony_kmh}
+          onChange={(e) => setParamDelivery("velocita_pony_kmh", e.target.value === "" ? "" : e.target.value)}
+          style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+        />
+      </label>
+      <label>
+        Minuti per raggio area (stima cerchio)
+        <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 4, lineHeight: 1.45 }}>
+          Raggio ≈ velocità × (minuti/60). Esempio: 20 km/h e 15 min → ~5 km.
+        </span>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          placeholder="15"
+          value={pDelivery.consegna_stima_raggio_minuti === "" ? "" : pDelivery.consegna_stima_raggio_minuti}
+          onChange={(e) => setParamDelivery("consegna_stima_raggio_minuti", e.target.value === "" ? "" : e.target.value)}
+          style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+        />
+      </label>
+    </div>
+  )
+
+  if (singleSedeMode) {
+    const pv = punti[0]
+    return (
+      <div className="dashboard-settings-page">
+        <h1 className="dashboard-page-title">Area di consegna</h1>
+        <p style={{ fontSize: 14, color: "#64748b", maxWidth: 720, lineHeight: 1.55 }}>
+          Marcatore e poligono di consegna della tua sede. Coordinate sede:{" "}
+          <Link to="/admin/settings/dati-pizzeria">Dati pizzeria</Link>. Altri parametri operativi:{" "}
+          <Link to="/admin/settings/parametri">Parametri</Link>.
+        </p>
+        <div
+          style={{
+            marginTop: 12,
+            padding: "12px 14px",
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            borderRadius: 8,
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: "#1e40af",
+            maxWidth: 900,
+          }}
+        >
+          <strong>Come leggere questa pagina:</strong>
+          <br />
+          1) Imposta velocità e minuti qui sotto (servono a stimare il raggio).
+          <br />
+          2) Usa <strong>Usa coordinate da Dati pizzeria</strong> (o trascina il marcatore verde) per posizionare la sede.
+          <br />
+          3) Clicca <strong>Genera area da stima moto</strong> per un cerchio di partenza, poi adatta i vertici alle strade.
+        </div>
+        <section className="dashboard-box dashboard-settings-section" style={{ marginTop: 20, maxWidth: 900 }}>
+          {stimaFieldsBlock}
+          <div style={{ marginTop: 16 }}>{pv ? renderPvBlock(pv, { asOwnSection: false }) : (
+            <p style={{ color: "#94a3b8" }}>
+              Nessun punto vendita configurato — impostane uno da <Link to="/admin/settings/dati-pizzeria">Dati pizzeria</Link>, poi
+              torna qui per disegnare l&apos;area di consegna.
+            </p>
+          )}</div>
+        </section>
+        <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 16, maxWidth: 720, lineHeight: 1.5 }}>
+          Gestisci più sedi? Attiva il servizio <strong>Punti vendita multipli</strong> (Super Admin) per avere un&apos;area dedicata
+          per ognuna, con un poligono globale di riserva per quelle non ancora configurate.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="dashboard-settings-page">
@@ -255,38 +472,7 @@ export default function AreaConsegnaSection() {
           Poligono usato dagli ordini web quando il PV non ha un&apos;area propria. In cassa puoi confermare anche fuori area dopo
           l&apos;avviso.
         </p>
-        <div className="dashboard-settings-fields" style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 420 }}>
-          <label>
-            Velocità stimata consegna (km/h)
-            <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 4, lineHeight: 1.45 }}>
-              Usata per il cerchio di partenza sotto e per la pianificazione operativa; default indicativo ~20 km/h.
-            </span>
-            <input
-              type="number"
-              min={1}
-              step={0.5}
-              placeholder="es. 20"
-              value={pDelivery.velocita_pony_kmh === "" ? "" : pDelivery.velocita_pony_kmh}
-              onChange={(e) => setParamDelivery("velocita_pony_kmh", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Minuti per raggio area (stima cerchio)
-            <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 4, lineHeight: 1.45 }}>
-              Raggio ≈ velocità × (minuti/60). Esempio: 20 km/h e 15 min → ~5 km.
-            </span>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              placeholder="15"
-              value={pDelivery.consegna_stima_raggio_minuti === "" ? "" : pDelivery.consegna_stima_raggio_minuti}
-              onChange={(e) => setParamDelivery("consegna_stima_raggio_minuti", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-        </div>
+        {stimaFieldsBlock}
         <div style={{ marginTop: 16 }}>
           <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Mappa area globale</h3>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
@@ -332,124 +518,7 @@ export default function AreaConsegnaSection() {
       {punti.length === 0 ? (
         <p style={{ marginTop: 16, color: "#94a3b8" }}>Nessun punto vendita configurato.</p>
       ) : (
-        punti.map((pv) => {
-          const cc = centerForPv(pv)
-          return (
-            <section
-              key={pv.id}
-              className="dashboard-box dashboard-settings-section"
-              style={{ marginTop: 24, maxWidth: 900 }}
-            >
-              <h3 style={{ fontSize: 16, marginBottom: 8 }}>
-                {pv.nome || "Sede"}
-                {pv.attivo === false ? (
-                  <span style={{ marginLeft: 8, fontSize: 12, color: "#b45309" }}>(non attiva)</span>
-                ) : null}
-              </h3>
-              <div style={{ marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => copyTenantCoordsToPv(pv.id)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #0f766e",
-                    background: "#ecfdf5",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                >
-                  Usa coordinate da Dati pizzeria
-                </button>
-                <button
-                  type="button"
-                  onClick={() => generaAreaCircolareStima(pv)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #c2410c",
-                    background: "#fff7ed",
-                    cursor: "pointer",
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                  title="Sostituisce il poligono con un cerchio centrato sul marcatore"
-                >
-                  Genera area da stima moto (~{stimaConsegna.vel} km/h × {stimaConsegna.minuti} min → ~{stimaConsegna.raggioKm.toFixed(1)}{" "}
-                  km)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPoly(pv.id, null)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #ccc",
-                    background: "#f5f5f5",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                >
-                  Rimuovi area per questa sede
-                </button>
-              </div>
-              <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 10px", lineHeight: 1.5, maxWidth: 720 }}>
-                La stima usa i valori nella sezione <strong>Area globale</strong> (salva prima se li hai modificati). Poi adatta il
-                poligono alla rete stradale.
-              </p>
-              <DeliveryAreaMapEditor
-                center={cc}
-                value={editing[pv.id] ?? null}
-                onChange={(gj) => setPoly(pv.id, gj)}
-                onCenterMarkerDrag={(la, lo) =>
-                  setPvCoords((prev) => ({
-                    ...prev,
-                    [pv.id]: { lat: la, lng: lo },
-                  }))
-                }
-                height={380}
-              />
-              <p style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>
-                Centro mappa:{" "}
-                {cc.lat != null && cc.lng != null ? (
-                  <>
-                    {Number(cc.lat).toFixed(5)}, {Number(cc.lng).toFixed(5)}
-                  </>
-                ) : (
-                  "— (imposta coordinate in Dati pizzeria o trascina il marcatore dopo aver salvato lat/lng sul DB)"
-                )}
-              </p>
-              {cc.lat == null || cc.lng == null ? (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "#92400e",
-                    background: "#fffbeb",
-                    border: "1px solid #fde68a",
-                    borderRadius: 8,
-                    padding: "8px 10px",
-                    marginTop: 8,
-                    maxWidth: 720,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Mappa apparentemente vuota: non e' un errore. Manca il centro della sede; imposta prima le coordinate o usa il
-                  marcatore verde.
-                </p>
-              ) : null}
-              <div style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="btn-primary-dashboard"
-                  disabled={savingId === pv.id}
-                  onClick={() => void savePv(pv.id)}
-                >
-                  {savingId === pv.id ? "Salvataggio…" : "Salva area e posizione sede"}
-                </button>
-              </div>
-            </section>
-          )
-        })
+        punti.map((pv) => renderPvBlock(pv, { asOwnSection: true }))
       )}
     </div>
   )

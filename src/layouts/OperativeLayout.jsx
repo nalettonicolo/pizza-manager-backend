@@ -197,6 +197,7 @@ export default function OperativeLayout() {
         : permessiForNav[currentAreaKey] === true));
   const operatoreLabel = labelFromEmailPrefix(user?.email ?? "");
   const isCassaPage = location.pathname === "/operative/cassa" || location.pathname.startsWith("/operative/cassa/");
+  const isDemoHubPage = location.pathname === "/operative/dashboard";
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
   const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
@@ -466,7 +467,7 @@ export default function OperativeLayout() {
             ) : null}
             {isSaUser || inDemoLive ? (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                <SaHomeButton mode={inDemoLive ? "demoHub" : "ingresso"} />
+                <SaHomeButton mode={inDemoLive && !isDemoHubPage ? "demoHub" : "ingresso"} />
               </div>
             ) : null}
           </div>
@@ -522,7 +523,9 @@ export default function OperativeLayout() {
               )}
               <div className="dashboard-header-actions">
                 {isSaUser ? (
-                  <SaHomeButton compact={narrowViewport} mode={inDemoLive ? "demoHub" : "ingresso"} />
+                  // Sull'hub demo stesso "torna all'hub demo" è ridondante (ci siamo già): qui
+                  // mostriamo la via di uscita vera verso l'ingresso Super Admin.
+                  <SaHomeButton compact={narrowViewport} mode={inDemoLive && !isDemoHubPage ? "demoHub" : "ingresso"} />
                 ) : null}
                 <button type="button" className="btn-logout btn-logout-red" onClick={() => void handleLogout()}>
                   Esci
