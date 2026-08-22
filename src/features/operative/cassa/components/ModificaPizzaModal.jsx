@@ -872,7 +872,6 @@ export default function ModificaPizzaModal({
                   >
                     + {ing.nome}
                     {priceLabelAlways(unit)}
-                    {(ing.prepCucina === true || ing.prep_cucina === true) ? " · prep cucina" : ""}
                   </button>
                   )
                 })}

@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { clearDemoGiroSession } from "@/utils/demoGiro"
+import { clearSupportTenantOverride } from "@/utils/supportTenantOverride"
 
 const SA_HOME = "/superadmin/ingresso"
 
@@ -28,6 +29,7 @@ function PmMark({ size = 18 }) {
  */
 export default function SaHomeButton({ className = "", compact = false, mode = "ingresso" }) {
   const isDemoHub = mode === "demoHub"
+  const navigate = useNavigate()
 
   if (isDemoHub) {
     return (
@@ -35,6 +37,8 @@ export default function SaHomeButton({ className = "", compact = false, mode = "
         to="/operative/dashboard"
         onClick={(e) => {
           // Mantieni il giro demo; preserva query support/_demo_giro se presenti.
+          // Navigazione client-side (niente reload pagina intera: altrimenti ogni
+          // ritorno all'hub demo ricarica da zero bundle/sessione/dati tenant).
           try {
             const qs = new URLSearchParams(window.location.search)
             if (!qs.get("_demo_giro")) qs.set("_demo_giro", "1")
@@ -42,7 +46,7 @@ export default function SaHomeButton({ className = "", compact = false, mode = "
             if (tid && !qs.get("support_tenant")) qs.set("support_tenant", tid)
             const next = `/operative/dashboard?${qs.toString()}`
             e.preventDefault()
-            window.location.assign(next)
+            navigate(next)
           } catch {
             /* Link default */
           }
@@ -60,7 +64,13 @@ export default function SaHomeButton({ className = "", compact = false, mode = "
   return (
     <Link
       to={SA_HOME}
-      onClick={() => clearDemoGiroSession()}
+      onClick={() => {
+        // Pulizia completa: sessionStorage (giro demo) E localStorage (override
+        // tenant supporto) — altrimenti il tenant di supporto resta "appiccicato"
+        // (letto da resolveSupportTenantOverride) e rimanda di nuovo in area demo.
+        clearDemoGiroSession()
+        clearSupportTenantOverride()
+      }}
       className={`sa-home-btn${compact ? " sa-home-btn--compact" : ""}${className ? ` ${className}` : ""}`}
       title="Torna alla home Super Admin"
       aria-label="Torna alla home Super Admin"
