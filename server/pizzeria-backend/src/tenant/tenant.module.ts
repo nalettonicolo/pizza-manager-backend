@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common'
-import { AuthModule } from '../auth/auth.module'
-import { PuntiVenditaService } from './punti-vendita.service'
-import { TenantController } from './tenant.controller'
-import { TenantService } from './tenant.service'
+import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { PuntiVenditaService } from './punti-vendita.service';
+import { TenantController } from './tenant.controller';
+import { TenantService } from './tenant.service';
 
 @Module({
   imports: [AuthModule],

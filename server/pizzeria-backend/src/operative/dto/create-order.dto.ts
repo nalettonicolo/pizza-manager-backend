@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer'
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsInt,
@@ -8,85 +8,85 @@ import {
   IsString,
   IsUUID,
   ValidateNested,
-} from 'class-validator'
+} from 'class-validator';
 
 export class CreateOrderItemDto {
   @IsUUID()
-  prodotto_id!: string
+  prodotto_id!: string;
 
   @IsNumber()
-  quantita!: number
+  quantita!: number;
 
   @IsNumber()
-  prezzo!: number
+  prezzo!: number;
 
   @IsOptional()
   @IsString()
-  formato_nome?: string | null
+  formato_nome?: string | null;
 
   @IsOptional()
   @IsString()
-  ingredienti_cottura_summary?: string | null
+  ingredienti_cottura_summary?: string | null;
 }
 
 export class CreateOrderDto {
   @IsNumber()
-  totale!: number
+  totale!: number;
 
   @IsOptional()
   @IsString()
-  stato?: string
+  stato?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
-  items!: CreateOrderItemDto[]
+  items!: CreateOrderItemDto[];
 
   @IsOptional()
   @IsString()
-  note?: string | null
+  note?: string | null;
 
   @IsOptional()
   @IsString()
-  tipo_pagamento?: string | null
+  tipo_pagamento?: string | null;
 
   @IsOptional()
   @IsString()
-  tipo_ordine?: string | null
+  tipo_ordine?: string | null;
 
   @IsOptional()
   @IsString()
-  nome_cliente?: string | null
+  nome_cliente?: string | null;
 
   @IsOptional()
   @IsString()
-  orario_ritiro?: string | null
+  orario_ritiro?: string | null;
 
   @IsOptional()
   @IsString()
-  indirizzo_consegna?: string | null
+  indirizzo_consegna?: string | null;
 
   @IsOptional()
   @IsNumber()
-  consegna_lng?: number | null
+  consegna_lng?: number | null;
 
   @IsOptional()
   @IsNumber()
-  consegna_lat?: number | null
+  consegna_lat?: number | null;
 
   @IsOptional()
   @IsObject()
-  pagamento_dettaglio?: Record<string, unknown> | null
+  pagamento_dettaglio?: Record<string, unknown> | null;
 
   @IsOptional()
   @IsUUID()
-  punto_vendita_id?: string | null
+  punto_vendita_id?: string | null;
 
   @IsOptional()
   @IsInt()
-  turno_operatori_id?: number | null
+  turno_operatori_id?: number | null;
 
   @IsOptional()
   @IsString()
-  telefono_ritiro?: string | null
+  telefono_ritiro?: string | null;
 }

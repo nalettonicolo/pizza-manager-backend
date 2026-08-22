@@ -11,24 +11,27 @@ import {
   Query,
   Req,
   UseGuards,
-} from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../auth/jwt.guard'
-import { resolveTenantIdForRequest } from '../common/resolve-tenant'
-import { BatchProductIdsDto } from './dto/batch-product-ids.dto'
-import { CreateOrderDto } from './dto/create-order.dto'
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt.guard';
+import { resolveTenantIdForRequest } from '../common/resolve-tenant';
+import { BatchProductIdsDto } from './dto/batch-product-ids.dto';
+import { CreateOrderDto } from './dto/create-order.dto';
 import {
   RigheAggregateDto,
   UpdateOrderPatchDto,
   UpdateOrderStatoDto,
   UpdateOrderTipoPagamentoDto,
-} from './dto/patch-order.dto'
-import { ReplaceOrderItemsDto } from './dto/replace-order-items.dto'
-import { TurniApriDto, TurniChiudiDto } from './dto/turni.dto'
-import { JwtOperativeUser, OperativeWritesService } from './operative-writes.service'
-import { OperativeService } from './operative.service'
+} from './dto/patch-order.dto';
+import { ReplaceOrderItemsDto } from './dto/replace-order-items.dto';
+import { TurniApriDto, TurniChiudiDto } from './dto/turni.dto';
+import {
+  JwtOperativeUser,
+  OperativeWritesService,
+} from './operative-writes.service';
+import { OperativeService } from './operative.service';
 
-type JwtUser = JwtOperativeUser
+type JwtUser = JwtOperativeUser;
 
 @ApiTags('operative')
 @Controller('operative')
@@ -39,7 +42,7 @@ export class OperativeController {
   ) {}
 
   private tenantOf(req: { user: JwtUser }, tenantIdParam?: string) {
-    return resolveTenantIdForRequest(req.user, tenantIdParam)
+    return resolveTenantIdForRequest(req.user, tenantIdParam);
   }
 
   @Get('ordini')
@@ -58,14 +61,14 @@ export class OperativeController {
     @Query('limit') limitStr?: string,
     @Query('stato') stato?: string,
   ) {
-    const tenantId = this.tenantOf(req, tenantIdParam)
-    const limit = limitStr ? Number(limitStr) : 50
+    const tenantId = this.tenantOf(req, tenantIdParam);
+    const limit = limitStr ? Number(limitStr) : 50;
     return this.operative.listOrdini(tenantId, {
       fromIso: fromIso || undefined,
       toIso: toIso || undefined,
       limit: Number.isFinite(limit) ? limit : 50,
       stato: stato || undefined,
-    })
+    });
   }
 
   @Get('categorie')
@@ -76,7 +79,7 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    return this.operative.listCategorie(this.tenantOf(req, tenantIdParam))
+    return this.operative.listCategorie(this.tenantOf(req, tenantIdParam));
   }
 
   @Get('ingredienti')
@@ -87,7 +90,7 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    return this.operative.listIngredienti(this.tenantOf(req, tenantIdParam))
+    return this.operative.listIngredienti(this.tenantOf(req, tenantIdParam));
   }
 
   @Get('prodotti')
@@ -99,7 +102,10 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam?: string,
     @Query('categoryId') categoryId?: string,
   ) {
-    return this.operative.listProdotti(this.tenantOf(req, tenantIdParam), categoryId)
+    return this.operative.listProdotti(
+      this.tenantOf(req, tenantIdParam),
+      categoryId,
+    );
   }
 
   @Get('configurazione-costi')
@@ -110,7 +116,9 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    return this.operative.getConfigurazioneCosti(this.tenantOf(req, tenantIdParam))
+    return this.operative.getConfigurazioneCosti(
+      this.tenantOf(req, tenantIdParam),
+    );
   }
 
   @Post('prodotto-ingredienti-batch')
@@ -128,7 +136,7 @@ export class OperativeController {
     return this.operative.batchProdottoIngredientiMerged(
       this.tenantOf(req, tenantIdParam),
       body.productIds,
-    )
+    );
   }
 
   // --- Mutazioni cassa / ordini (JWT tenant + ruoli staff Nest) ---
@@ -141,7 +149,7 @@ export class OperativeController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    return this.writes.turnoAperto(req.user, tenantIdParam)
+    return this.writes.turnoAperto(req.user, tenantIdParam);
   }
 
   @Post('turni/apri')
@@ -154,14 +162,16 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam: string | undefined,
     @Body() body: TurniApriDto,
   ) {
-    return this.writes.turnoApri(req.user, tenantIdParam, body.puntoVenditaId)
+    return this.writes.turnoApri(req.user, tenantIdParam, body.puntoVenditaId);
   }
 
   @Post('turni/chiudi')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiBody({ type: TurniChiudiDto })
-  @ApiOperation({ summary: 'Chiude turno cassa con riconciliazione cassa fisica' })
+  @ApiOperation({
+    summary: 'Chiude turno cassa con riconciliazione cassa fisica',
+  })
   async turnoChiudi(
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam: string | undefined,
@@ -173,7 +183,7 @@ export class OperativeController {
       body.fondoContatoEuro,
       body.incassoAttesoEuro ?? null,
       body.note ?? null,
-    )
+    );
   }
 
   @Post('ordini')
@@ -182,7 +192,8 @@ export class OperativeController {
   @ApiBearerAuth()
   @ApiBody({ type: CreateOrderDto })
   @ApiOperation({
-    summary: 'Crea ordine con righe (equivalente operativo RPC create_order_with_items)',
+    summary:
+      'Crea ordine con righe (equivalente operativo RPC create_order_with_items)',
     description:
       'Controlli staff lato JWT; polygon delivery non rivalidato qui (solo utenti Nest staff).',
   })
@@ -191,8 +202,8 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam: string | undefined,
     @Body() body: CreateOrderDto,
   ) {
-    const id = await this.writes.createOrder(req.user, tenantIdParam, body)
-    return { id }
+    const id = await this.writes.createOrder(req.user, tenantIdParam, body);
+    return { id };
   }
 
   @Get('ordini/:ordineId/dettaglio')
@@ -204,7 +215,7 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam: string | undefined,
     @Param('ordineId', ParseUUIDPipe) ordineId: string,
   ) {
-    return this.writes.getOrderDetail(req.user, tenantIdParam, ordineId)
+    return this.writes.getOrderDetail(req.user, tenantIdParam, ordineId);
   }
 
   @Patch('ordini/:ordineId/stato')
@@ -219,7 +230,12 @@ export class OperativeController {
     @Param('ordineId', ParseUUIDPipe) ordineId: string,
     @Body() body: UpdateOrderStatoDto,
   ) {
-    await this.writes.updateOrderStato(req.user, tenantIdParam, ordineId, body.stato)
+    await this.writes.updateOrderStato(
+      req.user,
+      tenantIdParam,
+      ordineId,
+      body.stato,
+    );
   }
 
   @Patch('ordini/:ordineId/tipo-pagamento')
@@ -238,7 +254,7 @@ export class OperativeController {
       tenantIdParam,
       ordineId,
       body.tipoPagamento,
-    )
+    );
   }
 
   @Patch('ordini/:ordineId')
@@ -256,7 +272,7 @@ export class OperativeController {
     @Param('ordineId', ParseUUIDPipe) ordineId: string,
     @Body() body: UpdateOrderPatchDto,
   ) {
-    await this.writes.updateOrderPatch(req.user, tenantIdParam, ordineId, body)
+    await this.writes.updateOrderPatch(req.user, tenantIdParam, ordineId, body);
   }
 
   @Put('ordini/:ordineId/righe')
@@ -266,7 +282,8 @@ export class OperativeController {
   @ApiBody({ type: ReplaceOrderItemsDto })
   @ApiOperation({
     summary: 'Sostituisce righe ordine',
-    description: 'Equivalente operativo RPC replace_order_items (controlli via JWT Nest).',
+    description:
+      'Equivalente operativo RPC replace_order_items (controlli via JWT Nest).',
   })
   async putOrdineRighe(
     @Req() req: { user: JwtUser },
@@ -274,20 +291,26 @@ export class OperativeController {
     @Param('ordineId', ParseUUIDPipe) ordineId: string,
     @Body() body: ReplaceOrderItemsDto,
   ) {
-    await this.writes.replaceOrderItems(req.user, tenantIdParam, ordineId, body)
+    await this.writes.replaceOrderItems(
+      req.user,
+      tenantIdParam,
+      ordineId,
+      body,
+    );
   }
 
   @Get('ruoli-pizzeria')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Elenco ruoli tenant (fallback da core.users se vista ruoli_pizzeria assente Sul client)',
+    summary:
+      'Elenco ruoli tenant (fallback da core.users se vista ruoli_pizzeria assente Sul client)',
   })
   listRuoliPizzeria(
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    return this.writes.listRuoliPizzeriaCore(req.user, tenantIdParam)
+    return this.writes.listRuoliPizzeriaCore(req.user, tenantIdParam);
   }
 
   @Post('righe/aggregate')
@@ -300,6 +323,6 @@ export class OperativeController {
     @Query('tenantId') tenantIdParam: string | undefined,
     @Body() body: RigheAggregateDto,
   ) {
-    return this.writes.righeAggregate(req.user, tenantIdParam, body.ordineIds)
+    return this.writes.righeAggregate(req.user, tenantIdParam, body.ordineIds);
   }
 }

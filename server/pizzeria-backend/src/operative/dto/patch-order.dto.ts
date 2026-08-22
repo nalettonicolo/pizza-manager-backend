@@ -5,70 +5,70 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-} from 'class-validator'
+} from 'class-validator';
 
 export class UpdateOrderStatoDto {
   @IsString()
-  stato!: string
+  stato!: string;
 }
 
 export class UpdateOrderTipoPagamentoDto {
   @IsString()
-  tipoPagamento!: string
+  tipoPagamento!: string;
 }
 
 export class UpdateOrderPatchDto {
   @IsOptional()
   @IsString()
-  nome_cliente?: string | null
+  nome_cliente?: string | null;
 
   @IsOptional()
   @IsString()
-  telefono_ritiro?: string | null
+  telefono_ritiro?: string | null;
 
   @IsOptional()
   @IsString()
-  orario_ritiro?: string | null
+  orario_ritiro?: string | null;
 
   @IsOptional()
   @IsString()
-  note?: string | null
+  note?: string | null;
 
   @IsOptional()
   @IsString()
-  tipo_pagamento?: string | null
+  tipo_pagamento?: string | null;
 
   @IsOptional()
   @IsString()
-  indirizzo_consegna?: string | null
+  indirizzo_consegna?: string | null;
 
   @IsOptional()
   @IsString()
-  tipo_ordine?: string | null
+  tipo_ordine?: string | null;
 
   @IsOptional()
   @IsObject()
-  pagamento_dettaglio?: Record<string, unknown> | null
+  pagamento_dettaglio?: Record<string, unknown> | null;
 
   @IsOptional()
   @IsString()
-  stato_consegna?: string | null
+  stato_consegna?: string | null;
 
   @IsOptional()
   @IsNumber()
-  consegna_lng?: number | null
+  consegna_lng?: number | null;
 
   @IsOptional()
   @IsNumber()
-  consegna_lat?: number | null
+  consegna_lat?: number | null;
 
   @IsOptional()
   @IsUUID()
-  punto_vendita_id?: string | null
+  punto_vendita_id?: string | null;
 }
 
 export class RigheAggregateDto {
   @IsArray()
   @IsString({ each: true })
-  ordineIds!: string[]
+  ordineIds!: string[];
 }

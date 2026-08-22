@@ -1,9 +1,17 @@
-import { Body, Controller, Get, HttpCode, Post, Req, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { AuthService } from './auth.service'
-import { LoginDto } from './dto/login.dto'
-import { JwtAuthGuard } from './jwt.guard'
-import { Throttle } from '@nestjs/throttler'
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from './jwt.guard';
+import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -14,7 +22,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Login email/password' })
   login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.password)
+    return this.authService.login(body.email, body.password);
   }
 
   @Post('refresh')
@@ -27,7 +35,7 @@ export class AuthController {
       'Richiede Bearer JWT ancora valido; restituisce un nuovo token (stesso payload da DB). Utile per sessione sliding.',
   })
   refresh(@Req() req: { user: { sub?: string } }) {
-    return this.authService.refresh(req.user)
+    return this.authService.refresh(req.user);
   }
 
   @Post('logout')
@@ -38,7 +46,7 @@ export class AuthController {
       'Nessuna sessione server-side oggi: il client rimuove il JWT. Endpoint per simmetria API e revoche future.',
   })
   logout() {
-    return
+    return;
   }
 
   @Get('me')
@@ -46,6 +54,6 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Profilo da JWT (Bearer)' })
   me(@Req() req: { user: { sub: string } }) {
-    return this.authService.me(req.user)
+    return this.authService.me(req.user);
   }
 }

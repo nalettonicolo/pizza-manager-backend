@@ -1,11 +1,11 @@
-import { ArrayMaxSize, IsArray, IsUUID } from 'class-validator'
+import { ArrayMaxSize, IsArray, IsUUID } from 'class-validator';
 
 export class PublicMenuIngredientsDto {
   @IsUUID()
-  tenantId!: string
+  tenantId!: string;
 
   @IsArray()
   @ArrayMaxSize(300)
   @IsUUID('4', { each: true })
-  productIds!: string[]
+  productIds!: string[];
 }

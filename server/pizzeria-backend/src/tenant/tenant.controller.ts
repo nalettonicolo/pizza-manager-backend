@@ -1,11 +1,11 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../auth/jwt.guard'
-import { resolveTenantIdForRequest } from '../common/resolve-tenant'
-import { PuntiVenditaService } from './punti-vendita.service'
-import { TenantService } from './tenant.service'
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt.guard';
+import { resolveTenantIdForRequest } from '../common/resolve-tenant';
+import { PuntiVenditaService } from './punti-vendita.service';
+import { TenantService } from './tenant.service';
 
-type JwtUser = { sub?: string; tenantId?: string; ruolo?: string }
+type JwtUser = { sub?: string; tenantId?: string; ruolo?: string };
 
 @ApiTags('tenant')
 @Controller('tenant')
@@ -23,12 +23,9 @@ export class TenantController {
     description:
       'Usa `tenantId` nel payload JWT. Super Admin può passare `?tenantId=` (Sala QA).',
   })
-  me(
-    @Req() req: { user: JwtUser },
-    @Query('tenantId') tenantIdParam?: string,
-  ) {
-    const tenantId = resolveTenantIdForRequest(req.user, tenantIdParam)
-    return this.tenantService.getTenantRowForJwtTenantId(tenantId)
+  me(@Req() req: { user: JwtUser }, @Query('tenantId') tenantIdParam?: string) {
+    const tenantId = resolveTenantIdForRequest(req.user, tenantIdParam);
+    return this.tenantService.getTenantRowForJwtTenantId(tenantId);
   }
 
   @Get('punti-vendita')
@@ -43,7 +40,7 @@ export class TenantController {
     @Req() req: { user: JwtUser },
     @Query('tenantId') tenantIdParam?: string,
   ) {
-    const tenantId = resolveTenantIdForRequest(req.user, tenantIdParam)
-    return this.puntiVenditaService.listForJwtTenant(tenantId)
+    const tenantId = resolveTenantIdForRequest(req.user, tenantIdParam);
+    return this.puntiVenditaService.listForJwtTenant(tenantId);
   }
 }

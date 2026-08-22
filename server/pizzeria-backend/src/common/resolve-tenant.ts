@@ -1,6 +1,6 @@
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common'
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 
-type JwtLike = { tenantId?: string; ruolo?: string }
+type JwtLike = { tenantId?: string; ruolo?: string };
 
 /**
  * Tenant effettivo per la richiesta.
@@ -11,20 +11,20 @@ export function resolveTenantIdForRequest(
   user: JwtLike | undefined,
   queryTenant?: string,
 ): string {
-  const ruolo = String(user?.ruolo ?? '').toUpperCase()
-  const isSa = ruolo === 'SUPERADMIN'
+  const ruolo = String(user?.ruolo ?? '').toUpperCase();
+  const isSa = ruolo === 'SUPERADMIN';
   const q =
     queryTenant && String(queryTenant).trim()
       ? String(queryTenant).trim()
-      : undefined
+      : undefined;
 
-  if (isSa && q) return q
+  if (isSa && q) return q;
 
   if (!user?.tenantId) {
-    throw new UnauthorizedException('Tenant non nel token')
+    throw new UnauthorizedException('Tenant non nel token');
   }
   if (q && q !== user.tenantId) {
-    throw new ForbiddenException('tenantId non coerente col token')
+    throw new ForbiddenException('tenantId non coerente col token');
   }
-  return user.tenantId
+  return user.tenantId;
 }

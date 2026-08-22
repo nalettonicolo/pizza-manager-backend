@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
-import { Prisma, Tenant } from '@prisma/client'
-import { PrismaService } from '../prisma/prisma.service'
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Tenant } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class TenantService {
@@ -12,15 +12,15 @@ export class TenantService {
    */
   async getTenantRowForJwtTenantId(tenantId: string | undefined) {
     if (!tenantId) {
-      throw new NotFoundException('Tenant non nel token')
+      throw new NotFoundException('Tenant non nel token');
     }
 
     try {
       const rows = await this.prisma.$queryRaw<Record<string, unknown>[]>(
         Prisma.sql`SELECT * FROM admin.tenants WHERE id = ${tenantId}::uuid LIMIT 1`,
-      )
+      );
       if (rows.length > 0) {
-        return this.serializeRow(rows[0])
+        return this.serializeRow(rows[0]);
       }
     } catch {
       /* tabella assente, permessi, ecc. → fallback core */
@@ -28,20 +28,20 @@ export class TenantService {
 
     const core = await this.prisma.tenant.findFirst({
       where: { id: tenantId, deletedAt: null },
-    })
+    });
     if (!core) {
-      throw new NotFoundException('Tenant non trovato')
+      throw new NotFoundException('Tenant non trovato');
     }
-    return this.mapCoreTenant(core)
+    return this.mapCoreTenant(core);
   }
 
   private serializeRow(row: Record<string, unknown>) {
-    const out: Record<string, unknown> = {}
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) {
-      if (v instanceof Date) out[k] = v.toISOString()
-      else out[k] = v
+      if (v instanceof Date) out[k] = v.toISOString();
+      else out[k] = v;
     }
-    return out
+    return out;
   }
 
   private mapCoreTenant(t: Tenant) {
@@ -72,6 +72,6 @@ export class TenantService {
         : null,
       sconto_percentuale:
         t.scontoPercentuale != null ? Number(t.scontoPercentuale) : null,
-    }
+    };
   }
 }

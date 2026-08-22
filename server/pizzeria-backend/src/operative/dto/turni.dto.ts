@@ -1,19 +1,19 @@
-import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator'
+import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class TurniApriDto {
   @IsUUID()
-  puntoVenditaId!: string
+  puntoVenditaId!: string;
 }
 
 export class TurniChiudiDto {
   @IsNumber()
-  fondoContatoEuro!: number
+  fondoContatoEuro!: number;
 
   @IsOptional()
   @IsNumber()
-  incassoAttesoEuro?: number | null
+  incassoAttesoEuro?: number | null;
 
   @IsOptional()
   @IsString()
-  note?: string | null
+  note?: string | null;
 }

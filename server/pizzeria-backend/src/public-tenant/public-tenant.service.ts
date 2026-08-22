@@ -1,9 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
-import type { Tenant } from '@prisma/client'
-import { PrismaService } from '../prisma/prisma.service'
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { Tenant } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 /** Slug vetrina: lettere, cifre, trattino, lunghezza ragionevole. */
-const SLUG_RE = /^[a-z0-9-]{1,80}$/i
+const SLUG_RE = /^[a-z0-9-]{1,80}$/i;
 
 @Injectable()
 export class PublicTenantService {
@@ -21,13 +25,13 @@ export class PublicTenantService {
       piano: String(t.piano),
       created_at: t.createdAt.toISOString(),
       updated_at: t.updatedAt.toISOString(),
-    }
+    };
   }
 
   async bySlug(raw: string) {
-    const slug = String(raw || '').trim()
+    const slug = String(raw || '').trim();
     if (!slug || !SLUG_RE.test(slug)) {
-      throw new BadRequestException('Slug non valido')
+      throw new BadRequestException('Slug non valido');
     }
     const t = await this.prisma.tenant.findFirst({
       where: {
@@ -35,24 +39,24 @@ export class PublicTenantService {
         deletedAt: null,
         attivo: true,
       },
-    })
+    });
     if (!t) {
-      throw new NotFoundException('Tenant non trovato')
+      throw new NotFoundException('Tenant non trovato');
     }
-    return this.toPublicDto(t)
+    return this.toPublicDto(t);
   }
 
   async byId(raw: string) {
-    const id = String(raw || '').trim()
+    const id = String(raw || '').trim();
     if (!id) {
-      throw new BadRequestException('Id mancante')
+      throw new BadRequestException('Id mancante');
     }
     const t = await this.prisma.tenant.findFirst({
       where: { id, deletedAt: null, attivo: true },
-    })
+    });
     if (!t) {
-      throw new NotFoundException('Tenant non trovato')
+      throw new NotFoundException('Tenant non trovato');
     }
-    return this.toPublicDto(t)
+    return this.toPublicDto(t);
   }
 }
