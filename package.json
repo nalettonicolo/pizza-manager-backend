@@ -54,6 +54,7 @@
     "@stripe/stripe-js": "^9.1.0",
     "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.7.9",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.575.0",
     "prop-types": "^15.8.1",
     "qrcode.react": "^4.2.0",
