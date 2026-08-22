@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
+import { Fragment, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Outlet, NavLink, Link, useLocation, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useTenant } from "@/app/contexts/TenantContext";
@@ -53,9 +53,16 @@ export default function AdminLayout() {
   const { hasServizio, enforcementActive, contabilitaMode } = useTenantServizi();
   const location = useLocation();
   const inDemoLive = isDemoGiroSearch(location.search);
-  const adminNavCompact = useMediaQuery("(max-width: 768px)");
+  // Con tutte le voci (Home…Guida) + email/ruolo/pulsanti SA a destra, sotto ~1024px la barra
+  // inline non ci sta più: meglio il menu a hamburger (già pronto) che uno scroll orizzontale
+  // silenzioso e poco scopribile. Prima era 768px: troppo tardi, restava lo scroll nascosto.
+  const adminNavCompact = useMediaQuery("(max-width: 1024px)");
   const [adminMobileNavOpen, setAdminMobileNavOpen] = useState(false);
   const closeMobileNav = useCallback(() => setAdminMobileNavOpen(false), []);
+  // Fade + freccia a destra quando la barra inline (voci Home…Guida) ha altre voci fuori
+  // dallo schermo da scrollare — altrimenti lo scroll orizzontale resta invisibile/non scopribile.
+  const [navHasMoreRight, setNavHasMoreRight] = useState(false);
+  const navInlineRef = useRef(null);
 
   const isMenuArea = location.pathname.startsWith("/admin/menu");
   const isSettingsArea = location.pathname.startsWith("/admin/settings");
@@ -98,6 +105,22 @@ export default function AdminLayout() {
       return !item.servizioId || hasServizio(item.servizioId);
     });
   }, [hasServizio, enforcementActive]);
+
+  useEffect(() => {
+    const node = navInlineRef.current;
+    if (!node) return undefined;
+    const update = () => {
+      setNavHasMoreRight(node.scrollWidth - node.clientWidth - node.scrollLeft > 4);
+    };
+    update();
+    node.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(node);
+    return () => {
+      node.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [adminNavCompact, visibleTopNav]);
 
   const blockedRedirect = useMemo(() => {
     if (isSuperAdminRole(ruolo)) return null;
@@ -199,18 +222,25 @@ export default function AdminLayout() {
             </button>
           ) : null}
           {!adminNavCompact ? (
-            <nav className="admin-bar-nav-inline" aria-label="Sezioni admin">
-              {visibleTopNav.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={withPreservedSupportSearch(item.to, location.search)}
-                  end={topNavLinkEnd(item)}
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
+            <div className="admin-bar-nav-inline-wrap">
+              <nav className="admin-bar-nav-inline" aria-label="Sezioni admin" ref={navInlineRef}>
+                {visibleTopNav.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={withPreservedSupportSearch(item.to, location.search)}
+                    end={topNavLinkEnd(item)}
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </nav>
+              {navHasMoreRight ? (
+                <span className="admin-bar-nav-more" aria-hidden>
+                  ›
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="admin-bar-right" style={{ alignItems: "center", gap: 12 }}>

@@ -425,6 +425,31 @@ button:active:not(:disabled),
   flex: 1 1 auto !important;
 }
 
+.admin-fixed-bar .admin-bar-nav-inline-wrap {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+/* Freccia + fade sul bordo destro: segnala che ci sono altre voci da scorrere quando lo
+   scroll orizzontale non è ancora arrivato in fondo (vedi navHasMoreRight in AdminLayout.jsx). */
+.admin-fixed-bar .admin-bar-nav-more {
+  position: absolute !important;
+  right: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  padding-left: 18px !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: linear-gradient(90deg, transparent, #292524 65%) !important;
+  pointer-events: none !important;
+}
+
 .admin-fixed-bar .admin-bar-nav-inline {
   display: flex !important;
   align-items: center !important;
