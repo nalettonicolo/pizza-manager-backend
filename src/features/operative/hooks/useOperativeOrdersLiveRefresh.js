@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
+let channelSeq = 0
+
 /**
  * Refresh ordini operativi via Supabase Realtime (core.ordini) + polling di sicurezza.
  * @param {object} opts
@@ -39,8 +41,16 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
 
     run() // primo caricamento all'avvio: immediato, nessun debounce
 
+    // Nome canale univoco per ogni mount dell'hook, non solo per tenant: in "Test 4 reparti"
+    // Pizzaioli/Bancone/Cucina/Delivery montano TUTTI questo hook contemporaneamente sullo stesso
+    // tenant — prima il topic era identico per tutti e quattro (`operative-ordini:${tenantId}`),
+    // e il client Realtime di Supabase non deduplica i join sullo stesso topic: le 4 subscribe
+    // concorrenti sullo stesso nome si intralciavano a vicenda, e in pratica gli eventi arrivavano
+    // solo al fallback di polling (30s) invece che in tempo reale — da cui il ritardo percepito
+    // segnalato dal vivo (click "In forno" su Pizzaioli → comparsa su Bancone dopo ~30s).
+    channelSeq += 1
     const channel = supabase
-      .channel(`operative-ordini:${tenantId}`)
+      .channel(`operative-ordini:${tenantId}:${channelSeq}`)
       .on(
         "postgres_changes",
         {
@@ -53,7 +63,9 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
       )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          // polling resta attivo come fallback
+          // Non blocca l'app (il polling sotto resta attivo come fallback), ma senza questo log
+          // un fallimento di Realtime era invisibile: sembrava solo "un po' lento", non "rotto".
+          console.warn(`[useOperativeOrdersLiveRefresh] canale Realtime ${status.toLowerCase()} per tenant ${tenantId} — resto sul polling ogni ${Math.max(8000, pollMs) / 1000}s`)
         }
       })
 

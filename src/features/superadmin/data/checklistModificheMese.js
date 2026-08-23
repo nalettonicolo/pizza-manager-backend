@@ -1436,6 +1436,25 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
     prontoDaProvare: true,
   },
   {
+    codice: "LP-01",
+    epic: "esperienza",
+    area: "landing",
+    titolo: "Prezzi piani in landing: niente annuale + nota dominio, ma i prezzi veri restano da fissare",
+    contesto:
+      "Segnalato: i prezzi in landing sembrano vecchi. Chiesto anche di togliere l'abbonamento annuale e aggiungere che il dominio del cliente lo gestiamo noi.",
+    richiesta:
+      "Vetrina prezzi solo mensile (niente sconto/opzione annuale mostrata). Aggiungere che il dominio è gestito da noi. Aggiornare i prezzi veri.",
+    comeVerificare: [
+      "Sezione «Piani» della landing: ogni piano mostra solo «Da XX €/mese», nessuna riga con sconto/opzione annuale",
+      "Sotto il titolo della sezione compare: «Il dominio del tuo sito lo gestiamo noi»",
+      "I prezzi mostrati corrispondono a quelli decisi dall'utente (da fissare — vedi nota)",
+    ],
+    noteTraccia:
+      "2026-08-23: rimossa la riga «Opzione annuale anticipata» da LandingPlansSection.jsx (restava solo il canone mensile); aggiunta la nota sul dominio nel sottotitolo della sezione prezzi. Trovata la causa reale del \"prezzi vecchi\": i piani (Base/Pro/Enterprise/Full) non sono letti da un database, ma da localStorage del browser (plansStorage.js/servicesStorage.js) — una modifica fatta in Super Admin → Piani resta salvata solo su quel dispositivo/browser, un cliente vero che visita il sito da un altro dispositivo vede sempre e solo i valori di default scritti nel codice (src/config/serviziAppRegistro.js), MAI le modifiche fatte in Super Admin. Valori di default attuali (quelli che un visitatore vede davvero oggi): Base 83€/mese, Pro 133€/mese, Enterprise 175€/mese, Full 524€/mese — calcolati sommando i prezzoDefaultEuro dei servizi inclusi in ciascun piano. Non ho cambiato questi numeri: servono i prezzi reali dall'utente prima di toccarli. Sistemare per bene il problema di fondo (i prezzi salvati in Super Admin devono raggiungere davvero i visitatori pubblici, non solo lo stesso browser) è un lavoro più grande — serve una tabella reale sul database invece di localStorage — tracciato qui ma non ancora affrontato.",
+    urgenza: "alta",
+    prontoDaProvare: false,
+  },
+  {
     codice: "AD-06",
     epic: "admin",
     area: "admin_parametri",
