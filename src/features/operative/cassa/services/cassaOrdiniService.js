@@ -15,6 +15,7 @@ export {
   getRigheAggregateByOrdineIds,
   getRigheByOrdineIds,
   chiudiGiornata,
+  chiudiOrdiniApertiGiornatePrecedenti,
   logCassaAuditEvent,
   staffAccettaOrdineWeb,
   staffRifiutaOrdineWeb,

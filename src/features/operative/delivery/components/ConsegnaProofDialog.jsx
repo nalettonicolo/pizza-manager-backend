@@ -1,58 +1,15 @@
-import { useRef, useState } from "react"
+import { useState } from "react"
 
 /**
- * Dialog firma + foto opzionale prima di segnare CONSEGNATO.
+ * Dialog foto + nota (entrambe opzionali) prima di segnare CONSEGNATO.
+ * La firma su schermo è stata rimossa su richiesta: rallentava senza portare valore reale
+ * (il cliente non firma davvero, era solo un passaggio in più prima del tasto Consegnato).
  */
 export default function ConsegnaProofDialog({ open, ordineNumero, onCancel, onConfirm, busy }) {
-  const canvasRef = useRef(null)
-  const drawing = useRef(false)
   const [photoDataUrl, setPhotoDataUrl] = useState(null)
   const [note, setNote] = useState("")
 
   if (!open) return null
-
-  const pos = (e) => {
-    const canvas = canvasRef.current
-    if (!canvas) return { x: 0, y: 0 }
-    const rect = canvas.getBoundingClientRect()
-    const clientX = e.touches?.[0]?.clientX ?? e.clientX
-    const clientY = e.touches?.[0]?.clientY ?? e.clientY
-    return { x: clientX - rect.left, y: clientY - rect.top }
-  }
-
-  const startDraw = (e) => {
-    e.preventDefault()
-    drawing.current = true
-    const ctx = canvasRef.current?.getContext("2d")
-    if (!ctx) return
-    const { x, y } = pos(e)
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-  }
-
-  const draw = (e) => {
-    if (!drawing.current) return
-    e.preventDefault()
-    const ctx = canvasRef.current?.getContext("2d")
-    if (!ctx) return
-    const { x, y } = pos(e)
-    ctx.lineTo(x, y)
-    ctx.strokeStyle = "#0f172a"
-    ctx.lineWidth = 2
-    ctx.lineCap = "round"
-    ctx.stroke()
-  }
-
-  const endDraw = () => {
-    drawing.current = false
-  }
-
-  const clearSig = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-  }
 
   const onPhoto = (e) => {
     const file = e.target.files?.[0]
@@ -64,10 +21,6 @@ export default function ConsegnaProofDialog({ open, ordineNumero, onCancel, onCo
 
   const handleConfirm = () => {
     const prove = []
-    const canvas = canvasRef.current
-    if (canvas) {
-      prove.push({ tipo: "firma", payload: { dataUrl: canvas.toDataURL("image/png") } })
-    }
     if (photoDataUrl) {
       prove.push({ tipo: "foto", payload: { dataUrl: photoDataUrl } })
     }
@@ -103,26 +56,9 @@ export default function ConsegnaProofDialog({ open, ordineNumero, onCancel, onCo
       >
         <h2 style={{ margin: "0 0 8px", fontSize: 17 }}>Conferma consegna #{ordineNumero ?? "—"}</h2>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
-          Firma del cliente (opzionale) e foto di prova. Immagini salvate nello Storage del locale (non in chiaro nel DB).
+          Foto di prova (opzionale). Immagini salvate nello Storage del locale (non in chiaro nel DB).
         </p>
-        <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Firma</p>
-        <canvas
-          ref={canvasRef}
-          width={360}
-          height={120}
-          style={{ width: "100%", height: 120, border: "1px solid #cbd5e1", borderRadius: 8, touchAction: "none" }}
-          onMouseDown={startDraw}
-          onMouseMove={draw}
-          onMouseUp={endDraw}
-          onMouseLeave={endDraw}
-          onTouchStart={startDraw}
-          onTouchMove={draw}
-          onTouchEnd={endDraw}
-        />
-        <button type="button" onClick={clearSig} style={{ marginTop: 6, fontSize: 12, color: "#64748b", background: "none", border: "none", cursor: "pointer" }}>
-          Cancella firma
-        </button>
-        <p style={{ fontSize: 12, fontWeight: 600, margin: "12px 0 4px" }}>Foto (opzionale)</p>
+        <p style={{ fontSize: 12, fontWeight: 600, margin: "0 0 4px" }}>Foto (opzionale)</p>
         <input type="file" accept="image/*" capture="environment" onChange={onPhoto} />
         {photoDataUrl ? (
           <img src={photoDataUrl} alt="Anteprima consegna" style={{ marginTop: 8, maxHeight: 80, borderRadius: 6 }} />

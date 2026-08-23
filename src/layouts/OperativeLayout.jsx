@@ -201,13 +201,18 @@ export default function OperativeLayout() {
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
   const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
+  /** Mappa live pony: ha già la sua intestazione compatta con link "← Lista delivery" — sidebar,
+   * header e footer copyright dell'area operativa la spingevano oltre l'altezza schermo (100dvh
+   * proprio + quello sopra/sotto = scroll di pagina su una mappa pensata per stare tutta a vista). */
+  const isDeliveryMapPage = location.pathname === "/operative/delivery/mappa";
   /** SA / demo / Sala QA: sidebar sempre utile per cambiare reparto (niente full-bleed pizzaiolo). */
   const keepOperativeSidebar =
     fullDemoAccess || ruoloKey === "superadmin" || isSaSupport || inDemoLive || isSuperAdminRole(ruolo);
   const operativeFullBleed =
     (isPizzaioloPage && !keepOperativeSidebar) ||
     isRepartiQuadTestPage ||
-    isOperativeIngressoPage;
+    isOperativeIngressoPage ||
+    isDeliveryMapPage;
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);

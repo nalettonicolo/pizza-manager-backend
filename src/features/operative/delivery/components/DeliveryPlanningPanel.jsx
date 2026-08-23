@@ -35,17 +35,36 @@ function slotLabelFromKey(key) {
   return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })
 }
 
+function capacityTier(n, warnAt = 3, fullAt = 5) {
+  if (n >= fullAt) return "full"
+  if (n >= warnAt) return "warn"
+  if (n > 0) return "ok"
+  return "empty"
+}
+
 /**
- * Overlay: griglia fasce consegna (5 colonne × N righe dagli orari di oggi).
+ * Planning consegne — ibrido D+C: heatmap fasce (sinistra) + elenco consegne (destra).
  */
 export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSettimana }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selectedSlotKey, setSelectedSlotKey] = useState(null)
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches,
+  )
 
   const orari = useMemo(() => getTodayOrariConsegna(orariSettimana), [orariSettimana])
   const slots = useMemo(() => buildSlotsFullDay(orari), [orari])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined
+    const mq = window.matchMedia("(max-width: 900px)")
+    const onChange = () => setNarrow(mq.matches)
+    onChange()
+    mq.addEventListener?.("change", onChange)
+    return () => mq.removeEventListener?.("change", onChange)
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -103,7 +122,36 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
     return map
   }, [orders])
 
-  const selectedOrders = selectedSlotKey != null ? ordersBySlotKey.get(selectedSlotKey) || [] : []
+  const heatmap = useMemo(() => {
+    const hoursSet = new Set()
+    const minsSet = new Set()
+    const byHm = new Map()
+    for (const slot of slots) {
+      const d = slot.date instanceof Date ? slot.date : new Date(Number(slot.key))
+      if (Number.isNaN(d.getTime())) continue
+      const h = d.getHours()
+      const m = d.getMinutes()
+      hoursSet.add(h)
+      minsSet.add(m)
+      byHm.set(`${h}:${m}`, slot)
+    }
+    return {
+      hours: [...hoursSet].sort((a, b) => a - b),
+      mins: [...minsSet].sort((a, b) => a - b),
+      byHm,
+    }
+  }, [slots])
+
+  const listOrders = useMemo(() => {
+    if (selectedSlotKey != null) return ordersBySlotKey.get(selectedSlotKey) || []
+    return orders
+      .slice()
+      .sort((a, b) => {
+        const ma = orarioToMinutes(a.orario_ritiro ?? a.orarioRitiro) ?? 9999
+        const mb = orarioToMinutes(b.orario_ritiro ?? b.orarioRitiro) ?? 9999
+        return ma - mb || (Number(a.numero) || 0) - (Number(b.numero) || 0)
+      })
+  }, [selectedSlotKey, ordersBySlotKey, orders])
 
   useEffect(() => {
     if (!open) return
@@ -118,6 +166,28 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
 
   const fonteLabel =
     orari.fonte === "consegna" ? "orari di consegna di oggi" : "orari di apertura di oggi"
+
+  const cellStyle = (tier, active) => ({
+    minHeight: 48,
+    borderRadius: 8,
+    border: active ? "2px solid #0f766e" : "1px solid #cbd5e1",
+    background:
+      tier === "full"
+        ? "#fef2f2"
+        : tier === "warn"
+          ? "#fffbeb"
+          : tier === "ok"
+            ? "#ecfdf5"
+            : "#f1f5f9",
+    padding: "6px 4px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  })
 
   return (
     <div
@@ -142,7 +212,7 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
         style={{
           width: "min(1100px, 100%)",
           maxHeight: "100%",
-          overflow: "auto",
+          overflow: "hidden",
           background: "#f8fafc",
           borderRadius: 12,
           boxShadow: "0 12px 40px rgba(0,0,0,0.22)",
@@ -159,9 +229,7 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
             padding: "16px 18px 12px",
             borderBottom: "1px solid #e2e8f0",
             background: "#fff",
-            position: "sticky",
-            top: 0,
-            zIndex: 1,
+            flexShrink: 0,
           }}
         >
           <div>
@@ -169,7 +237,7 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
               Planning consegne
             </h2>
             <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
-              Fasce da {fonteLabel} ({PLANNING_GRID_SLOT_MINUTES} min) · 5 colonne. Tocca una fascia per il dettaglio.
+              Heatmap fasce ({fonteLabel}) · elenco a destra. Tocca una cella per filtrare.
             </p>
           </div>
           <button
@@ -193,7 +261,7 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
           </button>
         </header>
 
-        <div style={{ padding: 16, flex: 1 }}>
+        <div style={{ padding: 16, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           {error ? (
             <p role="alert" style={{ color: "#c62828", fontWeight: 600 }}>
               {error}
@@ -206,104 +274,179 @@ export default function DeliveryPlanningPanel({ open, onClose, tenantId, orariSe
           ) : (
             <div
               style={{
+                flex: 1,
+                minHeight: 0,
                 display: "grid",
-                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-                gap: 8,
+                gridTemplateColumns: narrow ? "1fr" : "minmax(240px, 0.9fr) minmax(280px, 1.1fr)",
+                gridTemplateRows: narrow ? "minmax(160px, 40%) minmax(200px, 1fr)" : undefined,
+                gap: 12,
               }}
             >
-              {slots.map((slot) => {
-                const list = ordersBySlotKey.get(slot.key) || []
-                const n = list.length
-                const active = selectedSlotKey === slot.key
-                return (
-                  <button
-                    key={slot.key}
-                    type="button"
-                    onClick={() => setSelectedSlotKey(active ? null : slot.key)}
-                    style={{
-                      textAlign: "left",
-                      minHeight: 72,
-                      padding: "10px 10px 8px",
-                      borderRadius: 8,
-                      border: active ? "2px solid #0d9488" : "1px solid #e2e8f0",
-                      background: n > 0 ? (active ? "#ccfbf1" : "#fff") : "#f1f5f9",
-                      cursor: "pointer",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a", marginBottom: 4 }}>
-                      {slot.label}
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 10,
+                  padding: 12,
+                  background: "#fff",
+                  overflow: "auto",
+                  minHeight: 0,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: "#475569",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    marginBottom: 8,
+                  }}
+                >
+                  Fasce
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `36px repeat(${Math.max(1, heatmap.mins.length)}, minmax(40px, 1fr))`,
+                    gap: 5,
+                  }}
+                >
+                  <div />
+                  {heatmap.mins.map((m) => (
+                    <div
+                      key={`m${m}`}
+                      style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#64748b" }}
+                    >
+                      :{String(m).padStart(2, "0")}
                     </div>
-                    <div style={{ fontSize: 12, color: n > 0 ? "#0f766e" : "#94a3b8", fontWeight: 600 }}>
-                      {n === 0 ? "Libera" : n === 1 ? "1 consegna" : `${n} consegne`}
-                    </div>
-                    {n > 0 ? (
-                      <div style={{ marginTop: 4, fontSize: 11, color: "#475569", lineHeight: 1.3 }}>
-                        {list
-                          .slice(0, 2)
-                          .map((o) => `#${o.numero ?? "—"}`)
-                          .join(" · ")}
-                        {n > 2 ? ` · +${n - 2}` : ""}
-                      </div>
-                    ) : null}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {selectedSlotKey != null ? (
-            <section
-              style={{
-                marginTop: 16,
-                padding: 14,
-                borderRadius: 10,
-                border: "1px solid #99f6e4",
-                background: "#fff",
-              }}
-            >
-              <h3 style={{ margin: "0 0 10px", fontSize: 15, color: "#0f766e" }}>
-                Fascia {slotLabelFromKey(selectedSlotKey)} · {selectedOrders.length}{" "}
-                {selectedOrders.length === 1 ? "consegna" : "consegne"}
-              </h3>
-              {selectedOrders.length === 0 ? (
-                <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>Nessuna consegna in questa fascia.</p>
-              ) : (
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {selectedOrders.map((o) => {
-                    const ind = ordineIndirizzo(o)
-                    const nome = ordineNome(o)
-                    const sc = String(o.stato_consegna ?? o.statoConsegna ?? "").trim()
-                    return (
-                      <li
-                        key={o.id}
+                  ))}
+                  {heatmap.hours.map((h) => (
+                    <div key={`row-${h}`} style={{ display: "contents" }}>
+                      <div
                         style={{
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #e2e8f0",
-                          background: "#f8fafc",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: "#0f172a",
+                          display: "flex",
+                          alignItems: "center",
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                          <strong>#{o.numero ?? "—"}</strong>
-                          <span style={{ fontSize: 12, color: "#64748b" }}>
-                            {String(o.stato ?? "—")}
-                            {sc ? ` · ${sc}` : ""}
-                          </span>
-                        </div>
-                        {nome ? <div style={{ fontSize: 13, marginTop: 4, fontWeight: 600 }}>{nome}</div> : null}
-                        {ind ? (
-                          <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
-                            {formatIndirizzoDisplayItaliano(ind)}
+                        {String(h).padStart(2, "0")}
+                      </div>
+                      {heatmap.mins.map((m) => {
+                        const slot = heatmap.byHm.get(`${h}:${m}`)
+                        if (!slot) {
+                          return (
+                            <div
+                              key={`${h}-${m}`}
+                              style={{
+                                minHeight: 48,
+                                borderRadius: 8,
+                                border: "1px dashed #e2e8f0",
+                              }}
+                            />
+                          )
+                        }
+                        const list = ordersBySlotKey.get(slot.key) || []
+                        const n = list.length
+                        const tier = capacityTier(n)
+                        const active = selectedSlotKey === slot.key
+                        return (
+                          <button
+                            key={slot.key}
+                            type="button"
+                            onClick={() => setSelectedSlotKey(active ? null : slot.key)}
+                            style={cellStyle(tier, active)}
+                            title={`${slot.label} · ${n} consegne`}
+                          >
+                            <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>
+                              {n > 0 ? n : "·"}
+                            </span>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: "#64748b" }}>
+                              {slot.label?.replace?.(/\./g, ":") || slotLabelFromKey(slot.key)}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ margin: "10px 0 0", fontSize: 11, color: "#64748b" }}>
+                  {selectedSlotKey != null
+                    ? `Fascia ${slotLabelFromKey(selectedSlotKey)} — clic di nuovo per tutta la giornata`
+                    : "Clic su una fascia per filtrare l’elenco"}
+                </p>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 10,
+                  padding: 12,
+                  background: "#fff",
+                  overflow: "auto",
+                  minHeight: 0,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: "#475569",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    marginBottom: 10,
+                  }}
+                >
+                  {selectedSlotKey != null
+                    ? `Consegne · ${slotLabelFromKey(selectedSlotKey)}`
+                    : "Consegne · giornata"}
+                  {" · "}
+                  {listOrders.length}
+                </div>
+                {listOrders.length === 0 ? (
+                  <p style={{ margin: 0, color: "#94a3b8", fontSize: 13 }}>
+                    Nessuna consegna{selectedSlotKey != null ? " in questa fascia" : ""}.
+                  </p>
+                ) : (
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                    {listOrders.map((o) => {
+                      const ind = ordineIndirizzo(o)
+                      const nome = ordineNome(o)
+                      const sc = String(o.stato_consegna ?? o.statoConsegna ?? "").trim()
+                      const orario = o.orario_ritiro ?? o.orarioRitiro
+                      return (
+                        <li
+                          key={o.id}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: "1px solid #e2e8f0",
+                            background: "#f8fafc",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <strong>#{o.numero ?? "—"}</strong>
+                            <span style={{ fontSize: 12, color: "#64748b" }}>
+                              {selectedSlotKey == null && orario ? `${orario} · ` : ""}
+                              {String(o.stato ?? "—")}
+                              {sc ? ` · ${sc}` : ""}
+                            </span>
                           </div>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </section>
-          ) : null}
+                          {nome ? <div style={{ fontSize: 13, marginTop: 4, fontWeight: 600 }}>{nome}</div> : null}
+                          {ind ? (
+                            <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                              {formatIndirizzoDisplayItaliano(ind)}
+                            </div>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

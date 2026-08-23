@@ -13,6 +13,7 @@ import {
 const OPERATIVE_KEYS = [
   "pony_lun_gio",
   "pony_ven_dom",
+  "capienza_bauletto",
   "pizze_ogni_15_min",
   "consegne_ogni_min",
   "ritiro_ogni_min",
@@ -27,6 +28,7 @@ const OPERATIVE_KEYS = [
 const LABELS = {
   pony_lun_gio: "Pony lun–gio",
   pony_ven_dom: "Pony ven–dom",
+  capienza_bauletto: "Capienza bauletto (pz)",
   pizze_ogni_15_min: "Pizze / 15 min",
   consegne_ogni_min: "Consegne ogni (min)",
   ritiro_ogni_min: "Ritiro ogni (min)",
@@ -43,6 +45,7 @@ function readOperativeSlice(raw) {
   return {
     pony_lun_gio: r.pony_lun_gio !== undefined && r.pony_lun_gio !== "" ? r.pony_lun_gio : (r.pony_consegna ?? ""),
     pony_ven_dom: r.pony_ven_dom !== undefined && r.pony_ven_dom !== "" ? r.pony_ven_dom : "",
+    capienza_bauletto: r.capienza_bauletto !== undefined && r.capienza_bauletto !== "" ? r.capienza_bauletto : "12",
     pizze_ogni_15_min: r.pizze_ogni_15_min !== undefined && r.pizze_ogni_15_min !== "" ? r.pizze_ogni_15_min : (r.pizze_ogni_min ?? ""),
     consegne_ogni_min: r.consegne_ogni_min ?? "",
     ritiro_ogni_min: r.ritiro_ogni_min ?? "",
@@ -59,6 +62,8 @@ function toNumberPayload(p) {
   return {
     pony_lun_gio: p.pony_lun_gio === "" ? 0 : Number(p.pony_lun_gio) || 0,
     pony_ven_dom: p.pony_ven_dom === "" ? 0 : Number(p.pony_ven_dom) || 0,
+    capienza_bauletto:
+      p.capienza_bauletto === "" ? 12 : Math.min(99, Math.max(1, Number(p.capienza_bauletto) || 12)),
     pizze_ogni_15_min: p.pizze_ogni_15_min === "" ? 0 : Number(p.pizze_ogni_15_min) || 0,
     consegne_ogni_min: p.consegne_ogni_min === "" ? 0 : Number(p.consegne_ogni_min) || 0,
     ritiro_ogni_min: p.ritiro_ogni_min === "" ? 0 : Number(p.ritiro_ogni_min) || 0,
@@ -229,6 +234,18 @@ export default function CassaImpostazioniPage({ onBack }) {
                 placeholder="es. 3"
                 value={form.pony_ven_dom === "" ? "" : form.pony_ven_dom}
                 onChange={(e) => setField("pony_ven_dom", e.target.value === "" ? "" : e.target.value)}
+                style={inputStyle}
+              />
+          </label>
+          <label>
+            Capienza bauletto (pizze / giro)
+              <input
+                type="number"
+                min={1}
+                max={99}
+                placeholder="es. 12"
+                value={form.capienza_bauletto === "" ? "" : form.capienza_bauletto}
+                onChange={(e) => setField("capienza_bauletto", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
           </label>

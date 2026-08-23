@@ -609,10 +609,13 @@ export default function Bancone() {
             : "Nessun ordine pronto."}
         </p>
       ) : (
-        <div style={styles.mainRow} className="bancone-layout-main">
+        <div
+          style={{ ...styles.mainRow, ...(quad ? { flexWrap: "nowrap" } : {}) }}
+          className="bancone-layout-main"
+        >
           <aside
             className="bancone-layout-aside"
-            style={styles.leftPickColumn}
+            style={{ ...styles.leftPickColumn, ...(quad ? styles.leftPickColumnQuad : {}) }}
             aria-label="Check ingredienti per fascia oraria"
           >
             {!quad ? (
@@ -818,6 +821,16 @@ const styles = {
     border: "1px solid #e0e0e0",
     borderRadius: 10,
     alignSelf: "stretch",
+  },
+  // In "Test 4 reparti" il riquadro Bancone è stretto: la colonna ingredienti a larghezza piena
+  // spingeva gli ordini sotto invece che a fianco. Qui la restringiamo e forziamo la riga a non
+  // andare a capo (vedi flexWrap:"nowrap" sul mainRow quando quad), cosí gli ordini restano
+  // sempre visibili a destra.
+  leftPickColumnQuad: {
+    flex: "0 1 150px",
+    minWidth: 130,
+    maxWidth: 190,
+    padding: 8,
   },
   pickColumnTitle: { fontSize: 16, margin: "0 0 6px 0", fontWeight: 700 },
   pickHint: { fontSize: 11, color: "#666", margin: "0 0 12px 0", lineHeight: 1.35 },

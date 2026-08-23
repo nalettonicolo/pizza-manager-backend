@@ -13,6 +13,33 @@ import {
   NOTIFICATION_PARAM_KEYS,
   notificationAdapterReadiness,
 } from "@/integrations/notifications";
+import { useFeatureReadiness } from "@/hooks/useFeatureReadiness";
+
+function BetaBadge({ motivo }) {
+  return (
+    <span
+      title={motivo}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 10.5,
+        fontWeight: 800,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        color: "#9a3412",
+        background: "#fff7ed",
+        border: "1px solid #fdba74",
+        borderRadius: 999,
+        padding: "2px 8px",
+        marginLeft: 8,
+        verticalAlign: "middle",
+      }}
+    >
+      🔜 Beta
+    </span>
+  );
+}
 
 function serializePromozioniCalendario(list) {
   if (!Array.isArray(list)) return [];
@@ -33,6 +60,7 @@ function serializePromozioniCalendario(list) {
 const defaultParametri = () => ({
   pony_lun_gio: "",
   pony_ven_dom: "",
+  capienza_bauletto: "12",
   pizze_ogni_15_min: "",
   consegne_ogni_min: "",
   ritiro_ogni_min: "",
@@ -52,6 +80,8 @@ export default function ParametriSection() {
   const [foodcostCheckLoading, setFoodcostCheckLoading] = useState(false);
   const [foodcostMismatchCount, setFoodcostMismatchCount] = useState(0);
   const [foodcostModalOpen, setFoodcostModalOpen] = useState(false);
+  const ricalcoloAutoFeature = useFeatureReadiness("delivery_ricalcolo_automatico");
+  const notificheStaffFeature = useFeatureReadiness("notifiche_automatiche_staff");
 
   useEffect(() => {
     if (!tenantId) return;
@@ -99,6 +129,8 @@ export default function ParametriSection() {
     // retrocompatibilità: vecchio pony_consegna → pony_lun_gio se non impostati
     pony_lun_gio: raw.pony_lun_gio !== undefined && raw.pony_lun_gio !== "" ? raw.pony_lun_gio : (raw.pony_consegna ?? ""),
     pony_ven_dom: raw.pony_ven_dom !== undefined && raw.pony_ven_dom !== "" ? raw.pony_ven_dom : "",
+    capienza_bauletto:
+      raw.capienza_bauletto !== undefined && raw.capienza_bauletto !== "" ? raw.capienza_bauletto : "12",
     pizze_ogni_15_min: raw.pizze_ogni_15_min !== undefined && raw.pizze_ogni_15_min !== "" ? raw.pizze_ogni_15_min : (raw.pizze_ogni_min ?? ""),
     comanda_stampanti: Array.isArray(raw.comanda_stampanti) ? raw.comanda_stampanti.join(", ") : (raw.comanda_stampanti ?? ""),
     abilita_gestione_listini_multipli:
@@ -167,6 +199,8 @@ export default function ParametriSection() {
         ...(settings?.parametri_operativi || {}),
         pony_lun_gio: p.pony_lun_gio === "" ? 0 : Number(p.pony_lun_gio) || 0,
         pony_ven_dom: p.pony_ven_dom === "" ? 0 : Number(p.pony_ven_dom) || 0,
+        capienza_bauletto:
+          p.capienza_bauletto === "" ? 12 : Math.min(99, Math.max(1, Number(p.capienza_bauletto) || 12)),
         pizze_ogni_15_min: p.pizze_ogni_15_min === "" ? 0 : Number(p.pizze_ogni_15_min) || 0,
         consegne_ogni_min: p.consegne_ogni_min === "" ? 0 : Number(p.consegne_ogni_min) || 0,
         ritiro_ogni_min: p.ritiro_ogni_min === "" ? 0 : Number(p.ritiro_ogni_min) || 0,
@@ -274,6 +308,18 @@ export default function ParametriSection() {
                   placeholder="es. 3"
                   value={p.pony_ven_dom === "" ? "" : p.pony_ven_dom}
                   onChange={(e) => setParam("pony_ven_dom", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Capienza bauletto (pizze per giro / pony)
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  placeholder="es. 12"
+                  value={p.capienza_bauletto === "" ? "" : p.capienza_bauletto}
+                  onChange={(e) => setParam("capienza_bauletto", e.target.value === "" ? "" : e.target.value)}
                   style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
                 />
               </label>
@@ -398,15 +444,26 @@ export default function ParametriSection() {
                   style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
                 />
               </label>
-              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", gridColumn: "1 / -1" }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  cursor: ricalcoloAutoFeature.visible ? "pointer" : "not-allowed",
+                  gridColumn: "1 / -1",
+                  opacity: ricalcoloAutoFeature.visible ? 1 : 0.65,
+                }}
+              >
                 <input
                   type="checkbox"
-                  checked={p.rider_ricalcolo_automatico}
+                  checked={ricalcoloAutoFeature.visible ? p.rider_ricalcolo_automatico : false}
+                  disabled={!ricalcoloAutoFeature.visible}
                   onChange={(e) => setParam("rider_ricalcolo_automatico", e.target.checked)}
                   style={{ marginTop: 4 }}
                 />
                 <span>
                   Ricalcolo automatico consegne (quando il modulo sarà attivo; altrimenti resta solo ricalcolo manuale in cassa).
+                  {!ricalcoloAutoFeature.visible ? <BetaBadge motivo={ricalcoloAutoFeature.info?.motivo} /> : null}
                 </span>
               </label>
             </div>
@@ -537,62 +594,74 @@ export default function ParametriSection() {
                 lineHeight: 1.5,
               }}
             >
-              <h4 style={{ margin: "0 0 10px", fontSize: 14 }}>Notifica staff (coda — adapter da completare)</h4>
+              <h4 style={{ margin: "0 0 10px", fontSize: 14 }}>
+                Notifica staff (coda — adapter da completare)
+                {!notificheStaffFeature.visible ? <BetaBadge motivo={notificheStaffFeature.info?.motivo} /> : null}
+              </h4>
               <p style={{ margin: "0 0 10px", color: "#64748b" }}>
                 Percorso alternativo alla stampa. Gli invii automatici email/SMS/WhatsApp sono predisposti nel codice
                 ma richiedono ancora le API del provider scelto dal locale. Vedi{" "}
                 <code>docs/NOTIFICHE_INTEGRAZIONE.md</code>.
               </p>
-              <label style={{ display: "block", marginBottom: 10 }}>
-                Canale preferito
-                <select
-                  value={p.notifica_ordine_web_canale}
-                  onChange={(e) => setParam("notifica_ordine_web_canale", e.target.value)}
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
-                >
-                  <option value={NOTIFICATION_CHANNELS.EMAIL}>Email (SMTP — da implementare)</option>
-                  <option value={NOTIFICATION_CHANNELS.SMS}>SMS (gateway — da implementare)</option>
-                  <option value={NOTIFICATION_CHANNELS.WHATSAPP}>WhatsApp API (da implementare)</option>
-                  <option value={NOTIFICATION_CHANNELS.IN_APP}>Solo in-app (cucina/cassa/delivery)</option>
-                </select>
-              </label>
-              <label style={{ display: "block", marginBottom: 10 }}>
-                Email staff (override, opzionale)
-                <input
-                  type="email"
-                  value={p.notifica_ordine_web_email}
-                  onChange={(e) => setParam("notifica_ordine_web_email", e.target.value)}
-                  placeholder="Default: email fatturazione tenant"
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
-                />
-              </label>
-              <label style={{ display: "block", marginBottom: 10 }}>
-                Telefono SMS staff
-                <input
-                  type="tel"
-                  value={p.notifica_ordine_web_telefono_sms}
-                  onChange={(e) => setParam("notifica_ordine_web_telefono_sms", e.target.value)}
-                  placeholder="+39..."
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
-                />
-              </label>
-              <label style={{ display: "block", marginBottom: 10 }}>
-                Telefono WhatsApp staff
-                <input
-                  type="tel"
-                  value={p.notifica_ordine_web_telefono_whatsapp}
-                  onChange={(e) => setParam("notifica_ordine_web_telefono_whatsapp", e.target.value)}
-                  placeholder="+39..."
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
-                />
-              </label>
-              <ul style={{ margin: 0, paddingLeft: 18, color: "#64748b", fontSize: 12 }}>
-                {Object.entries(notificationAdapterReadiness()).map(([key, v]) => (
-                  <li key={key}>
-                    {v.label}: {v.ready ? "pronto" : "da integrare"} — {v.note}
-                  </li>
-                ))}
-              </ul>
+              {notificheStaffFeature.visible ? (
+                <>
+                  <label style={{ display: "block", marginBottom: 10 }}>
+                    Canale preferito
+                    <select
+                      value={p.notifica_ordine_web_canale}
+                      onChange={(e) => setParam("notifica_ordine_web_canale", e.target.value)}
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                    >
+                      <option value={NOTIFICATION_CHANNELS.EMAIL}>Email (SMTP — da implementare)</option>
+                      <option value={NOTIFICATION_CHANNELS.SMS}>SMS (gateway — da implementare)</option>
+                      <option value={NOTIFICATION_CHANNELS.WHATSAPP}>WhatsApp API (da implementare)</option>
+                      <option value={NOTIFICATION_CHANNELS.IN_APP}>Solo in-app (cucina/cassa/delivery)</option>
+                    </select>
+                  </label>
+                  <label style={{ display: "block", marginBottom: 10 }}>
+                    Email staff (override, opzionale)
+                    <input
+                      type="email"
+                      value={p.notifica_ordine_web_email}
+                      onChange={(e) => setParam("notifica_ordine_web_email", e.target.value)}
+                      placeholder="Default: email fatturazione tenant"
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                    />
+                  </label>
+                  <label style={{ display: "block", marginBottom: 10 }}>
+                    Telefono SMS staff
+                    <input
+                      type="tel"
+                      value={p.notifica_ordine_web_telefono_sms}
+                      onChange={(e) => setParam("notifica_ordine_web_telefono_sms", e.target.value)}
+                      placeholder="+39..."
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                    />
+                  </label>
+                  <label style={{ display: "block", marginBottom: 10 }}>
+                    Telefono WhatsApp staff
+                    <input
+                      type="tel"
+                      value={p.notifica_ordine_web_telefono_whatsapp}
+                      onChange={(e) => setParam("notifica_ordine_web_telefono_whatsapp", e.target.value)}
+                      placeholder="+39..."
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                    />
+                  </label>
+                  <ul style={{ margin: 0, paddingLeft: 18, color: "#64748b", fontSize: 12 }}>
+                    {Object.entries(notificationAdapterReadiness()).map(([key, v]) => (
+                      <li key={key}>
+                        {v.label}: {v.ready ? "pronto" : "da integrare"} — {v.note}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p style={{ margin: 0, color: "#9a3412", fontStyle: "italic" }}>
+                  Non ancora disponibile per il tuo locale — nel frattempo resta attiva la stampa comanda e le
+                  notifiche in-app.
+                </p>
+              )}
             </div>
           ) : null}
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
@@ -603,7 +672,10 @@ export default function ParametriSection() {
               style={{ marginTop: 4 }}
             />
             <span>
-              Chiusura giornata automatica in cassa (dopo l’orario di chiusura: alle 23:59 se chiusura è 00:00, altrimenti un’ora dopo l’orario di chiusura del giorno).
+              Chiusura giornata automatica in cassa: dopo l’orario di chiusura (alle 23:59 se chiusura è 00:00,
+              altrimenti un’ora dopo) salva la contabilità e porta a <strong>Consegnato</strong> gli ordini ancora
+              aperti di quel giorno (e eventuali residui dei giorni precedenti). In serata, di norma, gli ordini
+              delivery si chiudono già quando il fattorino conferma la consegna sul dispositivo.
             </span>
           </label>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>

@@ -448,7 +448,7 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
     urgenza: "media",
     prontoDaProvare: false,
     noteTraccia:
-      "2026-08-23 (verifica su richiesta \"controlla la checklist... verifica\"): non ancora fatto, e più delicato di quanto sembri. Il segno ✎ in Cassa (\"Pony A/B\", CassaPlanningBoard.jsx) viene da un override salvato SOLO in localStorage del browser (planningPonyAssign.js, loadPonyOverrides/savePonyOverrides — coerente con docs/PROGRAMMA_AFFIDABILITA.md, che elenca proprio questo tipo di dato \"workflow\" tra quelli da migrare fuori da localStorage in una fase futura, non ancora fatta). Se Cassa e Delivery girano su due dispositivi diversi (il caso normale in un locale vero), il secondo dispositivo non può proprio vedere l'override del primo: non è un pezzo di UI mancante, è un dato che oggi non esce dal browser che l'ha creato. In più, DeliveryDashboard.jsx (la vista Delivery/Pony reale) non ha alcun concetto di \"Pony A/B\" — assegna ordini a rider veri tramite rider_id (core.rider), un sistema completamente diverso dalle lettere di bilanciamento carico usate in Cassa. Per fare questa richiesta per davvero serve prima una scelta di prodotto: la lettera pony diventa un campo reale sull'ordine (richiede una colonna DB + RPC, sostituendo il localStorage) e/o si collega alle lettere Pony al vero rider_id? Non ho voluto indovinare e implementare qualcosa a metà che sembra funzionare solo nella stessa scheda del browser.",
+      "2026-08-23 (verifica su richiesta \"controlla la checklist... verifica\"): non ancora fatto, e più delicato di quanto sembri. Il segno ✎ in Cassa (\"Pony A/B\", CassaPlanningBoard.jsx) viene da un override salvato SOLO in localStorage del browser (planningPonyAssign.js, loadPonyOverrides/savePonyOverrides — coerente con docs/PROGRAMMA_AFFIDABILITA.md, che elenca proprio questo tipo di dato \"workflow\" tra quelli da migrare fuori da localStorage in una fase futura, non ancora fatta). Se Cassa e Delivery girano su due dispositivi diversi (il caso normale in un locale vero), il secondo dispositivo non può proprio vedere l'override del primo: non è un pezzo di UI mancante, è un dato che oggi non esce dal browser che l'ha creato. In più, DeliveryDashboard.jsx (la vista Delivery/Pony reale) non ha alcun concetto di \"Pony A/B\" — assegna ordini a rider veri tramite rider_id (core.rider), un sistema completamente diverso dalle lettere di bilanciamento carico usate in Cassa. Per fare questa richiesta per davvero serve prima una scelta di prodotto: la lettera pony diventa un campo reale sull'ordine (richiede una colonna DB + RPC, sostituendo il localStorage) e/o si collega alle lettere Pony al vero rider_id? Non ho voluto indovinare e implementare qualcosa a metà che sembra funzionare solo nella stessa scheda del browser.\n\n2026-08-23 (nuova segnalazione, nessun intervento richiesto subito — \"dovremo migliorare\"): l'utente ha aggiunto un aspetto ulteriore: la lettera pony (es. \"a1/2\", \"b1/2\") non deve essere legata sempre alla stessa persona (es. pony A = sempre Marco) — potrebbe cambiare in base al tempo di percorrenza/consegna del giro precedente, cioè assegnata dinamicamente a chi si libera prima, non fissa. Si somma alla scelta di prodotto già sopra: serve decidere anche come calcolare \"chi si libera prima\" (tempo stimato vs posizione GPS reale) prima di poter progettare la soluzione.",
   },
   {
     codice: "CA-04",
@@ -1239,6 +1239,168 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
     prontoDaProvare: true,
   },
   {
+    codice: "OP-13",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Delivery: Assegna/In viaggio/Consegnato completamente rotti in produzione (bug critico)",
+    contesto:
+      "Segnalato dal vivo su pizzamanager.it (screenshot + log console) durante la conferma di un ordine (#59) da Delivery: ogni click su Assegna, In viaggio o Consegnato (con firma) falliva. Console: 'relation \"public.profiles\" does not exist · 42P01', ripetuto su setAssegnato, setInViaggio e markConsegnatoWithProof.",
+    richiesta: "Il flusso di stato consegna in Delivery deve funzionare per tutti i ruoli autorizzati.",
+    comeVerificare: [
+      "Da Delivery (o Test 4 reparti, riquadro Delivery), su un ordine assegnabile: clic su Assegna → nessun errore, stato aggiornato",
+      "Poi In viaggio → nessun errore",
+      "Poi Consegnato con firma/foto → nessun errore, ordine passa a CONSEGNATO",
+    ],
+    noteTraccia:
+      "2026-08-23: causa trovata via lettura diretta delle funzioni SQL public.delivery_update_stato_consegna e public.delivery_mark_consegnato — entrambe contenevano una clausola morta 'OR EXISTS (SELECT 1 FROM public.profiles ...)' che referenzia una tabella MAI esistita in questo schema (probabilmente boilerplate da una vecchia versione, prima della migrazione a utenti_ruoli). Postgres fallisce a livello di parse su una tabella inesistente, quindi l'intero controllo permessi falliva sempre, per qualsiasi utente — non era un problema di permessi ma un guasto strutturale che rendeva l'intero flusso Delivery non funzionante al 100%, indipendentemente da chi cliccasse. Confermato con query su information_schema che public.profiles non esiste da nessuna parte nel database, e che solo queste 2 funzioni la referenziano. Fix: rimossa la sola clausola morta da entrambe le funzioni (sql/modules/71_fix_delivery_functions_dead_profiles_table.sql, applicato in produzione). Gli altri controlli (ruolo via utenti_ruoli, superadmin, account di test pizzaioli@pizzamanager.it) restano identici — nessuna perdita di accesso. Da verificare dal vivo cliccando davvero Assegna/In viaggio/Consegnato su pizzamanager.it. Nota separata non ancora indagata: lo stesso log riportava anche 'loadOrders: TypeError: Failed to fetch' — potrebbe essere un problema di rete/CORS a parte, va controllato se persiste ora che le RPC funzionano.",
+    urgenza: "alta",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "OP-14",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Latenza tra Pizzaioli e Bancone quando si segnano più ordini «In forno» di fila",
+    contesto:
+      "Segnalato dall'utente: quando dal Pizzaiolo si clicca «In forno» su più ordini in rapida successione (es. per fare insieme 3 diavole di ordini diversi invece che una alla volta), gli ordini non comparivano subito e tutti insieme in Bancone come atteso, ma con un ritardo percepibile — vanificando lo scopo pratico di raggrupparli.",
+    richiesta:
+      "Cliccando «In forno» su più ordini vicini nel tempo, tutti devono comparire in Bancone insieme e senza ritardo percepibile, per permettere di preparare più pizze uguali (es. 3 diavole) in un solo passaggio.",
+    comeVerificare: [
+      "Da Pizzaioli, clicca «In forno» su 2-3 ordini diversi in rapida successione (entro 1 secondo l'uno dall'altro)",
+      "Su Bancone (o Test 4 reparti, riquadro Bancone), tutti gli ordini appena segnati compaiono insieme, non uno alla volta con ritardo",
+    ],
+    noteTraccia:
+      "2026-08-23: causa trovata in useOperativeOrdersLiveRefresh.js (hook condiviso da Cassa/Cucina/Bancone/Delivery/Pizzaiolo/Pony per il refresh via Supabase Realtime su core.ordini): ogni evento Realtime lanciava subito un reload completo e pesante (più query Supabase in sequenza — ordini, righe aggregate, prodotti, ingredienti, categorie). Con 3 click ravvicinati partivano 3 reload paralleli che si accavallavano competendo per la rete, e solo l'ultimo a completarsi vinceva (gli altri scartati da una guardia anti-race già esistente) — risultato: gli ordini comparivano sfalsati con ritardo invece che insieme. Aggiunto un debounce di 300ms sugli eventi Realtime (il primo caricamento all'avvio resta immediato, non è toccato): eventi ravvicinati si raggruppano in un solo reload pulito, mostrando tutti gli ordini appena aggiornati insieme invece che uno alla volta. Fix nell'hook condiviso: beneficia automaticamente anche Cassa/Cucina/Delivery/Pony, non solo Bancone. Lint pulito. Da verificare dal vivo sul dispositivo reale in pizzeria (la latenza percepita potrebbe includere anche fattori di rete/dispositivo non riproducibili in locale).",
+    urgenza: "alta",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "OP-15",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Delivery: ordini consegnati riapparivano dopo poco + dialog conferma consegna semplificato",
+    contesto:
+      "Segnalato dall'utente: cliccando Consegnato e salvando in Delivery, dopo un po' l'ordine ricompariva nella lista (spariva subito, poi tornava). Chiesto anche di togliere la firma dal dialog di conferma (rallentava senza reale utilità), di trasformare il link «Maps» in un vero tasto spostato sotto il totale, e di rendere più evidente lo stato del pagamento per il ragazzo delle consegne.",
+    richiesta:
+      "Un ordine segnato Consegnato deve restare fuori dalla lista Delivery definitivamente. Il dialog di conferma consegna deve essere più veloce (niente firma). Il tasto Maps e lo stato pagamento devono essere più a colpo d'occhio.",
+    comeVerificare: [
+      "Da Delivery, segna un ordine Consegnato → sparisce e NON deve ricomparire nemmeno dopo qualche minuto (anche in Test 4 reparti)",
+      "Il dialog di conferma consegna non ha più il riquadro firma — solo foto opzionale e nota opzionale",
+      "Sulla card ordine: sotto il totale (in alto a destra) c'è un tasto «📍 Maps» invece del semplice link",
+      "Sotto l'indirizzo compare un riquadro grande e colorato con icona + tipo di pagamento (es. «💵 Contanti» o «🔗 Paga online · da confermare»)",
+    ],
+    noteTraccia:
+      "2026-08-23: causa del riapparire trovata leggendo il codice — delivery_mark_consegnato (RPC) aggiorna solo stato_consegna/stato_delivery, NON lo stato ordine \"top level\" (che resta apposta PRONTO: Bancone lo usa per distinguere un ritiro in negozio ancora da consegnare da uno delivery già uscito). DeliveryDashboard.jsx però filtrava la lista solo su quello stato top-level (o, in Test 4 reparti, su nessun filtro stato) — quindi un ordine appena consegnato veniva rimosso localmente ma poi il refresh Realtime successivo lo recuperava di nuovo perché continuava a matchare. Aggiunto un filtro esplicito lato client che esclude sempre gli ordini con stato_consegna=CONSEGNATO, sia nel flusso normale sia in Test 4 reparti. Rimossa la firma su schermo da ConsegnaProofDialog.jsx (restano foto e nota, entrambe opzionali). Riorganizzata la card ordine: il link Maps è ora un tasto vero con icona 📍 posizionato sotto il totale; aggiunto un riquadro pagamento grande (icona+etichetta, riuso di iconTipoPagamentoLista/labelTipoPagamentoLista/tipoPagamentoInAttesa già usate in Cassa) con sfondo arancione se il pagamento è ancora da confermare, verde altrimenti. Lint pulito, 102 test invariati.",
+    urgenza: "alta",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "CA-26",
+    epic: "cassa",
+    area: "cassa_ordini",
+    titolo: "Icone di stato nell'elenco ordini in cassa (a colpo d'occhio)",
+    contesto: "L'utente voleva vedere subito, senza aprire il dettaglio, a che punto è ogni ordine.",
+    richiesta:
+      "Icona per stato: 🤚 in preparazione, 🔥 pronto/in bancone, 🛵 in viaggio, 🏁 consegnato.",
+    comeVerificare: [
+      "In cassa, elenco ordini a sinistra: ogni riga ha un'icona di stato accanto all'icona di pagamento (tocca/passa il mouse per l'etichetta)",
+      "Un ordine appena creato → 🤚; segnato pronto (Bancone/Pizzaioli) → 🔥; delivery assegnato a un pony e in viaggio → 🛵; consegnato → 🏁",
+    ],
+    noteTraccia:
+      "2026-08-23: aggiunta statoOrdineIconInfo() in CassaPage.jsx, riusa i campi stato/stato_consegna già presenti sull'ordine (nessuna nuova query). Priorità quando più condizioni sono vere: In viaggio > Consegnato > Pronto > In preparazione (nessuna icona per In attesa o annullato, quest'ultimo ha già la sua etichetta \"Annullato\"). Lint pulito.",
+    urgenza: "bassa",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "OP-16",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Delivery: card mostrava stato generale «CONSEGNATO» insieme a «Consegna: IN_VIAGGIO» (contraddittorio)",
+    contesto:
+      "Screenshot dell'ordine #66: badge in alto «CONSEGNATO», badge sotto «Consegna: IN_VIAGGIO» — impossibile che un ordine sia consegnato se è appena partito, segnalato giustamente come inconsistente.",
+    richiesta: "I due stati mostrati sulla card devono sempre essere coerenti tra loro.",
+    comeVerificare: [
+      "Controllato l'ordine #66 in database: oggi risulta stato=CONSEGNATO, stato_consegna=CONSEGNATO, stato_delivery=CONSEGNATO — pienamente coerente adesso",
+      "Se ricapita un caso simile, l'ordine con stato generale CONSEGNATO deve sparire dalla lista Delivery indipendentemente da stato_consegna",
+    ],
+    noteTraccia:
+      "2026-08-23: verificato via query diretta che l'ordine #66 è oggi pienamente coerente nel database (probabile scatto momentaneo del rendering, coinciso con l'orario in cui in produzione sono state applicate in sequenza due correzioni diverse a delivery_mark_consegnato nella stessa giornata — la mia, modulo 71, e una successiva di un'altra sessione, modulo 72, che ha esteso la funzione ad aggiornare anche core.ordini.stato, non solo stato_consegna/stato_delivery, cosa che prima mancava). Comunque, aggiunta in DeliveryDashboard.jsx una difesa aggiuntiva: un ordine con stato generale CONSEGNATO viene sempre escluso dalla lista attiva, indipendentemente da cosa dica stato_consegna — così anche un futuro disallineamento non produrrebbe più una card contraddittoria. Lint pulito.",
+    urgenza: "media",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "OP-17",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Latenza percepita forno→bancone (12s) — verificata la pubblicazione Realtime, causa non ancora isolata del tutto",
+    contesto:
+      "L'utente ha misurato ~12 secondi tra il click «In forno» dal Pizzaiolo e la comparsa dell'ordine in Bancone, nonostante il fix debounce di OP-14.",
+    richiesta: "Ridurre ulteriormente la latenza percepita tra reparti.",
+    comeVerificare: ["Da definire una volta isolata la causa residua"],
+    noteTraccia:
+      "2026-08-23: verificato che core.ordini È correttamente incluso nella pubblicazione supabase_realtime (non è quindi un problema di tabella non pubblicata — ipotesi scartata). Il debounce di OP-14 evita reload multipli sovrapposti ma non accorcia il singolo reload, che in Bancone incatena diverse query Supabase in sequenza (ordini → righe → prodotti/ingredienti → categorie): su rete/dispositivo reali in pizzeria questo può facilmente sommare a qualche secondo. Non ancora escluso un ritardo nella consegna dell'evento Realtime stesso (RLS o broadcast). Serve una misurazione dal vivo con i tempi di rete reali per isolare quanto pesa il reload lato client vs. la consegna dell'evento — non ho abbastanza dati per intervenire alla cieca oltre a quanto già fatto in OP-14.",
+    urgenza: "media",
+    prontoDaProvare: false,
+  },
+  {
+    codice: "OP-18",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Delivery: uniti «Assegna» e «In viaggio» in un solo tasto",
+    contesto:
+      "Chiesto di semplificare: chi prende in carico un ordine da consegnare è di fatto già in viaggio, due click separati (Assegna poi In viaggio) erano friction inutile per il fattorino.",
+    richiesta:
+      "Un solo tasto porta l'ordine direttamente a In viaggio. Il tasto Consegnato finale resta separato (quello sì deve restare un'azione distinta, confermata dal fattorino all'arrivo).",
+    comeVerificare: [
+      "Da Delivery, un ordine nuovo mostra un solo tasto «🛵 In consegna» (non più Assegna + In viaggio separati)",
+      "Cliccandolo, l'ordine passa direttamente a Consegna: IN_VIAGGIO",
+      "Il tasto Consegnato resta e funziona come prima",
+    ],
+    noteTraccia:
+      "2026-08-23: rimosso il tasto Assegna e la funzione setAssegnato in DeliveryDashboard.jsx; il tasto «In consegna» chiama direttamente deliveryUpdateStatoConsegna(id, \"IN_VIAGGIO\") (nessuna modifica SQL: lo stato ASSEGNATO nell'enum resta valido/usato altrove, semplicemente questo flusso non lo attraversa più). Nota per il prossimo passo, esplicitamente NON implementato ora: l'utente vuole che sia il fattorino stesso, dal proprio telefono, a scegliere \"Consegna A\" o \"Consegna B\" (il giro) invece che qualcuno gli assegni l'ordine da cassa — questo però è la stessa richiesta già tracciata in CA-03 (oggi il gruppo Pony A/B è un override salvato solo in localStorage in Cassa, non arriva per niente a Delivery/Pony su un altro dispositivo, e Delivery non ha alcun concetto di \"gruppo\", solo rider_id): prima di costruire la selezione sul telefono del fattorino serve la stessa decisione di prodotto già in sospeso lì (gruppo persistito su DB, collegato o no a un rider_id reale). Lint pulito, 102 test invariati.",
+    urgenza: "alta",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "CA-27",
+    epic: "cassa",
+    area: "cassa_pony",
+    titolo: "Tasto «Live» in cassa: posizione GPS reale dei pony sulla mappa",
+    contesto:
+      "Chiesto un tasto accanto a Planning per vedere in tempo reale dove si trovano i pony, non solo le destinazioni degli ordini.",
+    richiesta: "Nuovo tasto «📍 Live» a destra di Planning, che apre la mappa con la posizione live dei pony.",
+    comeVerificare: [
+      "In Cassa, accanto al tasto Planning c'è ora «📍 Live»",
+      "Cliccandolo si apre la mappa consegne: se un pony ha l'app aperta con geolocalizzazione attiva, appare un marker 🛵 con la sua posizione (aggiornata al massimo ogni 60s lato pony, mappa la ricontrolla ogni 20s)",
+      "Un pony che non sincronizza posizione da più di 20 minuti (app chiusa) sparisce dalla mappa, non resta un puntino fermo",
+      "La mappa si apre già centrata sul locale (marker 🍕 rosso), non su Roma o su un punto casuale; con ordini/pony attivi, l'inquadratura li include sempre insieme alla sede, mai solo loro da soli",
+    ],
+    noteTraccia:
+      "2026-08-23: la scrittura della posizione pony esisteva già (core.rider_posizione, RPC rider_upsert_posizione, moduli 41/42) ma nessuna RPC pubblica la leggeva — la mappa comando (DeliveryCommandMapPage.jsx) mostrava solo le destinazioni ordine, mai il pony stesso. Aggiunta RPC rider_posizioni_live(p_tenant_id) (sql/modules/73_rider_posizioni_live.sql, applicata in produzione) che restituisce le posizioni aggiornate negli ultimi 20 minuti dei rider attivi del tenant. Aggiunto marker separato 🛵 sulla mappa esistente (icona distinta dai pallini colorati degli ordini, refresh ogni 20s senza ri-centrare la mappa ad ogni giro). Nuovo tasto «📍 Live» in Cassa, a fianco di Planning, che apre /operative/delivery/mappa (stessa pagina già linkata da Delivery come «Mappa live»).\n\n2026-08-23 (correzione): il centro/inquadratura iniziale era hardcoded su Roma (41.9028, 12.4964 — un placeholder mai sistemato) finché non arrivava il primo ordine con coordinate. Aggiunto un marker fisso 🍕 per la sede del locale (da tenantData.lat/lng, stesso campo già usato altrove per il raggio di consegna) e un'unica logica di inquadratura che include sempre la sede insieme a ordini e pony del momento — mai più solo loro da soli, la sede è sempre nel campo visivo (\"focus su di noi\"). Fallback se il locale non ha ancora lat/lng salvati: Padova (coerente col resto dell'app), non più Roma. Lint, build di produzione e 109 test tutti puliti.",
+    urgenza: "media",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "CA-28",
+    epic: "cassa",
+    area: "cassa_pony",
+    titolo: "Mappa Live: resta dentro Cassa (topbar visibile), area di consegna disegnata",
+    contesto:
+      "Tre correzioni sulla mappa live appena aggiunta: (1) da Cassa il tasto Live portava a una pagina separata a schermo intero, perdendo la topbar di Cassa; da Delivery/Pony va bene restare pagina intera; (2) mancava il perimetro dell'area di consegna sulla mappa; (3) verificare che la sede fosse davvero visibile.",
+    richiesta:
+      "Da Cassa, Live deve aprirsi restando dentro Cassa (topbar visibile). Da Delivery/Pony resta come pagina a sé. La mappa deve mostrare anche il perimetro dell'area di consegna, non solo il puntino della sede.",
+    comeVerificare: [
+      "Da Cassa → tasto Live: la mappa si apre al posto del menù/carrello, la topbar di Cassa (Ordini, Fidelity, Planning, Live) resta visibile sopra; «✕ Chiudi mappa» torna alla normale schermata di vendita",
+      "Da Delivery → «Mappa live»: si apre ancora come pagina a schermo intero (nessun cambiamento qui, per ora)",
+      "Sulla mappa (in entrambi i casi) è visibile un'area arancione tratteggiata: il perimetro di consegna configurato in Impostazioni",
+      "Il marker 🍕 della sede è visibile e riconoscibile, distinto dai pallini ordine e dal marker 🛵 pony",
+    ],
+    noteTraccia:
+      "2026-08-23: per Cassa, invece di navigare a /operative/delivery/mappa (che smontava CassaPage e con essa la sua topbar dinamica, iniettata via CassaHeaderContext — un semplice cambio di route non poteva bastare), la mappa ora si apre DENTRO Cassa, nello stesso pannello già usato da Planning (stesso pattern showPlanningBar/onClose, nuovo stato showLiveMap, mutuamente esclusivo con Planning). DeliveryCommandMapPage.jsx accetta ora un prop opzionale onClose: se presente mostra «✕ Chiudi mappa» al posto del link «← Lista delivery» (usato solo dalla pagina standalone di Delivery/Pony, lasciata invariata come richiesto). Aggiunto il disegno del perimetro area di consegna (stesso dato consegna_area_poligono di Impostazioni → Area di consegna, già letto altrove con getDeliveryPolygonOuterRing) come google.maps.Polygon non cliccabile, sotto tutti i marker; quando c'è solo la sede in vista (nessun ordine/pony al momento) l'inquadratura iniziale ora mostra tutta l'area di consegna invece di uno zoom stretto sul solo puntino. Il marker 🍕 della sede era già implementato nel giro precedente (tenantData.lat/lng, verificato presente e valorizzato nel database per il tenant reale) — il probabile motivo per cui sembrava assente è la pagina tagliata dal bug di scroll risolto anch'esso in questo giro di lavoro, non un problema del marker in sé. Lint, build di produzione e 115 test tutti puliti.",
+    urgenza: "media",
+    prontoDaProvare: true,
+  },
+  {
     codice: "AD-06",
     epic: "admin",
     area: "admin_parametri",
@@ -1352,6 +1514,27 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
     noteTraccia:
       "2026-08-22: unificati in una sola sezione «Capacità e logistica» (griglia a sinistra) i campi prima sparsi: pony_lun_gio, pony_ven_dom, pizze_ogni_15_min (capacità forno), tempo_preparazione_pizza, soglia_giallo_pizze, consegne_ogni_min, ritiro_ogni_min, rider_velocita_media_kmh, rider_velocita_mal_tempo_kmh, rider_ritardo_soglia_min, rider_tempo_fermata_cliente_min, rider_forno_evidenza_min, rider_partenza_buffer_min, ricalcolo automatico. Il fieldset «Accettazione ordini online» (auto/manuale), prima dentro «Ordini web (vetrina)», è stato spostato accanto come colonna destra. Nessun campo rinominato/rimosso nello state o nel salvataggio (setParam/handleSave invariati) — solo riposizionati nel markup, quindi nessun rischio di perdita dati. \"Capienza bauletto\" (citata come esempio dall'utente) NON esiste oggi come parametro globale — è una capacità per-rider verificata dalle RPC di assegnazione (moduli SQL 41/43), non un valore unico del locale: non ne ho creato uno nuovo per non inventare una funzionalità non richiesta esplicitamente. Lint pulito.",
     urgenza: "bassa",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "AD-10",
+    epic: "admin",
+    area: "admin_parametri",
+    titolo: "Distinzione Super Admin / cliente: funzionalità non sicure nascoste al tenant",
+    contesto:
+      "L'utente ha chiesto una distinzione reale: Super Admin deve continuare a vedere/usare tutto (per testare), un tenant cliente deve vedere solo le funzionalità di cui si è sicuri, il resto con un messaggio \"presto disponibile\" invece di una funzionalità esposta ma non garantita.",
+    richiesta:
+      "Meccanismo riusabile (non un cartello scritto a mano una volta) + applicarlo alle funzionalità già segnalate come non ancora sicure in questa sessione.",
+    comeVerificare: [
+      "Da tenant (non superadmin): /operative/test-reparti-quad mostra \"presto disponibile\" invece della pagina",
+      "Da tenant: il checkbox \"Ricalcolo automatico consegne\" in Parametri operativi è disabilitato con badge Beta",
+      "Da tenant: la sezione \"Notifica staff\" in Parametri operativi mostra solo la spiegazione, senza i campi di configurazione",
+      "Da tenant: in Cassa, il bottone \"Link pagamento (invia/registra)\" non compare per un ordine con pagamento tipo link",
+      "Da Super Admin: tutte e 4 le funzionalità sopra restano visibili e usabili esattamente come prima",
+    ],
+    noteTraccia:
+      "2026-08-23 (in locale, non pushato su richiesta esplicita): creato src/config/featureReadiness.js (registro chiave→stato beta/stabile), src/hooks/useFeatureReadiness.js (hook di lettura) e src/components/ui/ComingSoonGate.jsx (sostituisce tutto il contenuto di una route quando non visibile). Applicato: (1) route /operative/test-reparti-quad con ComingSoonGate — è uno strumento di collaudo interno, non una funzionalità operativa; (2) checkbox \"Ricalcolo automatico consegne\" in ParametriSection.jsx — disabilitato con badge Beta per un tenant (il testo diceva già \"quando il modulo sarà attivo\", ora è coerente anche visivamente); (3) sezione \"Notifica staff\" (adapter email/SMS/WhatsApp, già segnata \"da integrare\" nel codice) — i campi di configurazione spariscono per un tenant, resta solo la spiegazione; (4) bottone \"Link pagamento\" in CassaPage.jsx — nascosto per un tenant, funzionalità appena costruita e non ancora provata con un pagamento reale end-to-end. Lista concordata con l'utente via scelta multipla, non decisa a mia discrezione. Lint pulito, build di produzione verificata, 102 test invariati. NON pushato: resta locale finché l'utente non conferma.",
+    urgenza: "media",
     prontoDaProvare: true,
   },
   {

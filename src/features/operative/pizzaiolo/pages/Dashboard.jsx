@@ -175,20 +175,6 @@ export default function PizzaioloDashboard() {
     () => sortOrdiniByOrario(filterOrdiniVisibili(orders, minutiVisibili)),
     [orders, minutiVisibili]
   )
-  /** Ci sono ordini in preparazione ma nessuno entro la finestra di visibilità (es. tutti
-   * programmati per pranzo/cena mentre è ancora mattina): senza questo la pagina risultava
-   * silenziosamente vuota, indistinguibile da "nessun lavoro" — segnalato dal vivo dall'utente
-   * confrontando con Cucina/Bancone/Delivery, che non hanno questo filtro e mostravano gli stessi
-   * ordini. */
-  const prossimoOrdineOrario = useMemo(() => {
-    if (ordiniVisibili.length > 0 || !orders.length) return null
-    let minMin = Infinity
-    for (const o of orders) {
-      const m = orarioToMinutes(o.orario_ritiro ?? o.orarioRitiro)
-      if (m != null && m < minMin) minMin = m
-    }
-    return Number.isFinite(minMin) ? minutesToOrario(minMin) : null
-  }, [orders, ordiniVisibili])
   const ordiniNegozio = useMemo(
     () => ordiniVisibili.filter((o) => (o.tipo_ordine || "").toLowerCase() !== "delivery"),
     [ordiniVisibili]
@@ -478,15 +464,8 @@ export default function PizzaioloDashboard() {
 
       {error && <div style={styles.error}>{error}</div>}
 
-      {!error && orders.length > 0 && ordiniVisibili.length === 0 ? (
-        <div style={styles.infoBanner}>
-          {orders.length === 1 ? "C'è 1 ordine in preparazione" : `Ci sono ${orders.length} ordini in preparazione`}
-          {" "}più avanti oggi, nessuno entro i prossimi {minutiVisibili} minuti
-          {prossimoOrdineOrario ? ` (il prossimo alle ${prossimoOrdineOrario})` : ""}.
-        </div>
-      ) : null}
-
-      {/* Riquadri orari con numero pizze (tutti gli ordini IN_PREPARAZIONE caricati) */}
+      {/* Riquadri orari con numero pizze (tutti gli ordini IN_PREPARAZIONE caricati) — i riquadri
+          stessi bastano a far capire che ci sono ordini più avanti, senza bisogno di un testo. */}
       {(slotLabels.length > 0 || pizzeSenzaOrarioSlot > 0) && (
         <div style={styles.slotsWrap}>
           {slotLabels.map((label) => (
@@ -599,16 +578,6 @@ export default function PizzaioloDashboard() {
 const styles = {
   title: { fontSize: 22, margin: "0 0 12px", flexShrink: 0 },
   error: { padding: 12, background: "#ffebee", color: "#c62828", borderRadius: 8, marginBottom: 16 },
-  infoBanner: {
-    padding: 12,
-    background: "#eff6ff",
-    color: "#1e3a8a",
-    border: "1px solid #bfdbfe",
-    borderRadius: 8,
-    marginBottom: 16,
-    fontSize: 13,
-    lineHeight: 1.5,
-  },
   slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
   slotBox: {
     padding: "4px 8px",

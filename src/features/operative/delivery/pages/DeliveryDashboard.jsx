@@ -17,6 +17,11 @@ import DeliveryPlanningPanel from "@/features/operative/delivery/components/Deli
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaByOrdineId } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
+import {
+  iconTipoPagamentoLista,
+  labelTipoPagamentoLista,
+  tipoPagamentoInAttesa,
+} from "@/features/operative/cassa/utils/cassaPaymentDisplay"
 
 const STATO_PRONTO = "PRONTO"
 const POLL_FALLBACK_MS = 30000
@@ -146,7 +151,23 @@ export default function DeliveryDashboard(props) {
           limit: quadTest ? 200 : 80,
         })
         if (seq !== loadSeqRef.current) return
-        let rows = (data || []).filter(isDeliveryTipoOrdine).filter((o) => !ordineRowIsAnnullato(o))
+        // delivery_mark_consegnato aggiorna solo stato_consegna/stato_delivery, non lo stato
+        // ordine "top level" (che resta PRONTO di proposito — Bancone lo usa per distinguere un
+        // ritiro in negozio ancora da consegnare). Senza questo filtro, un ordine appena segnato
+        // Consegnato spariva subito (rimozione ottimistica locale) ma poi RIAPPARIVA al refresh
+        // successivo, perché tornava a matchare stato=PRONTO (o, in quadTest, nessun filtro stato
+        // lato server): qui lo escludiamo esplicitamente lato client.
+        let rows = (data || [])
+          .filter(isDeliveryTipoOrdine)
+          .filter((o) => !ordineRowIsAnnullato(o))
+          .filter((o) => ordineStatoConsegna(o) !== "CONSEGNATO")
+          // Difesa extra: stato "top level" ordine è ora la fonte definitiva di chiusura (dal
+          // modulo 72_chiudi_giornata_chiude_ordini.sql — delivery_mark_consegnato aggiorna anche
+          // core.ordini.stato, non solo stato_consegna). Se per qualsiasi motivo i due campi
+          // risultassero temporaneamente disallineati (es. un vecchio ordine chiuso da un'altra
+          // via mentre stato_consegna era rimasto indietro), lo stato generale vince sempre:
+          // un ordine con stato CONSEGNATO non deve mai comparire come ancora da consegnare.
+          .filter((o) => String(o?.stato ?? "").trim().toUpperCase() !== "CONSEGNATO")
         if (quadTest) {
           rows = [...rows].sort((a, b) => {
             const ma = orarioToMinutes(a.orario_ritiro ?? a.orarioRitiro) ?? 99999
@@ -180,16 +201,9 @@ export default function DeliveryDashboard(props) {
     if (syncedRiderPos) setRiderPos(syncedRiderPos)
   }, [syncedRiderPos])
 
-  const setAssegnato = async (ordineId) => {
-    if (!ordineId) return
-    try {
-      await deliveryUpdateStatoConsegna(ordineId, "ASSEGNATO")
-      await loadOrders({ silent: true })
-    } catch (err) {
-      logDeliveryError("setAssegnato", err)
-    }
-  }
-
+  // "Assegna" e "In viaggio" erano due click separati: su richiesta dell'utente li abbiamo
+  // uniti in uno solo — il fattorino che prende in carico l'ordine è di fatto già in viaggio,
+  // non ha senso fargli confermare due volte. Un solo tasto porta direttamente a IN_VIAGGIO.
   const setInViaggio = async (ordineId) => {
     if (!ordineId) return
     try {
@@ -248,9 +262,10 @@ export default function DeliveryDashboard(props) {
     const lat = ordineConsegnaLat(ord)
     const lng = ordineConsegnaLng(ord)
     const mapsUrl = lat != null && lng != null ? `https://www.google.com/maps?q=${lat},${lng}` : null
-    const inViaggio = sc === "IN_VIAGGIO"
     const p = compact ? 10 : 16
     const fs = compact ? 12 : 14
+    const tipoPagamento = ord.tipo_pagamento ?? ord.tipoPagamento ?? ""
+    const pagamentoInAttesa = tipoPagamentoInAttesa(tipoPagamento)
     return (
       <li
         key={ord.id}
@@ -266,16 +281,40 @@ export default function DeliveryDashboard(props) {
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center",
+            alignItems: "flex-start",
             marginBottom: 6,
             gap: 8,
             flexWrap: "wrap",
           }}
         >
           <strong style={{ fontSize: compact ? 13 : undefined }}>#{ord.numero ?? ord.id?.slice?.(0, 8) ?? "—"}</strong>
-          <span style={{ fontWeight: 600, color: "#2e7d32", fontSize: compact ? 12 : undefined }}>
-            € {Number(ord.totale ?? 0).toFixed(2)}
-          </span>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <span style={{ fontWeight: 600, color: "#2e7d32", fontSize: compact ? 12 : undefined }}>
+              € {Number(ord.totale ?? 0).toFixed(2)}
+            </span>
+            {mapsUrl ? (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: compact ? 11 : 12,
+                  fontWeight: 700,
+                  color: "#1565c0",
+                  background: "#e3f2fd",
+                  border: "1px solid #90caf9",
+                  borderRadius: 6,
+                  padding: compact ? "3px 7px" : "4px 9px",
+                  textDecoration: "none",
+                }}
+              >
+                📍 Maps
+              </a>
+            ) : null}
+          </div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6, fontSize: compact ? 10 : 11 }}>
           <span style={{ background: "#e3f2fd", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{statoOrd}</span>
@@ -294,36 +333,32 @@ export default function DeliveryDashboard(props) {
             {formatIndirizzoDisplayItaliano(ind)}
           </p>
         ) : null}
-        {mapsUrl ? (
-          <p style={{ margin: "0 0 6px" }}>
-            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: compact ? 11 : 13, color: "#1565c0" }}>
-              Maps
-            </a>
+        {tipoPagamento ? (
+          <p
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: compact ? 14 : 16,
+              fontWeight: 800,
+              margin: "0 0 8px",
+              padding: compact ? "6px 8px" : "8px 10px",
+              borderRadius: 8,
+              background: pagamentoInAttesa ? "#fff3e0" : "#e8f5e9",
+              color: pagamentoInAttesa ? "#e65100" : "#1b5e20",
+              border: `1px solid ${pagamentoInAttesa ? "#ffb74d" : "#a5d6a7"}`,
+            }}
+          >
+            <span>{iconTipoPagamentoLista(tipoPagamento)}</span>
+            <span>{labelTipoPagamentoLista(tipoPagamento)}</span>
+            {pagamentoInAttesa ? <span style={{ fontWeight: 600, fontSize: compact ? 11 : 12 }}>· da confermare</span> : null}
           </p>
         ) : null}
         {ord.note ? (
           <p style={{ fontSize: compact ? 11 : 13, color: "#555", marginBottom: 6 }}>Note: {ord.note}</p>
         ) : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: compact ? 6 : 8 }}>
-          {sc !== "ASSEGNATO" && sc !== "IN_VIAGGIO" && sc !== "CONSEGNATO" ? (
-            <button
-              type="button"
-              onClick={() => setAssegnato(ord.id)}
-              style={{
-                padding: compact ? "4px 8px" : "8px 16px",
-                fontSize: compact ? 11 : undefined,
-                background: "#7c3aed",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Assegna
-            </button>
-          ) : null}
-          {!inViaggio ? (
+          {sc !== "IN_VIAGGIO" && sc !== "CONSEGNATO" ? (
             <button
               type="button"
               onClick={() => setInViaggio(ord.id)}
@@ -338,7 +373,7 @@ export default function DeliveryDashboard(props) {
                 fontWeight: 600,
               }}
             >
-              In viaggio
+              🛵 In consegna
             </button>
           ) : null}
           <button

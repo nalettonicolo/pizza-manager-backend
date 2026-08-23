@@ -118,7 +118,7 @@ export function getTodayOrariConsegna(orariSettimana) {
 }
 
 /** Converte "HH:mm" in minuti da mezzanotte. 00:00 = 0, 24:00 = 1440. */
-function timeToMinutes(str) {
+export function timeToMinutes(str) {
   if (!str || typeof str !== "string") return 0
   const [h, m] = str.trim().split(":").map(Number)
   const mins = (h || 0) * 60 + (m || 0)
@@ -127,9 +127,56 @@ function timeToMinutes(str) {
 }
 
 /** Minuti di fine giornata: se chiusura è 00:00 consideriamo mezzanotte = 24*60. */
-function endMinutesForDay(chiusuraStr) {
+export function endMinutesForDay(chiusuraStr) {
   const m = timeToMinutes(chiusuraStr)
   return m === 0 ? 24 * 60 : m
+}
+
+/**
+ * Con pranzo attivo (due fasce): "pranzo" | "cena". Con fascia unica: null.
+ * @param {number} totalMinutes minuti da mezzanotte (es. 12:30 → 750)
+ */
+export function getServizioBandForMinutes(totalMinutes, fasce) {
+  if (!Array.isArray(fasce) || fasce.length <= 1) return null
+  const sorted = [...fasce].sort((a, b) => timeToMinutes(a.apertura) - timeToMinutes(b.apertura))
+  for (let i = 0; i < sorted.length; i += 1) {
+    const start = timeToMinutes(sorted[i].apertura)
+    const end = endMinutesForDay(sorted[i].chiusura)
+    if (totalMinutes >= start && totalMinutes <= end) {
+      return i === 0 ? "pranzo" : "cena"
+    }
+  }
+  return "cena"
+}
+
+/**
+ * Fascia servizio da mostrare nel planning Cassa quando il pranzo è attivo.
+ * Durante pranzo → "pranzo", durante cena → "cena".
+ * Nel buco pomeridiano o prima dell'apertura → la fascia imminente (cena / pranzo).
+ * Con fascia unica: null (mostra tutto).
+ */
+export function getActivePlanningServizioBand(nowDate, fasce) {
+  if (!Array.isArray(fasce) || fasce.length <= 1) return null
+  const now = nowDate instanceof Date ? nowDate : new Date()
+  const totalMinutes = now.getHours() * 60 + now.getMinutes()
+  const sorted = [...fasce].sort((a, b) => timeToMinutes(a.apertura) - timeToMinutes(b.apertura))
+
+  for (let i = 0; i < sorted.length; i += 1) {
+    const start = timeToMinutes(sorted[i].apertura)
+    const end = endMinutesForDay(sorted[i].chiusura)
+    if (totalMinutes >= start && totalMinutes <= end) {
+      return i === 0 ? "pranzo" : "cena"
+    }
+  }
+
+  const pranzoStart = timeToMinutes(sorted[0].apertura)
+  if (totalMinutes < pranzoStart) return "pranzo"
+
+  const cenaBand = sorted[1] ?? sorted[sorted.length - 1]
+  const cenaStart = timeToMinutes(cenaBand.apertura)
+  if (totalMinutes < cenaStart) return "cena"
+
+  return "cena"
 }
 
 /**

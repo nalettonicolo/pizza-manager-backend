@@ -10,6 +10,7 @@ import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview"
 import { appPrompt } from "@/utils/appDialog"
+import { useFeatureReadiness } from "@/hooks/useFeatureReadiness"
 
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs"
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid"
@@ -20,6 +21,7 @@ import NuovoClienteModal from "@/features/operative/cassa/components/NuovoClient
 import Cart from "@/features/operative/cassa/components/Cart"
 import CassaModificaOrdineModal from "@/features/operative/cassa/components/CassaModificaOrdineModal"
 import CassaPlanningBoard from "@/features/operative/cassa/components/CassaPlanningBoard"
+import DeliveryCommandMapPage from "@/features/operative/delivery/pages/DeliveryCommandMapPage"
 import {
   ordineTipoOrdine,
   ordineIsDelivery,
@@ -81,6 +83,7 @@ import {
   upsertCarrelloSospeso,
   getCarrelloSospesoCliente,
   deleteCarrelloSospeso,
+  chiudiOrdiniApertiGiornatePrecedenti,
 } from "@/features/operative/cassa/services/cassaOrdiniService"
 import { updateTenantSettings } from "@/features/admin/services/parametriService"
 import { useCassaModificaOrdine } from "@/features/operative/cassa/hooks/useCassaModificaOrdine"
@@ -226,7 +229,26 @@ function turnoOkForCassa(po, turno, activePvId) {
   return true
 }
 
+function ordineIsConsegnato(o) {
+  const stato = String(o?.stato ?? "").trim().toUpperCase()
+  const statoConsegna = String(o?.stato_consegna ?? o?.statoConsegna ?? "").trim().toUpperCase()
+  return stato === "CONSEGNATO" || statoConsegna === "CONSEGNATO"
+}
+
 /** Riga titolo lista ordini: negozio = nome + orario a destra; delivery = nome grande + orario a destra. */
+/** Icona di stato per l'elenco ordini in cassa — a colpo d'occhio dove si trova l'ordine nel
+ * flusso, senza dover aprire il dettaglio. Priorità: In viaggio (il più "vivo") > Consegnato >
+ * Pronto/in bancone > In preparazione. Nessuna icona per IN_ATTESA o stati non riconosciuti. */
+function statoOrdineIconInfo(o) {
+  const stato = String(o?.stato ?? "").trim().toUpperCase()
+  const statoConsegna = String(o?.stato_consegna ?? o?.statoConsegna ?? "").trim().toUpperCase()
+  if (statoConsegna === "IN_VIAGGIO") return { icon: "🛵", label: "In viaggio" }
+  if (stato === "CONSEGNATO" || statoConsegna === "CONSEGNATO") return { icon: "🏁", label: "Consegnato" }
+  if (stato === "PRONTO") return { icon: "🔥", label: "Pronto — in bancone" }
+  if (stato === "IN_PREPARAZIONE") return { icon: "🤚", label: "In preparazione" }
+  return null
+}
+
 function OrdineCardTitleRows({ o, isDelivery }) {
   const m = buildOrdineCardTitleModel(o, isDelivery)
   if (isDelivery) {
@@ -286,6 +308,7 @@ export default function CassaPage() {
   const pvList = pvCtx?.pvList ?? []
   const { user, ruolo } = useAuth()
   const canAnnullaOrdineCassa = useMemo(() => normalizeRuoloOperativo(ruolo) === "cassa", [ruolo])
+  const pagamentoLinkFeature = useFeatureReadiness("pagamento_link_whatsapp")
   const { hasServizio, enforcementActive } = useTenantServizi()
   const { fullDemoAccess, inDemoLive, canEditParametri: resolveCanEditParametri } = useOperativeSaDemoAccess()
   /** Gate piano solo per colore/tooltip; pulsanti sempre visibili in Cassa. */
@@ -356,6 +379,10 @@ export default function CassaPage() {
   /** Data locale (YYYY-MM-DD): dichiarata subito — usata in effect/deps prima di altri memo. */
   const todayStr = useMemo(() => getLocalYYYYMMDD(), [])
   const [showPlanningBar, setShowPlanningBar] = useState(false)
+  /** Mappa live pony aperta DENTRO Cassa (non una navigazione a un'altra pagina): la topbar di
+   * Cassa resta visibile sopra, stesso trattamento di showPlanningBar. */
+  const [showLiveMap, setShowLiveMap] = useState(false)
+  const showOverlayPanel = showPlanningBar || showLiveMap
   const [productIngredientiMap, setProductIngredientiMap] = useState({})
   const [productIngredientIdsMap, setProductIngredientIdsMap] = useState({})
   const [ingredientiEsauritiIds, setIngredientiEsauritiIds] = useState([])
@@ -990,6 +1017,29 @@ export default function CassaPage() {
     const id = setInterval(() => void tick(), 60 * 1000)
     return () => clearInterval(id)
   }, [tenantId, tenantData?.orari_settimana, tenantData?.parametri_operativi, todayStr, loadOrdini])
+
+  /** Se ieri sera la cassa non era aperta, i residui restano aperti: catch-up all’apertura. */
+  useEffect(() => {
+    if (!tenantId) return
+    const po = tenantData?.parametri_operativi || {}
+    if (po.chiusura_giornata_automatica === false) return
+    const storageKey = `pm_catchup_ordini_pre_${tenantId}_${todayStr}`
+    if (typeof localStorage !== "undefined" && localStorage.getItem(storageKey)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const n = await chiudiOrdiniApertiGiornatePrecedenti(tenantId)
+        if (cancelled) return
+        if (typeof localStorage !== "undefined") localStorage.setItem(storageKey, "1")
+        if (n > 0) loadOrdini()
+      } catch (e) {
+        console.warn("Catch-up ordini giornate precedenti", e)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId, tenantData?.parametri_operativi, todayStr, loadOrdini])
 
   const handleAnnullaOrdine = useCallback(
     async (ordineId) => {
@@ -1678,7 +1728,10 @@ export default function CassaPage() {
           ) : null}
           <button
             type="button"
-            onClick={() => setShowPlanningBar((v) => !v)}
+            onClick={() => {
+              setShowPlanningBar((v) => !v)
+              setShowLiveMap(false)
+            }}
             style={{
               ...cassaToolbarCompactBtn,
               background: "#2e7d32",
@@ -1689,6 +1742,23 @@ export default function CassaPage() {
             title="Situazione planning"
           >
             Planning
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowLiveMap((v) => !v)
+              setShowPlanningBar(false)
+            }}
+            style={{
+              ...cassaToolbarCompactBtn,
+              background: "#0f172a",
+              color: "#fff",
+              fontWeight: 600,
+              ...(tm ? { flex: "1 1 100%", minHeight: 48, fontSize: 15 } : {}),
+            }}
+            title="Mappa live: posizione in tempo reale dei pony (resta dentro Cassa)"
+          >
+            📍 Live
           </button>
         </div>
       </div>
@@ -3268,8 +3338,9 @@ export default function CassaPage() {
               Confermi chiusura giornata?
             </h3>
             <p style={{ margin: "0 0 16px", fontSize: 14, color: "#444", lineHeight: 1.5 }}>
-              Verrà creato il salvataggio per contabilità e lo storico giornaliero si resetta. L&apos;operazione non è
-              annullabile da qui.
+              Verrà salvato il riepilogo per la contabilità e gli ordini ancora aperti di oggi (e di giorni
+              precedenti) passeranno a <strong>Consegnato</strong>. Gli annullati restano invariati. Di norma in
+              serata gli ordini delivery sono già chiusi dal fattorino. L&apos;operazione non è annullabile da qui.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "flex-end" }}>
               <button
@@ -3496,7 +3567,7 @@ export default function CassaPage() {
       >
       {showPaginaOrdini && (
         <div style={styles.modalOverlay} onClick={() => setShowPaginaOrdini(false)} role="dialog" aria-modal="true">
-          <div style={{ ...styles.detailModal, maxWidth: 520, width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...styles.detailModal, ...styles.ordiniModal }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ margin: 0 }}>Ordini</h3>
               <button type="button" style={styles.planningBarClose} onClick={() => setShowPaginaOrdini(false)}>✕</button>
@@ -3508,7 +3579,7 @@ export default function CassaPage() {
               onChange={(e) => setOrdiniSearch(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #ddd", marginBottom: 16 }}
             />
-            <div style={{ flex: 1, overflowY: "auto", minHeight: 200 }}>
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 200 }}>
               {ordiniRaggruppatiPerOra.length === 0 ? (
                 <p style={{ color: "#666", fontSize: 14 }}>Nessun ordine trovato.</p>
               ) : (
@@ -3525,6 +3596,7 @@ export default function CassaPage() {
                         const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
                         const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
                         const ann = ordineIsAnnullato(o)
+                        const consegnato = !ann && ordineIsConsegnato(o)
                         const pendingAccept = ordineRichiedeAccettazioneCassa(o)
                         return (
                           <li key={o.id}>
@@ -3533,18 +3605,20 @@ export default function CassaPage() {
                               style={{
                                 ...styles.ordiniItem,
                                 ...(ann ? { opacity: 0.72, borderLeft: "3px solid #b71c1c" } : {}),
-                                ...(!ann && pendingAccept ? { borderLeft: "3px solid #ea580c" } : {}),
+                                ...(consegnato ? { opacity: 0.82, borderLeft: "3px solid #94a3b8" } : {}),
+                                ...(!ann && !consegnato && pendingAccept ? { borderLeft: "3px solid #ea580c" } : {}),
                               }}
                               onClick={() => { openOrdineDetail(o.id); setShowPaginaOrdini(false); }}
                               title="Apri dettaglio"
                             >
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={styles.ordiniItemGrid}>
+                                <div style={{ minWidth: 0 }}>
                                   <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
                                   <div style={{ fontSize: 11, color: "#666", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                     <span>{idOrdine}</span>
                                     {ann ? <span style={{ color: "#b71c1c", fontWeight: 700 }}>Annullato</span> : null}
-                                    {!ann && pendingAccept ? (
+                                    {consegnato ? <span style={{ color: "#64748b", fontWeight: 700 }}>Consegnato</span> : null}
+                                    {!ann && !consegnato && pendingAccept ? (
                                       <span style={{ color: "#c2410c", fontWeight: 700 }}>Da accettare</span>
                                     ) : null}
                                   </div>
@@ -3552,8 +3626,10 @@ export default function CassaPage() {
                                     <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
                                   ) : null}
                                 </div>
-                                <span style={{ fontSize: 14 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
-                                <span style={{ fontSize: 12, marginLeft: 4 }} title={labelPagamento}>{iconPagamento}</span>
+                                <div style={styles.ordiniItemMeta}>
+                                  <span style={{ fontSize: 14, fontWeight: 700 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
+                                  <span style={{ fontSize: 12 }} title={labelPagamento}>{iconPagamento}</span>
+                                </div>
                               </div>
                             </button>
                           </li>
@@ -3567,8 +3643,8 @@ export default function CassaPage() {
           </div>
         </div>
       )}
-      {/* Planning desktop: nasconde elenco ordini e carrello (come il menù) per usare tutta la larghezza. */}
-      {!(showPlanningBar && !cassaMobileLayout) ? (
+      {/* Planning/Live desktop: nasconde elenco ordini e carrello (come il menù) per usare tutta la larghezza. */}
+      {!(showOverlayPanel && !cassaMobileLayout) ? (
       <div style={{ ...styles.ordiniSection, ...cassaMobileShell.ordiniExtra }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
           <h3 style={{ ...styles.ordiniTitle, margin: 0, ...(cassaMobileLayout ? { fontSize: 18 } : {}) }}>Ordini</h3>
@@ -3664,6 +3740,7 @@ export default function CassaPage() {
           {ordiniOggiFiltered.map((o) => {
             const iconPagamento = iconTipoPagamentoLista(o.tipo_pagamento)
             const labelPagamento = labelTipoPagamentoLista(o.tipo_pagamento)
+            const statoIcon = statoOrdineIconInfo(o)
             const isDelivery = ordineIsDelivery(o)
             const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
             const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
@@ -3712,6 +3789,11 @@ export default function CassaPage() {
                     </div>
                     <span style={{ fontSize: cassaMobileLayout ? 16 : 14 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
                     <span style={{ fontSize: 12, marginLeft: 4 }} title={labelPagamento}>{iconPagamento}</span>
+                    {statoIcon ? (
+                      <span style={{ fontSize: cassaMobileLayout ? 16 : 14, marginLeft: 4 }} title={statoIcon.label}>
+                        {statoIcon.icon}
+                      </span>
+                    ) : null}
                   </div>
                 </button>
               </li>
@@ -3725,7 +3807,7 @@ export default function CassaPage() {
         style={{
           ...styles.productsArea,
           ...cassaMobileShell.productsExtra,
-          ...(showPlanningBar
+          ...(showOverlayPanel
             ? {
                 display: "flex",
                 flexDirection: "column",
@@ -3739,6 +3821,11 @@ export default function CassaPage() {
             : {}),
         }}
       >
+        {showLiveMap ? (
+          <div style={{ flex: 1, minHeight: 0, display: "flex", borderRadius: 10, overflow: "hidden" }}>
+            <DeliveryCommandMapPage onClose={() => setShowLiveMap(false)} />
+          </div>
+        ) : null}
         {showPlanningBar ? (
           <CassaPlanningBoard
             rows={planningMergedRows}
@@ -3747,6 +3834,13 @@ export default function CassaPage() {
             tenantId={tenantId}
             canEditPony={canAnnullaOrdineCassa || fullDemoAccess}
             maxPizzeForno={maxPizzeFornoUnico}
+            orariOggi={orariOggi}
+            shopCoords={
+              tenantData?.lat != null && tenantData?.lng != null
+                ? { lat: Number(tenantData.lat), lng: Number(tenantData.lng) }
+                : null
+            }
+            shopLogoUrl={tenantData?.logo_url ?? tenantData?.logoUrl ?? null}
             onClose={() => setShowPlanningBar(false)}
             onOpenOrdine={(id) => void openOrdineDetail(id)}
             ordiniOnlineToggle={
@@ -3911,7 +4005,7 @@ export default function CassaPage() {
           </div>
         )}
 
-        {!showPlanningBar ? (
+        {!showOverlayPanel ? (
           <>
             <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
               <input
@@ -3955,7 +4049,7 @@ export default function CassaPage() {
         ) : null}
       </div>
 
-      {!(showPlanningBar && !cassaMobileLayout) ? (
+      {!(showOverlayPanel && !cassaMobileLayout) ? (
       <div style={{ ...styles.riepilogoSection, ...cassaMobileShell.cartExtra }}>
         <Cart
           cart={cart}
@@ -4315,7 +4409,9 @@ export default function CassaPage() {
                   Stampa per reparto
                 </button>
               )}
-              {!ordineIsAnnullato(ordineDetail) && isTipoPagamentoLink(ordineDetail.tipo_pagamento) ? (
+              {!ordineIsAnnullato(ordineDetail) &&
+              isTipoPagamentoLink(ordineDetail.tipo_pagamento) &&
+              pagamentoLinkFeature.visible ? (
                 <button
                   type="button"
                   style={{ ...styles.impostazioniBtn, marginTop: 8, background: "#2e7d32", color: "#fff" }}
@@ -4767,6 +4863,7 @@ const styles = {
     flexDirection: "column",
     alignItems: "stretch",
     width: "100%",
+    boxSizing: "border-box",
     padding: "8px 10px",
     marginBottom: 6,
     background: "#fff",
@@ -4776,6 +4873,28 @@ const styles = {
     cursor: "pointer",
     textAlign: "left",
     font: "inherit",
+  },
+  ordiniModal: {
+    maxWidth: 880,
+    width: "min(96vw, 880px)",
+    maxHeight: "90vh",
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+  },
+  ordiniItemGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: "8px 16px",
+    alignItems: "start",
+    width: "100%",
+  },
+  ordiniItemMeta: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 4,
+    flexShrink: 0,
   },
   modalOverlay: {
     position: "fixed",

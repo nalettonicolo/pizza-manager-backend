@@ -6,6 +6,7 @@ import {
   filterSlotsWebDeliveryVetrinaQuarter,
   getTodayOrariConsegna,
   buildSlotsFullDay,
+  getActivePlanningServizioBand,
 } from "@/features/operative/cassa/utils/planningUtils"
 
 describe("planningUtils slot keys", () => {
@@ -69,5 +70,38 @@ describe("planningUtils slot keys", () => {
     const slots = buildSlotsFullDay(today)
     expect(slots.length).toBeGreaterThan(0)
     expect(slots[0].label).toMatch(/18:00/)
+  })
+})
+
+describe("getActivePlanningServizioBand", () => {
+  const dualFasce = [
+    { apertura: "12:00", chiusura: "14:30" },
+    { apertura: "18:00", chiusura: "23:00" },
+  ]
+
+  function at(h, m = 0) {
+    const d = new Date()
+    d.setHours(h, m, 0, 0)
+    return d
+  }
+
+  it("returns null with single fascia", () => {
+    expect(getActivePlanningServizioBand(at(13), [{ apertura: "11:00", chiusura: "23:00" }])).toBeNull()
+  })
+
+  it("returns pranzo during lunch hours", () => {
+    expect(getActivePlanningServizioBand(at(13), dualFasce)).toBe("pranzo")
+  })
+
+  it("returns cena during dinner hours", () => {
+    expect(getActivePlanningServizioBand(at(20), dualFasce)).toBe("cena")
+  })
+
+  it("returns cena in afternoon gap between services", () => {
+    expect(getActivePlanningServizioBand(at(16), dualFasce)).toBe("cena")
+  })
+
+  it("returns pranzo before lunch opens", () => {
+    expect(getActivePlanningServizioBand(at(10), dualFasce)).toBe("pranzo")
   })
 })

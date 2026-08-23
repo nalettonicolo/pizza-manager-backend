@@ -505,6 +505,14 @@ export async function fetchVetrinaSlotCaricoOggi(tenantId) {
   return data && typeof data === "object" ? data : {}
 }
 
+/** Posizioni GPS live dei pony/rider attivi del tenant (ultimi 20 minuti), per la mappa comando. */
+export async function getRiderPosizioniLive(tenantId) {
+  if (!tenantId) return []
+  const { data, error } = await supabase.rpc("rider_posizioni_live", { p_tenant_id: tenantId })
+  if (error) throw error
+  return Array.isArray(data) ? data : []
+}
+
 /** Delivery: ASSEGNATO | IN_VIAGGIO | RICHIESTA | PROBLEMA (+ sync stato_delivery). */
 export async function deliveryUpdateStatoConsegna(ordineId, stato) {
   if (!ordineId) throw new Error("ordineId mancante")
@@ -1209,7 +1217,7 @@ export async function getRigheByOrdineIds(ordineIds, options = {}) {
   return aggregated
 }
 
-/** Chiude la giornata (salvataggio contabilità e reset storico). payload = export ordini del giorno (JSON). */
+/** Chiude la giornata (salvataggio contabilità + ordini aperti → CONSEGNATO). payload = export ordini del giorno (JSON). */
 export async function chiudiGiornata(tenantId, data = null, payload = null) {
   const d = data || new Date().toISOString().slice(0, 10)
   const { data: id, error } = await supabase.rpc("chiudi_giornata", {
@@ -1219,6 +1227,28 @@ export async function chiudiGiornata(tenantId, data = null, payload = null) {
   })
   if (error) throw error
   return id
+}
+
+/**
+ * Catch-up: chiude ordini ancora aperti di giornate precedenti (Europe/Rome).
+ * Utile all’apertura cassa se la chiusura automatica della sera non è partita.
+ * @returns {Promise<number>} numero ordini chiusi
+ */
+export async function chiudiOrdiniApertiGiornatePrecedenti(tenantId) {
+  if (!tenantId) return 0
+  // Ieri in fuso locale (mezzogiorno evita ambiguità DST / UTC di toISOString).
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() - 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  const { data, error } = await supabase.rpc("chiudi_ordini_aperti_fino_a", {
+    p_tenant_id: tenantId,
+    p_data: `${y}-${m}-${day}`,
+  })
+  if (error) throw error
+  return Number(data) || 0
 }
 
 ///////////////////////////////////////////////////////////

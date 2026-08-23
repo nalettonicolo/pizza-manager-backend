@@ -63,6 +63,9 @@
 --   sql/modules/68_clienti_select_staff_cassa.sql
 --   sql/modules/69_create_order_web_cliente_from_cassa.sql
 --   sql/modules/70_fix_vetrina_slot_carico_oggi_categoria_pizza.sql
+--   sql/modules/71_fix_delivery_functions_dead_profiles_table.sql
+--   sql/modules/72_chiudi_giornata_chiude_ordini.sql
+--   sql/modules/73_rider_posizioni_live.sql
 --
 -- Moduli 41-50 "reali" (rider capacità/routing/OAuth/tavoli/audit, applicati stasera
 -- direttamente su Supabase da un'altra chat, MAI salvati come file sql/modules/ locali):

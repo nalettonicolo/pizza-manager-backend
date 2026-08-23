@@ -7,8 +7,14 @@ import { supabase } from "@/lib/supabaseClient"
  * @param {string|null|undefined} opts.tenantId
  * @param {() => void|Promise<void>} opts.onRefresh — tipicamente loadOrders({ silent: true })
  * @param {number} [opts.pollMs=30000] — fallback se Realtime non arriva
+ * @param {number} [opts.debounceMs=300] — raggruppa più eventi Realtime ravvicinati (es. il
+ *   pizzaiolo che clicca "In forno" su 3 ordini di fila) in un solo reload, invece di far
+ *   partire un reload pesante e completo (più query in sequenza) per ognuno: senza questo,
+ *   i reload si accavallano e competono per la rete, e lato reparto ricevente (es. Bancone)
+ *   gli ordini appena segnati compaiono uno alla volta con un ritardo percepibile invece che
+ *   tutti insieme.
  */
-export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30000 }) {
+export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30000, debounceMs = 300 }) {
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
@@ -21,7 +27,17 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
       void Promise.resolve(onRefreshRef.current()).catch(() => {})
     }
 
-    run()
+    let debounceTimer = null
+    const scheduleRun = () => {
+      if (cancelled) return
+      if (debounceTimer) window.clearTimeout(debounceTimer)
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null
+        run()
+      }, debounceMs)
+    }
+
+    run() // primo caricamento all'avvio: immediato, nessun debounce
 
     const channel = supabase
       .channel(`operative-ordini:${tenantId}`)
@@ -33,7 +49,7 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
           table: "ordini",
           filter: `tenant_id=eq.${tenantId}`,
         },
-        () => run(),
+        () => scheduleRun(),
       )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
@@ -45,8 +61,9 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
 
     return () => {
       cancelled = true
+      if (debounceTimer) window.clearTimeout(debounceTimer)
       window.clearInterval(poll)
       void supabase.removeChannel(channel)
     }
-  }, [tenantId, pollMs])
+  }, [tenantId, pollMs, debounceMs])
 }

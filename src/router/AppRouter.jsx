@@ -13,6 +13,7 @@ import OperativeLayout from "@/layouts/OperativeLayout";
 
 /* ================= GUARDS ================= */
 import ProtectedRoute from "@/components/ProtectedRoute";
+import SuperadminOnlyGate from "@/components/ui/SuperadminOnlyGate";
 import ContabilitaFullRoutesGate from "@/features/admin/components/ContabilitaFullRoutesGate";
 import ClienteRoute from "@/components/ClienteRoute";
 import ClienteEmailVerifiedRoute from "@/components/ClienteEmailVerifiedRoute";
@@ -643,7 +644,9 @@ export default function AppRouter() {
             path="/operative/test-reparti-quad"
             element={
               <Suspense fallback={<PageFallback />}>
-                <RepartiQuadTestPage />
+                <SuperadminOnlyGate redirectTo="/operative/dashboard">
+                  <RepartiQuadTestPage />
+                </SuperadminOnlyGate>
               </Suspense>
             }
           />
