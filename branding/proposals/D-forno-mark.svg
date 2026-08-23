@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  D forno</title>
+  <rect width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- arco forno -->
+  <path d="M120 360 V220 A136 136 0 0 1 392 220 V360" fill="#faf7f2"/>
+  <path d="M156 360 V236 A100 100 0 0 1 356 236 V360" fill="#d35400"/>
+  <path d="M188 360 V252 A68 68 0 0 1 324 252 V360" fill="#922b21"/>
+  <!-- barre dashboard -->
+  <rect x="208" y="300" width="22" height="48" rx="6" fill="#faf7f2"/>
+  <rect x="245" y="276" width="22" height="72" rx="6" fill="#faf7f2"/>
+  <rect x="282" y="290" width="22" height="58" rx="6" fill="#faf7f2"/>
+</svg>

@@ -31,12 +31,14 @@ export function sortOrdersByNearestNeighbor(orders, start) {
       const o = remaining[i]
       const lat = Number(o.consegna_lat ?? o.consegnaLat)
       const lng = Number(o.consegna_lng ?? o.consegnaLng)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        bestIdx = i
-        bestDist = Infinity
-        break
-      }
-      const d = haversineKm(curLat, curLng, lat, lng)
+      // Un ordine senza coordinate non è comparabile: lo trattiamo a distanza infinita (in coda,
+      // non subito) invece di interrompere la scansione e "saltare la fila" solo perché è stato
+      // incontrato prima nell'array — prima lo faceva, e un ordine senza coordinate messo per
+      // caso a un indice basso finiva scelto al posto di uno vicinissimo con coordinate valide.
+      const d =
+        Number.isFinite(lat) && Number.isFinite(lng)
+          ? haversineKm(curLat, curLng, lat, lng)
+          : Infinity
       if (d < bestDist) {
         bestDist = d
         bestIdx = i

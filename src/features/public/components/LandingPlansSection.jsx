@@ -6,8 +6,6 @@ import {
   inclusioniIncluded,
 } from "@/features/superadmin/catalog/plansStorage";
 import {
-  annualTotalFromMonthlyEuro,
-  formatEuro,
   formatEuroMonth,
   sumMonthlyFromInclusioni,
 } from "@/features/superadmin/catalog/servicesStorage";
@@ -43,6 +41,9 @@ export default function LandingPlansSection() {
         Nessun piano “free” permanente: inizi con <strong>14 giorni di prova</strong> sul{" "}
         <strong>piano che scegli</strong>, poi prosegui con l’abbonamento relativo. Le offerte qui sotto riflettono i
         piani configurati in console (stesso browser se hai salvato listino e catalogo).
+        <br />
+        <strong>Il dominio del tuo sito lo gestiamo noi</strong>: nessun pensiero tecnico, ce ne occupiamo
+        direttamente per te.
       </p>
       <div className="pricing-grid pricing-grid--plans-catalog">
         <div className="pricing-card featured">
@@ -71,13 +72,8 @@ export default function LandingPlansSection() {
               ? `Validità listino: ${formatValiditaMesiLabel(p.validitaMesi)} (mesi di calendario)`
               : null;
           const monthly = sumMonthlyFromInclusioni(p.inclusioni, services);
-          const disc = Number(p.scontoAbbonamentoAnnualePercent) || 0;
-          const annualHint =
-            monthly > 0 && disc > 0
-              ? `Opzione annuale anticipata: circa ${formatEuro(annualTotalFromMonthlyEuro(monthly, disc))}/anno (−${disc}% su 12 mensilità) · ${formatEuroMonth(monthly)}`
-              : monthly > 0
-                ? `Da ${formatEuroMonth(monthly)}`
-                : null;
+          // Solo mensile in vetrina pubblica: niente sconto/opzione annuale mostrata al cliente.
+          const annualHint = monthly > 0 ? `Da ${formatEuroMonth(monthly)}` : null;
           const contattiHref = `/contatti?piano=${encodeURIComponent(p.id)}#prova-gratuita`;
 
           return (

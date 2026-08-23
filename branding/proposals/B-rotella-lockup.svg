@@ -1,0 +1,20 @@
+<svg width="640" height="160" viewBox="0 0 640 160" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  B lockup</title>
+  <g transform="translate(8,8) scale(0.28125)">
+    <rect x="0" y="0" width="512" height="512" rx="112" fill="#c0392b"/>
+    <rect x="236" y="86" width="40" height="118" rx="12" fill="#faf7f2"/>
+    <rect x="244" y="98" width="24" height="70" rx="8" fill="#d35400"/>
+    <circle cx="256" cy="320" r="118" fill="#faf7f2"/>
+    <circle cx="256" cy="320" r="88" fill="none" stroke="#922b21" stroke-width="14"/>
+    <circle cx="256" cy="320" r="52" fill="#c0392b"/>
+    <circle cx="256" cy="320" r="22" fill="#faf7f2"/>
+    <g stroke="#d35400" stroke-width="8" stroke-linecap="round">
+      <line x1="256" y1="232" x2="256" y2="252"/>
+      <line x1="256" y1="388" x2="256" y2="408"/>
+      <line x1="168" y1="320" x2="188" y2="320"/>
+      <line x1="324" y1="320" x2="344" y2="320"/>
+    </g>
+  </g>
+  <text x="168" y="76" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="44" font-weight="800" fill="#241a12">Pizza<tspan fill="#c0392b">Manager</tspan></text>
+  <text x="168" y="104" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="2" fill="#93816a">GESTIONALE PER PIZZERIE</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager E1  legatura PM</title>
+  <rect width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- Stem condiviso: P a sinistra, M a destra sullo stesso tratto -->
+  <path fill="#faf7f2" d="
+    M120 120h118c78 0 126 44 126 118 0 70-44 110-112 116l54 76h-64l-48-68H184v68h-64V120zm64 56v112h52c40 0 64-22 64-56s-24-56-64-56H184z
+  "/>
+  <!-- M (usa lo stem destro della P come sinistra) -->
+  <path fill="#faf7f2" d="
+    M278 430V210l52 108 52-108v220h-52V318l-26 52-26-52v112h-52z
+  "/>
+  <path fill="#d35400" d="M352 148 L392 188 L352 228 Z"/>
+</svg>

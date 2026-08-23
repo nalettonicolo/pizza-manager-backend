@@ -404,7 +404,13 @@ export async function deleteMagazzinoDdt(tenantId, id) {
   if (error) throw error
 }
 
-/** Aggiorna lo stato di un ordine (es. IN_PREPARAZIONE → PRONTO). */
+/**
+ * Aggiorna lo stato di un ordine (es. IN_PREPARAZIONE → PRONTO), passando dalla RPC
+ * ordine_transizione_stato: valida che la transizione sia ammessa (macchina a stati
+ * server-side — prima era un .update({stato}) diretto senza alcun controllo, un ordine
+ * CONSEGNATO poteva tornare IN_PREPARAZIONE o un ANNULLATO "resuscitare" a PRONTO) e registra
+ * l'evento in cassa_ordine_audit.
+ */
 export async function updateOrderStato(ordineId, stato) {
   if (nestOperativeWritesEnabled()) {
     try {
@@ -414,10 +420,10 @@ export async function updateOrderStato(ordineId, stato) {
       console.warn("[adminService] updateOrderStato Nest fallback Supabase:", e?.message ?? e)
     }
   }
-  const { error } = await supabase
-    .from("Ordine")
-    .update({ stato })
-    .eq("id", ordineId)
+  const { error } = await supabase.rpc("ordine_transizione_stato", {
+    p_ordine_id: ordineId,
+    p_stato_nuovo: stato,
+  })
   if (error) throw error
 }
 
@@ -3597,6 +3603,25 @@ export async function turniCassaChiudi(tenantId, params) {
     throw error
   }
   return data
+}
+
+/**
+ * Storico turni cassa (aperti e chiusi) del tenant, per revisione/riconciliazione.
+ * @param {{ puntoVenditaId?: string|null, limit?: number }} [opts]
+ * @returns {Promise<Array>}
+ */
+export async function turniCassaStorico(tenantId, opts = {}) {
+  if (!tenantId) return []
+  const { data, error } = await supabase.rpc("turni_cassa_storico", {
+    p_tenant_id: tenantId,
+    p_punto_vendita_id: opts.puntoVenditaId || null,
+    p_limit: Number.isFinite(Number(opts.limit)) ? Number(opts.limit) : 60,
+  })
+  if (error) {
+    logSupabaseError("admin.turniCassaStorico", error, { tenantId })
+    throw error
+  }
+  return Array.isArray(data) ? data : []
 }
 
 ///////////////////////////////////////////////////////////

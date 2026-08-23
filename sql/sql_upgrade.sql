@@ -66,6 +66,8 @@
 --   sql/modules/71_fix_delivery_functions_dead_profiles_table.sql
 --   sql/modules/72_chiudi_giornata_chiude_ordini.sql
 --   sql/modules/73_rider_posizioni_live.sql
+--   sql/modules/74_turni_cassa_storico.sql
+--   sql/modules/75_ordine_transizione_stato.sql
 --
 -- Moduli 41-50 "reali" (rider capacità/routing/OAuth/tavoli/audit, applicati stasera
 -- direttamente su Supabase da un'altra chat, MAI salvati come file sql/modules/ locali):

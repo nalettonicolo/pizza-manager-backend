@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  PM cream (stelo condiviso)</title>
+  <rect width="512" height="512" rx="112" fill="#faf7f2"/>
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="none" stroke="#eadfd0" stroke-width="3"/>
+  <!-- Shared stem + P bowl + M peaks as one composition -->
+  <path fill="#c0392b" d="
+    M100 100h136c78 0 128 44 128 120s-46 116-118 120
+    c20 8 36 28 48 56l28 52h-68l-36-68H164v68H100V100zm64 56v112h66c38 0 60-20 60-56s-22-56-60-56H164z
+  "/>
+  <path fill="#c0392b" d="
+    M292 416V216l54 108 54-108v200h-52V320l-28 54-28-54v96h-52z
+  "/>
+  <!-- orange accent on shared / M right edge -->
+  <path fill="none" stroke="#d35400" stroke-width="14" stroke-linecap="round" d="M398 220 v176"/>
+  <path fill="none" stroke="#d35400" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" d="M292 216 L346 324 L400 216"/>
+</svg>

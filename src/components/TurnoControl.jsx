@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { turniCassaAperto, turniCassaApri, turniCassaChiudi } from "@/features/admin/services/adminService"
+import { turniCassaAperto, turniCassaApri, turniCassaChiudi, turniCassaStorico } from "@/features/admin/services/adminService"
 
 function mapTurnoRpcError(err) {
   const m = String(err?.message || err?.hint || "").toLowerCase()
@@ -20,6 +20,11 @@ function formatDt(iso) {
   return d.toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })
 }
 
+function formatEuro(n) {
+  if (n == null || !Number.isFinite(Number(n))) return "—"
+  return `€ ${Number(n).toFixed(2)}`
+}
+
 export default function TurnoControl({ tenantId, puntoVenditaId, pvList }) {
   const [loading, setLoading] = useState(false)
   const [turno, setTurno] = useState(null)
@@ -28,6 +33,10 @@ export default function TurnoControl({ tenantId, puntoVenditaId, pvList }) {
   const [fondoStr, setFondoStr] = useState("")
   const [attesoStr, setAttesoStr] = useState("")
   const [noteChiusura, setNoteChiusura] = useState("")
+  const [storico, setStorico] = useState([])
+  const [storicoLoading, setStoricoLoading] = useState(false)
+  const [storicoErr, setStoricoErr] = useState(null)
+  const [storicoOpen, setStoricoOpen] = useState(false)
 
   const pvNome = (id) => {
     if (!id || !Array.isArray(pvList)) return null
@@ -50,6 +59,25 @@ export default function TurnoControl({ tenantId, puntoVenditaId, pvList }) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const loadStorico = useCallback(async () => {
+    if (!tenantId) return
+    setStoricoErr(null)
+    setStoricoLoading(true)
+    try {
+      const rows = await turniCassaStorico(tenantId, { puntoVenditaId: puntoVenditaId || null })
+      setStorico(Array.isArray(rows) ? rows : [])
+    } catch (err) {
+      setStorico([])
+      setStoricoErr(mapTurnoRpcError(err))
+    } finally {
+      setStoricoLoading(false)
+    }
+  }, [tenantId, puntoVenditaId])
+
+  useEffect(() => {
+    if (storicoOpen) void loadStorico()
+  }, [storicoOpen, loadStorico])
 
   const apriTurno = async () => {
     if (!tenantId || !puntoVenditaId) {
@@ -96,6 +124,7 @@ export default function TurnoControl({ tenantId, puntoVenditaId, pvList }) {
       setAttesoStr("")
       setNoteChiusura("")
       await refresh()
+      if (storicoOpen) await loadStorico()
       alert("Turno chiuso e riconciliazione registrata.")
     } catch (err) {
       alert(mapTurnoRpcError(err))
@@ -236,6 +265,77 @@ export default function TurnoControl({ tenantId, puntoVenditaId, pvList }) {
           </div>
         </div>
       ) : null}
+
+      <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
+        <button
+          type="button"
+          onClick={() => setStoricoOpen((v) => !v)}
+          style={{
+            background: "none",
+            border: "none",
+            padding: 0,
+            color: "#0f172a",
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span>{storicoOpen ? "▾" : "▸"}</span> Storico turni
+        </button>
+        {storicoOpen ? (
+          <div style={{ marginTop: 10 }}>
+            {storicoErr ? <p style={{ color: "#b91c1c", fontSize: 13, margin: "0 0 8px" }}>{storicoErr}</p> : null}
+            {storicoLoading ? (
+              <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>Caricamento…</p>
+            ) : storico.length === 0 ? (
+              <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>Nessun turno registrato ancora.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {storico.map((t) => {
+                  const chiuso = t.stato === "chiuso"
+                  const deltaColor =
+                    t.delta_euro == null ? "#64748b" : Number(t.delta_euro) === 0 ? "#16a34a" : "#c2410c"
+                  return (
+                    <div
+                      key={t.id}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        border: "1px solid #e2e8f0",
+                        background: chiuso ? "#f8fafc" : "#f0fdf4",
+                        fontSize: 13,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                        <strong>{t.operatore || "—"}</strong>
+                        <span style={{ color: "#64748b" }}>{t.punto_vendita_nome || "—"}</span>
+                      </div>
+                      <div style={{ color: "#475569", marginTop: 4 }}>
+                        {formatDt(t.aperto_il)} → {chiuso ? formatDt(t.chiuso_il) : "in corso"}
+                      </div>
+                      {chiuso ? (
+                        <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 12 }}>
+                          <span>Fondo contato: {formatEuro(t.fondo_contato_euro)}</span>
+                          <span>Atteso: {formatEuro(t.incasso_atteso_euro)}</span>
+                          <span style={{ color: deltaColor, fontWeight: 700 }}>
+                            Scostamento: {t.delta_euro == null ? "—" : formatEuro(t.delta_euro)}
+                          </span>
+                        </div>
+                      ) : null}
+                      {t.note_chiusura ? (
+                        <div style={{ marginTop: 4, color: "#64748b", fontStyle: "italic" }}>{t.note_chiusura}</div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }

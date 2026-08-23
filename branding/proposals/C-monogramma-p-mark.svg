@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  proposta C (monogramma P)</title>
+  <desc>Monogramma P con spicchio negativo: astratto, distintivo, SaaS.</desc>
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- P bold costruita con forme -->
+  <path
+    d="M148 120h148c78 0 128 42 128 112s-50 112-128 112H212v88H148V120zm64 56v112h78c38 0 64-20 64-56s-26-56-64-56H212z"
+    fill="#faf7f2"
+  />
+  <!-- spicchio negativo / accento pizza nello spazio della P -->
+  <path d="M286 176 L348 232 L286 288 Z" fill="#d35400"/>
+  <circle cx="318" cy="228" r="9" fill="#922b21"/>
+  <circle cx="304" cy="248" r="7" fill="#922b21"/>
+</svg>

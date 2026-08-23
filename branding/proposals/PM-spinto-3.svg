@@ -1,0 +1,15 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager PM spinto 3  rim M</title>
+  <rect width="512" height="512" rx="108" fill="#faf7f2"/>
+  <!-- M as orange shell + red core = rim-light flat -->
+  <path fill="#d35400" d="
+    M248 448V176l78 148 78-148v272h-72V300l-42 78-42-78v148h-72z
+  "/>
+  <path fill="#c0392b" d="
+    M268 428V214l54 104 54-104v214h-50V318l-29 54-29-54v110h-50z
+  "/>
+  <path fill="#c0392b" d="
+    M64 64h172c104 0 170 58 170 158s-60 152-154 156
+    L316 448h-92l-60-108H140v108H64V64zm76 72v172h92c56 0 90-32 90-86s-34-86-90-86H140z
+  "/>
+</svg>

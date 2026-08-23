@@ -1,0 +1,15 @@
+<svg width="640" height="160" viewBox="0 0 640 160" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  C lockup</title>
+  <g transform="translate(8,8) scale(0.28125)">
+    <rect x="0" y="0" width="512" height="512" rx="112" fill="#c0392b"/>
+    <path
+      d="M148 120h148c78 0 128 42 128 112s-50 112-128 112H212v88H148V120zm64 56v112h78c38 0 64-20 64-56s-26-56-64-56H212z"
+      fill="#faf7f2"
+    />
+    <path d="M286 176 L348 232 L286 288 Z" fill="#d35400"/>
+    <circle cx="318" cy="228" r="9" fill="#922b21"/>
+    <circle cx="304" cy="248" r="7" fill="#922b21"/>
+  </g>
+  <text x="168" y="76" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="44" font-weight="800" fill="#241a12">Pizza<tspan fill="#c0392b">Manager</tspan></text>
+  <text x="168" y="104" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="2" fill="#93816a">GESTIONALE PER PIZZERIE</text>
+</svg>

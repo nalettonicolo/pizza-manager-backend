@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager PM spinto</title>
+  <desc>Tile crema, PM intrecciati ultra-bold, outline arancio forte sulla M.</desc>
+  <rect width="512" height="512" rx="108" fill="#faf7f2"/>
+  <!-- Orange M outline (behind, thicker = più spinto) -->
+  <path fill="none" stroke="#d35400" stroke-width="36" stroke-linejoin="round" stroke-linecap="round"
+    d="M250 430 V190 L330 340 L410 190 V430"/>
+  <!-- Red P  heavy, fills left -->
+  <path fill="#c0392b" d="
+    M72 72h168c98 0 160 56 160 152 0 92-56 146-148 150
+    L320 440h-88l-64-112H148v112H72V72zm72 68v168h88c54 0 86-30 86-84s-32-84-86-84H144z
+  "/>
+  <!-- Red M fill on top of orange stroke -->
+  <path fill="#c0392b" d="
+    M262 430V210l62 118 62-118v220h-58V322l-33 62-33-62v108h-58z
+  "/>
+</svg>

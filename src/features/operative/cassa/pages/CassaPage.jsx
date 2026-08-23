@@ -146,6 +146,7 @@ import { computeFidelityRedeemPuntiCost } from "@/utils/fidelityRedeem"
 import { productMatchesMenuSearch } from "@/utils/menuProductSearch"
 import {
   iconTipoPagamentoLista,
+  buildLegendaPagamentoOrdini,
   isTipoPagamentoLink,
   isTipoPagamentoOnlineProvider,
   labelTipoPagamentoLista,
@@ -235,7 +236,6 @@ function ordineIsConsegnato(o) {
   return stato === "CONSEGNATO" || statoConsegna === "CONSEGNATO"
 }
 
-/** Riga titolo lista ordini: negozio = nome + orario a destra; delivery = nome grande + orario a destra. */
 /** Icona di stato per l'elenco ordini in cassa — a colpo d'occhio dove si trova l'ordine nel
  * flusso, senza dover aprire il dettaglio. Priorità: In viaggio (il più "vivo") > Consegnato >
  * Pronto/in bancone > In preparazione. Nessuna icona per IN_ATTESA o stati non riconosciuti. */
@@ -249,24 +249,136 @@ function statoOrdineIconInfo(o) {
   return null
 }
 
+const ORDINI_LISTA_LEGENDA = [
+  {
+    title: "Stato ordine",
+    items: [
+      { mark: "🤚", text: "In preparazione" },
+      { mark: "🔥", text: "Pronto — in bancone" },
+      { mark: "🛵", text: "In viaggio" },
+      { mark: "🏁", text: "Consegnato" },
+    ],
+  },
+  {
+    title: "Ordine online",
+    items: [
+      {
+        mark: (
+          <span
+            aria-hidden
+            style={{
+              display: "inline-block",
+              width: 22,
+              height: 16,
+              borderLeft: "3px solid #ea580c",
+              borderRadius: 2,
+              background: "#fff",
+              boxShadow: "inset 0 0 0 1px #fecaca",
+            }}
+          />
+        ),
+        text: "Bordo arancione — da accettare in cassa",
+      },
+    ],
+  },
+]
+
+function OrdiniListaLegendaInfo({ parametri, tenantData }) {
+  const [open, setOpen] = useState(false)
+  const pagamentoItems = useMemo(
+    () => buildLegendaPagamentoOrdini(parametri, tenantData),
+    [parametri, tenantData],
+  )
+  return (
+    <div
+      style={styles.ordiniLegendaWrap}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        style={styles.ordiniLegendaBtn}
+        aria-label="Legenda simboli ordini"
+        aria-expanded={open}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      >
+        ⓘ
+      </button>
+      {open ? (
+        <div style={styles.ordiniLegendaPopover} role="tooltip">
+          <div style={styles.ordiniLegendaTitle}>Legenda simboli</div>
+          <div style={styles.ordiniLegendaCols}>
+            {pagamentoItems.length ? (
+              <div style={styles.ordiniLegendaGroup}>
+                <div style={styles.ordiniLegendaGroupTitle}>Pagamento</div>
+                <ul style={styles.ordiniLegendaList}>
+                  {pagamentoItems.map((item, idx) => (
+                    <li key={`pag-${idx}`} style={styles.ordiniLegendaRow}>
+                      <span style={styles.ordiniLegendaMark}>{item.mark}</span>
+                      <span style={styles.ordiniLegendaText}>{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div>
+              {ORDINI_LISTA_LEGENDA.map((group) => (
+                <div key={group.title} style={styles.ordiniLegendaGroup}>
+                  <div style={styles.ordiniLegendaGroupTitle}>{group.title}</div>
+                  <ul style={styles.ordiniLegendaList}>
+                    {group.items.map((item, idx) => (
+                      <li key={`${group.title}-${idx}`} style={styles.ordiniLegendaRow}>
+                        <span style={styles.ordiniLegendaMark}>{item.mark}</span>
+                        <span style={styles.ordiniLegendaText}>{item.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function OrdineCardTitleRows({ o, isDelivery }) {
   const m = buildOrdineCardTitleModel(o, isDelivery)
-  if (isDelivery) {
-    return (
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, width: "100%" }}>
-        <span style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.25, minWidth: 0 }}>{m.titoloPrincipale}</span>
-        {m.showOrarioADestra ? (
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#1565c0", flexShrink: 0 }}>{m.orario}</span>
-        ) : null}
-      </div>
-    )
+  const nomeStyle = {
+    fontWeight: 700,
+    fontSize: isDelivery ? 17 : 15,
+    lineHeight: 1.25,
+    minWidth: 0,
+    flex: "1 1 auto",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  }
+  const orarioStyle = {
+    fontSize: 13,
+    fontWeight: 600,
+    color: isDelivery ? "#1565c0" : "#2e7d32",
+    flex: "0 0 auto",
+    whiteSpace: "nowrap",
+    marginLeft: 8,
   }
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, width: "100%" }}>
-      <span style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.25, minWidth: 0 }}>{m.titoloPrincipale}</span>
-      {m.showOrarioADestra ? (
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#2e7d32", flexShrink: 0 }}>{m.orario}</span>
-      ) : null}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        gap: 8,
+        width: "100%",
+        minWidth: 0,
+        overflow: "hidden",
+      }}
+    >
+      <span style={nomeStyle} title={m.titoloPrincipale}>
+        {m.titoloPrincipale}
+      </span>
+      {m.showOrarioADestra ? <span style={orarioStyle}>{m.orario}</span> : null}
     </div>
   )
 }
@@ -3612,7 +3724,7 @@ export default function CassaPage() {
                               title="Apri dettaglio"
                             >
                               <div style={styles.ordiniItemGrid}>
-                                <div style={{ minWidth: 0 }}>
+                                <div style={{ minWidth: 0, overflow: "hidden" }}>
                                   <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
                                   <div style={{ fontSize: 11, color: "#666", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                     <span>{idOrdine}</span>
@@ -3623,11 +3735,25 @@ export default function CassaPage() {
                                     ) : null}
                                   </div>
                                   {indirizzoSecondaRiga ? (
-                                    <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        color: "#555",
+                                        marginTop: 2,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      title={indirizzoSecondaRiga}
+                                    >
+                                      {indirizzoSecondaRiga}
+                                    </div>
                                   ) : null}
                                 </div>
                                 <div style={styles.ordiniItemMeta}>
-                                  <span style={{ fontSize: 14, fontWeight: 700 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
+                                  <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}>
+                                    € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}
+                                  </span>
                                   <span style={{ fontSize: 12 }} title={labelPagamento}>{iconPagamento}</span>
                                 </div>
                               </div>
@@ -3646,8 +3772,11 @@ export default function CassaPage() {
       {/* Planning/Live desktop: nasconde elenco ordini e carrello (come il menù) per usare tutta la larghezza. */}
       {!(showOverlayPanel && !cassaMobileLayout) ? (
       <div style={{ ...styles.ordiniSection, ...cassaMobileShell.ordiniExtra }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-          <h3 style={{ ...styles.ordiniTitle, margin: 0, ...(cassaMobileLayout ? { fontSize: 18 } : {}) }}>Ordini</h3>
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+            <h3 style={{ ...styles.ordiniTitle, margin: 0, ...(cassaMobileLayout ? { fontSize: 18 } : {}) }}>Ordini</h3>
+            <OrdiniListaLegendaInfo parametri={parametri} tenantData={tenantData} />
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {!cassaOrdineInCorso ? (
               <button
@@ -3761,8 +3890,8 @@ export default function CassaPage() {
                   onClick={() => openOrdineDetail(o.id)}
                   title="Apri dettaglio"
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={styles.ordiniItemGrid}>
+                    <div style={{ minWidth: 0, overflow: "hidden" }}>
                       <OrdineCardTitleRows o={o} isDelivery={isDelivery} />
                       <div
                         style={{
@@ -3784,16 +3913,32 @@ export default function CassaPage() {
                         ) : null}
                       </div>
                       {indirizzoSecondaRiga ? (
-                        <div style={{ fontSize: cassaMobileLayout ? 13 : 11, color: "#555", marginTop: 2 }}>{indirizzoSecondaRiga}</div>
+                        <div
+                          style={{
+                            fontSize: cassaMobileLayout ? 13 : 11,
+                            color: "#555",
+                            marginTop: 2,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={indirizzoSecondaRiga}
+                        >
+                          {indirizzoSecondaRiga}
+                        </div>
                       ) : null}
                     </div>
-                    <span style={{ fontSize: cassaMobileLayout ? 16 : 14 }}>€ {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}</span>
-                    <span style={{ fontSize: 12, marginLeft: 4 }} title={labelPagamento}>{iconPagamento}</span>
-                    {statoIcon ? (
-                      <span style={{ fontSize: cassaMobileLayout ? 16 : 14, marginLeft: 4 }} title={statoIcon.label}>
-                        {statoIcon.icon}
+                    <div style={styles.ordiniItemMeta}>
+                      <span style={{ fontSize: cassaMobileLayout ? 16 : 14, fontWeight: 700, whiteSpace: "nowrap" }}>
+                        € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}
                       </span>
-                    ) : null}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: cassaMobileLayout ? 16 : 14 }}>
+                        <span style={{ fontSize: 12 }} title={labelPagamento}>{iconPagamento}</span>
+                        {statoIcon ? (
+                          <span title={statoIcon.label}>{statoIcon.icon}</span>
+                        ) : null}
+                      </span>
+                    </div>
                   </div>
                 </button>
               </li>
@@ -3807,23 +3952,34 @@ export default function CassaPage() {
         style={{
           ...styles.productsArea,
           ...cassaMobileShell.productsExtra,
-          ...(showOverlayPanel
+          ...(showLiveMap
             ? {
                 display: "flex",
                 flexDirection: "column",
                 overflow: "hidden",
-                padding: 12,
+                padding: 0,
                 minHeight: 0,
                 flex: 1,
                 minWidth: 0,
                 width: "100%",
               }
-            : {}),
+            : showOverlayPanel
+              ? {
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                  padding: 12,
+                  minHeight: 0,
+                  flex: 1,
+                  minWidth: 0,
+                  width: "100%",
+                }
+              : {}),
         }}
       >
         {showLiveMap ? (
-          <div style={{ flex: 1, minHeight: 0, display: "flex", borderRadius: 10, overflow: "hidden" }}>
-            <DeliveryCommandMapPage onClose={() => setShowLiveMap(false)} />
+          <div style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignSelf: "stretch" }}>
+            <DeliveryCommandMapPage onClose={() => setShowLiveMap(false)} embedded />
           </div>
         ) : null}
         {showPlanningBar ? (
@@ -4746,6 +4902,9 @@ const styles = {
     display: "flex",
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
   },
   comandaBanner: {
     flexShrink: 0,
@@ -4833,6 +4992,9 @@ const styles = {
     padding: "16px",
     display: "flex",
     flexDirection: "column",
+    overflow: "visible",
+    position: "relative",
+    zIndex: 2,
   },
   riepilogoSection: {
     width: 320,
@@ -4849,6 +5011,91 @@ const styles = {
     margin: "0 0 12px 0",
     fontSize: 16,
     fontWeight: 600,
+  },
+  ordiniLegendaWrap: {
+    position: "relative",
+    flexShrink: 0,
+    zIndex: 1400,
+  },
+  ordiniLegendaBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 22,
+    height: 22,
+    padding: 0,
+    border: "none",
+    background: "transparent",
+    color: "#64748b",
+    fontSize: 16,
+    lineHeight: 1,
+    cursor: "help",
+    borderRadius: "50%",
+  },
+  ordiniLegendaPopover: {
+    position: "absolute",
+    top: 0,
+    left: "100%",
+    marginLeft: 10,
+    zIndex: 1400,
+    width: 420,
+    maxWidth: "min(420px, 55vw)",
+    maxHeight: "min(70vh, 520px)",
+    overflowY: "auto",
+    padding: "12px 14px",
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    boxShadow: "0 10px 28px rgba(15, 23, 42, 0.16)",
+    pointerEvents: "none",
+  },
+  ordiniLegendaTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#334155",
+    marginBottom: 10,
+  },
+  ordiniLegendaCols: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "8px 18px",
+    alignItems: "start",
+  },
+  ordiniLegendaGroup: {
+    marginBottom: 4,
+  },
+  ordiniLegendaGroupTitle: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    marginBottom: 4,
+  },
+  ordiniLegendaList: {
+    listStyle: "none",
+    margin: 0,
+    padding: 0,
+  },
+  ordiniLegendaRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "3px 0",
+    fontSize: 12,
+    lineHeight: 1.35,
+    color: "#475569",
+  },
+  ordiniLegendaMark: {
+    width: 28,
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+  },
+  ordiniLegendaText: {
+    minWidth: 0,
   },
   ordiniList: {
     listStyle: "none",
@@ -4885,9 +5132,11 @@ const styles = {
   ordiniItemGrid: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) auto",
-    gap: "8px 16px",
+    columnGap: 12,
+    rowGap: 4,
     alignItems: "start",
     width: "100%",
+    minWidth: 0,
   },
   ordiniItemMeta: {
     display: "flex",
@@ -4895,6 +5144,7 @@ const styles = {
     alignItems: "flex-end",
     gap: 4,
     flexShrink: 0,
+    paddingLeft: 4,
   },
   modalOverlay: {
     position: "fixed",

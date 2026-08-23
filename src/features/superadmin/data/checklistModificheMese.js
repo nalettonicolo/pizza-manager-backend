@@ -1401,6 +1401,41 @@ export const CHECKLIST_MODIFICHE_MESE = Object.freeze([
     prontoDaProvare: true,
   },
   {
+    codice: "OP-19",
+    epic: "esperienza",
+    area: "op_reparti",
+    titolo: "Analisi bug mirata sull'area Delivery: 2 bug reali trovati e corretti nell'assegnazione pony",
+    contesto:
+      "Su richiesta esplicita di analisi bug concentrata sull'area operativa Delivery, riletto il codice di ordinamento/assegnazione consegne (non toccato in questa sessione fino ad ora).",
+    richiesta: "Nessuna richiesta specifica — verifica proattiva del codice esistente.",
+    comeVerificare: [
+      "Ordina per vicinanza in Delivery con almeno un ordine privo di coordinate di consegna mescolato tra ordini con coordinate valide: l'ordine senza coordinate non deve più \"scavalcare\" un ordine vicino solo perché capitato prima nell'elenco — deve finire in coda, non a caso",
+      "In un giorno con più ordini grossi (≥ capienza bauletto) di quanti pony disponibili: il conteggio pizze per pony nel planning non deve esplodere oltre la capienza per un singolo pony — l'eccesso deve restare visibilmente da assegnare a mano, non sparire dentro un pony già pieno",
+    ],
+    noteTraccia:
+      "2026-08-23: (1) sortOrdersByNearestNeighbor (deliveryRouteUtils.js, usato per ordinare la lista Delivery per vicinanza al pony) interrompeva la ricerca del più vicino non appena incontrava, scorrendo l'elenco, un ordine senza consegna_lat/lng — lo sceglieva subito come \"prossimo\" scartando qualunque candidato più vicino già trovato in precedenza nello stesso giro di scansione: un ordine senza coordinate messo per caso a un indice basso nell'array finiva scelto al posto di uno vicinissimo con coordinate valide. Corretto trattando un ordine senza coordinate come distanza infinita (finisce naturalmente in coda) invece di interrompere la ricerca. (2) packSameAddressGroup (planningPonyAssign.js, riempimento bauletti nel planning Cassa) aveva `Math.min(big.left, space || baulettoCap)`: quando tutti i pony erano già al limite di capienza (più ordini grossi di quanti la flotta pony regge), `space` diventa legittimamente 0, ma essendo 0 \"falsy\" in JavaScript l'operatore `||` faceva ripiegare su un bauletto INTERO invece di 0, sovraccaricando silenziosamente quel pony oltre la sua capienza invece di fermarsi (la guardia esistente subito sotto, pensata apposta per questo caso, veniva aggirata). Corretto rimuovendo il fallback errato. Scoperta collaterale, non un bug ma un'infrastruttura utile per il futuro: esiste già un'intera famiglia di RPC Supabase per l'assegnazione automatica rider (assegna_ordine_rider_auto, candidati_rider_per_ordine, assegna_ordine_a_rider — con turni, capienza residua e distanza geografica reale) costruita in una sessione precedente ma MAI collegata a nessun pulsante dell'interfaccia: il flusso Delivery reale oggi passa da un sistema completamente diverso (deliveryUpdateStatoConsegna/delivery_mark_consegnato). Potrebbe essere la base pronta per la futura selezione \"Consegna A/B\" dal telefono del fattorino discussa in OP-18/CA-03, invece di costruire da zero. Lint e 115 test tutti puliti (nessun test esistente copriva questi due casi limite, quindi nessuno si è rotto correggendoli).",
+    urgenza: "media",
+    prontoDaProvare: true,
+  },
+  {
+    codice: "CA-29",
+    epic: "cassa",
+    area: "cassa_turni",
+    titolo: "Turno cassa: era già completo (non 'da sviluppare') — aggiunto lo storico mancante",
+    contesto:
+      "Un documento di roadmap incollato dall'utente elencava «Turno cassa: parametro tenant, RPC Supabase, gate checkout; ordine collegato al turno» come lavoro ancora da fare. Verificando il codice, il sistema esiste già interamente e funziona: parametro parametri_operativi.cassa_turno_obbligatorio, RPC turni_cassa_apri/chiudi/aperto (anche con percorso NestJS + fallback Supabase), blocco reale del checkout in CassaPage.jsx se il turno è obbligatorio e non aperto per il punto vendita attivo, e ogni ordine creato viene collegato al turno aperto (core.ordini.turno_operatori_id, verificato lato server in create_order_with_items). Il documento pastato era quindi disallineato dallo stato reale del codice su questo punto.",
+    richiesta: "Nessuna richiesta — verifica proattiva su un punto della roadmap che risultava già implementato.",
+    comeVerificare: [
+      "Impostazioni → parametro «Turno cassa obbligatorio»: se attivo, in Cassa senza turno aperto il checkout è bloccato con un avviso, non solo un banner ignorabile",
+      "Apri un turno da Operative → Turni, fai un ordine in Cassa, chiudi il turno dichiarando il fondo contato",
+      "In Operative → Turni, sotto ai pulsanti apri/chiudi, apri «Storico turni»: compare l'elenco dei turni passati (operatore, orari, fondo dichiarato, scostamento) — prima non esisteva nessun modo di rivedere i turni chiusi, solo quello aperto in quel momento",
+    ],
+    noteTraccia:
+      "2026-08-23: unico gap reale trovato dopo aver letto per intero RPC e componenti esistenti — nessuno storico dei turni passati, solo lo stato \"aperto adesso\". Aggiunta RPC turni_cassa_storico(p_tenant_id, p_punto_vendita_id, p_limit) (sql/modules/74_turni_cassa_storico.sql, applicata in produzione) che restituisce i turni del tenant con nome operatore (da utenti_ruoli.nome_visualizzato, fallback email) e nome punto vendita. Aggiunta turniCassaStorico() in adminService.js (solo percorso Supabase RPC, senza duplicare anche il percorso NestJS esistente per apri/chiudi/aperto — fuori scopo per una funzione di sola lettura) e una sezione pieghevole «Storico turni» in TurnoControl.jsx (usata da Operative → Turni), con scostamento colorato (verde se zero, arancione se diverso da zero). Lint e 115 test puliti.",
+    urgenza: "bassa",
+    prontoDaProvare: true,
+  },
+  {
     codice: "AD-06",
     epic: "admin",
     area: "admin_parametri",

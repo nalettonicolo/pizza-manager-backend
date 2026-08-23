@@ -185,7 +185,12 @@ function packSameAddressGroup(orders, buckets, loadPizze, baulettoCap, pizzePerO
     if (!big) break
     const ponyIdx = emptyPonyFromHigh(loadPizze, baulettoCap)
     const space = Math.max(0, baulettoCap - loadPizze[ponyIdx])
-    const take = Math.min(big.left, space || baulettoCap)
+    // `space || baulettoCap` era un bug: quando tutti i pony sono già al limite (più grossi
+    // ordini che capienza flotta), emptyPonyFromHigh ripiega su un pony già pieno, `space`
+    // diventa 0 — ma essendo 0 "falsy" in JS, `0 || baulettoCap` tornava un bauletto INTERO
+    // invece di 0, sovraccaricando quel pony invece di fermarsi (la guardia `take <= 0 break`
+    // sotto esiste apposta per questo caso e veniva silenziosamente aggirata).
+    const take = Math.min(big.left, space)
     if (take <= 0) break
     pushShare(buckets, loadPizze, ponyIdx, big.ordine, take, false, take < big.total)
     big.left -= take

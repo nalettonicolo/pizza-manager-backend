@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager E2  PM minimal</title>
+  <rect width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- P bold, M più piccola a destra, allineate in base -->
+  <path fill="#faf7f2" d="
+    M96 108h148c86 0 140 48 140 128s-54 128-140 128H160v88H96V108zm64 60v136h78c46 0 76-26 76-68s-30-68-76-68H160z
+  "/>
+  <path fill="#faf7f2" d="
+    M316 452V248l46 92 46-92v204h-48V360l-22 42-22-42v92h-48z
+  "/>
+  <rect x="96" y="456" width="320" height="16" rx="8" fill="#d35400"/>
+</svg>

@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  PM cream (outline M)</title>
+  <desc>Tile crema, monogramma PM intrecciato, accento arancio sul tratto della M.</desc>
+  <rect width="512" height="512" rx="112" fill="#faf7f2"/>
+  <!-- P solid -->
+  <path fill="#c0392b" d="
+    M92 96h148c86 0 140 50 140 136 0 82-50 130-132 134
+    L312 416h-72l-56-92H156v92H92V96zm64 60v148h76c46 0 74-26 74-74s-28-74-74-74H156z
+  "/>
+  <!-- M with orange outline behind then red fill -->
+  <path fill="none" stroke="#d35400" stroke-width="22" stroke-linejoin="round" stroke-linecap="round" d="
+    M268 416V220l58 112 58-112v196
+  "/>
+  <path fill="#c0392b" d="
+    M276 416V232l50 98 50-98v184h-48V318l-26 50-26-50v98h-48z
+  "/>
+</svg>

@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  PM cream (pulito + barra)</title>
+  <rect width="512" height="512" rx="112" fill="#faf7f2"/>
+  <!-- Cleaner PM, less outline noise -->
+  <path fill="#c0392b" d="
+    M96 108h152c84 0 138 48 138 132s-54 132-138 132H160v80H96V108zm64 58v148h82c46 0 74-26 74-74s-28-74-74-74H160z
+  "/>
+  <path fill="#c0392b" d="
+    M308 430V236l52 104 52-104v194h-50V334l-27 52-27-52v96h-50z
+  "/>
+  <rect x="96" y="452" width="320" height="16" rx="8" fill="#d35400"/>
+</svg>

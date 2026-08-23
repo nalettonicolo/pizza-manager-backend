@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager PM spinto 2</title>
+  <rect width="512" height="512" rx="108" fill="#faf7f2"/>
+  <!-- even denser: less margin, heavier stems -->
+  <path fill="none" stroke="#d35400" stroke-width="42" stroke-linejoin="miter" stroke-linecap="square"
+    d="M240 448 V168 L332 348 L424 168 V448"/>
+  <path fill="#c0392b" d="
+    M56 56h176c108 0 176 60 176 164s-62 158-160 162
+    L324 456h-96l-68-120H140v120H56V56zm80 76v184h96c60 0 96-34 96-92s-36-92-96-92H136z
+  "/>
+  <path fill="#c0392b" d="
+    M252 448V188l68 132 68-132v260h-64V336l-36 68-36-68v112h-64z
+  "/>
+</svg>

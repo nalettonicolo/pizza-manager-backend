@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  E PM</title>
+  <rect width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- P -->
+  <path d="M118 118h132c72 0 118 40 118 108s-46 108-118 108H182v98H118V118zm64 56v104h62c34 0 54-18 54-52s-20-52-54-52H182z" fill="#faf7f2"/>
+  <!-- M -->
+  <path d="M268 430V210l58 110 58-110v220h-54V320l-28 52-28-52v110H268z" fill="#faf7f2"/>
+  <circle cx="392" cy="150" r="18" fill="#d35400"/>
+</svg>

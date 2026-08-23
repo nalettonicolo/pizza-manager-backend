@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager  F comanda</title>
+  <rect width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- ticket -->
+  <g transform="rotate(-8 256 256)">
+    <rect x="128" y="110" width="256" height="300" rx="28" fill="#faf7f2"/>
+    <rect x="160" y="168" width="160" height="18" rx="9" fill="#c0392b" opacity="0.85"/>
+    <rect x="160" y="210" width="140" height="16" rx="8" fill="#d35400" opacity="0.75"/>
+    <rect x="160" y="250" width="150" height="16" rx="8" fill="#922b21" opacity="0.55"/>
+    <!-- check -->
+    <path d="M300 300 L330 330 L390 250" fill="none" stroke="#d35400" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

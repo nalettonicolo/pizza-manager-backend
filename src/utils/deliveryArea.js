@@ -14,6 +14,25 @@ export function getDeliveryPolygonOuterRing(po) {
   return ring
 }
 
+/** Coordinate sede: PV attivo se presenti, altrimenti tenant. */
+export function resolveShopCoords(tenantData, puntoVendita) {
+  const pvLat = Number(puntoVendita?.lat)
+  const pvLng = Number(puntoVendita?.lng)
+  if (Number.isFinite(pvLat) && Number.isFinite(pvLng)) return { lat: pvLat, lng: pvLng }
+  const lat = Number(tenantData?.lat)
+  const lng = Number(tenantData?.lng)
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
+}
+
+/** Anello area consegna: poligono PV se configurato, altrimenti tenant. */
+export function resolveDeliveryPolygonOuterRing(tenantData, puntoVendita) {
+  const pvPoly = puntoVendita?.consegna_area_poligono
+  if (pvPoly && typeof pvPoly === "object" && pvPoly.type === "Polygon") {
+    return getDeliveryPolygonOuterRing({ consegna_area_poligono: pvPoly })
+  }
+  return getDeliveryPolygonOuterRing(tenantData?.parametri_operativi)
+}
+
 /**
  * Ray casting (anello chiuso GeoJSON, coordinate [lng, lat]).
  * @param {number} lng

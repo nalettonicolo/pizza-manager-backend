@@ -6,17 +6,35 @@ import "../../../styles/landing.css"
 export default function Landing() {
   return (
     <div className="landing-wrapper">
-
       <div className="landing-bg" aria-hidden="true" />
+
+      <nav className="landing-nav" aria-label="Principale">
+        <Link to="/" className="logo logo-with-mark">
+          <img src={logoPizzaManager} alt="" width={36} height={36} className="logo-mark-img" />
+          <span>PizzaManager</span>
+        </Link>
+        <div className="nav-center">
+          <a href="#perche" className="nav-anchor">Perché</a>
+          <a href="#funzionalita" className="nav-anchor">Funzionalità</a>
+          <a href="#piani" className="nav-anchor">Piani</a>
+        </div>
+        <div className="nav-links">
+          <Link to="/login" className="btn-outline">Accedi</Link>
+          <Link to="/contatti#prova-gratuita" className="btn-primary">Prova gratuita</Link>
+        </div>
+      </nav>
 
       <section className="hero">
         <div className="hero-text">
-          <p className="hero-badge">SaaS verticale per pizzerie e delivery</p>
+          <p className="hero-badge">Gestionale per pizzerie</p>
           <h1>
-            Il tuo locale, <span className="hero-gradient">una sola regia</span>
+            La tua pizzeria,{" "}
+            <span className="hero-gradient">finalmente sotto controllo</span>
           </h1>
           <p className="hero-desc">
-            Ordini, cucina, cassa e consegne aggiornati in tempo reale. Multi-sede, ruoli operativi e dati isolati per tenant: meno errori, più coperti, meno stress in sala.
+            Basta comande urlate in cucina, ordini persi su un foglietto, il fattorino che non sai
+            dove sia arrivato. PizzaManager mette cassa, cucina, banco e consegne sullo stesso
+            sistema, in tempo reale: quando prendi un ordine, tutto il tuo staff lo vede all’istante.
           </p>
 
           <div className="hero-buttons">
@@ -28,13 +46,20 @@ export default function Landing() {
             </Link>
           </div>
           <p className="hero-hint">
-            La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per entrare in app.
+            La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per
+            entrare in app.
           </p>
 
           <ul className="hero-trust" aria-label="Punti di forza">
-            <li><span className="trust-dot" /> Multi-tenant pronto</li>
-            <li><span className="trust-dot" /> Ruoli cucina / cassa / delivery</li>
-            <li><span className="trust-dot" /> Menu e ordini sempre allineati</li>
+            <li>
+              <span className="trust-dot" /> Tempo reale tra le postazioni
+            </li>
+            <li>
+              <span className="trust-dot" /> Cassa anche senza internet
+            </li>
+            <li>
+              <span className="trust-dot" /> Consegne e forno sotto controllo
+            </li>
           </ul>
         </div>
 
@@ -52,88 +77,111 @@ export default function Landing() {
             </div>
             <div className="mock-pipeline">
               <div className="mock-stage">
-                <span className="mock-stage-title">Ricezione</span>
+                <span className="mock-stage-title">Cassa</span>
                 <div className="mock-chip">#1042 Bancone</div>
-                <div className="mock-chip dim">#1043 Asporto</div>
+                <div className="mock-chip dim">#1043 Delivery</div>
               </div>
               <div className="mock-stage mock-stage-hot">
                 <span className="mock-stage-title">Cucina</span>
                 <div className="mock-chip">3 in lavorazione</div>
               </div>
               <div className="mock-stage">
-                <span className="mock-stage-title">Pronto</span>
-                <div className="mock-chip ok">2 da ritirare</div>
+                <span className="mock-stage-title">Consegna</span>
+                <div className="mock-chip ok">2 in viaggio</div>
               </div>
             </div>
             <div className="mock-footer-bar">
               <span className="mock-sync">Sync attivo</span>
-              <span className="mock-dots" aria-hidden="true"><i /><i /><i /></span>
+              <span className="mock-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
             </div>
           </div>
-          <p className="hero-visual-caption">Anteprima concettuale del flusso ordini</p>
+          <p className="hero-visual-caption">Un ordine preso → tutto lo staff lo vede subito</p>
         </div>
       </section>
 
       <section id="perche" className="section-stats">
         <div className="stat-strip">
           <div className="stat-strip-item">
-            <strong>Tempo reale</strong>
-            <span>Stati ordine sincronizzati tra postazioni</span>
+            <strong>Un solo sistema</strong>
+            <span>Cassa, cucina, banco e consegne allineati</span>
           </div>
           <div className="stat-strip-item">
-            <strong>Multi-sede</strong>
-            <span>Punti vendita e permessi sotto controllo</span>
+            <strong>Sempre operativo</strong>
+            <span>Anche se salta internet il venerdì sera</span>
           </div>
           <div className="stat-strip-item">
-            <strong>Cloud</strong>
-            <span>Dati strutturati, backup e aggiornamenti inclusi</span>
+            <strong>Cassa che torna</strong>
+            <span>Apertura e chiusura turno senza calcoli a mano</span>
           </div>
         </div>
       </section>
 
       <section id="funzionalita" className="section-bento">
         <div className="section-head">
-          <p className="section-eyebrow">Tutto ciò che serve al giorno d’oggi</p>
-          <h2 className="section-title">Dalla comanda alla consegna, senza fratture</h2>
+          <p className="section-eyebrow">Cosa risolve in sala</p>
+          <h2 className="section-title">Dal foglietto al controllo, senza caos</h2>
           <p className="section-lead">
-            Un’unica piattaforma per coordinare team, menu e operatività: pensata per chi vuole scalare senza perdere il controllo sul servizio.
+            Funzioni pensate per il servizio reale: meno urla, meno ordini persi, più chiarezza su
+            forno, cassa e fattorini.
           </p>
         </div>
 
         <div className="bento-grid">
           <article className="bento bento-large">
-            <h3>Ordini e cucina sempre d’accordo</h3>
-            <p>La cucina vede le comande nel momento giusto; meno richiami, meno errori di trascrizione, più fluidità in punta di serata.</p>
+            <h3>Non perdi mai un ordine</h3>
+            <p>
+              Anche se salta internet un venerdì sera pieno, la cassa continua a funzionare e invia
+              tutto da sola appena torna la rete.
+            </p>
           </article>
           <article className="bento">
-            <h3>Cassa e bancone</h3>
-            <p>Flussi dedicati per incasso e ritiro, con visibilità su prodotti e disponibilità.</p>
+            <h3>Sai sempre se la cassa torna</h3>
+            <p>
+              Apri il turno, lavora, chiudi indicando quanto c’è in cassa: il sistema ti dice subito
+              se combacia, senza calcoli a mano a fine serata.
+            </p>
           </article>
           <article className="bento">
-            <h3>Delivery e rider</h3>
-            <p>Area consegne per seguire lo stato delle uscite e ridurre i tempi morti.</p>
+            <h3>I clienti ordinano da soli</h3>
+            <p>
+              Vetrina online, pagamento con carta o link WhatsApp, o contanti alla consegna —
+              decidi tu. Tu risparmi tempo al telefono.
+            </p>
           </article>
           <article className="bento bento-wide">
-            <h3>Menu ricco e configurabile</h3>
-            <p>Categorie, formati, ingredienti, allergeni e impasti: struttura pronta per menu complessi e multi-formato.</p>
+            <h3>Le consegne non sono più un’incognita</h3>
+            <p>
+              Disegni tu l’area che copri: un indirizzo fuori zona viene segnalato subito. E vedi in
+              tempo reale dove sono i tuoi fattorini sulla mappa.
+            </p>
           </article>
           <article className="bento">
-            <h3>Report</h3>
-            <p>Quadro su vendite e andamenti per decidere con i numeri sotto mano.</p>
+            <h3>Ogni pizza al momento giusto</h3>
+            <p>
+              Il sistema conta da solo quante pizze stai preparando per fascia oraria, così non
+              accetti mai più ordini di quanti il forno ne regga.
+            </p>
           </article>
           <article className="bento">
-            <h3>Ruoli e permessi</h3>
-            <p>Ogni figura vede solo ciò che le serve: meno rumore, più focus operativo.</p>
+            <h3>Cresci senza cambiare sistema</h3>
+            <p>
+              Un secondo locale? Stesso account, dati sempre separati e al sicuro.
+            </p>
           </article>
         </div>
       </section>
 
       <section className="section-roles">
         <div className="section-head">
-          <p className="section-eyebrow">Il tuo locale e la squadra</p>
-          <h2 className="section-title">Due livelli: chi gestisce e chi opera</h2>
+          <p className="section-eyebrow">Staff sullo stesso ritmo</p>
+          <h2 className="section-title">Quando prendi un ordine, lo vedono tutti</h2>
           <p className="section-lead section-lead-roles">
-            <strong>Cosa sono i «tenant»?</strong> In pratica, ogni <strong>pizzeria iscritta</strong> (o ogni marchio che usi il servizio) ha uno <strong>spazio riservato</strong>: menu, ordini e impostazioni restano <strong>separati</strong> da quelli degli altri locali. È il modo in cui il software tiene i dati al sicuro e ordinati, locale per locale.
+            Cassa, cucina, banco e consegne non sono più mondi separati: un solo flusso in tempo
+            reale, così la cucina non aspetta e nemmeno il tuo gestionale dovrebbe farlo.
           </p>
         </div>
         <div className="roles-grid roles-grid-two">
@@ -141,14 +189,16 @@ export default function Landing() {
             <span className="role-tag">Gestione</span>
             <h3>Titolare e amministratori</h3>
             <p>
-              Chi gestisce il locale: menu, listini, report, orari, dati della pizzeria e chi può accedere alle varie aree (cassa, cucina, …). È il pannello di comando del <strong>tuo</strong> spazio — quello della tua attività, non mescolato con altri clienti.
+              Menu, orari, area consegna, turni cassa e permessi: il pannello di comando del tuo
+              locale, con i dati isolati e al sicuro.
             </p>
           </div>
           <div className="role-card">
             <span className="role-tag">Sala &amp; cucina</span>
             <h3>Operatori</h3>
             <p>
-              Cassa, cucina, bancone e delivery: schermate pensate per velocità e meno errori in servizio. Ogni operatore vede solo ciò che serve al proprio ruolo.
+              Schermate per cassa, cucina, bancone e delivery: velocità in servizio, meno errori,
+              meno foglietti.
             </p>
           </div>
         </div>
@@ -158,11 +208,15 @@ export default function Landing() {
 
       <section className="cta-block">
         <div className="cta-inner">
-          <h2>Porta ordine e cucina sulla stessa frequenza</h2>
-          <p>Scopri come PizzaManager può adattarsi al tuo locale: dalla singola sede al modello multi-punto.</p>
+          <h2>PizzaManager. La cucina non aspetta, e nemmeno il tuo gestionale dovrebbe farlo.</h2>
+          <p>Porta il tuo locale sotto controllo: dalla singola sede al secondo punto vendita.</p>
           <div className="cta-buttons">
-            <Link to="/contatti#prova-gratuita" className="btn-primary big">Richiedi prova o demo</Link>
-            <Link to="/login" className="btn-ghost big">Accedi al pannello</Link>
+            <Link to="/contatti#prova-gratuita" className="btn-primary big">
+              Richiedi prova o demo
+            </Link>
+            <Link to="/login" className="btn-ghost big">
+              Accedi al pannello
+            </Link>
           </div>
         </div>
       </section>
@@ -179,10 +233,11 @@ export default function Landing() {
             <Link to="/termini">Termini</Link>
             <Link to="/support">Supporto</Link>
           </nav>
-          <Link to="/login" className="footer-link">Accedi</Link>
+          <Link to="/login" className="footer-link">
+            Accedi
+          </Link>
         </div>
       </footer>
-
     </div>
   )
 }

@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager E4  tile crema</title>
+  <rect width="512" height="512" rx="112" fill="#faf7f2"/>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="none" stroke="#eadfd0" stroke-width="4"/>
+  <path fill="#c0392b" d="
+    M108 120h128c74 0 120 42 120 114s-46 114-120 114H172v82H108V120zm64 56v116h58c38 0 58-20 58-58s-20-58-58-58H172z
+  "/>
+  <path fill="#c0392b" d="
+    M286 430V210l54 108 54-108v220h-50V318l-29 54-29-54v112h-50z
+  "/>
+  <circle cx="400" cy="148" r="16" fill="#d35400"/>
+</svg>

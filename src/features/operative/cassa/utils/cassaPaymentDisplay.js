@@ -7,7 +7,15 @@ import {
   isTipoPagamentoPagaOnline,
   normalizeTipoPagamentoLabel,
   TIPO_PAGAMENTO_PAGA_ONLINE,
+  listTipiPagamentoCassa,
+  isCassaPagamentoPagaOnlineAbilitato,
+  TIPO_PAGAMENTO_CONTANTI,
+  TIPO_PAGAMENTO_CARTA,
+  TIPO_PAGAMENTO_MISTO,
+  TIPO_PAGAMENTO_DA_PAGARE,
+  TIPO_PAGAMENTO_ALTRO,
 } from "@/features/operative/cassa/utils/cassaPagamentiOptions"
+import { getTenantOnlinePaymentProviders } from "@/constants/onlinePaymentProviders"
 
 export function iconTipoPagamentoLista(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
@@ -58,4 +66,46 @@ export function tipoPagamentoInAttesa(tipoPagamento) {
     (t.includes("stripe") && t.includes("attesa")) ||
     (t.includes("online") && t.includes("attesa"))
   )
+}
+
+const LEGENDA_PAGAMENTO_BY_TIPO = {
+  [TIPO_PAGAMENTO_CONTANTI]: { mark: "💵", text: "Contanti" },
+  [TIPO_PAGAMENTO_CARTA]: { mark: "💳", text: "Carta / POS" },
+  [TIPO_PAGAMENTO_MISTO]: { mark: "🔀", text: "Pagamento misto" },
+  [TIPO_PAGAMENTO_DA_PAGARE]: { mark: "⏳", text: "Da pagare" },
+  [TIPO_PAGAMENTO_PAGA_ONLINE]: { mark: "🔗", text: "Paga online (link)" },
+  [TIPO_PAGAMENTO_ALTRO]: { mark: "🧾", text: "Altro" },
+}
+
+const LEGENDA_PAGAMENTO_BY_PROVIDER = {
+  stripe: { mark: "🛒", text: "Pagamento online (Stripe)" },
+  sumup: { mark: "📲", text: "SumUp" },
+  satispay: { mark: "📱", text: "Satispay" },
+}
+
+/** Voci legenda pagamento in lista ordini Cassa — solo metodi attivi per il tenant. */
+export function buildLegendaPagamentoOrdini(parametri, tenant) {
+  const tipi = listTipiPagamentoCassa(parametri, { ordineOnline: false })
+  const items = []
+  const seen = new Set()
+
+  for (const tipo of tipi) {
+    const entry = LEGENDA_PAGAMENTO_BY_TIPO[tipo]
+    if (entry && !seen.has(entry.text)) {
+      items.push(entry)
+      seen.add(entry.text)
+    }
+  }
+
+  if (isCassaPagamentoPagaOnlineAbilitato(parametri)) {
+    for (const row of getTenantOnlinePaymentProviders(tenant)) {
+      const entry = LEGENDA_PAGAMENTO_BY_PROVIDER[row.provider_key]
+      if (entry && !seen.has(entry.text)) {
+        items.push(entry)
+        seen.add(entry.text)
+      }
+    }
+  }
+
+  return items
 }
