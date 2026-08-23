@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { formatPrice } from "@/utils/format"
 import CartItem from "./CartItem"
+import CassaConsegnaMappaSlot from "./CassaConsegnaMappaSlot"
 import {
   getTodayOrari,
   buildSlotsInOpeningHours,
@@ -42,6 +43,8 @@ export default function RiepilogoOrdinePage({
   onCheckoutScontoGlobaleChange,
   tipoOrdine,
   deliverySearch,
+  deliveryMapCoords = null,
+  altreConsegneOggi = [],
   checkoutNote,
   onCheckoutNoteChange,
   checkoutTipoPagamento,
@@ -70,6 +73,12 @@ export default function RiepilogoOrdinePage({
   onRemove,
   onEditPizza,
   pizzePerSlotFromOrders = {},
+  /** Numero di ordini (non pizze) per fascia — stessa fonte del Planning, per il dettaglio "N consegne · M ritiri". */
+  consegnePerSlotFromOrders = {},
+  ritiriPerSlotFromOrders = {},
+  indirizziPerSlotFromOrders = {},
+  shopCoords = null,
+  shopLogoUrl = null,
   /** Tetto pizze/forno per fascia 15 min (allineato al planning). Se omesso, calcolo da parametri canale. */
   maxPizzeFornoPerSlot = null,
   /** Fedeltà (solo ritiro in negozio, se servizio attivo) */
@@ -104,6 +113,8 @@ export default function RiepilogoOrdinePage({
       : maxPizzeCanale
 
   const orariOggi = useMemo(() => getTodayOrari(orariSettimana), [orariSettimana])
+  /** Mappa chiusa di default: layout compatto come prima, aperta solo su richiesta (tasto «Mostra mappa»). */
+  const [mapVisible, setMapVisible] = useState(false)
   const [slotTick, setSlotTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setSlotTick((n) => n + 1), 30 * 1000)
@@ -522,10 +533,40 @@ export default function RiepilogoOrdinePage({
       )}
 
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>
-          {tipoOrdine === "delivery" ? "Fasce orarie consegna" : "Fasce orarie ritiro"}
-        </h3>
-        <p style={styles.pizzeOrdine}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <h3 style={{ ...styles.sectionTitle, margin: 0 }}>
+            {tipoOrdine === "delivery" ? "Fasce orarie consegna" : "Fasce orarie ritiro"}
+          </h3>
+          {tipoOrdine === "delivery" && (deliveryMapCoords || (altreConsegneOggi && altreConsegneOggi.length > 0)) ? (
+            <button
+              type="button"
+              onClick={() => setMapVisible((v) => !v)}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: "3px 10px",
+                borderRadius: 999,
+                border: "1px solid #94a3b8",
+                background: mapVisible ? "#1565c0" : "#fff",
+                color: mapVisible ? "#fff" : "#334155",
+                cursor: "pointer",
+              }}
+            >
+              📍 {mapVisible ? "Nascondi mappa" : "Mostra mappa"}
+            </button>
+          ) : null}
+        </div>
+        {mapVisible && tipoOrdine === "delivery" && (deliveryMapCoords || (altreConsegneOggi && altreConsegneOggi.length > 0)) && (
+          <div style={{ marginTop: 10 }}>
+            <CassaConsegnaMappaSlot
+              currentCoords={deliveryMapCoords}
+              altreConsegne={altreConsegneOggi}
+              shopCoords={shopCoords}
+              shopLogoUrl={shopLogoUrl}
+            />
+          </div>
+        )}
+        <p style={{ ...styles.pizzeOrdine, marginTop: 10 }}>
           Il tuo ordine: <strong>{totalPizzeOrdine} {totalPizzeOrdine === 1 ? "pizza" : "pizze"}</strong>
         </p>
         <p style={styles.hint}>
@@ -541,8 +582,8 @@ export default function RiepilogoOrdinePage({
             <>Solo nell’orario di apertura; oltre la chiusura non è disponibile nessun orario. </>
           )}
           Capacità forno: max {maxPizzePerSlot} pizze ogni {PLANNING_GRID_SLOT_MINUTES} min. In ogni fascia vedi le pizze{" "}
-          <strong>già prenotate oggi</strong> (consegna + ritiro). Se selezioni una fascia, il conteggio include anche
-          le pizze di <strong>questo ordine</strong>.
+          <strong>già prenotate oggi</strong> (consegna + ritiro) e il dettaglio consegne/ritiri, come nel Planning. Se
+          selezioni una fascia, il conteggio include anche le pizze di <strong>questo ordine</strong>.
         </p>
         {noSlotDisponibili && (
           <p style={{ color: "#c62828", fontWeight: 600, marginBottom: 12 }}>
@@ -556,6 +597,9 @@ export default function RiepilogoOrdinePage({
         <div style={styles.slotsGrid}>
           {slots.map((slot) => {
             const booked = pizzePerSlot[slot.key] ?? 0
+            const consegneCount = consegnePerSlotFromOrders[slot.key] ?? 0
+            const ritiriCount = ritiriPerSlotFromOrders[slot.key] ?? 0
+            const indirizziSlot = indirizziPerSlotFromOrders[slot.key] ?? []
             const isSelected = selectedSlot?.key === slot.key
             const withCart = isSelected ? booked + totalPizzeOrdine : booked
             const past = isSlotPast(slot, nowForSlots)
@@ -599,6 +643,32 @@ export default function RiepilogoOrdinePage({
                 <div style={styles.slotTime}>{slot.label}</div>
                 <div style={styles.slotCount}>
                   {booked} {booked === 1 ? "pizza prenotata" : "pizze prenotate"}
+                  {consegneCount > 0 || ritiriCount > 0 ? (
+                    <span style={{ display: "block", fontSize: 10, marginTop: 2, color: "#475569" }}>
+                      {consegneCount} {consegneCount === 1 ? "consegna" : "consegne"} · {ritiriCount}{" "}
+                      {ritiriCount === 1 ? "ritiro" : "ritiri"}
+                    </span>
+                  ) : null}
+                  {indirizziSlot.length > 0 ? (
+                    <ul
+                      style={{
+                        listStyle: "none",
+                        margin: "3px 0 0",
+                        padding: 0,
+                        textAlign: "left",
+                        fontSize: 10,
+                        lineHeight: 1.5,
+                        color: "#1e293b",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {indirizziSlot.map((via, i) => (
+                        <li key={i} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                          📍 {via}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {isSelected && totalPizzeOrdine > 0 ? (
                     <span style={{ display: "block", fontSize: 11, marginTop: 2, fontWeight: 600 }}>
                       +{totalPizzeOrdine} in questo ordine → {withCart} totali

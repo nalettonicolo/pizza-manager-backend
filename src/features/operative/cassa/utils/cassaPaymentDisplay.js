@@ -43,6 +43,13 @@ export function isTipoPagamentoLink(tipoPagamento) {
   return isTipoPagamentoPagaOnline(tipoPagamento)
 }
 
+/** Il pagamento (in attesa) è specificamente un provider online (Stripe/SumUp) o un link "Paga online"
+ * generico — da segnalare a cassa in modo diverso da un semplice "da pagare" al banco/alla consegna. */
+export function isTipoPagamentoOnlineProvider(tipoPagamento) {
+  const t = String(tipoPagamento || "").toLowerCase()
+  return isTipoPagamentoPagaOnline(t) || t.includes("stripe") || t.includes("sumup")
+}
+
 export function tipoPagamentoInAttesa(tipoPagamento) {
   const t = String(tipoPagamento || "").toLowerCase()
   return (

@@ -20,11 +20,15 @@ export default function CassaModificaOrdineModal({
   setModificaRighe,
   modificaProdottiList,
   modificaTotaleAnteprima,
+  orarioSlots,
   tipiPagamento,
   onClose,
   onSave,
 }) {
   if (!ordine) return null
+
+  const slotSelezionato = (orarioSlots || []).find((s) => s.label === modificaForm.orario_ritiro)
+  const slotAlLimite = slotSelezionato?.over === true
 
   return (
     <div style={styles.modalOverlay} onClick={() => !saving && onClose()} role="dialog" aria-modal="true">
@@ -225,13 +229,43 @@ export default function CassaModificaOrdineModal({
           ) : null}
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontWeight: 500 }}>Orario ritiro o consegna</span>
-            <input
-              type="text"
-              value={modificaForm.orario_ritiro}
-              onChange={(e) => setModificaForm((f) => ({ ...f, orario_ritiro: e.target.value }))}
-              placeholder="Es. 18:30"
-              style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-            />
+            {orarioSlots && orarioSlots.length > 0 ? (
+              <select
+                value={modificaForm.orario_ritiro}
+                onChange={(e) => setModificaForm((f) => ({ ...f, orario_ritiro: e.target.value }))}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: slotAlLimite ? "1px solid #c2410c" : "1px solid #ccc",
+                }}
+              >
+                {!orarioSlots.some((s) => s.label === modificaForm.orario_ritiro) ? (
+                  <option value={modificaForm.orario_ritiro}>{modificaForm.orario_ritiro || "—"}</option>
+                ) : null}
+                {orarioSlots.map((s) => (
+                  <option key={s.key} value={s.label}>
+                    {s.label}
+                    {s.maxPerSlot > 0 ? ` (${s.pizze}/${s.maxPerSlot} pizze)` : ""}
+                    {s.over ? " — al limite" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Fallback se gli orari di apertura non sono configurati: resta modificabile a testo.
+              <input
+                type="text"
+                value={modificaForm.orario_ritiro}
+                onChange={(e) => setModificaForm((f) => ({ ...f, orario_ritiro: e.target.value }))}
+                placeholder="Es. 18:30"
+                style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
+              />
+            )}
+            {slotAlLimite ? (
+              <span style={{ fontSize: 12, color: "#9a3412", lineHeight: 1.4 }}>
+                Fascia già al limite di capacità forno (in base al carico stimato). Puoi comunque salvare per
+                forzare l'inserimento — valuta tu se il locale può reggere il carico extra.
+              </span>
+            ) : null}
           </label>
           {ordineIsDelivery(ordine) ? (
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>

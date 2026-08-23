@@ -1,17 +1,12 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
-import { useSuperadminLocalJson } from "@/features/superadmin/hooks/useSuperadminLocalJson"
+import { useSuperadminChecklistDbProgress } from "@/features/superadmin/hooks/useSuperadminChecklistDbProgress"
 import {
   CHECKLIST_MODIFICHE_MESE,
   CHECKLIST_EPIC_LABELS,
   CHECKLIST_BATCH_TEST_PRIORITA,
   groupChecklistByEpicAndArea,
 } from "@/features/superadmin/data/checklistModificheMese"
-import { loadAndMigrateChecklistProgress } from "@/features/superadmin/utils/checklistMeseProgress"
-
-/** Stabile: non cambiare senza migrare i dati (vedi checklistMeseProgress.js). */
-const STORAGE_SUFFIX = "checklist_modifiche_mese_v2_codici"
-const EMPTY = {}
 
 const URGENZA_STYLE = {
   alta: { bg: "#fef2f2", fg: "#991b1b", label: "Da verificare subito" },
@@ -19,35 +14,21 @@ const URGENZA_STYLE = {
   bassa: { bg: "#f8fafc", fg: "#64748b", label: "Può attendere" },
 }
 
-// Merge v1→v2 appena il modulo è caricato (prima del primo paint del hook).
-if (typeof window !== "undefined") {
-  loadAndMigrateChecklistProgress()
-}
-
 /**
  * Checklist mensile: epic → area → voci (ogni voce ha flag e nota propri).
  */
 export default function SuperadminChecklistMesePage() {
-  const { data: progress, setData: setProgress, ready } = useSuperadminLocalJson(STORAGE_SUFFIX, EMPTY)
+  const { data: progress, setData: setProgress, ready, migratedCount } = useSuperadminChecklistDbProgress()
   const [q, setQ] = useState("")
   const [soloAperti, setSoloAperti] = useState(false)
   const [soloUrgenti, setSoloUrgenti] = useState(false)
   const [soloDaFare, setSoloDaFare] = useState(false)
   const [openCodice, setOpenCodice] = useState(null)
   const [completateOpen, setCompletateOpen] = useState(false)
-  const [migrateInfo] = useState(() => {
-    if (typeof window === "undefined") return null
-    try {
-      const hadV1 = Boolean(localStorage.getItem("pm_superadmin_checklist_modifiche_mese_2026_08"))
-      const merged = loadAndMigrateChecklistProgress()
-      if (hadV1 && Object.keys(merged || {}).length > 0) {
-        return `Ripristinati progressi/note dalla versione precedente (${Object.keys(merged).length} voci in archivio).`
-      }
-    } catch {
-      /* ignore */
-    }
-    return null
-  })
+  const migrateInfo =
+    migratedCount > 0
+      ? `Importati ${migratedCount} progressi/note salvati in questo browser nel database condiviso (ora visibili anche dagli altri ambienti).`
+      : null
   const noteTimers = useRef({})
 
   const isDone = useCallback((codice) => Boolean(progress?.[codice]?.done), [progress])
@@ -245,8 +226,8 @@ export default function SuperadminChecklistMesePage() {
           lineHeight: 1.5,
         }}
       >
-        Cita il <strong>codice</strong> in chat (es. <code>CL-05</code>) per adattare quel pezzo. Flag e note restano
-        salvati in questo browser; non cambiare chiave di archivio senza migrazione.
+        Cita il <strong>codice</strong> in chat (es. <code>CL-05</code>) per adattare quel pezzo. Flag e note sono
+        salvati nel database (condivisi tra ambienti: locale e produzione vedono lo stesso stato).
       </p>
       <p
         style={{

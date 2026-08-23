@@ -20,6 +20,9 @@ export const PUBLIC_PARAMETRI_OPERATIVI_KEYS = [
   "cassa_pagamento_contanti",
   "cassa_pagamento_carta",
   "cassa_pagamento_paga_online",
+  "vetrina_consegna_filtro_quarto_attivo",
+  "vetrina_consegna_filtro_quarto_ora_fine",
+  "vetrina_consegna_filtro_quarto_minuto",
 ]
 
 /** Chiavi sensibili che non devono comparire nella risposta pubblica. */

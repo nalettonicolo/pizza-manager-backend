@@ -35,7 +35,13 @@ function InnerPay({ onSuccess, onError, returnUrl }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PaymentElement />
+      <PaymentElement
+        options={{
+          layout: "tabs",
+          paymentMethodOrder: ["card"],
+          wallets: { applePay: "never", googlePay: "never", link: "never" },
+        }}
+      />
       <button
         type="button"
         disabled={!stripe || busy}
@@ -60,7 +66,7 @@ function InnerPay({ onSuccess, onError, returnUrl }) {
  * Payment Element Stripe (SCA / 3DS gestiti da Stripe).
  * Non usa <form> interno: il checkout vetrina ha già un form esterno (nested form = click ignora confirmPayment).
  */
-export default function StripePaymentForm({ publishableKey, clientSecret, onSuccess, onError }) {
+export default function StripePaymentForm({ publishableKey, clientSecret, onSuccess, onError, returnPath = "/cliente/ordini" }) {
   const stripePromise = useMemo(() => {
     const pk = String(publishableKey || "").trim()
     if (!pk.startsWith("pk_")) return null
@@ -69,11 +75,11 @@ export default function StripePaymentForm({ publishableKey, clientSecret, onSucc
 
   const returnUrl = useMemo(() => {
     try {
-      return new URL("/cliente/ordini", window.location.origin).href
+      return new URL(returnPath, window.location.origin).href
     } catch {
-      return `${window.location.origin}/cliente/ordini`
+      return `${window.location.origin}${returnPath}`
     }
-  }, [])
+  }, [returnPath])
 
   if (!clientSecret) {
     return (

@@ -18,18 +18,36 @@ const PizzaioloDashboard = lazy(() => import("@/features/operative/pizzaiolo/pag
 const Cucina = lazy(() => import("@/features/operative/cucina/pages/Cucina"))
 const Bancone = lazy(() => import("@/features/operative/bancone/pages/Bancone"))
 const DeliveryDashboard = lazy(() => import("@/features/operative/delivery/pages/DeliveryDashboard"))
+const CassaPage = lazy(() => import("@/features/operative/cassa/pages/CassaPage"))
 
 /** Nel test 4 reparti: tutte le delivery di oggi per fascia oraria; la route full screen resta sul flusso PRONTO. */
 function DeliveryQuadTestPane() {
   return <DeliveryDashboard mode="quadTestBySlot" />
 }
 
-const PANES = [
-  { path: "/operative/pizzaioli", label: "Pizzaioli", El: PizzaioloDashboard },
-  { path: "/operative/bancone", label: "Bancone", El: Bancone },
-  { path: "/operative/cucina", label: "Cucina", El: Cucina },
-  { path: "/operative/delivery", label: "Delivery / pony", El: DeliveryQuadTestPane },
+/** Reparti disponibili per ciascuno dei 4 riquadri: l'utente sceglie liberamente cosa vedere dove. */
+const AVAILABLE_PANES = [
+  { key: "cassa", label: "Cassa", El: CassaPage },
+  { key: "pizzaioli", label: "Pizzaioli", El: PizzaioloDashboard },
+  { key: "bancone", label: "Bancone", El: Bancone },
+  { key: "cucina", label: "Cucina", El: Cucina },
+  { key: "delivery", label: "Delivery / pony", El: DeliveryQuadTestPane },
 ]
+const PANE_BY_KEY = new Map(AVAILABLE_PANES.map((p) => [p.key, p]))
+
+const DEFAULT_SELECTION = ["pizzaioli", "bancone", "cucina", "delivery"]
+const SELECTION_STORAGE_KEY = "pm_reparti_quad_test_selection_v1"
+
+function loadStoredSelection() {
+  try {
+    const raw = window.localStorage.getItem(SELECTION_STORAGE_KEY)
+    const arr = raw ? JSON.parse(raw) : null
+    if (!Array.isArray(arr) || arr.length !== 4) return DEFAULT_SELECTION
+    return arr.map((k) => (PANE_BY_KEY.has(k) ? k : DEFAULT_SELECTION[0]))
+  } catch {
+    return DEFAULT_SELECTION
+  }
+}
 
 function PanelFallback() {
   return (
@@ -42,7 +60,20 @@ export default function RepartiQuadTestPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [reloadKey, setReloadKey] = useState(0)
+  const [selection, setSelection] = useState(loadStoredSelection)
   const inDemo = isDemoGiroSearch(location.search)
+
+  function updatePaneSelection(index, key) {
+    setSelection((prev) => {
+      const next = prev.map((k, i) => (i === index ? key : k))
+      try {
+        window.localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
 
   const canAccessQuad =
     isQuadRepartiTestEmail(user?.email) || isSuperAdminRole(ruolo) || inDemo
@@ -80,7 +111,7 @@ export default function RepartiQuadTestPage() {
       >
         <strong style={{ fontSize: 14, color: "#0f172a" }}>Test 4 reparti</strong>
         <span style={{ fontSize: 12, color: "#64748b" }}>
-          Pizzaioli · Bancone · Cucina · Delivery (sessione condivisa, senza iframe)
+          Scegli il reparto in ciascun riquadro (sessione condivisa, senza iframe)
         </span>
         <Link
           to={withPreservedSupportSearch("/operative/cassa", location.search)}
@@ -151,11 +182,12 @@ export default function RepartiQuadTestPage() {
             background: "#e2e8f0",
           }}
         >
-          {PANES.map((f) => {
+          {selection.map((key, index) => {
+            const f = PANE_BY_KEY.get(key) || AVAILABLE_PANES[0]
             const Comp = f.El
             return (
               <div
-                key={`${f.path}-${reloadKey}`}
+                key={`slot-${index}-${f.key}-${reloadKey}`}
                 style={{
                   position: "relative",
                   minHeight: 0,
@@ -171,7 +203,10 @@ export default function RepartiQuadTestPage() {
                 <div
                   style={{
                     flexShrink: 0,
-                    padding: "4px 8px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 6px",
                     fontSize: 11,
                     fontWeight: 700,
                     color: "#334155",
@@ -179,7 +214,25 @@ export default function RepartiQuadTestPage() {
                     borderBottom: "1px solid #e2e8f0",
                   }}
                 >
-                  {f.label}
+                  <select
+                    value={f.key}
+                    onChange={(e) => updatePaneSelection(index, e.target.value)}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#334155",
+                      padding: "2px 4px",
+                      borderRadius: 4,
+                      border: "1px solid #cbd5e1",
+                      background: "#fff",
+                    }}
+                  >
+                    {AVAILABLE_PANES.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div
                   className="reparti-quad-panel-body"

@@ -37,6 +37,8 @@ export default function OnlinePaymentProviderCard({
   const [secretDraft, setSecretDraft] = useState("")
   const [savingPublic, setSavingPublic] = useState(false)
   const [savingSecret, setSavingSecret] = useState(false)
+  const [publicFeedback, setPublicFeedback] = useState(null) // { tone: "ok" | "error", text }
+  const [secretFeedback, setSecretFeedback] = useState(null)
 
   const cfg = useMemo(
     () => ({ ...(row?.public_config || {}), ...(publicDraft || {}) }),
@@ -50,9 +52,16 @@ export default function OnlinePaymentProviderCard({
     e.preventDefault()
     if (!onSavePublic) return
     setSavingPublic(true)
+    setPublicFeedback(null)
     try {
       await onSavePublic(definition.key, cfg)
       setPublicDraft({})
+      setPublicFeedback({ tone: "ok", text: "Configurazione salvata." })
+    } catch (err) {
+      setPublicFeedback({
+        tone: "error",
+        text: `Salvataggio non riuscito: ${err?.message || "errore sconosciuto"}. Riprova o contatta il supporto.`,
+      })
     } finally {
       setSavingPublic(false)
     }
@@ -62,9 +71,16 @@ export default function OnlinePaymentProviderCard({
     e.preventDefault()
     if (!onSaveSecret || !secretDraft.trim()) return
     setSavingSecret(true)
+    setSecretFeedback(null)
     try {
       await onSaveSecret(definition.key, secretDraft.trim())
       setSecretDraft("")
+      setSecretFeedback({ tone: "ok", text: "Segreto salvato." })
+    } catch (err) {
+      setSecretFeedback({
+        tone: "error",
+        text: `Salvataggio non riuscito: ${err?.message || "errore sconosciuto"}. Riprova o contatta il supporto.`,
+      })
     } finally {
       setSavingSecret(false)
     }
@@ -267,6 +283,16 @@ export default function OnlinePaymentProviderCard({
                 </button>
               ) : null}
             </div>
+            {publicFeedback ? (
+              <p className={`online-pay-card-feedback online-pay-card-feedback--${publicFeedback.tone}`}>
+                {publicFeedback.text}
+              </p>
+            ) : null}
+            {secretFeedback ? (
+              <p className={`online-pay-card-feedback online-pay-card-feedback--${secretFeedback.tone}`}>
+                {secretFeedback.text}
+              </p>
+            ) : null}
           </form>
           {children ? <div className="online-pay-card-extra">{children}</div> : null}
         </div>

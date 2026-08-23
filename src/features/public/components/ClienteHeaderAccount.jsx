@@ -15,10 +15,10 @@ import {
   finalizeDemoSaRestore,
   clearDemoClienteSessionFlags,
   getDemoClienteCredentials,
+  readCachedSupabaseUser,
   DEMO_CLIENTE_FLAG_KEY,
   DEMO_CLIENTE_QUERY,
 } from "@/utils/demoClienteSession"
-import { supabase } from "@/lib/supabaseClient"
 import { setDemoGiroSessionActive, withDemoGiroQuery } from "@/utils/demoGiro"
 import { SUPPORT_TENANT_QUERY, resolveSupportTenantOverride } from "@/utils/supportTenantOverride"
 import {
@@ -26,6 +26,7 @@ import {
   clienteTipoOrdineLabel,
 } from "@/utils/clienteOrdineStato"
 import { formatPrice } from "@/utils/format"
+import { PmMark } from "@/components/SaHomeButton"
 
 function formatOrdineQuando(iso) {
   if (!iso) return "—"
@@ -128,22 +129,22 @@ export default function ClienteHeaderAccount() {
         window.alert(r.error)
         return
       }
-      // Verifica che la sessione SA sia effettivamente attiva prima di navigare
-      // (evita redirect a /login con sessione ancora “cliente”).
-      try {
-        const { data } = await supabase.auth.getSession()
-        const email = data?.session?.user?.email
-        const demoEmail = String(getDemoClienteCredentials().email || "").toLowerCase()
-        if (!data?.session?.access_token) {
-          window.alert("Ripristino Super Admin incompleto (nessuna sessione). Riprova.")
-          return
-        }
-        if (email && demoEmail && String(email).toLowerCase() === demoEmail) {
-          window.alert("Sessione ancora su Cliente Test. Riprova «Super Admin» tra un attimo.")
-          return
-        }
-      } catch {
-        /* prosegui comunque se getSession fallisce dopo setSession ok */
+      // Verifica che la sessione SA sia effettivamente attiva prima di navigare (evita redirect a
+      // /login con sessione ancora "cliente"). Lettura sincrona da localStorage invece di
+      // supabase.auth.getSession(): con più tab/sessioni aperte in contemporanea (tipico qui,
+      // demo Super Admin + Cliente Test) getSession() può restare bloccato per secondi sul lock
+      // interno di supabase-js (navigator.locks) — stesso motivo per cui demoClienteSession.js usa
+      // già questa lettura diretta altrove. supabase.auth.setSession() (appena chiamato dentro
+      // restoreDemoSaSession) scrive su storage prima di risolvere, quindi il valore è già fresco.
+      const cachedUser = readCachedSupabaseUser()
+      const demoEmail = String(getDemoClienteCredentials().email || "").toLowerCase()
+      if (!cachedUser?.id) {
+        window.alert("Ripristino Super Admin incompleto (nessuna sessione). Riprova.")
+        return
+      }
+      if (cachedUser.email && demoEmail && String(cachedUser.email).toLowerCase() === demoEmail) {
+        window.alert("Sessione ancora su Cliente Test. Riprova «Super Admin» tra un attimo.")
+        return
       }
       setDemoGiroSessionActive(true)
       let tenantId = null
@@ -162,8 +163,24 @@ export default function ClienteHeaderAccount() {
       } catch {
         /* ignore */
       }
-      const dest = withDemoGiroQuery("/operative/dashboard", tenantId)
+      let dest = withDemoGiroQuery("/operative/dashboard", tenantId)
+      // _qa_console=1 è pensato per il giro DEMO da dentro Sala QA (stesso ruolo per tutta la
+      // sessione): qui invece la sessione cambia identità (da Cliente Test a Super Admin), e quel
+      // flag può far rimandare a Sala QA invece che all'hub Demo live. Non serve per l'hub: basta
+      // _demo_giro=1 (già presente) a farlo riconoscere come "Demo live".
+      try {
+        const u = new URL(dest, window.location.origin)
+        u.searchParams.delete("_qa_console")
+        dest = `${u.pathname}${u.search}`
+      } catch {
+        /* mantieni dest così com'è se l'URL non è valido */
+      }
       finalizeDemoSaRestore()
+      // Reload completo (non navigate()): la sessione è appena cambiata (Cliente Test → Super
+      // Admin) con supabase.auth.setSession(); un reload rilegge subito la sessione nuova da
+      // storage, mentre una navigazione client-side rischia di far leggere ad AuthContext ancora
+      // il ruolo "cliente" per un istante (onAuthStateChange è asincrono) — e le guardie di
+      // /operative/dashboard rimandano indietro in Area cliente prima che il ruolo si aggiorni.
       window.location.replace(dest)
     } finally {
       setRestoringSa(false)
@@ -187,11 +204,13 @@ export default function ClienteHeaderAccount() {
       {canReturnToSa ? (
         <button
           type="button"
-          className="public-layout-btn public-layout-btn--outline cliente-header-account__sa"
+          className="sa-home-btn sa-home-btn--compact cliente-header-account__sa"
           disabled={restoringSa}
           onClick={() => void backToSa()}
+          title="Torna all’hub DEMO (aree di lavoro)"
         >
-          {restoringSa ? "Uscita…" : "Super Admin"}
+          <PmMark size={16} />
+          <span className="sa-home-btn-label">{restoringSa ? "Uscita…" : "DEMO"}</span>
         </button>
       ) : isDemoCliente && demoClienteQuery ? (
         <button

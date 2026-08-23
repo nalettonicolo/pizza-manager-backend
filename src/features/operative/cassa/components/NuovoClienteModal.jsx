@@ -1,9 +1,23 @@
 import { useState, useEffect, useRef, useMemo } from "react"
+import L from "leaflet"
+import "leaflet/dist/leaflet.css"
 import Modal from "@/components/dashboard/Modal"
 import { createAnagraficaCliente, updateAnagraficaCliente } from "@/features/admin/services/adminService"
 import { getDeliveryPolygonOuterRing } from "@/utils/deliveryArea"
 import { formatIndirizzoFromNominatim, formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { getBrowserLocationAddress } from "@/utils/geolocateBrowser"
 import { useDebounce } from "@/hooks/useDebounce"
+
+const PIN_ICON = L.divIcon({
+  className: "cassa-nuovo-cliente-pin",
+  html:
+    '<svg width="26" height="36" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.7 23.3 0 15 0z" fill="#c0392b"/>' +
+    '<circle cx="15" cy="15" r="6" fill="#fff"/>' +
+    "</svg>",
+  iconSize: [26, 36],
+  iconAnchor: [13, 36],
+})
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 const inputStyle = {
@@ -14,7 +28,13 @@ const inputStyle = {
   fontSize: 14,
 }
 
-async function searchAddress(query) {
+/**
+ * @param {string} query
+ * @param {{ minLng: number, minLat: number, maxLng: number, maxLat: number } | null} [bbox]
+ *   Area di consegna del locale: se presente, i suggerimenti sono limitati a quella zona
+ *   (bounded=1 — niente risultati fuori area, anche omonimi in un'altra città/paese).
+ */
+async function searchAddress(query, bbox) {
   const q = (query || "").trim()
   if (q.length < 3) return []
   const params = new URLSearchParams({
@@ -22,7 +42,12 @@ async function searchAddress(query) {
     format: "json",
     limit: "5",
     addressdetails: "1",
+    countrycodes: "it",
   })
+  if (bbox) {
+    params.set("viewbox", `${bbox.minLng},${bbox.maxLat},${bbox.maxLng},${bbox.minLat}`)
+    params.set("bounded", "1")
+  }
   const res = await fetch(`${NOMINATIM_URL}?${params}`, {
     headers: { Accept: "application/json" },
   })
@@ -61,6 +86,12 @@ function deliveryAreaBbox(parametriOperativi) {
   return bboxFromPolygonRing(ring)
 }
 
+/** Toglie il CAP finale (5 cifre): stessa via vicina spesso torna con CAP diversi da Nominatim
+ * (zone limitrofe), inutile e confuso da mostrare/salvare per un indirizzo di consegna. */
+function senzaCap(label) {
+  return String(label || "").replace(/\s+\d{5}\s*$/, "").trim()
+}
+
 export default function NuovoClienteModal({
   open,
   onClose,
@@ -80,10 +111,100 @@ export default function NuovoClienteModal({
   const [addressSuggestions, setAddressSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [mapCenter, setMapCenter] = useState(null) // { lat, lon } or null
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState(null)
   const suggestionsRef = useRef(null)
   const inputAddressRef = useRef(null)
+  const mapContainerRef = useRef(null)
+  const mapRef = useRef(null)
+  const markerRef = useRef(null)
+  const polygonRef = useRef(null)
+  const [mapReady, setMapReady] = useState(false)
 
   const debouncedIndirizzo = useDebounce(indirizzo, 400)
+
+  // Mappa reale (Leaflet), non più un iframe statico: serve per mostrare davvero il poligono
+  // dell'area di consegna, non solo un riquadro ritagliato senza contorno visibile.
+  useEffect(() => {
+    if (!open || !mapContainerRef.current || mapRef.current) return undefined
+    const map = L.map(mapContainerRef.current, { center: [45.4064, 11.8768], zoom: 12, scrollWheelZoom: true })
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map)
+    map.on("click", (ev) => {
+      setMapCenter({ lat: ev.latlng.lat, lon: ev.latlng.lng })
+    })
+    mapRef.current = map
+    setMapReady(true)
+    return () => {
+      map.remove()
+      mapRef.current = null
+      markerRef.current = null
+      polygonRef.current = null
+      setMapReady(false)
+    }
+  }, [open])
+
+  const deliveryRing = useMemo(
+    () => getDeliveryPolygonOuterRing(parametriOperativi),
+    [parametriOperativi],
+  )
+  const deliveryRingKey = useMemo(
+    () => (Array.isArray(deliveryRing) ? JSON.stringify(deliveryRing) : ""),
+    [deliveryRing],
+  )
+
+  // Poligono area di consegna: prima qui non si vedeva affatto (l'iframe OSM non può disegnarlo),
+  // quindi l'operatore non aveva modo di capire a colpo d'occhio se un indirizzo ricade in area.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    if (polygonRef.current) {
+      polygonRef.current.remove()
+      polygonRef.current = null
+    }
+    if (!Array.isArray(deliveryRing) || deliveryRing.length <= 2) return
+    // deliveryRing è [lng, lat] (ordine GeoJSON): Leaflet vuole [lat, lng].
+    const latlngs = deliveryRing
+      .map((p) => [Number(p?.[1]), Number(p?.[0])])
+      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+    if (latlngs.length <= 2) return
+    const polygon = L.polygon(latlngs, {
+      color: "#0f766e",
+      weight: 2,
+      fillColor: "#2dd4bf",
+      fillOpacity: 0.18,
+    }).addTo(mapRef.current)
+    polygonRef.current = polygon
+    if (!mapCenter) mapRef.current.fitBounds(polygon.getBounds(), { padding: [16, 16] })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliveryRingKey è la dipendenza stabile
+  }, [mapReady, deliveryRingKey])
+
+  // Marker: crea/sposta in base a mapCenter (indirizzo cercato, suggerimento scelto, clic sulla
+  // mappa o posizione del dispositivo).
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    if (!mapCenter) {
+      if (markerRef.current) {
+        markerRef.current.remove()
+        markerRef.current = null
+      }
+      return
+    }
+    const pos = [mapCenter.lat, mapCenter.lon]
+    if (!markerRef.current) {
+      const marker = L.marker(pos, { draggable: true, icon: PIN_ICON }).addTo(mapRef.current)
+      marker.on("dragend", () => {
+        const p = marker.getLatLng()
+        setMapCenter({ lat: p.lat, lon: p.lng })
+      })
+      markerRef.current = marker
+    } else {
+      markerRef.current.setLatLng(pos)
+    }
+    mapRef.current.panTo(pos)
+    if (mapRef.current.getZoom() < 16) mapRef.current.setZoom(16)
+  }, [mapReady, mapCenter])
 
   useEffect(() => {
     if (!open) return
@@ -99,7 +220,7 @@ export default function NuovoClienteModal({
     const ind = (initialData?.indirizzo && String(initialData.indirizzo).trim()) || ""
     if (initialData?.id && ind.length >= 3) {
       let cancelled = false
-      searchAddress(ind).then((list) => {
+      searchAddress(ind, deliveryAreaBbox(parametriOperativi)).then((list) => {
         if (cancelled || !list?.length) return
         const top = list[0]
         const lat = parseFloat(top.lat)
@@ -113,7 +234,7 @@ export default function NuovoClienteModal({
       }
     }
     return undefined
-  }, [open, initialData])
+  }, [open, initialData, parametriOperativi])
 
   useEffect(() => {
     let cancelled = false
@@ -123,7 +244,7 @@ export default function NuovoClienteModal({
       setMapCenter(null)
       return
     }
-    searchAddress(debouncedIndirizzo).then((list) => {
+    searchAddress(debouncedIndirizzo, deliveryAreaBbox(parametriOperativi)).then((list) => {
       if (!cancelled) {
         setAddressSuggestions(list)
         setShowSuggestions(list.length > 0)
@@ -145,7 +266,7 @@ export default function NuovoClienteModal({
       }
     })
     return () => { cancelled = true }
-  }, [debouncedIndirizzo])
+  }, [debouncedIndirizzo, parametriOperativi])
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -179,10 +300,29 @@ export default function NuovoClienteModal({
   }
 
   const handleSelectSuggestion = (item) => {
-    setIndirizzo(formatIndirizzoFromNominatim(item))
+    setIndirizzo(senzaCap(formatIndirizzoFromNominatim(item, indirizzo)))
     setMapCenter({ lat: parseFloat(item.lat), lon: parseFloat(item.lon) })
     setShowSuggestions(false)
     setAddressSuggestions([])
+  }
+
+  /** Geolocalizza il dispositivo in uso (stesso pulsante 📍 del profilo cliente): utile quando il
+   * cliente detta l'indirizzo mentre l'operatore è fisicamente lì con lui (es. tablet al banco),
+   * non pensato per il normale ordine telefonico (geolocalizzerebbe la cassa, non il cliente). */
+  const handleUseMyLocation = async () => {
+    setGeoError(null)
+    setGeoLoading(true)
+    try {
+      const { lat, lng, address } = await getBrowserLocationAddress()
+      if (address) setIndirizzo(senzaCap(address))
+      setMapCenter({ lat, lon: lng })
+      setShowSuggestions(false)
+      setAddressSuggestions([])
+    } catch (err) {
+      setGeoError(err?.message || "Impossibile ottenere la posizione.")
+    } finally {
+      setGeoLoading(false)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -225,23 +365,24 @@ export default function NuovoClienteModal({
 
   const deliveryBbox = useMemo(() => deliveryAreaBbox(parametriOperativi), [parametriOperativi])
 
-  const mapSrc = useMemo(() => {
-    if (mapCenter) {
-      const { lat, lon } = mapCenter
-      const delta = 0.008
-      const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
-      return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lon}`
+  /** Stessa via vicina torna spesso più volte da Nominatim con solo il CAP diverso: qui lo
+   * togliamo dall'etichetta e uniamo le righe che risultano identiche, altrimenti si vedono
+   * 4-5 suggerimenti apparentemente uguali in fila. */
+  const dedupedSuggestions = useMemo(() => {
+    const seen = new Set()
+    const out = []
+    for (const item of addressSuggestions) {
+      const label = senzaCap(formatIndirizzoFromNominatim(item, indirizzo))
+      if (!label || seen.has(label)) continue
+      seen.add(label)
+      out.push({ item, label })
     }
-    if (deliveryBbox) {
-      const { minLng, minLat, maxLng, maxLat } = deliveryBbox
-      return `https://www.openstreetmap.org/export/embed.html?bbox=${minLng},${minLat},${maxLng},${maxLat}&layer=mapnik`
-    }
-    return null
-  }, [mapCenter, deliveryBbox])
+    return out
+  }, [addressSuggestions, indirizzo])
 
   const mapCaption = useMemo(() => {
-    if (mapCenter) return "Posizione dall’indirizzo (cerca o scegli un suggerimento)."
-    if (deliveryBbox) return "Area di consegna del locale (da Impostazioni). Inserisci l’indirizzo per il punto cliente."
+    if (mapCenter) return "Posizione dall’indirizzo (cerca, scegli un suggerimento o trascina il puntatore)."
+    if (deliveryBbox) return "Area di consegna del locale in verde. Inserisci l’indirizzo per il punto cliente, o clicca sulla mappa."
     return null
   }, [mapCenter, deliveryBbox])
 
@@ -254,20 +395,39 @@ export default function NuovoClienteModal({
             : "Inserisci i dati per la consegna. Se il cliente si registra poi da solo con lo stesso nome, indirizzo e telefono, l'account verrà unificato."}
         </p>
 
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 280px", minWidth: 0 }}>
-            <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Nome *</label>
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              required
-              placeholder="Nome e cognome"
-              style={inputStyle}
-            />
+        <div>
+          <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Nome *</label>
+          <input
+            type="text"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            required
+            placeholder="Nome e cognome"
+            style={inputStyle}
+          />
 
-            <div style={{ position: "relative", marginTop: 12 }}>
-              <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Indirizzo</label>
+          <label style={{ display: "block", marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Telefono *</label>
+          <input
+            type="tel"
+            value={telefono}
+            onChange={(e) => setTelefono(e.target.value)}
+            required
+            placeholder="Numero di telefono"
+            style={inputStyle}
+          />
+
+          <label style={{ display: "block", marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email (per invito a registrarsi)"
+            style={inputStyle}
+          />
+
+          <div style={{ position: "relative", marginTop: 12 }}>
+            <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Indirizzo</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
               <input
                 ref={inputAddressRef}
                 type="text"
@@ -277,105 +437,105 @@ export default function NuovoClienteModal({
                   setMapCenter(null)
                 }}
                 placeholder="Inizia a digitare per cercare l'indirizzo..."
-                style={inputStyle}
+                style={{ ...inputStyle, flex: 1, minWidth: 0 }}
               />
-              {showSuggestions && addressSuggestions.length > 0 && (
-                <ul
-                  ref={suggestionsRef}
-                  style={{
-                    listStyle: "none",
-                    margin: "4px 0 0",
-                    padding: 0,
-                    background: "#fff",
-                    border: "1px solid #ddd",
-                    borderRadius: 6,
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                    maxHeight: 200,
-                    overflowY: "auto",
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    zIndex: 10,
-                  }}
-                >
-                  {addressSuggestions.map((item, i) => (
-                    <li
-                      key={i}
-                      role="button"
-                      tabIndex={0}
-                      onMouseDown={(e) => {
+              <button
+                type="button"
+                onClick={handleUseMyLocation}
+                disabled={geoLoading}
+                title="Usa la posizione di questo dispositivo (geolocalizzazione)"
+                aria-label="Usa la mia posizione"
+                style={{
+                  flexShrink: 0,
+                  width: 44,
+                  border: "1px solid #ddd",
+                  borderRadius: 6,
+                  background: "#f8fafc",
+                  cursor: geoLoading ? "default" : "pointer",
+                  fontSize: 17,
+                  lineHeight: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: geoLoading ? 0.5 : 1,
+                }}
+              >
+                {geoLoading ? "…" : "📍"}
+              </button>
+            </div>
+            {geoError && (
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "#b91c1c" }}>{geoError}</p>
+            )}
+            {showSuggestions && addressSuggestions.length > 0 && (
+              <ul
+                ref={suggestionsRef}
+                style={{
+                  listStyle: "none",
+                  margin: "4px 0 0",
+                  padding: 0,
+                  background: "#fff",
+                  border: "1px solid #ddd",
+                  borderRadius: 6,
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  maxHeight: 200,
+                  overflowY: "auto",
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                }}
+              >
+                {dedupedSuggestions.map(({ item, label }, i) => (
+                  <li
+                    key={i}
+                    role="button"
+                    tabIndex={0}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      handleSelectSuggestion(item)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
                         e.preventDefault()
                         handleSelectSuggestion(item)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          handleSelectSuggestion(item)
-                        }
-                      }}
-                      style={{
-                        padding: "10px 12px",
-                        cursor: "pointer",
-                        borderBottom: "1px solid #eee",
-                        fontSize: 13,
-                      }}
-                    >
-                      {formatIndirizzoFromNominatim(item)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <label style={{ display: "block", marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Telefono *</label>
-            <input
-              type="tel"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              required
-              placeholder="Numero di telefono"
-              style={inputStyle}
-            />
-
-            <label style={{ display: "block", marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email (per invito a registrarsi)"
-              style={inputStyle}
-            />
+                      }
+                    }}
+                    style={{
+                      padding: "10px 12px",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #eee",
+                      fontSize: 13,
+                    }}
+                  >
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
-          <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+          <div style={{ marginTop: 12 }}>
             <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Mappa</label>
             {mapCaption ? (
               <p style={{ margin: "0 0 6px", fontSize: 11, color: "#64748b", lineHeight: 1.35 }}>{mapCaption}</p>
             ) : null}
             <div
+              ref={mapContainerRef}
               style={{
                 width: "100%",
-                height: 220,
+                height: 260,
                 borderRadius: 8,
                 overflow: "hidden",
                 border: "1px solid #ddd",
                 background: "#f0f0f0",
               }}
-            >
-              {mapSrc ? (
-                <iframe
-                  title="Mappa indirizzo e area di consegna"
-                  src={mapSrc}
-                  style={{ width: "100%", height: "100%", border: 0 }}
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-              ) : (
-                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#666", fontSize: 13, padding: 12, textAlign: "center" }}>
-                  Configura il poligono area di consegna in Impostazioni oppure cerca un indirizzo per la mappa.
-                </div>
-              )}
-            </div>
+              aria-label="Mappa indirizzo e area di consegna"
+            />
+            {!deliveryBbox ? (
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "#b45309" }}>
+                Nessun poligono area di consegna configurato in Impostazioni — la mappa mostra solo l’indirizzo cercato.
+              </p>
+            ) : null}
           </div>
         </div>
 

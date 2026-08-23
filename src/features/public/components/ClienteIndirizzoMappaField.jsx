@@ -3,6 +3,7 @@ import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { getDeliveryPolygonOuterRing } from "@/utils/deliveryArea"
 import { geocodeAddressForDelivery } from "@/utils/geocodeAddress"
+import { getBrowserLocationAddress } from "@/utils/geolocateBrowser"
 
 const DEFAULT_CENTER = { lat: 45.4064, lng: 11.8768 } // Padova: centro di fallback senza indirizzo
 
@@ -29,14 +30,40 @@ function debounce(fn, ms) {
   return debounced
 }
 
+/** Civico digitato in coda alla query (es. "Via Pontedera 4" → "4"; esclude il CAP, sempre 5 cifre). */
+function extractTypedCivico(q) {
+  // Cerca solo nel primo pezzo prima della virgola: se dopo il civico è già digitata la città
+  // (es. "Via Rossi 12, Padova"), il numero non è più l'ultimo token dell'intera stringa.
+  const primoPezzo = String(q || "").trim().split(",")[0] || ""
+  const m = primoPezzo.match(/(\d{1,4}[a-zA-Z]?)\s*$/)
+  return m ? m[1] : null
+}
+
+/**
+ * Nominatim spesso non ha il civico esatto indicizzato e restituisce solo la via: in quel caso
+ * il suggerimento non mostra il numero che il cliente ha appena digitato, e sembra "sparito".
+ * Se il risultato non ha un house_number reale, lo ricomponiamo inserendo il civico digitato
+ * subito dopo il nome via (il civico non geocodifica comunque una via non censita a quel livello:
+ * la posizione resta quella della via, corretta per l'uso — selezione della via giusta).
+ */
+function labelWithCivico(row, typedCivico) {
+  const hasHouseNumber = Boolean(row?.address?.house_number)
+  if (hasHouseNumber || !typedCivico) return row.display_name
+  const parts = String(row.display_name || "").split(", ")
+  if (!parts.length) return row.display_name
+  parts[0] = `${parts[0]} ${typedCivico}`
+  return parts.join(", ")
+}
+
 async function searchNominatim(q) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&countrycodes=it&limit=5&q=${encodeURIComponent(q)}`
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=it&limit=5&q=${encodeURIComponent(q)}`
   const res = await fetch(url, { headers: { Accept: "application/json" } })
   if (!res.ok) return []
   const data = await res.json()
+  const typedCivico = extractTypedCivico(q)
   return Array.isArray(data)
     ? data.map((row) => ({
-        label: row.display_name,
+        label: labelWithCivico(row, typedCivico),
         lat: parseFloat(row.lat),
         lng: parseFloat(row.lon),
       }))
@@ -70,6 +97,8 @@ export default function ClienteIndirizzoMappaField({
   const [suggestions, setSuggestions] = useState([])
   const [suggestOpen, setSuggestOpen] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState(null)
 
   const deliveryRing = useMemo(
     () => getDeliveryPolygonOuterRing(tenant?.parametri_operativi),
@@ -232,29 +261,74 @@ export default function ClienteIndirizzoMappaField({
     setSuggestOpen(false)
   }
 
+  async function handleUseMyLocation() {
+    setGeoError(null)
+    setGeoLoading(true)
+    try {
+      const { lat, lng, address } = await getBrowserLocationAddress()
+      if (address) onIndirizzoChange?.(address)
+      syncCoordsFromLatLng(lat, lng)
+      setSuggestions([])
+      setSuggestOpen(false)
+    } catch (err) {
+      setGeoError(err?.message || "Impossibile ottenere la posizione.")
+    } finally {
+      setGeoLoading(false)
+    }
+  }
+
   return (
     <div className="cliente-indirizzo-mappa">
       <label className="login-label" htmlFor={inputId}>
         {label}
       </label>
       <div style={{ position: "relative" }}>
-        <input
-          ref={indirizzoInputRef}
-          id={inputId}
-          className="login-input"
-          value={indirizzo}
-          onChange={handleInputChange}
-          onFocus={() => suggestions.length > 0 && setSuggestOpen(true)}
-          onBlur={() => window.setTimeout(() => setSuggestOpen(false), 150)}
-          autoComplete="street-address"
-          disabled={disabled}
-          placeholder="Via, civico, città"
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+          <input
+            ref={indirizzoInputRef}
+            id={inputId}
+            className="login-input"
+            value={indirizzo}
+            onChange={handleInputChange}
+            onFocus={() => suggestions.length > 0 && setSuggestOpen(true)}
+            onBlur={() => window.setTimeout(() => setSuggestOpen(false), 150)}
+            autoComplete="street-address"
+            disabled={disabled}
+            placeholder="Via, civico, città"
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          {!disabled ? (
+            <button
+              type="button"
+              onClick={handleUseMyLocation}
+              disabled={geoLoading}
+              title="Usa la mia posizione (geolocalizzazione)"
+              aria-label="Usa la mia posizione"
+              style={{
+                flexShrink: 0,
+                width: 44,
+                border: "1px solid #d0d8e6",
+                borderRadius: 8,
+                background: "#f8fafc",
+                cursor: geoLoading ? "default" : "pointer",
+                fontSize: 17,
+                lineHeight: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: geoLoading ? 0.5 : 1,
+              }}
+            >
+              {geoLoading ? "…" : "📍"}
+            </button>
+          ) : null}
+        </div>
         {suggestOpen && (searching || suggestions.length > 0) ? (
           <ul
             style={{
               position: "absolute",
               zIndex: 20,
+              top: "100%",
               left: 0,
               right: 0,
               marginTop: 2,
@@ -299,9 +373,14 @@ export default function ClienteIndirizzoMappaField({
         ) : null}
       </div>
       <p className="login-brand-sub" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
-        Inserisci l&apos;indirizzo completo e scegli un suggerimento. Sulla mappa puoi trascinare il puntatore o
-        cliccare il punto di consegna.
+        Inserisci l&apos;indirizzo completo e scegli un suggerimento, oppure usa 📍 per rilevare la tua posizione.
+        Sulla mappa puoi trascinare il puntatore o cliccare il punto di consegna.
       </p>
+      {geoError ? (
+        <p className="login-brand-sub" style={{ fontSize: 12, marginTop: 2, color: "#b91c1c" }}>
+          {geoError}
+        </p>
+      ) : null}
 
       {!disabled ? (
         <div

@@ -23,6 +23,9 @@ const defaultOrari = () =>
     consegnaDiversa: false,
     consegnaDa: "11:30",
     consegnaA: "14:30",
+    pranzoAttivo: false,
+    pranzoDa: "12:00",
+    pranzoA: "14:30",
   }));
 
 function parseOrari(val) {
@@ -39,6 +42,9 @@ function parseOrari(val) {
       consegnaDiversa: existing?.consegnaDiversa ?? false,
       consegnaDa: existing?.consegnaDa ?? "11:30",
       consegnaA: existing?.consegnaA ?? "14:30",
+      pranzoAttivo: existing?.pranzoAttivo ?? false,
+      pranzoDa: existing?.pranzoDa ?? "12:00",
+      pranzoA: existing?.pranzoA ?? "14:30",
     };
   });
 }
@@ -75,15 +81,20 @@ export default function OrariSection() {
       <section className="dashboard-box dashboard-settings-section">
         <p className="dashboard-settings-section-desc">
           Seleziona i giorni di apertura e gli orari del locale. Puoi impostare un orario di consegna diverso dall’orario di esercizio.
+          Se un giorno è aperto anche a pranzo (oltre alla sera), attiva “Aperto anche a pranzo”: cassa e checkout mostreranno
+          entrambe le fasce, saltando il buco di chiusura pomeridiana tra pranzo e sera.
         </p>
         <div style={{ overflowX: "auto", marginTop: 16 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #eee" }}>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Giorno</th>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Aperto</th>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Apertura</th>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Chiusura</th>
+                <th style={{ textAlign: "left", padding: "10px 8px" }}>Aperto anche a pranzo</th>
+                <th style={{ textAlign: "left", padding: "10px 8px" }}>Pranzo da</th>
+                <th style={{ textAlign: "left", padding: "10px 8px" }}>Pranzo a</th>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Consegna diversa</th>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Consegna da</th>
                 <th style={{ textAlign: "left", padding: "10px 8px" }}>Consegna a</th>
@@ -115,6 +126,32 @@ export default function OrariSection() {
                       value={row.chiusura}
                       onChange={(e) => updateGiorno(index, "chiusura", e.target.value)}
                       disabled={!row.aperto}
+                      style={{ padding: "6px 8px" }}
+                    />
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    <input
+                      type="checkbox"
+                      checked={row.pranzoAttivo}
+                      onChange={(e) => updateGiorno(index, "pranzoAttivo", e.target.checked)}
+                      disabled={!row.aperto}
+                    />
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    <input
+                      type="time"
+                      value={row.pranzoDa}
+                      onChange={(e) => updateGiorno(index, "pranzoDa", e.target.value)}
+                      disabled={!row.aperto || !row.pranzoAttivo}
+                      style={{ padding: "6px 8px" }}
+                    />
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    <input
+                      type="time"
+                      value={row.pranzoA}
+                      onChange={(e) => updateGiorno(index, "pranzoA", e.target.value)}
+                      disabled={!row.aperto || !row.pranzoAttivo}
                       style={{ padding: "6px 8px" }}
                     />
                   </td>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
@@ -11,6 +11,16 @@ import {
 } from "@/utils/clienteOrdineStato"
 import { formatPrice } from "@/utils/format"
 import { resolveClienteVetrinaPath } from "@/utils/clienteVetrinaPath"
+import { getLocalYYYYMMDD, orderCreatedLocalDateKey } from "@/utils/localDate"
+
+/** Ordine ancora aperto oggi (non consegnato/ritirato né annullato): quello che il cliente vuole
+ * vedere subito, non perso in mezzo allo storico. */
+const STATI_CONCLUSI = new Set(["CONSEGNATO", "ANNULLATO"])
+function isOrdineApertoOggi(o) {
+  const stato = String(o?.stato ?? "").toUpperCase()
+  if (STATI_CONCLUSI.has(stato)) return false
+  return orderCreatedLocalDateKey(o) === getLocalYYYYMMDD()
+}
 
 function formatDateTime(value) {
   if (!value) return "—"
@@ -31,6 +41,26 @@ function formatDateTime(value) {
   } catch {
     return raw
   }
+}
+
+/**
+ * Il campo note dell'ordine è in realtà un log operativo interno (tracciamento canale, metodo di
+ * pagamento, motivo di un eventuale rifiuto in cassa) — non testo scritto dal cliente. Mostrarlo
+ * grezzo espone gergo interno ("Ordine web · in attesa accettazione cassa") ed eventuali note che
+ * un operatore ha digitato pensando fossero solo per uso interno. Qui si ricava solo quello che
+ * ha senso per il cliente: un messaggio pulito se l'ordine è stato rifiutato/annullato dal locale,
+ * altrimenti nulla (i segmenti restanti sono tutti tracciamento interno).
+ */
+function noteClienteVisibile(detail) {
+  const raw = String(detail?.note || "").trim()
+  if (!raw) return null
+  const stato = String(detail?.stato || "").toUpperCase()
+  if (stato === "ANNULLATO") {
+    const conMotivo = raw.match(/Rifiutato cassa:\s*(.+?)\s*(?:·|$)/i)
+    if (conMotivo?.[1]) return `Il locale ha annullato l'ordine. Motivo: ${conMotivo[1].trim()}`
+    if (/Rifiutato (da cassa|cassa)/i.test(raw)) return "Il locale ha annullato l'ordine."
+  }
+  return null
 }
 
 function statoBadgeStyle(stato) {
@@ -56,6 +86,8 @@ export default function ClienteOrdiniPage() {
   const [sumupConfirming, setSumupConfirming] = useState(false)
   const [sumupMessage, setSumupMessage] = useState(null)
 
+  const ordiniApertiOggi = useMemo(() => orders.filter(isOrdineApertoOggi), [orders])
+
   useEffect(() => {
     let c = false
     ;(async () => {
@@ -80,6 +112,43 @@ export default function ClienteOrdiniPage() {
     if (!nuovoId) return
     openDetail(nuovoId)
   }, [nuovoId])
+
+  /**
+   * Aggiornamento silenzioso: se cassa accetta/sposta l'ordine mentre il cliente ha questa pagina
+   * aperta, prima restava fermo alla prima foto finché non si ricaricava a mano la pagina. Ogni 15s
+   * (e subito al ritorno sulla tab) rilegge lista e, se aperto, il dettaglio — senza spinner/errori
+   * visibili per non disturbare se un tick va storto.
+   */
+  useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const { data, error: err } = await listClienteOrdini()
+        if (!cancelled && !err && data) setOrders(data)
+      } catch {
+        /* silenzioso: prossimo tick riprova */
+      }
+      if (cancelled) return
+      setDetail((prevDetail) => {
+        if (prevDetail?.id) {
+          void getClienteOrdineDettaglio(prevDetail.id).then(({ data, error: err }) => {
+            if (!cancelled && !err && data) setDetail(data)
+          })
+        }
+        return prevDetail
+      })
+    }
+    const id = setInterval(refresh, 15000)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [])
 
   useEffect(() => {
     if (!sumupReturn || !nuovoId) return
@@ -182,6 +251,47 @@ export default function ClienteOrdiniPage() {
       ) : null}
 
       {error ? <ErrorState message={error} /> : null}
+
+      {!error && ordiniApertiOggi.length > 0 ? (
+        <div style={{ marginBottom: 22 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            {ordiniApertiOggi.length === 1 ? "Il tuo ordine di oggi" : "I tuoi ordini di oggi"}
+          </h2>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            {ordiniApertiOggi.map((o) => (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => openDetail(o.id)}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "14px 16px",
+                    borderRadius: 10,
+                    border: "1px solid #93c5fd",
+                    background: "#eff6ff",
+                    cursor: "pointer",
+                    font: "inherit",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 15 }}>Ordine #{o.numero ?? "—"}</strong>
+                    <span
+                      style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 999, ...statoBadgeStyle(o.stato) }}
+                    >
+                      {clienteStatoOrdineLabel(o.stato)}
+                    </span>
+                  </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 13, color: "#1d4ed8" }}>
+                    {clienteTipoOrdineLabel(o.tipo_ordine)}
+                    {o.orario_ritiro ? ` · previsto per le ${o.orario_ritiro}` : ""}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {!error && orders.length === 0 ? (
         <div
@@ -325,10 +435,10 @@ export default function ClienteOrdiniPage() {
                 <dd style={{ margin: "0 0 10px" }}>{detail.indirizzo_consegna}</dd>
               </>
             ) : null}
-            {detail.note ? (
+            {noteClienteVisibile(detail) ? (
               <>
                 <dt style={{ color: "#64748b", fontWeight: 600 }}>Note</dt>
-                <dd style={{ margin: "0 0 10px", whiteSpace: "pre-wrap" }}>{detail.note}</dd>
+                <dd style={{ margin: "0 0 10px", whiteSpace: "pre-wrap" }}>{noteClienteVisibile(detail)}</dd>
               </>
             ) : null}
           </dl>

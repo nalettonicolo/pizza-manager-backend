@@ -167,11 +167,28 @@ export function formatIndirizzoFromGoogleAddressComponents(components) {
 }
 
 /**
+ * Civico digitato dopo il nome via (es. "Via Rossi 12" → "12", "Via Rossi 12, Padova" → "12" —
+ * cerca solo nel primo pezzo prima della virgola, non in fondo a tutta la stringa: altrimenti con
+ * città/CAP già digitati dopo il civico (caso comune mentre si continua a scrivere) il numero non
+ * è più l'ultimo token e sparisce). Esclude il CAP, sempre 5 cifre. Riconosce anche il civico con
+ * sub-unità separata da barra (es. "19a/1", frequente in alcune città) — senza questo, digitando
+ * quella forma veniva riconosciuta solo la parte dopo la barra ("1"), perdendo "19a/".
+ */
+function extractTypedCivico(query) {
+  const primoPezzo = String(query || "").trim().split(",")[0] || ""
+  const m = primoPezzo.match(/(\d{1,4}[a-zA-Z]?(?:\/\d{1,4}[a-zA-Z]?)?)\s*$/)
+  return m ? m[1] : ""
+}
+
+/**
  * Risultato ricerca Nominatim con `format=json` e `addressdetails=1`.
  * @param {object} item
+ * @param {string} [typedQuery] — testo digitato dall'utente: se Nominatim non ha il civico esatto
+ *   indicizzato (house_number assente), il civico digitato viene usato comunque nel suggerimento
+ *   invece di sparire silenziosamente (la posizione geografica resta quella della via).
  * @returns {string}
  */
-export function formatIndirizzoFromNominatim(item) {
+export function formatIndirizzoFromNominatim(item, typedQuery = "") {
   if (!item || typeof item !== "object") return ""
   const addr = item.address && typeof item.address === "object" ? item.address : null
   if (!addr) {
@@ -179,7 +196,7 @@ export function formatIndirizzoFromNominatim(item) {
   }
   const road = String(addr.road || addr.pedestrian || addr.path || "").trim()
   const houseParts = [addr.house_number, addr.house_name].map((x) => (x != null ? String(x).trim() : "")).filter(Boolean)
-  const house = houseParts.join(" ").trim()
+  const house = houseParts.join(" ").trim() || extractTypedCivico(typedQuery)
   const city = String(
     addr.city ||
       addr.town ||

@@ -50,6 +50,19 @@
 --   sql/modules/55_superadmin_checklist_mese_progress.sql
 --   sql/modules/56_fix_core_users_dead_fk_references.sql
 --   sql/modules/57_fix_public_menu_ingredient_names_order.sql
+--   sql/modules/58_carrelli_sospesi.sql
+--   sql/modules/59_payment_link_hosted_checkout.sql
+--   sql/modules/60_tenant_sconto_scadenza.sql
+--   sql/modules/61_fix_cliente_lista_propri_ordini_orario_tipo.sql
+--   sql/modules/62_indici_prestazioni.sql
+--   sql/modules/63_fix_payment_provider_rpc_superadmin_bypass.sql
+--   sql/modules/64_fix_staff_accetta_ordine_web_raise_syntax.sql
+--   sql/modules/65_chiarisci_messaggio_pagamento_pendente_accettazione.sql
+--   sql/modules/66_consenti_accetta_ordine_web_con_pagamento_pendente.sql
+--   sql/modules/67_fix_payment_provider_ready_search_path.sql
+--   sql/modules/68_clienti_select_staff_cassa.sql
+--   sql/modules/69_create_order_web_cliente_from_cassa.sql
+--   sql/modules/70_fix_vetrina_slot_carico_oggi_categoria_pizza.sql
 --
 -- Moduli 41-50 "reali" (rider capacità/routing/OAuth/tavoli/audit, applicati stasera
 -- direttamente su Supabase da un'altra chat, MAI salvati come file sql/modules/ locali):

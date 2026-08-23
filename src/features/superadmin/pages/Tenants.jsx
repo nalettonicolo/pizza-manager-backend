@@ -49,6 +49,14 @@ function toDateInputValue(v) {
   return d.toISOString().slice(0, 10);
 }
 
+/** True se la data di scadenza sconto (YYYY-MM-DD) è passata rispetto a oggi. Nessuna scadenza = mai scaduto. */
+function scontoScaduto(scadenzaYmd) {
+  if (!scadenzaYmd) return false;
+  const oggi = new Date();
+  const oggiYmd = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, "0")}-${String(oggi.getDate()).padStart(2, "0")}`;
+  return String(scadenzaYmd) < oggiYmd;
+}
+
 function emptyModal(mode, services, reloadInclusioniFromPiano) {
   return {
     mode,
@@ -64,6 +72,7 @@ function emptyModal(mode, services, reloadInclusioniFromPiano) {
     data_attivazione_abbonamento: "",
     sconto_percentuale: "0",
     sconto_importo_euro: "0",
+    sconto_scadenza: "",
     prova_valida_fino: "",
     serviziPersonalizzati: false,
     pianoTemplateId: "",
@@ -112,6 +121,7 @@ function tenantToModal(t, mode, services, reloadInclusioniFromPiano) {
       po.sconto_importo_euro != null && po.sconto_importo_euro !== ""
         ? String(po.sconto_importo_euro)
         : "0",
+    sconto_scadenza: toDateInputValue(t.sconto_scadenza),
     prova_valida_fino: toDateInputValue(t.prova_valida_fino),
     serviziPersonalizzati,
     pianoTemplateId: "",
@@ -343,6 +353,7 @@ export default function Tenants() {
         addebito_automatico_mensile: modal.addebito_automatico_mensile,
         data_attivazione_abbonamento: modal.data_attivazione_abbonamento || null,
         sconto_percentuale: modal.sconto_percentuale,
+        sconto_scadenza: modal.sconto_scadenza || null,
         prova_valida_fino: modal.prova_valida_fino || null,
         parametri_operativi: nextPo,
         sito_web_cliente: modal.sito_web_cliente || null,
@@ -492,7 +503,30 @@ export default function Tenants() {
                       const bits = [];
                       if (pct) bits.push(`${Number(t.sconto_percentuale)}%`);
                       if (euro > 0) bits.push(`−${euro} €`);
-                      return bits.length ? bits.join(" · ") : "—";
+                      if (!bits.length) return "—";
+                      const scaduto = scontoScaduto(t.sconto_scadenza);
+                      const scadenzaLabel = t.sconto_scadenza
+                        ? new Date(t.sconto_scadenza + "T12:00:00").toLocaleDateString("it-IT")
+                        : null;
+                      return (
+                        <>
+                          <span style={scaduto ? { textDecoration: "line-through", color: "#94a3b8" } : undefined}>
+                            {bits.join(" · ")}
+                          </span>
+                          {scadenzaLabel ? (
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: 11,
+                                color: scaduto ? "#c0392b" : "#64748b",
+                                fontWeight: scaduto ? 700 : 400,
+                              }}
+                            >
+                              {scaduto ? `Scaduto il ${scadenzaLabel}` : `Fino al ${scadenzaLabel}`}
+                            </span>
+                          ) : null}
+                        </>
+                      );
                     })()}
                   </td>
                   <td style={{ fontSize: 13 }}>{pianoDisplayLabel(t.piano)}</td>
@@ -867,6 +901,20 @@ export default function Tenants() {
                     />
                     <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
                       Si applica sul totale dopo lo sconto percentuale; salvato con il cliente (parametri operativi).
+                    </p>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Scadenza promozione (opzionale)</label>
+                    <input
+                      type="date"
+                      value={modal.sconto_scadenza}
+                      onChange={(e) => setModalField("sconto_scadenza", e.target.value)}
+                      style={inputStyle}
+                    />
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                      Vale sia per lo sconto percentuale sia per quello fisso sopra. Lascia vuoto per uno sconto senza
+                      scadenza. Dopo questa data il canone stimato torna al listino pieno, senza cancellare i valori:
+                      basta togliere la data (o metterne una futura) per riattivare la stessa promozione.
                     </p>
                   </div>
                 </div>

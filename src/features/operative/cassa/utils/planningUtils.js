@@ -37,8 +37,24 @@ function parseOrari(val) {
       consegnaDiversa: existing?.consegnaDiversa ?? false,
       consegnaDa: existing?.consegnaDa ?? "11:30",
       consegnaA: existing?.consegnaA ?? "14:30",
+      pranzoAttivo: existing?.pranzoAttivo ?? false,
+      pranzoDa: existing?.pranzoDa ?? "12:00",
+      pranzoA: existing?.pranzoA ?? "14:30",
     }
   })
+}
+
+/**
+ * Fasce del giorno come coppie {apertura, chiusura}, ordinate cronologicamente.
+ * Con "aperto anche a pranzo" attivo: due fasce (pranzo + esercizio principale) invece di una —
+ * la griglia slot deve saltare il buco di chiusura pomeridiana tra le due, non generare fasce fittizie.
+ * Senza pranzo attivo: sempre una sola fascia (comportamento identico a prima, nessuna regressione).
+ */
+function fasceDelGiorno(row) {
+  const principale = { apertura: row?.apertura || "00:00", chiusura: row?.chiusura || "23:59" }
+  if (!row?.pranzoAttivo) return [principale]
+  const pranzo = { apertura: row.pranzoDa || "12:00", chiusura: row.pranzoA || "14:30" }
+  return [pranzo, principale].sort((a, b) => timeToMinutes(a.apertura) - timeToMinutes(b.apertura))
 }
 
 /** Indice giorno per orari_settimana: 0 = Lunedì, 6 = Domenica. */
@@ -48,17 +64,27 @@ function getGiornoIndex(date) {
   return (jsDay + 6) % 7 // 0 = Lun, 6 = Dom
 }
 
-/** Restituisce orari di oggi { aperto, apertura, chiusura } (stringhe "HH:mm"). */
+/**
+ * Restituisce orari di oggi { aperto, apertura, chiusura, fasce } (stringhe "HH:mm").
+ * `apertura`/`chiusura` restano i confini esterni della giornata (prima apertura → ultima chiusura):
+ * per un giorno senza pranzo attivo coincidono esattamente con la singola fascia, come prima (nessuna
+ * regressione). `fasce` è il dettaglio per-banda usato dalla generazione degli slot, che deve saltare
+ * il buco di chiusura pomeridiana quando il pranzo è attivo.
+ */
 export function getTodayOrari(orariSettimana) {
   const orari = parseOrari(orariSettimana)
-  if (!orari?.length) return { aperto: true, apertura: "00:00", chiusura: "23:59" }
+  if (!orari?.length) {
+    return { aperto: true, apertura: "00:00", chiusura: "23:59", fasce: [{ apertura: "00:00", chiusura: "23:59" }] }
+  }
   const idx = getGiornoIndex(new Date())
   const row = orari[idx]
-  if (!row) return { aperto: false, apertura: "00:00", chiusura: "00:00" }
+  if (!row) return { aperto: false, apertura: "00:00", chiusura: "00:00", fasce: [{ apertura: "00:00", chiusura: "00:00" }] }
+  const fasce = fasceDelGiorno(row)
   return {
     aperto: row.aperto,
-    apertura: row.apertura || "00:00",
-    chiusura: row.chiusura || "23:59",
+    apertura: fasce[0].apertura,
+    chiusura: fasce[fasce.length - 1].chiusura,
+    fasce,
   }
 }
 
@@ -235,11 +261,10 @@ export function buildSlotsInOpeningHours(orariOggi, count = 24, options = {}) {
  * Sempre popolata (anche se oggi è «chiuso» o senza ordini): serve la tabella orari.
  * orariOggi: { aperto, apertura, chiusura }. Chiusura 00:00 = fine giornata (24:00).
  */
-export function buildSlotsFullDay(orariOggi) {
+function buildFullDaySlotsForBand(band, now) {
   const grid = PLANNING_GRID_SLOT_MINUTES
-  const now = new Date()
-  const startMin = timeToMinutes(orariOggi?.apertura || "11:00")
-  let endMin = endMinutesForDay(orariOggi?.chiusura || "23:00")
+  const startMin = timeToMinutes(band?.apertura || "11:00")
+  let endMin = endMinutesForDay(band?.chiusura || "23:00")
   if (endMin <= startMin) endMin += 24 * 60
   const lastStart = lastSlotStartInclusive(endMin, grid)
   const slots = []
@@ -259,6 +284,26 @@ export function buildSlotsFullDay(orariOggi) {
     slotStartMin += grid
   }
   return slots
+}
+
+/**
+ * Genera tutte le caselle da apertura a chiusura (fino a mezzanotte).
+ * Per il planning lato cassa: griglia completa della giornata.
+ * Sempre popolata (anche se oggi è «chiuso» o senza ordini): serve la tabella orari.
+ * orariOggi: { aperto, apertura, chiusura, fasce? }. Chiusura 00:00 = fine giornata (24:00).
+ * Con `fasce` multiple (pranzo attivo) genera gli slot di ciascuna banda e salta il buco tra le due
+ * (es. 14:45–18:45): non una singola fascia apertura→chiusura come prima del pranzo configurabile.
+ */
+export function buildSlotsFullDay(orariOggi) {
+  const now = new Date()
+  const bands = Array.isArray(orariOggi?.fasce) && orariOggi.fasce.length
+    ? orariOggi.fasce
+    : [{ apertura: orariOggi?.apertura || "11:00", chiusura: orariOggi?.chiusura || "23:00" }]
+  const byKey = new Map()
+  for (const band of bands) {
+    for (const s of buildFullDaySlotsForBand(band, now)) byKey.set(s.key, s)
+  }
+  return [...byKey.values()].sort((a, b) => a.key - b.key)
 }
 
 /**

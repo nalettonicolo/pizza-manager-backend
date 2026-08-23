@@ -5,6 +5,7 @@ import {
 } from "@/features/operative/cassa/utils/ordineFieldHelpers"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { ordineIsAnnullato } from "@/utils/incassiFromOrdini"
+import { isOrdineOnlineCanale } from "@/features/operative/cassa/utils/cassaPagamentiOptions"
 import {
   ponyCountForToday,
   loadPonyOverrides,
@@ -30,6 +31,33 @@ function ShopIcon() {
     <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }} title="Ritiro in negozio">
       🏪
     </span>
+  )
+}
+
+function capacityTier(value, max) {
+  if (!max || max <= 0) return "ok"
+  const pct = (Number(value) || 0) / max
+  if (pct >= 1) return "full"
+  if (pct >= 0.7) return "warn"
+  return "ok"
+}
+
+/** Numero + barra colorata (teal → ambra → rosso avvicinandosi al limite forno): il sovraccarico
+ * si vede a colpo d'occhio senza dover leggere/confrontare i numeri fascia per fascia. */
+function CapacityBar({ value, max }) {
+  const v = Number(value) || 0
+  const m = Number(max) || 0
+  const pct = m > 0 ? Math.min(100, Math.round((v / m) * 100)) : 0
+  const tier = capacityTier(v, m)
+  return (
+    <div style={styles.capWrap}>
+      <span style={styles.capNum}>
+        {v}/{m}
+      </span>
+      <span style={styles.capTrack}>
+        <span style={{ ...styles.capFill, ...styles[`capFill_${tier}`], width: `${pct}%` }} />
+      </span>
+    </div>
   )
 }
 
@@ -86,6 +114,30 @@ export default function CassaPlanningBoard({
     }))
     return ponyDayLoadSummary(cleaned, ponyCount, activeOverrides)
   }, [rows, ponyCount, activeOverrides])
+
+  /** Fasce senza consegne/ritiri raggruppate in un'unica riga (invece di una riga vuota per
+   * fascia): più a colpo d'occhio, meno scroll per arrivare alle fasce che contano davvero. */
+  const displayItems = useMemo(() => {
+    const items = []
+    let emptyRun = []
+    const flushEmpty = () => {
+      if (emptyRun.length === 0) return
+      items.push({ type: "emptyGroup", rows: emptyRun })
+      emptyRun = []
+    }
+    for (const row of rows || []) {
+      const deliveryList = (row.deliveryOrdiniList || []).filter((o) => !ordineIsAnnullato(o))
+      const ritiroList = (row.ritiroOrdiniList || []).filter((o) => !ordineIsAnnullato(o))
+      if (deliveryList.length > 0 || ritiroList.length > 0) {
+        flushEmpty()
+        items.push({ type: "slot", row, deliveryList, ritiroList })
+      } else {
+        emptyRun.push(row)
+      }
+    }
+    flushEmpty()
+    return items
+  }, [rows])
 
   const toggleGear = useCallback(
     (slotKey) => {
@@ -182,76 +234,101 @@ export default function CassaPlanningBoard({
               </tr>
             </thead>
             <tbody>
-              {(rows || []).map((row) => {
-                const deliveryList = (row.deliveryOrdiniList || []).filter((o) => !ordineIsAnnullato(o))
-                const ritiroList = (row.ritiroOrdiniList || []).filter((o) => !ordineIsAnnullato(o))
+              {displayItems.map((item) => {
+                if (item.type === "emptyGroup") {
+                  const first = item.rows[0]
+                  const last = item.rows[item.rows.length - 1]
+                  const label = item.rows.length > 1 ? `${first.label} – ${last.label}` : first.label
+                  const text =
+                    item.rows.length > 1 ? `— ${item.rows.length} fasce libere —` : "— fascia libera —"
+                  return (
+                    <tr key={`empty-${first.slotKey}`} style={styles.tr}>
+                      <td style={styles.tdTime}>
+                        <strong style={{ color: "#94a3b8", fontSize: 12.5 }}>{label}</strong>
+                      </td>
+                      <td style={styles.tdBody}>
+                        <span style={styles.emptySlot}>{text}</span>
+                      </td>
+                      <td style={styles.tdPz}>
+                        <CapacityBar value={0} max={maxPizzeForno} />
+                      </td>
+                      {canEditPony ? <td style={styles.tdGear} /> : null}
+                    </tr>
+                  )
+                }
+
+                const { row, deliveryList, ritiroList } = item
                 const buckets = ponyBucketsWithEmpty(deliveryList, ponyCount, activeOverrides)
                 const editing = editSlotKey === row.slotKey
-                const hasAny = deliveryList.length > 0 || ritiroList.length > 0
                 return (
                   <tr key={row.slotKey} style={styles.tr}>
                     <td style={styles.tdTime}>
                       <strong>{row.label}</strong>
                     </td>
                     <td style={styles.tdBody}>
-                      {!hasAny ? (
-                        <span style={styles.emptySlot}>— libero —</span>
-                      ) : (
-                        <ul style={styles.list}>
-                          {buckets.map((bucket) => {
-                            if (bucket.items.length === 0) {
-                              return (
-                                <li key={`empty-${bucket.letter}`}>
-                                  <div style={styles.emptyPonyRow}>
-                                    <span style={styles.ponyTag}>{bucket.letter}</span>
-                                    <span style={styles.emptyPonyLabel}>— 0 consegne —</span>
-                                  </div>
-                                </li>
-                              )
-                            }
-                            return bucket.items.map((a) => {
-                              const o = a.ordine
-                              const pz = pizzePerOrdine?.[o.id] ?? pizzePerOrdine?.[String(o.id)] ?? 0
-                              const selected = editing && selectedOrdineId === o.id
-                              return (
-                                <li key={o.id}>
-                                  <button
-                                    type="button"
-                                    style={{
-                                      ...styles.rowBtn,
-                                      ...(selected ? styles.rowBtnSelected : {}),
-                                    }}
-                                    onClick={() => onSelectRow(o.id, row.slotKey)}
-                                  >
-                                    <ArrowIcon dir={a.arrowDir} />
-                                    <span style={styles.ponyTag}>{a.label}</span>
-                                    {a.manual ? (
-                                      <span style={styles.manualMark} title="Assegnazione modificata in cassa">
-                                        ✎
-                                      </span>
-                                    ) : null}
-                                    <span style={styles.addr}>{shortAddress(o)}</span>
-                                    <span style={styles.pz}>— {pz}</span>
-                                  </button>
-                                </li>
-                              )
-                            })
-                          })}
-                          {ritiroList.map((o) => {
+                      <ul style={styles.list}>
+                        {buckets.map((bucket) => {
+                          if (bucket.items.length === 0) {
+                            return (
+                              <li key={`empty-${bucket.letter}`}>
+                                <div style={styles.emptyPonyRow}>
+                                  <span style={styles.ponyTag}>{bucket.letter}</span>
+                                  <span style={styles.emptyPonyLabel}>— 0 consegne —</span>
+                                </div>
+                              </li>
+                            )
+                          }
+                          return bucket.items.map((a) => {
+                            const o = a.ordine
                             const pz = pizzePerOrdine?.[o.id] ?? pizzePerOrdine?.[String(o.id)] ?? 0
-                            const nome = ordineNomeCliente(o) || "Cliente"
+                            const selected = editing && selectedOrdineId === o.id
+                            const online = isOrdineOnlineCanale(o)
                             return (
                               <li key={o.id}>
-                                <button type="button" style={styles.rowBtn} onClick={() => onOpenOrdine?.(o.id)}>
-                                  <ShopIcon />
-                                  <span style={styles.addr}>{nome}</span>
-                                  <span style={styles.pz}>— {pz}</span>
+                                <button
+                                  type="button"
+                                  style={{
+                                    ...styles.rowBtn,
+                                    ...(online ? styles.rowBtnOnline : {}),
+                                    ...(selected ? styles.rowBtnSelected : {}),
+                                  }}
+                                  onClick={() => onSelectRow(o.id, row.slotKey)}
+                                >
+                                  <ArrowIcon dir={a.arrowDir} />
+                                  <span style={{ ...styles.onlineDot, ...(online ? styles.onlineDotOn : {}) }} />
+                                  <span style={styles.ponyTag}>{a.label}</span>
+                                  {a.manual ? (
+                                    <span style={styles.manualMark} title="Assegnazione modificata in cassa">
+                                      ✎
+                                    </span>
+                                  ) : null}
+                                  <span style={styles.addr}>{shortAddress(o)}</span>
+                                  <span style={styles.pz}>{pz}</span>
                                 </button>
                               </li>
                             )
-                          })}
-                        </ul>
-                      )}
+                          })
+                        })}
+                        {ritiroList.map((o) => {
+                          const pz = pizzePerOrdine?.[o.id] ?? pizzePerOrdine?.[String(o.id)] ?? 0
+                          const nome = ordineNomeCliente(o) || "Cliente"
+                          const online = isOrdineOnlineCanale(o)
+                          return (
+                            <li key={o.id}>
+                              <button
+                                type="button"
+                                style={{ ...styles.rowBtn, ...(online ? styles.rowBtnOnline : {}) }}
+                                onClick={() => onOpenOrdine?.(o.id)}
+                              >
+                                <ShopIcon />
+                                <span style={{ ...styles.onlineDot, ...(online ? styles.onlineDotOn : {}) }} />
+                                <span style={styles.addr}>{nome}</span>
+                                <span style={styles.pz}>{pz}</span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
                       {editing && selectedOrdineId ? (
                         <span style={{ display: "inline-flex", gap: 4, marginTop: 4 }}>
                           <button type="button" style={styles.moveBtn} onClick={() => onMoveSelected("up")} title="Pony precedente">
@@ -264,7 +341,7 @@ export default function CassaPlanningBoard({
                       ) : null}
                     </td>
                     <td style={styles.tdPz}>
-                      {row.totPizzeForno}/{maxPizzeForno}
+                      <CapacityBar value={row.totPizzeForno} max={maxPizzeForno} />
                     </td>
                     {canEditPony ? (
                       <td style={styles.tdGear}>
@@ -438,11 +515,36 @@ const styles = {
     padding: "8px 12px",
     verticalAlign: "top",
     textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+  capWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  capNum: {
     fontSize: 12,
     fontWeight: 700,
     color: "#334155",
-    whiteSpace: "nowrap",
+    fontVariantNumeric: "tabular-nums",
   },
+  capTrack: {
+    display: "block",
+    width: 56,
+    height: 5,
+    borderRadius: 999,
+    background: "#e2e8f0",
+    overflow: "hidden",
+  },
+  capFill: {
+    display: "block",
+    height: "100%",
+    borderRadius: 999,
+  },
+  capFill_ok: { background: "#0f766e" },
+  capFill_warn: { background: "#d97706" },
+  capFill_full: { background: "#c62828" },
   tdGear: {
     padding: "6px 4px",
     verticalAlign: "top",
@@ -502,6 +604,21 @@ const styles = {
   rowBtnSelected: {
     borderColor: "#0f766e",
     background: "#ecfdf5",
+  },
+  rowBtnOnline: {
+    borderColor: "#fdba8c",
+    background: "#fff1e8",
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "#cbd5e1",
+    flexShrink: 0,
+  },
+  onlineDotOn: {
+    background: "#ea580c",
+    boxShadow: "0 0 0 3px #fff1e8",
   },
   ponyTag: {
     fontSize: 11,

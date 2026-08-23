@@ -100,6 +100,9 @@ export function ricevutaPayloadFromOrdineDetail(detail, tenantData) {
  * @param {string} [payload.tipoPagamento]
  * @param {Array<{ qty: number, titolo: string, prezzoUnit: number, importo: number }>} payload.righe
  * @param {number} payload.totale
+ * @param {number} [payload.scontoCassaEuro]
+ * @param {number} [payload.scontoPuntiEuro]
+ * @param {number} [payload.scontoPunti] — punti fedeltà scalati
  * @param {object} [payload.parametri] — riusa comanda_font_size, comanda_line_height, comanda_margin_mm, comanda_width_mm, comanda_rotolo_mm, comanda_font_family
  * @param {boolean} [payload.annullato]
  */
@@ -184,21 +187,60 @@ export function buildRicevutaHtmlDocument(payload) {
   }
   if (tipoPagamento) headerParts.push(`<div><strong>Pagamento</strong> ${escapeHtml(String(tipoPagamento))}</div>`)
 
-  // Sconto cassa: riga dedicata (non solo nelle note)
+  // Sconti: righe dedicate sotto le pizze (non nelle note cliente)
   const noteStr = note != null ? String(note) : ""
-  const scontoMatch = noteStr.match(/\[Sconto cassa €\s*([0-9]+(?:[.,][0-9]{1,2})?)\s*\]/i)
   let noteClean = noteStr
-  let scontoEuro = null
-  if (scontoMatch) {
-    scontoEuro = Number(String(scontoMatch[1]).replace(",", "."))
-    noteClean = noteStr.replace(scontoMatch[0], "").replace(/\s{2,}/g, " ").trim()
+
+  const scontoCassaMatch = noteClean.match(/\[Sconto cassa €\s*([0-9]+(?:[.,][0-9]{1,2})?)\s*\]/i)
+  let scontoCassaEuro = null
+  if (scontoCassaMatch) {
+    scontoCassaEuro = Number(String(scontoCassaMatch[1]).replace(",", "."))
+    noteClean = noteClean.replace(scontoCassaMatch[0], "")
   }
   if (Number.isFinite(Number(payload.scontoCassaEuro)) && Number(payload.scontoCassaEuro) > 0) {
-    scontoEuro = Number(payload.scontoCassaEuro)
+    scontoCassaEuro = Number(payload.scontoCassaEuro)
   }
+
+  // Es. [Premio fedeltà (margherita) −€5.80; punti scalati: 12]
+  const premioMatch = noteClean.match(
+    /\[Premio fedeltà[^\]]*?(?:−|-|–)?\s*€\s*([0-9]+(?:[.,][0-9]{1,2})?)[^\]]*?punti\s+scalati:\s*(\d+)\s*\]/i,
+  )
+  let scontoPuntiEuro = null
+  let scontoPunti = null
+  if (premioMatch) {
+    scontoPuntiEuro = Number(String(premioMatch[1]).replace(",", "."))
+    scontoPunti = Number(premioMatch[2])
+    noteClean = noteClean.replace(premioMatch[0], "")
+  }
+  if (Number.isFinite(Number(payload.scontoPuntiEuro)) && Number(payload.scontoPuntiEuro) > 0) {
+    scontoPuntiEuro = Number(payload.scontoPuntiEuro)
+  }
+  if (Number.isFinite(Number(payload.scontoPunti)) && Number(payload.scontoPunti) > 0) {
+    scontoPunti = Math.floor(Number(payload.scontoPunti))
+  }
+
+  noteClean = noteClean.replace(/\s{2,}/g, " ").replace(/\n{2,}/g, "\n").trim()
   if (noteClean) headerParts.push(`<div class="note"><strong>Note</strong> ${escapeHtml(noteClean)}</div>`)
 
   const headerHtml = headerParts.join("")
+
+  const scontoRigheHtml = []
+  if (scontoPuntiEuro != null && Number.isFinite(scontoPuntiEuro) && scontoPuntiEuro > 0) {
+    const puntiLabel =
+      scontoPunti != null && Number.isFinite(scontoPunti) && scontoPunti > 0
+        ? `Sconto punti (${scontoPunti})`
+        : "Sconto punti"
+    scontoRigheHtml.push(`<div class="riga riga-sconto">
+      <div class="riga-main"><span class="titolo">${escapeHtml(puntiLabel)}</span></div>
+      <div class="importo">− € ${scontoPuntiEuro.toFixed(2)}</div>
+    </div>`)
+  }
+  if (scontoCassaEuro != null && Number.isFinite(scontoCassaEuro) && scontoCassaEuro > 0) {
+    scontoRigheHtml.push(`<div class="riga riga-sconto">
+      <div class="riga-main"><span class="titolo">Sconto cassa</span></div>
+      <div class="importo">− € ${scontoCassaEuro.toFixed(2)}</div>
+    </div>`)
+  }
 
   return `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Ricevuta</title>
   <style>
@@ -207,7 +249,8 @@ export function buildRicevutaHtmlDocument(payload) {
     body {
       font-family: ${fontStack};
       margin: 0;
-      padding: 2px;
+      padding: 3mm 4mm;
+      box-sizing: border-box;
       font-size: ${fontSize}px;
       line-height: ${lineHeight};
       color: #000;
@@ -240,14 +283,6 @@ export function buildRicevutaHtmlDocument(payload) {
     .meta-id { font-size: 0.85em; font-weight: 600; color: #000; }
     .meta-tipo { font-weight: 900; margin: 2px 0; }
     .note { margin-top: 4px; font-weight: 700; color: #000; }
-    .sconto {
-      margin-top: 8px;
-      padding-top: 6px;
-      border-top: 1px dashed #000;
-      font-weight: 900;
-      text-align: right;
-      color: #000;
-    }
     .righe { margin-top: 8px; border-top: 2px solid #000; padding-top: 6px; }
     .riga {
       display: flex;
@@ -271,6 +306,7 @@ export function buildRicevutaHtmlDocument(payload) {
       white-space: pre-wrap;
     }
     .importo { font-weight: 900; flex-shrink: 0; color: #000; }
+    .riga-sconto .titolo { font-weight: 800; }
     .totale {
       margin-top: 10px;
       padding-top: 8px;
@@ -295,12 +331,7 @@ export function buildRicevutaHtmlDocument(payload) {
     }
   </style></head><body>
     <div class="testata">${headerHtml}</div>
-    <div class="righe">${righeHtml || "<p>Nessuna riga.</p>"}</div>
-    ${
-      scontoEuro != null && Number.isFinite(scontoEuro) && scontoEuro > 0
-        ? `<div class="sconto"><strong>Sconto cassa</strong> − € ${scontoEuro.toFixed(2)}</div>`
-        : ""
-    }
+    <div class="righe">${righeHtml || "<p>Nessuna riga.</p>"}${scontoRigheHtml.join("")}</div>
     <div class="totale">Totale € ${Number(totale).toFixed(2)}</div>
     <div class="footer">Documento di cortesia — non fiscale</div>
   </body></html>`

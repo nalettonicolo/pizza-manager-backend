@@ -102,16 +102,29 @@ export default function TenantServiziPlanFields({
   const sumRaw = sumMonthlyFromInclusioni(modal.inclusioni, catalogServices);
   const canAlign = (modal.serviziPersonalizzati || !!modal.pianoTemplateId) && Number.isFinite(sumRaw) && sumRaw > 0;
 
-  const pctSconto = Math.min(100, Math.max(0, Number(modal.sconto_percentuale) || 0));
-  const euroFisso = Math.max(
+  // Scadenza (opzionale, condivisa da entrambi gli sconti): oltre quella data lo sconto non si
+  // applica più al canone stimato, senza azzerare i valori impostati (basta togliere la data per
+  // riattivare la stessa promozione).
+  const scontoScaduto = (() => {
+    const scadenza = modal.sconto_scadenza
+    if (!scadenza) return false
+    const oggi = new Date()
+    const oggiYmd = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, "0")}-${String(oggi.getDate()).padStart(2, "0")}`
+    return String(scadenza) < oggiYmd
+  })()
+  const pctScontoRaw = Math.min(100, Math.max(0, Number(modal.sconto_percentuale) || 0))
+  const euroFissoRaw = Math.max(
     0,
     Math.round((Number(String(modal.sconto_importo_euro ?? "").replace(",", ".")) || 0) * 100) / 100,
-  );
+  )
+  const pctSconto = scontoScaduto ? 0 : pctScontoRaw
+  const euroFisso = scontoScaduto ? 0 : euroFissoRaw
   const dopoPercentuale =
     Number.isFinite(sumRaw) && sumRaw > 0 ? Math.round(sumRaw * (1 - pctSconto / 100) * 100) / 100 : 0;
   const nettoCanone =
     Number.isFinite(dopoPercentuale) ? Math.max(0, Math.round((dopoPercentuale - euroFisso) * 100) / 100) : 0;
   const mostraNetto = Number.isFinite(sumRaw) && sumRaw > 0 && (pctSconto > 0 || euroFisso > 0);
+  const promoScadutaConValori = scontoScaduto && (pctScontoRaw > 0 || euroFissoRaw > 0);
 
   return (
     <section className="sa-form-section">
@@ -227,6 +240,11 @@ export default function TenantServiziPlanFields({
                 Ordine: prima sconto {pctSconto > 0 ? `${pctSconto}%` : "0%"} sul listino
                 {euroFisso > 0 ? `, poi −${euroFisso} €` : ""} sul residuo.
               </span>
+            </p>
+          ) : promoScadutaConValori ? (
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "#c0392b", fontWeight: 600 }}>
+              Promozione scaduta il {new Date(modal.sconto_scadenza + "T12:00:00").toLocaleDateString("it-IT")}: il
+              canone è tornato al listino pieno. Togli la scadenza (o mettine una futura) per riattivarla.
             </p>
           ) : (
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>

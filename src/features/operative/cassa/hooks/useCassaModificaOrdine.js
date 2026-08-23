@@ -16,6 +16,11 @@ import {
   ordineIsDelivery,
 } from "@/features/operative/cassa/utils/ordineFieldHelpers"
 import { splitNomeDaIndirizzoConsegna } from "@/features/operative/cassa/utils/cassaDeliveryNomeIndirizzo"
+import { getTodayOrari, buildSlotsInOpeningHours, PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
+import { maxPizzePerSlot } from "@/features/operative/cassa/utils/slotCapacityUtils"
+import { slotPizzeCount, readPizzaioloLeadTimeConsegnaMin } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
+import { ordineIsAnnullato } from "@/utils/incassiFromOrdini"
+import { orderCreatedLocalDateKey } from "@/utils/localDate"
 
 const EMPTY_FORM = {
   nome_cliente: "",
@@ -35,6 +40,9 @@ export function useCassaModificaOrdine({
   ordineDetail,
   setOrdineDetail,
   loadOrdini,
+  ordiniOggi,
+  pizzePerOrdine,
+  todayStr,
 }) {
   const [modificaOrdineModal, setModificaOrdineModal] = useState(null)
   const [modificaForm, setModificaForm] = useState(EMPTY_FORM)
@@ -177,6 +185,46 @@ export function useCassaModificaOrdine({
     [modificaRighe],
   )
 
+  /**
+   * Fasce orarie selezionabili per "Orario ritiro o consegna", con il carico forno stimato
+   * per ciascuna (pizze già impegnate, tempo di viaggio delivery già scontato via lead time —
+   * stessa logica di slotPizzeCount usata in Pizzaiolo/planning). A differenza della vetrina
+   * cliente (che nasconde le fasce piene), qui NON si nasconde nulla: la Cassa può sempre
+   * forzare una fascia al limite, il dropdown mostra solo un avviso.
+   */
+  const orarioSlots = useMemo(() => {
+    if (!modificaOrdineModal?.id) return []
+    const po = tenantData?.parametri_operativi || {}
+    const orariOggi = getTodayOrari(tenantData?.orari_settimana)
+    const slots = buildSlotsInOpeningHours(orariOggi, 24, { staffOverrideClosing: true })
+
+    const altreOggiAttive = (ordiniOggi || []).filter(
+      (o) =>
+        o.id !== modificaOrdineModal.id &&
+        orderCreatedLocalDateKey(o) === todayStr &&
+        !ordineIsAnnullato(o),
+    )
+    const leadTime = readPizzaioloLeadTimeConsegnaMin(po)
+    const carico = slotPizzeCount(altreOggiAttive, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES, leadTime)
+    const maxPerSlot = maxPizzePerSlot(po)
+
+    const options = slots.map((s) => ({
+      key: s.key,
+      label: s.label,
+      pizze: carico[s.label] || 0,
+      maxPerSlot,
+      over: maxPerSlot > 0 && (carico[s.label] || 0) >= maxPerSlot,
+    }))
+
+    // L'orario attuale dell'ordine deve restare selezionabile anche se non compare tra le
+    // fasce generate (es. già passato, o non allineato ai quarti d'ora).
+    const attuale = String(modificaForm.orario_ritiro || "").trim()
+    if (attuale && !options.some((o) => o.label === attuale)) {
+      options.unshift({ key: `attuale-${attuale}`, label: attuale, pizze: carico[attuale] || 0, maxPerSlot, over: false })
+    }
+    return options
+  }, [modificaOrdineModal?.id, modificaForm.orario_ritiro, tenantData?.parametri_operativi, tenantData?.orari_settimana, ordiniOggi, pizzePerOrdine, todayStr])
+
   return {
     modificaOrdineModal,
     modificaForm,
@@ -186,6 +234,7 @@ export function useCassaModificaOrdine({
     setModificaRighe,
     modificaProdottiList,
     modificaTotaleAnteprima,
+    orarioSlots,
     openModificaOrdine,
     closeModificaOrdine,
     handleSalvaModificaOrdine,

@@ -3,16 +3,16 @@
  * Uso: await appAlert("Messaggio") · const ok = await appConfirm("Sei sicuro?")
  */
 
-/** @typedef {{ kind: 'alert'|'confirm', title?: string, message: string, okLabel?: string, cancelLabel?: string, variant?: 'info'|'success'|'danger' }} AppDialogRequest */
+/** @typedef {{ kind: 'alert'|'confirm'|'prompt', title?: string, message: string, okLabel?: string, cancelLabel?: string, variant?: 'info'|'success'|'danger', placeholder?: string, defaultValue?: string }} AppDialogRequest */
 
-/** @type {null | ((req: AppDialogRequest) => Promise<boolean>)} */
+/** @type {null | ((req: AppDialogRequest) => Promise<boolean|string|null>)} */
 let presentFn = null
 let busy = false
 
-/** @type {{ req: AppDialogRequest, resolve: (v: boolean) => void }[]} */
+/** @type {{ req: AppDialogRequest, resolve: (v: boolean|string|null) => void }[]} */
 const queue = []
 
-/** @param {(req: AppDialogRequest) => Promise<boolean> | null} fn */
+/** @param {(req: AppDialogRequest) => Promise<boolean|string|null> | null} fn */
 export function registerAppDialogPresenter(fn) {
   presentFn = typeof fn === "function" ? fn : null
   pump()
@@ -28,8 +28,8 @@ function pump() {
   }
   void Promise.resolve()
     .then(() => presentFn(item.req))
-    .then((v) => item.resolve(Boolean(v)))
-    .catch(() => item.resolve(false))
+    .then((v) => item.resolve(item.req.kind === "prompt" ? v : Boolean(v)))
+    .catch(() => item.resolve(item.req.kind === "prompt" ? null : false))
     .finally(() => {
       busy = false
       pump()
@@ -38,7 +38,7 @@ function pump() {
 
 /**
  * @param {AppDialogRequest} req
- * @returns {Promise<boolean>}
+ * @returns {Promise<boolean|string|null>}
  */
 function enqueue(req) {
   return new Promise((resolve) => {
@@ -78,6 +78,26 @@ export function appConfirm(message, opts = {}) {
     okLabel: opts.okLabel || "Conferma",
     cancelLabel: opts.cancelLabel || "Annulla",
     variant: opts.variant || "danger",
+  })
+}
+
+/**
+ * Richiesta testuale (OK / Annulla) — sostituisce window.prompt nativo.
+ * Restituisce il testo inserito (stringa, anche vuota) se confermato, `null` se annullato.
+ * @param {string} message
+ * @param {{ title?: string, okLabel?: string, cancelLabel?: string, placeholder?: string, defaultValue?: string, variant?: 'info'|'success'|'danger' }} [opts]
+ * @returns {Promise<string|null>}
+ */
+export function appPrompt(message, opts = {}) {
+  return enqueue({
+    kind: "prompt",
+    message: message == null ? "" : String(message),
+    title: opts.title || "Richiesta",
+    okLabel: opts.okLabel || "OK",
+    cancelLabel: opts.cancelLabel || "Annulla",
+    placeholder: opts.placeholder || "",
+    defaultValue: opts.defaultValue || "",
+    variant: opts.variant || "info",
   })
 }
 

@@ -18,4 +18,7 @@ export {
   logCassaAuditEvent,
   staffAccettaOrdineWeb,
   staffRifiutaOrdineWeb,
+  upsertCarrelloSospeso,
+  getCarrelloSospesoCliente,
+  deleteCarrelloSospeso,
 } from "@/features/admin/services/adminService"

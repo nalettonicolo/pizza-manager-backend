@@ -84,10 +84,5 @@ function scoreOne(ing, ctx) {
     score -= 8
   }
 
-  // Stesso token del nome pizza
-  for (const token of ctx.productName.split(/\s+/).filter((t) => t.length > 3)) {
-    if (nome.includes(token)) score += 8
-  }
-
   return score
 }

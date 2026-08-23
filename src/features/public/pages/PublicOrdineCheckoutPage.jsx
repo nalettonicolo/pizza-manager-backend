@@ -206,6 +206,14 @@ export default function PublicOrdineCheckoutPage() {
     return filterSlotsExcludingFull(notPast, slotCarico, cartPizze, maxPerSlot)
   }, [calendarClosed, ordiniVetrinaConsentiti, orariOggi, slotTick, parametri, slotCarico, items])
 
+  // Un ordine con più pizze della capacità massima di UNA fascia non entrerebbe mai, nemmeno in una
+  // fascia completamente vuota: in quel caso "Nessuna fascia disponibile" è fuorviante (sembra che
+  // il locale sia chiuso/pieno), mentre il problema è solo la quantità di questo ordine.
+  const cartTroppoGrandePerUnaFascia = useMemo(
+    () => cartPizzeCount(items) > maxPizzePerSlot(parametri),
+    [items, parametri],
+  )
+
   useEffect(() => {
     setSelectedSlot((prev) => {
       if (!prev) return prev
@@ -598,11 +606,6 @@ export default function PublicOrdineCheckoutPage() {
           {geoBusy ? (
             <p style={{ margin: "8px 0 0", fontSize: 13, color: "#64748b" }}>Verifica area di consegna…</p>
           ) : null}
-          {coords ? (
-            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#166534", fontWeight: 600 }}>
-              Indirizzo ok per la consegna.
-            </p>
-          ) : null}
           {address.trim() && !coords && !geoBusy ? (
             <button
               type="button"
@@ -677,7 +680,12 @@ export default function PublicOrdineCheckoutPage() {
               </>
             ) : null}
           </p>
-          {slots.length === 0 ? (
+          {slots.length === 0 && cartTroppoGrandePerUnaFascia ? (
+            <p style={{ color: "#b45309" }}>
+              Il tuo ordine è troppo grande per essere preparato in un&apos;unica fascia oraria. Contatta
+              direttamente il locale per organizzare la consegna.
+            </p>
+          ) : slots.length === 0 ? (
             <p style={{ color: "#b45309" }}>
               Nessuna fascia disponibile
               {calendarClosed && ordiniVetrinaConsentiti

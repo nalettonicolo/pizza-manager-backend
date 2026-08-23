@@ -9,6 +9,7 @@ import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview"
+import { appPrompt } from "@/utils/appDialog"
 
 import CategoryTabs from "@/features/operative/cassa/components/CategoryTabs"
 import ProductGrid from "@/features/operative/cassa/components/ProductGrid"
@@ -27,6 +28,9 @@ import {
   ordineIndirizzoConsegna,
   ordineOrarioRitiro,
   ordineRichiedeAccettazioneCassa,
+  ordineOnlinePaymentStatus,
+  ordineOnlinePaymentFallito,
+  minutiAllOrarioRitiro,
 } from "@/features/operative/cassa/utils/ordineFieldHelpers"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { splitNomeDaIndirizzoConsegna } from "@/features/operative/cassa/utils/cassaDeliveryNomeIndirizzo"
@@ -74,6 +78,9 @@ import {
   logCassaAuditEvent,
   staffAccettaOrdineWeb,
   staffRifiutaOrdineWeb,
+  upsertCarrelloSospeso,
+  getCarrelloSospesoCliente,
+  deleteCarrelloSospeso,
 } from "@/features/operative/cassa/services/cassaOrdiniService"
 import { updateTenantSettings } from "@/features/admin/services/parametriService"
 import { useCassaModificaOrdine } from "@/features/operative/cassa/hooks/useCassaModificaOrdine"
@@ -137,6 +144,7 @@ import { productMatchesMenuSearch } from "@/utils/menuProductSearch"
 import {
   iconTipoPagamentoLista,
   isTipoPagamentoLink,
+  isTipoPagamentoOnlineProvider,
   labelTipoPagamentoLista,
   tipoPagamentoInAttesa,
 } from "@/features/operative/cassa/utils/cassaPaymentDisplay"
@@ -305,6 +313,9 @@ export default function CassaPage() {
   const [deliveryDraftByClienteId, setDeliveryDraftByClienteId] = useState({})
   const [deliverySearchResults, setDeliverySearchResults] = useState([])
   const [deliverySearchLoading, setDeliverySearchLoading] = useState(false)
+  /** Geocoding "live" dell'indirizzo in corso, solo per il pallino verde in mappa (Riepilogo
+   * ordine a domicilio) — indipendente dal geocode fatto alla conferma per consegna_lat/lng. */
+  const [deliveryMapCoords, setDeliveryMapCoords] = useState(null)
   const [nuovoClienteModalOpen, setNuovoClienteModalOpen] = useState(false)
   const [profiloClienteModalOpen, setProfiloClienteModalOpen] = useState(false)
   const [clienteDomicilioQuickOpen, setClienteDomicilioQuickOpen] = useState(false)
@@ -357,6 +368,10 @@ export default function CassaPage() {
   const [lastOrderModalDetail, setLastOrderModalDetail] = useState(null)
   const [lastOrderLoading, setLastOrderLoading] = useState(false)
   const [lastOrderDetailLoading, setLastOrderDetailLoading] = useState(false)
+  /** CL-03: elenco a tendina — id ordine espanso inline (niente più giro lista→dettaglio→"Torna all'elenco"). */
+  const [expandedOrdineId, setExpandedOrdineId] = useState(null)
+  /** Cache dettaglio per id: riapri lo stesso ordine senza rifare la fetch. */
+  const [expandedOrdineDetailById, setExpandedOrdineDetailById] = useState({})
   const [ordiniOnlineDisabilitati, setOrdiniOnlineDisabilitati] = useState(false)
   const [ordiniOnlineToggleSaving, setOrdiniOnlineToggleSaving] = useState(false)
   const [showPaginaOrdini, setShowPaginaOrdini] = useState(false)
@@ -380,6 +395,8 @@ export default function CassaPage() {
   const [payLinkPhone, setPayLinkPhone] = useState("")
   const [payLinkBusy, setPayLinkBusy] = useState(false)
   const [payLinkMessage, setPayLinkMessage] = useState("")
+  /** URL della pagina di pagamento ospitata (/paga/:intentId), per il tasto WhatsApp. */
+  const [payLinkUrl, setPayLinkUrl] = useState("")
   const [foodcostMismatchCount, setFoodcostMismatchCount] = useState(0)
   const [foodcostMismatchPreview, setFoodcostMismatchPreview] = useState([])
   const [foodcostAlertDismissed, setFoodcostAlertDismissed] = useState(false)
@@ -632,6 +649,7 @@ export default function CassaPage() {
     setModificaRighe,
     modificaProdottiList,
     modificaTotaleAnteprima,
+    orarioSlots,
     openModificaOrdine,
     closeModificaOrdine,
     handleSalvaModificaOrdine,
@@ -641,6 +659,9 @@ export default function CassaPage() {
     ordineDetail,
     setOrdineDetail,
     loadOrdini,
+    ordiniOggi,
+    pizzePerOrdine,
+    todayStr,
   })
 
   useOperativeOrdersLiveRefresh({
@@ -730,7 +751,7 @@ export default function CassaPage() {
       setPizzePerOrdine({})
       return
     }
-    getRigheAggregateByOrdineIds(ids).then(setPizzePerOrdine).catch(() => setPizzePerOrdine({}))
+    getRigheAggregateByOrdineIds(ids, tenantId).then(setPizzePerOrdine).catch(() => setPizzePerOrdine({}))
   }, [tenantId, ordiniOggi, todayStr])
 
   const openOrdineDetail = useCallback(async (ordineId) => {
@@ -755,13 +776,22 @@ export default function CassaPage() {
     if (!tenantId || !selectedCliente) return
     setLastOrderLoading(true)
     setLastOrderModalDetail(null)
+    setExpandedOrdineId(null)
+    setExpandedOrdineDetailById({})
     try {
-      const data = await getOrders(tenantId, { limit: 400 })
-      const matches = ordiniFiltratiPerClienteAnagrafica(data, selectedCliente)
-      if (!matches.length) {
+      // CA-22: un tetto troppo basso qui fa scomparire in silenzio lo storico di un cliente che
+      // non ha ordinato tra gli ultimi ordini del locale — 3000 copre comodamente mesi di attività
+      // restando comunque un fetch indicizzato (tenant_id + created_at) veloce.
+      const data = await getOrders(tenantId, { limit: 3000 })
+      const allMatches = ordiniFiltratiPerClienteAnagrafica(data, selectedCliente)
+      if (!allMatches.length) {
         setLastOrderModalDetail({ empty: true })
         return
       }
+      // Solo gli ultimi 3 ordini del cliente: storico rapido da consultare, non l'elenco completo.
+      const matches = [...allMatches]
+        .sort((a, b) => new Date(ordineCreatedAt(b) || 0) - new Date(ordineCreatedAt(a) || 0))
+        .slice(0, 3)
       setLastOrderModalDetail({ mode: "list", ordini: matches })
     } catch (e) {
       console.error(e)
@@ -771,9 +801,16 @@ export default function CassaPage() {
     }
   }, [tenantId, selectedCliente])
 
+  /**
+   * CL-03: click su una riga dello storico → espande il dettaglio subito sotto (a tendina),
+   * senza lasciare l'elenco. Riclic sulla stessa riga → richiude. Il dettaglio resta in cache
+   * per id: riaprire lo stesso ordine non rifà la fetch.
+   */
   const loadClienteOrdineDetail = useCallback(
     async (ordineId) => {
       if (!tenantId || !ordineId) return
+      setExpandedOrdineId((prev) => (prev === ordineId ? null : ordineId))
+      if (expandedOrdineDetailById[ordineId]) return
       setLastOrderDetailLoading(true)
       try {
         const detail = await getOrderDetail(ordineId)
@@ -783,18 +820,16 @@ export default function CassaPage() {
         const productsById = (prodotti || []).reduce((acc, p) => ({ ...acc, [p.id]: p }), {})
         const base = { ...detail, productNames, productsById }
         const enriched = await enrichOrdineDetailIngredientiSummaries(tenantId, base)
-        setLastOrderModalDetail((prev) => {
-          const historyOrdini = prev?.mode === "list" ? prev.ordini : prev?.historyOrdini || []
-          return { mode: "detail", historyOrdini, ...enriched, productsById }
-        })
+        setExpandedOrdineDetailById((prev) => ({ ...prev, [ordineId]: enriched }))
       } catch (e) {
         console.error(e)
         alert("Errore caricamento ordine. " + (e?.message || ""))
+        setExpandedOrdineId((prev) => (prev === ordineId ? null : prev))
       } finally {
         setLastOrderDetailLoading(false)
       }
     },
-    [tenantId],
+    [tenantId, expandedOrdineDetailById],
   )
 
   const handleSegnaPagato = useCallback(async (ordineId, nuovoTipo) => {
@@ -855,6 +890,38 @@ export default function CassaPage() {
       numeri: list.map((o) => o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "?").slice(0, 12),
     }
   }, [ordiniOggiAttivi, tenantData?.parametri_operativi, deliveryAlertTick])
+
+  /** A 20 minuti (o meno) dall'orario previsto, un ordine con pagamento online ancora non confermato
+   * passa da solo a "da pagare alla consegna" (stesso effetto di "Segna come pagato" → Contanti) —
+   * o subito, se il provider dichiara un fallimento esplicito (vedi CL-11). "Accetta" non blocca più
+   * un pagamento pendente (l'operatore può accettare comunque in cucina), quindi qui NON ci si limita
+   * agli ordini ancora da accettare: anche uno già accettato con pagamento online rimasto a metà va
+   * comunque convertito, altrimenti resterebbe segnato online per sempre senza nessuno che se ne
+   * accorga. Nessun cambio per ordini senza orario programmato (ASAP) e non ancora falliti: restano
+   * com'erano, l'operatore li vede subito nei toast "da accettare". */
+  const autoConvertingPagamentoRef = useRef(new Set())
+  useEffect(() => {
+    void deliveryAlertTick
+    const candidates = (ordiniOggiAttivi || []).filter((o) => {
+      if (!o?.id) return false
+      if (!tipoPagamentoInAttesa(o.tipo_pagamento)) return false
+      if (ordineOnlinePaymentStatus(o) === "succeeded") return false
+      // Pagamento fallito dichiarato dal provider (carta rifiutata, checkout scaduto/annullato):
+      // converti subito, non aspettare i 20 minuti dalla consegna.
+      if (ordineOnlinePaymentFallito(o)) return true
+      const mins = minutiAllOrarioRitiro(o)
+      return mins != null && mins <= 20
+    })
+    if (!candidates.length) return
+    for (const o of candidates) {
+      if (autoConvertingPagamentoRef.current.has(o.id)) continue
+      autoConvertingPagamentoRef.current.add(o.id)
+      updateOrderTipoPagamento(o.id, TIPO_PAGAMENTO_CONTANTI)
+        .then(() => loadOrdini())
+        .catch((e) => console.error("Auto-conversione pagamento pendente → contanti fallita per ordine", o.id, e))
+        .finally(() => autoConvertingPagamentoRef.current.delete(o.id))
+    }
+  }, [ordiniOggiAttivi, deliveryAlertTick, loadOrdini])
 
   const buildPayloadContabilita = useCallback(() => {
     const totaleGiornata = (ordiniOggiAttivi || []).reduce((s, o) => s + Number(o.totale || 0), 0)
@@ -981,11 +1048,11 @@ export default function CassaPage() {
   const handleRifiutaOrdineWeb = useCallback(
     async (ordineId) => {
       if (!ordineId) return
-      const motivo = window.prompt("Motivo del rifiuto (opzionale):", "")
+      const motivo = await appPrompt(
+        "Rifiutare questo ordine web? Verrà annullato e il cliente non lo riceverà in cucina.\n\nMotivo del rifiuto (opzionale):",
+        { title: "Rifiuta ordine web", okLabel: "Rifiuta ordine", variant: "danger" },
+      )
       if (motivo === null) return
-      if (!window.confirm("Rifiutare questo ordine web? Verrà annullato e il cliente non lo riceverà in cucina.")) {
-        return
-      }
       setAccettazioneWebBusy(true)
       try {
         await staffRifiutaOrdineWeb(ordineId, motivo.trim() || null)
@@ -1040,6 +1107,49 @@ export default function CassaPage() {
     }, 300)
     return () => clearTimeout(t)
   }, [tenantId, tipoOrdine, deliverySearch, selectedCliente])
+
+  // Geocoding "live" per il pallino verde in mappa (Riepilogo): solo quando si è arrivati alla
+  // schermata di conferma di un ordine a domicilio, per non geocodificare ad ogni battuta prima.
+  useEffect(() => {
+    if (!showRiepilogo || tipoOrdine !== TIPO_ORDINE.DELIVERY) {
+      setDeliveryMapCoords(null)
+      return undefined
+    }
+    const addr = splitNomeDaIndirizzoConsegna(deliverySearch)?.addrPart || deliverySearch
+    const q = String(addr || "").trim()
+    if (q.length < 8) {
+      setDeliveryMapCoords(null)
+      return undefined
+    }
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const coords = await geocodeAddressForDelivery(q)
+        if (!cancelled) setDeliveryMapCoords(coords)
+      } catch {
+        if (!cancelled) setDeliveryMapCoords(null)
+      }
+    }, 500)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [showRiepilogo, tipoOrdine, deliverySearch])
+
+  /** Consegne a domicilio di oggi (già attive) con coordinate note, per i pallini rossi in mappa. */
+  const altreConsegneOggiConCoords = useMemo(() => {
+    if (!showRiepilogo || tipoOrdine !== TIPO_ORDINE.DELIVERY) return []
+    return (ordiniOggiAttivi || [])
+      .filter((o) => (o.tipo_ordine || o.tipoOrdine || "").toLowerCase() === "delivery")
+      .map((o) => ({
+        numero: o.numero ?? o.numero_ordine ?? o.numeroOrdine,
+        orario: o.orario_ritiro ?? o.orarioRitiro,
+        lat: o.consegna_lat ?? o.consegnaLat,
+        lng: o.consegna_lng ?? o.consegnaLng,
+      }))
+      .filter((o) => Number.isFinite(Number(o.lat)) && Number.isFinite(Number(o.lng)))
+      .map((o) => ({ ...o, lat: Number(o.lat), lng: Number(o.lng) }))
+  }, [showRiepilogo, tipoOrdine, ordiniOggiAttivi])
 
   useEffect(() => {
     if (!showRiepilogo || !tenantId || !fidelityServizioOk || tipoOrdine !== TIPO_ORDINE.NEGOZIO) {
@@ -1099,19 +1209,22 @@ export default function CassaPage() {
     }
   }, [showRiepilogo, tenantId])
 
+  const applyDraftToCart = useCallback((draft) => {
+    if (!draft) return
+    setCart(Array.isArray(draft.cart) ? draft.cart : [])
+    setCheckoutNote(draft.checkoutNote || "")
+    setCheckoutNomeCliente(draft.checkoutNomeCliente || "")
+    setCheckoutTelefonoCliente(draft.checkoutTelefonoCliente || "")
+    setCheckoutSelectedSlot(draft.checkoutSelectedSlot || null)
+  }, [])
+
   const handleSelectCliente = useCallback((c) => {
     const savedDraft = c?.id ? deliveryDraftByClienteId[c.id] : null
     setSelectedCliente(c)
     setDeliverySearch(displayCliente(c))
     setDeliverySearchResults([])
     setClienteDomicilioQuickOpen(true)
-    if (savedDraft) {
-      setCart(Array.isArray(savedDraft.cart) ? savedDraft.cart : [])
-      setCheckoutNote(savedDraft.checkoutNote || "")
-      setCheckoutNomeCliente(savedDraft.checkoutNomeCliente || "")
-      setCheckoutTelefonoCliente(savedDraft.checkoutTelefonoCliente || "")
-      setCheckoutSelectedSlot(savedDraft.checkoutSelectedSlot || null)
-    }
+    if (savedDraft) applyDraftToCart(savedDraft)
     // Se profilo collegabile (indirizzo + email/tel), apri storico: evidenzia ordini non conclusi.
     if (tenantId && c && (c.indirizzo || "").trim() && ((c.telefono || "").trim() || (c.email || "").trim())) {
       void (async () => {
@@ -1120,6 +1233,8 @@ export default function CassaPage() {
           const matches = ordiniFiltratiPerClienteAnagrafica(data, c)
           const incompleti = matches.filter((o) => ordineStatoIncompleto(o))
           if (incompleti.length > 0) {
+            setExpandedOrdineId(null)
+            setExpandedOrdineDetailById({})
             setLastOrderModalDetail({
               mode: "list",
               ordini: matches,
@@ -1131,7 +1246,21 @@ export default function CassaPage() {
         }
       })()
     }
-  }, [deliveryDraftByClienteId, tenantId])
+    // CA-15: carrello in sospeso persistito sul DB — copre anche il caso "il cliente ha iniziato
+    // l'ordine da casa (sito) senza confermare e poi ha chiamato il negozio". Vince sulla bozza
+    // locale/in-memoria se presente (quella del DB è la fonte di verità, sopravvive al refresh e
+    // ad altre sessioni/tablet cassa).
+    if (tenantId && c?.id) {
+      void (async () => {
+        try {
+          const remoteDraft = await getCarrelloSospesoCliente(tenantId, c.id)
+          if (remoteDraft) applyDraftToCart(remoteDraft)
+        } catch (e) {
+          console.warn("[Cassa] lettura carrello in sospeso fallita:", e?.message ?? e)
+        }
+      })()
+    }
+  }, [deliveryDraftByClienteId, tenantId, applyDraftToCart])
 
   const handleSwitchConsegnaToNegozio = useCallback(async () => {
     const curr = selectedCliente
@@ -1337,18 +1466,26 @@ export default function CassaPage() {
                 <ul style={{ ...styles.dropdownList, marginTop: 4 }}>
                   {deliverySearchResults.map((c) => (
                     <li
-                      key={c.id}
+                      key={`${c.fonte || "a"}-${c.id}`}
                       role="button"
                       tabIndex={0}
                       onClick={() => handleSelectCliente(c)}
                       onKeyDown={(e) => e.key === "Enter" && handleSelectCliente(c)}
                       style={styles.dropdownItem}
                     >
-                      <strong>{c.nome}</strong>
-                      {c.indirizzo && (
-                        <span style={{ color: "#555" }}> – {formatIndirizzoDisplayItaliano(c.indirizzo)}</span>
-                      )}
-                      {c.telefono && <span style={{ fontSize: 12, color: "#666" }}> · {c.telefono}</span>}
+                      <div style={{ fontWeight: 600 }}>
+                        {c.nome || "—"}
+                        {c.fonte === "web" ? (
+                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: "#1565c0" }}>
+                            online
+                          </span>
+                        ) : null}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#666" }}>
+                        {[c.telefono, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""].filter(Boolean).join(" · ") ||
+                          c.email ||
+                          "—"}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1363,16 +1500,25 @@ export default function CassaPage() {
               if (selectedCliente?.id) {
                 const nome = String(selectedCliente.nome || "").trim()
                 const telefono = String(selectedCliente.telefono || "").trim()
-                setDeliveryDraftByClienteId((prev) => ({
-                  ...prev,
-                  [selectedCliente.id]: {
-                    cart: Array.isArray(cart) ? cart : [],
-                    checkoutNote,
-                    checkoutNomeCliente: checkoutNomeCliente || nome,
-                    checkoutTelefonoCliente: checkoutTelefonoCliente || telefono,
-                    checkoutSelectedSlot,
-                  },
-                }))
+                const draft = {
+                  origine: "cassa",
+                  tipoOrdine,
+                  cart: Array.isArray(cart) ? cart : [],
+                  checkoutNote,
+                  checkoutNomeCliente: checkoutNomeCliente || nome,
+                  checkoutTelefonoCliente: checkoutTelefonoCliente || telefono,
+                  checkoutSelectedSlot,
+                  deliverySearch,
+                }
+                setDeliveryDraftByClienteId((prev) => ({ ...prev, [selectedCliente.id]: draft }))
+                // CA-15: bozza in sospeso salvata sul DB (non solo in memoria) — cassa la ritrova
+                // riselezionando questo cliente, anche da un'altra sessione/tablet. Fire-and-forget:
+                // non blocca il reset visivo della schermata anche se la scrittura è lenta/fallisce.
+                if (tenantId) {
+                  void upsertCarrelloSospeso(tenantId, selectedCliente.id, draft).catch((e) =>
+                    console.warn("[Cassa] salvataggio carrello in sospeso fallito:", e?.message ?? e),
+                  )
+                }
               }
               setSelectedCliente(null)
               setDeliverySearch("")
@@ -1382,9 +1528,12 @@ export default function CassaPage() {
               setCheckoutNote("")
               setCheckoutSelectedSlot(null)
               setCheckoutError(null)
+              // Torna alla schermata cassa pulita (menù + carrello vuoto): senza questo, chiudendo il
+              // cliente mentre si è sul riepilogo/checkout si restava lì con lo stato appena azzerato.
+              setShowRiepilogo(false)
             }}
             style={{ padding: "8px 10px", background: "#666", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, cursor: "pointer", flexShrink: 0 }}
-            title="Chiudi cliente: salva bozza ordine (carrello e dati) e la ripristini quando riselezioni il cliente"
+            title="Chiudi cliente: salva il carrello in sospeso e la ripristini quando riselezioni il cliente"
           >
             ✕
           </button>
@@ -1416,7 +1565,7 @@ export default function CassaPage() {
                   minHeight: tm ? 48 : undefined,
                   flex: tm ? "1 1 auto" : undefined,
                 }}
-                title="Storico ordini di questo cliente (ultimi 400 ordini)"
+                title="Storico ordini di questo cliente (ultimi 3000 ordini del locale)"
               >
                 {lastOrderLoading ? "..." : "Storico ordini"}
               </button>
@@ -2108,6 +2257,11 @@ export default function CassaPage() {
       }
       bypassFuoriAreaCheckRef.current = false
 
+      const webClienteUserId =
+        selectedCliente?.fonte === "web" && selectedCliente?.id
+          ? selectedCliente.id
+          : undefined
+
       pendingOfflinePayload = {
         tenant_id: tenantId,
         totale: totalCheckout,
@@ -2128,6 +2282,7 @@ export default function CassaPage() {
         consegnaLng,
         consegnaLat,
         pagamentoDettaglio,
+        webClienteUserId,
         telefonoRitiro: telefonoRitiroNegozio || undefined,
         punto_vendita_id: activePvId || undefined,
         turno_operatori_id:
@@ -2151,6 +2306,7 @@ export default function CassaPage() {
         consegnaLat,
         pagamentoDettaglio,
         telefonoRitiro: telefonoRitiroNegozio || undefined,
+        webClienteUserId,
       })
 
       if (
@@ -2243,6 +2399,13 @@ export default function CassaPage() {
 
       markCheckoutEnd(telemetryCtx, { ok: true, tenantId, ordineId: orderId })
 
+      // CA-15: ordine confermato per davvero → il carrello in sospeso del cliente non serve più.
+      if (selectedCliente?.id) {
+        void deleteCarrelloSospeso(tenantId, selectedCliente.id).catch((e) =>
+          console.warn("[Cassa] pulizia carrello in sospeso fallita:", e?.message ?? e),
+        )
+      }
+
       clearCassaDraft(tenantId, activePvId ?? "nopv")
       setCart([])
       setCheckoutNote("")
@@ -2315,6 +2478,12 @@ export default function CassaPage() {
         tipoPagamento: tipoPagamentoPerStampa || undefined,
         righe: ricevutaRigheFromCartSnapshot(snapshotCart),
         totale: totalCheckout,
+        scontoCassaEuro: scontoManualeEuro > 0 ? scontoManualeEuro : undefined,
+        scontoPuntiEuro: scontoPremioFidelityEuro > 0 ? scontoPremioFidelityEuro : undefined,
+        scontoPunti:
+          scontoPremioFidelityEuro > 0 && redeemSnap?.cost != null
+            ? Number(redeemSnap.cost)
+            : undefined,
         parametri: po,
         annullato: false,
       }
@@ -2446,6 +2615,22 @@ export default function CassaPage() {
     const negozio = (ordiniOggiAttivi || []).filter((o) => !ordineIsDelivery(o))
     return groupOrdiniBySlotOrarioRitiro(negozio, PLANNING_GRID_SLOT_MINUTES)
   }, [ordiniOggiAttivi])
+  /** Vie delle consegne per fascia (checkout): stesso raggruppamento del Planning, solo l'indirizzo breve. */
+  const indirizziPerSlotFromOrders = useMemo(() => {
+    const out = {}
+    for (const [slotKey, ordini] of Object.entries(ordiniBySlotDelivery)) {
+      out[slotKey] = (ordini || [])
+        .filter((o) => !ordineIsAnnullato(o))
+        .map((o) => {
+          const raw = ordineIndirizzoConsegna(o)
+          if (!raw) return null
+          const formatted = formatIndirizzoDisplayItaliano(raw) || raw
+          return formatted.length > 34 ? `${formatted.slice(0, 32)}…` : formatted
+        })
+        .filter(Boolean)
+    }
+    return out
+  }, [ordiniBySlotDelivery])
   const pizzePerSlotDelivery = useMemo(() => {
     const delivery = (ordiniOggiAttivi || []).filter((o) => ordineIsDelivery(o))
     return groupPizzeBySlotOrarioRitiro(delivery, pizzePerOrdine, PLANNING_GRID_SLOT_MINUTES)
@@ -2648,6 +2833,8 @@ export default function CassaPage() {
           onCheckoutScontoGlobaleChange={setCheckoutScontoGlobale}
           tipoOrdine={tipoOrdine}
           deliverySearch={deliverySearch}
+          deliveryMapCoords={deliveryMapCoords}
+          altreConsegneOggi={altreConsegneOggiConCoords}
           checkoutNote={checkoutNote}
           onCheckoutNoteChange={setCheckoutNote}
           checkoutTipoPagamento={checkoutTipoPagamento}
@@ -2683,6 +2870,15 @@ export default function CassaPage() {
           onRemove={(item) => setCart((prev) => prev.filter((p) => p !== item))}
           onEditPizza={openModificaPizzaFromCart}
           pizzePerSlotFromOrders={pizzePerSlotRiepilogo}
+          consegnePerSlotFromOrders={ordiniPerSlotDelivery}
+          ritiriPerSlotFromOrders={ordiniPerSlotNegozio}
+          indirizziPerSlotFromOrders={indirizziPerSlotFromOrders}
+          shopCoords={
+            tenantData?.lat != null && tenantData?.lng != null
+              ? { lat: Number(tenantData.lat), lng: Number(tenantData.lng) }
+              : null
+          }
+          shopLogoUrl={tenantData?.logo_url || null}
           maxPizzeFornoPerSlot={maxPizzeFornoUnico}
           fidelityAbilitato={fidelityServizioOk}
           fidelityQuery={fidelityQuery}
@@ -2945,6 +3141,7 @@ export default function CassaPage() {
               onClick={() => {
                 setPostCheckoutPayLink(null)
                 setPayLinkMessage("")
+                setPayLinkUrl("")
               }}
               style={{ fontWeight: 600 }}
             >
@@ -2998,6 +3195,7 @@ export default function CassaPage() {
                   if (!tenantId || !postCheckoutPayLink) return
                   setPayLinkBusy(true)
                   setPayLinkMessage("")
+                  setPayLinkUrl("")
                   void runUnifiedPayByLinkSetup({
                     tenantId,
                     ordineId: postCheckoutPayLink.orderId,
@@ -3007,6 +3205,7 @@ export default function CassaPage() {
                   })
                     .then((r) => {
                       setPayLinkMessage(r.ok ? r.message || "OK" : r.error || "Errore")
+                      setPayLinkUrl(r.ok ? r.paymentUrl || "" : "")
                     })
                     .finally(() => setPayLinkBusy(false))
                 }}
@@ -3015,6 +3214,27 @@ export default function CassaPage() {
                 {payLinkBusy ? "Registrazione…" : "Registra / invia richiesta link"}
               </button>
             )}
+            {payLinkUrl ? (
+              <a
+                href={`https://wa.me/${payLinkPhone.replace(/[^\d]/g, "")}?text=${encodeURIComponent(
+                  `Ecco il link per pagare il tuo ordine online: ${payLinkUrl}`,
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                className="cassa-toolbar-compact-btn"
+                style={{
+                  fontWeight: 700,
+                  background: "#25D366",
+                  color: "#fff",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                📱 Invia su WhatsApp
+              </a>
+            ) : null}
           </div>
           {payLinkMessage ? (
             <p
@@ -3025,6 +3245,11 @@ export default function CassaPage() {
               }}
             >
               {payLinkMessage}
+            </p>
+          ) : null}
+          {payLinkUrl ? (
+            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#475569", wordBreak: "break-all" }}>
+              Link: {payLinkUrl}
             </p>
           ) : null}
         </div>
@@ -3991,13 +4216,29 @@ export default function CassaPage() {
               })}
             </ul>
             <p style={{ fontWeight: 600, marginBottom: 12 }}>Totale: € {typeof ordineDetail.totale === "number" ? ordineDetail.totale.toFixed(2) : ordineDetail.totale ?? "—"}</p>
-            <p style={{ marginBottom: 12, fontSize: 13 }}>
+            <p
+              style={{
+                marginBottom: 12,
+                fontSize: 13,
+                ...(tipoPagamentoInAttesa(ordineDetail.tipo_pagamento) &&
+                isTipoPagamentoOnlineProvider(ordineDetail.tipo_pagamento)
+                  ? ordineOnlinePaymentFallito(ordineDetail)
+                    ? { color: "#b91c1c", fontWeight: 600 }
+                    : { color: "#0e7490", fontWeight: 600 }
+                  : {}),
+              }}
+            >
               Pagamento:{" "}
-              {tipoPagamentoInAttesa(ordineDetail.tipo_pagamento)
-                ? isTipoPagamentoLink(ordineDetail.tipo_pagamento)
-                  ? TIPO_PAGAMENTO_PAGA_ONLINE
-                  : "⏳ Da pagare"
-                : ordineDetail.tipo_pagamento || "—"}
+              {(() => {
+                const tp = ordineDetail.tipo_pagamento
+                if (!tipoPagamentoInAttesa(tp)) return tp || "—"
+                if (isTipoPagamentoOnlineProvider(tp)) {
+                  return ordineOnlinePaymentFallito(ordineDetail)
+                    ? "⚠️ Pagamento online non riuscito — verrà segnato «da pagare»"
+                    : "🌐 Pagamento online in corso — in attesa di conferma"
+                }
+                return isTipoPagamentoLink(tp) ? TIPO_PAGAMENTO_PAGA_ONLINE : "⏳ Da pagare"
+              })()}
             </p>
             {(ordinePuntoVenditaId(ordineDetail) || ordineTurnoOperatoriId(ordineDetail) != null) ? (
               <p style={{ marginBottom: 12, fontSize: 12, color: "#555", lineHeight: 1.45 }}>
@@ -4169,6 +4410,7 @@ export default function CassaPage() {
           setModificaRighe={setModificaRighe}
           modificaProdottiList={modificaProdottiList}
           modificaTotaleAnteprima={modificaTotaleAnteprima}
+          orarioSlots={orarioSlots}
           tipiPagamento={
             isOrdineOnlineCanale(modificaOrdineModal) ? tipiPagamentoOrdineOnline : tipiPagamentoCassa
           }
@@ -4183,163 +4425,179 @@ export default function CassaPage() {
       )}
 
       {lastOrderModalDetail && !lastOrderLoading && (
-        <div style={styles.modalOverlay} onClick={() => setLastOrderModalDetail(null)} role="dialog" aria-modal="true">
-          <div style={{ ...styles.detailModal, maxWidth: lastOrderModalDetail.mode === "list" ? 520 : 560 }} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={styles.modalOverlay}
+          onClick={() => {
+            setLastOrderModalDetail(null)
+            setExpandedOrdineId(null)
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div style={{ ...styles.detailModal, maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0 }}>
-                {lastOrderModalDetail.mode === "detail"
-                  ? `Ordine #${lastOrderModalDetail.numero ?? lastOrderModalDetail.numero_ordine ?? lastOrderModalDetail.numeroOrdine ?? "—"}`
-                  : "Storico ordini"}
-              </h3>
-              <button type="button" style={styles.planningBarClose} onClick={() => setLastOrderModalDetail(null)}>✕</button>
+              <h3 style={{ margin: 0 }}>Storico ordini</h3>
+              <button
+                type="button"
+                style={styles.planningBarClose}
+                onClick={() => {
+                  setLastOrderModalDetail(null)
+                  setExpandedOrdineId(null)
+                }}
+              >
+                ✕
+              </button>
             </div>
             {lastOrderModalDetail.empty ? (
               <p style={{ color: "#666" }}>Nessun ordine trovato per questo cliente negli ultimi ordini caricati.</p>
             ) : lastOrderModalDetail.error ? (
               <p style={{ color: "#c62828" }}>{lastOrderModalDetail.error}</p>
-            ) : lastOrderModalDetail.mode === "list" ? (
+            ) : (
               <>
                 <p style={{ margin: "0 0 12px", fontSize: 13, color: "#666" }}>
-                  Seleziona un ordine (dal più recente). Elenco fino a 400 ordini del locale.
+                  Clicca un ordine per aprirlo qui sotto. Solo gli ultimi 3 ordini di questo cliente.
                 </p>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "min(60vh, 420px)", overflowY: "auto" }}>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "min(70vh, 560px)", overflowY: "auto" }}>
                   {(lastOrderModalDetail.ordini || []).map((o) => {
                     const num = o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"
                     const when = o.createdAt ?? o.created_at
                     const whenStr = when ? new Date(when).toLocaleString("it-IT") : "—"
                     const incompleto = ordineStatoIncompleto(o)
+                    const expanded = expandedOrdineId === o.id
+                    const detail = expandedOrdineDetailById[o.id]
                     return (
                       <li key={o.id} style={{ borderBottom: "1px solid #eee" }}>
                         <button
                           type="button"
                           onClick={() => loadClienteOrdineDetail(o.id)}
-                          disabled={lastOrderDetailLoading}
+                          disabled={lastOrderDetailLoading && !expanded}
                           style={{
                             width: "100%",
                             textAlign: "left",
                             padding: "12px 8px",
                             border: "none",
-                            background: incompleto ? "#fff7ed" : "transparent",
-                            cursor: lastOrderDetailLoading ? "wait" : "pointer",
+                            background: expanded ? "#eef2ff" : incompleto ? "#fff7ed" : "transparent",
+                            cursor: lastOrderDetailLoading && !expanded ? "wait" : "pointer",
                             fontSize: 14,
                           }}
                         >
-                          <div style={{ fontWeight: 600 }}>
+                          <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 11, color: "#94a3b8" }}>{expanded ? "▾" : "▸"}</span>
                             #{num} · € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}
                             {incompleto ? (
-                              <span style={{ marginLeft: 8, fontSize: 11, color: "#c2410c", fontWeight: 700 }}>
+                              <span style={{ marginLeft: 4, fontSize: 11, color: "#c2410c", fontWeight: 700 }}>
                                 Non concluso
                               </span>
                             ) : null}
                           </div>
-                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{whenStr}</div>
+                          <div style={{ fontSize: 12, color: "#666", marginTop: 4, marginLeft: 18 }}>{whenStr}</div>
                         </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-                {lastOrderDetailLoading && <p style={{ marginTop: 12, color: "#666" }}>Caricamento dettaglio…</p>}
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  style={{ ...styles.planningBarToggle, marginBottom: 14 }}
-                  onClick={() =>
-                    setLastOrderModalDetail({ mode: "list", ordini: lastOrderModalDetail.historyOrdini || [] })
-                  }
-                >
-                  ← Torna all&apos;elenco
-                </button>
-                <p style={{ margin: "0 0 8px", color: "#666" }}>
-                  {ordineIsDelivery(lastOrderModalDetail) ? "Consegna" : "Ritiro in negozio"}
-                </p>
-                {ordineIsDelivery(lastOrderModalDetail) && ordineIndirizzoConsegna(lastOrderModalDetail) && (
-                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Indirizzo: {ordineIndirizzoConsegna(lastOrderModalDetail)}</p>
-                )}
-                {ordineNomeCliente(lastOrderModalDetail) && (
-                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Cliente: {ordineNomeCliente(lastOrderModalDetail)}</p>
-                )}
-                {ordineOrarioRitiro(lastOrderModalDetail) && (
-                  <p style={{ margin: "0 0 12px", color: "#555" }}>Orario: {ordineOrarioRitiro(lastOrderModalDetail)}</p>
-                )}
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px", borderTop: "1px solid #eee", paddingTop: 12 }}>
-                  {(lastOrderModalDetail.righe || []).map((r, i) => {
-                    const nomeProdotto = lastOrderModalDetail.productNames?.[r.prodottoId ?? r.prodotto_id] ?? "—"
-                    const formatoNome = r.formatoNome ?? r.formato_nome
-                    const label = formatoNome ? `${nomeProdotto} (${formatoNome})` : nomeProdotto
-                    const ing =
-                      r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
-                    const modsOnly = extractModificheFromIngredientiSummary(ing)
-                    return (
-                      <li key={r.id || i} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                              <span>{label} × {r.quantita}</span>
-                              <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
-                            </div>
-                            {modsOnly ? (
-                              <div style={{ fontSize: 12, color: "#b71c1c", marginTop: 4, lineHeight: 1.35, fontWeight: 700 }}>
-                                {modsOnly}
-                              </div>
+                        {expanded ? (
+                          <div style={{ padding: "4px 16px 16px 26px", background: "#fafbff" }}>
+                            {lastOrderDetailLoading && !detail ? (
+                              <p style={{ color: "#666", fontSize: 13 }}>Caricamento dettaglio…</p>
+                            ) : detail ? (
+                              <>
+                                <p style={{ margin: "0 0 8px", color: "#666" }}>
+                                  {ordineIsDelivery(detail) ? "Consegna" : "Ritiro in negozio"}
+                                </p>
+                                {ordineIsDelivery(detail) && ordineIndirizzoConsegna(detail) && (
+                                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>
+                                    Indirizzo: {String(ordineIndirizzoConsegna(detail) || "").replace(/\s+\d{5}\s*$/, "")}
+                                  </p>
+                                )}
+                                {ordineNomeCliente(detail) && (
+                                  <p style={{ margin: "0 0 12px", fontWeight: 500 }}>Cliente: {ordineNomeCliente(detail)}</p>
+                                )}
+                                {ordineOrarioRitiro(detail) && (
+                                  <p style={{ margin: "0 0 12px", color: "#555" }}>Orario: {ordineOrarioRitiro(detail)}</p>
+                                )}
+                                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px", borderTop: "1px solid #eee", paddingTop: 12 }}>
+                                  {(detail.righe || []).map((r, i) => {
+                                    const nomeProdotto = detail.productNames?.[r.prodottoId ?? r.prodotto_id] ?? "—"
+                                    const formatoNome = r.formatoNome ?? r.formato_nome
+                                    const label = formatoNome ? `${nomeProdotto} (${formatoNome})` : nomeProdotto
+                                    const ing = r.ingredientiCotturaSummary ?? r.ingredienti_cottura_summary ?? ""
+                                    const modsOnly = extractModificheFromIngredientiSummary(ing)
+                                    return (
+                                      <li key={r.id || i} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                                              <span>{label} × {r.quantita}</span>
+                                              <span>€ {(Number(r.prezzo) * (r.quantita || 1)).toFixed(2)}</span>
+                                            </div>
+                                            {modsOnly ? (
+                                              <div style={{ fontSize: 12, color: "#b71c1c", marginTop: 4, lineHeight: 1.35, fontWeight: 700 }}>
+                                                {modsOnly}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            title="Aggiungi questa riga al carrello (con modifiche)"
+                                            style={{
+                                              flexShrink: 0,
+                                              border: "1px solid #cbd5e1",
+                                              background: "#fff",
+                                              borderRadius: 8,
+                                              padding: "6px 10px",
+                                              fontSize: 12,
+                                              fontWeight: 700,
+                                              cursor: "pointer",
+                                            }}
+                                            onClick={() => addHistoryLineToCart(r, detail)}
+                                          >
+                                            Aggiungi
+                                          </button>
+                                        </div>
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                                <p style={{ fontWeight: 600, marginBottom: 12 }}>
+                                  Totale: € {typeof detail.totale === "number" ? detail.totale.toFixed(2) : detail.totale ?? "—"}
+                                </p>
+                                <p style={{ margin: 0, fontSize: 13 }}>Pagamento: {detail.tipo_pagamento || "—"}</p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+                                  <button
+                                    type="button"
+                                    style={{ ...styles.impostazioniBtn, background: "#0f172a" }}
+                                    onClick={() => recallHistoryOrderToCart(detail)}
+                                  >
+                                    Ripeti ordine completo
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{ ...styles.impostazioniBtn, background: "#1565c0" }}
+                                    onClick={() => {
+                                      const payload = comandaPayloadFromOrdineDetail(detail, tenantData)
+                                      if (payload) printComandaKitchen(payload)
+                                    }}
+                                  >
+                                    Stampa comanda
+                                  </button>
+                                  {haStampantiReparto && (
+                                    <button
+                                      type="button"
+                                      style={{ ...styles.impostazioniBtn, background: "#37474f", color: "#fff" }}
+                                      onClick={() => {
+                                        const payload = comandaPayloadFromOrdineDetail(detail, tenantData)
+                                        if (payload) printComandaKitchenPerReparto(payload)
+                                      }}
+                                    >
+                                      Stampa per reparto
+                                    </button>
+                                  )}
+                                </div>
+                              </>
                             ) : null}
                           </div>
-                          <button
-                            type="button"
-                            title="Aggiungi questa riga al carrello (con modifiche)"
-                            style={{
-                              flexShrink: 0,
-                              border: "1px solid #cbd5e1",
-                              background: "#fff",
-                              borderRadius: 8,
-                              padding: "6px 10px",
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                            }}
-                            onClick={() => addHistoryLineToCart(r, lastOrderModalDetail)}
-                          >
-                            Aggiungi
-                          </button>
-                        </div>
+                        ) : null}
                       </li>
                     )
                   })}
                 </ul>
-                <p style={{ fontWeight: 600, marginBottom: 12 }}>Totale: € {typeof lastOrderModalDetail.totale === "number" ? lastOrderModalDetail.totale.toFixed(2) : lastOrderModalDetail.totale ?? "—"}</p>
-                <p style={{ margin: 0, fontSize: 13 }}>Pagamento: {lastOrderModalDetail.tipo_pagamento || "—"}</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
-                  <button
-                    type="button"
-                    style={{ ...styles.impostazioniBtn, background: "#0f172a" }}
-                    onClick={() => recallHistoryOrderToCart(lastOrderModalDetail)}
-                  >
-                    Ripeti ordine completo
-                  </button>
-                  <button
-                    type="button"
-                    style={{ ...styles.impostazioniBtn, background: "#1565c0" }}
-                    onClick={() => {
-                      const payload = comandaPayloadFromOrdineDetail(lastOrderModalDetail, tenantData)
-                      if (payload) printComandaKitchen(payload)
-                    }}
-                  >
-                    Stampa comanda
-                  </button>
-                  {haStampantiReparto && (
-                    <button
-                      type="button"
-                      style={{ ...styles.impostazioniBtn, background: "#37474f", color: "#fff" }}
-                      onClick={() => {
-                        const payload = comandaPayloadFromOrdineDetail(lastOrderModalDetail, tenantData)
-                        if (payload) printComandaKitchenPerReparto(payload)
-                      }}
-                    >
-                      Stampa per reparto
-                    </button>
-                  )}
-                </div>
               </>
             )}
           </div>

@@ -5,7 +5,7 @@ import { clearSupportTenantOverride } from "@/utils/supportTenantOverride"
 const SA_HOME = "/superadmin/ingresso"
 
 /** Marchio tipografico PizzaManager (logo.svg vuoto nel repo). */
-function PmMark({ size = 18 }) {
+export function PmMark({ size = 18 }) {
   return (
     <svg
       width={size}

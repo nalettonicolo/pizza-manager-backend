@@ -105,8 +105,15 @@ export default function Bancone() {
       ])
       const prontoList = dataPronto || []
       const prepExtra = dataPrep || []
+      // Un ordine PRONTO a domicilio è già uscito (o sta per uscire con il pony): i suoi chip non
+      // servono più al bancone anche se una bibita non risulta ancora barrata. Un PRONTO ritiro in
+      // negozio invece resta nell'aggregazione finché non si preme "Consegnato" (il cliente non è
+      // ancora passato a prenderlo).
+      const prontoPerAggregazione = prontoList.filter(
+        (o) => (o.tipo_ordine || o.tipoOrdine || "").toLowerCase() !== "delivery",
+      )
       const prepMergedMap = new Map()
-      for (const o of [...prepExtra, ...prontoList]) {
+      for (const o of [...prepExtra, ...prontoPerAggregazione]) {
         if (o?.id) prepMergedMap.set(o.id, o)
       }
       const prepList = [...prepMergedMap.values()]
@@ -115,7 +122,7 @@ export default function Bancone() {
       const allIds = [...new Set([...cardIds, ...prepIds])]
 
       const [pizze, righe] = await Promise.all([
-        cardIds.length ? getRigheAggregateByOrdineIds(cardIds) : {},
+        cardIds.length ? getRigheAggregateByOrdineIds(cardIds, tenantId) : {},
         allIds.length ? getRigheByOrdineIds(allIds) : [],
       ])
       if (seq !== loadSeqRef.current) return
@@ -404,6 +411,9 @@ export default function Bancone() {
       try {
         await updateOrderStato(ordineId, STATO_CONSEGNATO)
         setOrders((prev) => prev.filter((o) => o.id !== ordineId))
+        // Rimuove subito anche dall'aggregazione "da preparare" (bibite/ingredienti), senza
+        // aspettare il prossimo refresh: l'ordine è concluso, i suoi chip non servono più.
+        setPrepOrders((prev) => prev.filter((o) => o.id !== ordineId))
         setDetailOrder(null)
       } catch (err) {
         console.error(err)
@@ -612,7 +622,7 @@ export default function Bancone() {
                 </h2>
                 <p style={styles.pickHint}>
                   {cucinaTabletOn
-                    ? "Le bibite le prepara il Bancone (tocca quando l'hai presa). Gli altri ingredienti li prepara la Cucina: qui li vedi in sola lettura, per sapere cosa sta arrivando — il tocco \"pronto\" resta solo in Cucina."
+                    ? "Le bibite le prepara il Bancone (tocca quando l'hai presa). Gli altri ingredienti li prepara la Cucina: qui puoi comunque toccarli per barrarli come promemoria personale — non cambia lo stato in Cucina, che resta l'unica a segnarli davvero pronti."
                     : "Conteggi per fascia (stesso ingrediente = un solo chip con quantità). Compare appena l'ordine è in preparazione. Tocca quando pronto."}
                 </p>
               </>
@@ -636,27 +646,47 @@ export default function Bancone() {
                         )
                         const showCount = item.count
                         if (readOnlyPrep) {
-                          // In sola lettura: "fatto" viene dallo stato condiviso cucina_prep_stato
-                          // (scritto dalla Cucina), non dal toggle locale pickedBanconeKeys — qui
-                          // il Bancone guarda soltanto, non marca nulla come pronto.
+                          // Con Cucina attiva questi ingredienti li prepara lei (il "pronto" vero resta
+                          // scritto in cucina_prep_stato): il click qui in Bancone NON tocca quello
+                          // stato condiviso, resta un promemoria solo locale (pickedBanconeKeys, come
+                          // le bibite) — un modo per non perdersi nulla senza far credere agli altri
+                          // reparti che l'abbia preparato Bancone.
                           const doneCount = item.doneCount || 0
                           const remaining = Math.max(0, showCount - doneCount)
-                          const allDone = remaining === 0
+                          const doneByCucina = remaining === 0
+                          const picked = pickedBanconeKeys.has(item.pickKey)
+                          const crossedOut = picked || doneByCucina
                           return (
-                            <span
+                            <button
                               key={item.pickKey}
+                              type="button"
+                              disabled={doneByCucina}
                               style={{
                                 ...styles.pickChip,
-                                cursor: "default",
-                                ...(allDone
-                                  ? { background: "#e2e8f0", color: "#94a3b8", textDecoration: "line-through" }
+                                ...(crossedOut
+                                  ? {
+                                      background: "#e2e8f0",
+                                      color: "#94a3b8",
+                                      textDecoration: "line-through",
+                                      borderColor: "#cbd5e1",
+                                      cursor: doneByCucina ? "default" : "pointer",
+                                    }
                                   : { background: fullBg, color: "#1a1a1a" }),
                               }}
-                              title="In preparazione in Cucina (sola visualizzazione)."
+                              onClick={() => {
+                                if (doneByCucina) return
+                                togglePickedBancone(item.pickKey)
+                                highlightOrdiniFromChip(item.ordineIds)
+                              }}
+                              title={
+                                doneByCucina
+                                  ? "Già segnato pronto dalla Cucina."
+                                  : "Lo prepara la Cucina — tocca per barrarlo qui (solo un promemoria per te, non cambia lo stato in Cucina)."
+                              }
                             >
                               {remaining > 1 ? `${remaining}× ` : ""}
                               {item.label}
-                            </span>
+                            </button>
                           )
                         }
                         const picked = pickedBanconeKeys.has(item.pickKey)

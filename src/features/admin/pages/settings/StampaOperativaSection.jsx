@@ -122,10 +122,27 @@ const COMANDA_PREVIEW_MOCK = {
       dettagli: [
         { tag: "impasto", text: "Impasto: Classico" },
         { tag: "cottura", text: "Cottura: Normale" },
-        { tag: "ingredienti", text: "Mozzarella, pomodoro, basilico" },
+        // Stesso formato di buildComandaIngredientiSummary + split « · » in stampa:
+        // ordine di ricetta (prodotto_ingrediente.ordine), non alfabetico.
+        {
+          tag: "ingredienti",
+          text: "In cottura: Pomodoro, Mozzarella, Basilico",
+        },
       ],
     },
-    { qty: 1, titolo: "Patatine fritte", dettagli: [] },
+    {
+      qty: 1,
+      titolo: "Capricciosa (Classica)",
+      dettagli: [
+        { tag: "impasto", text: "Impasto: Integrale" },
+        { tag: "cottura", text: "Cottura: Ben cotta" },
+        {
+          tag: "ingredienti",
+          text:
+            "Senza: Carciofi · Abbondante Funghi · In cottura: Pomodoro, Mozzarella, Prosciutto cotto, Funghi · A fine cottura: Olive",
+        },
+      ],
+    },
   ],
 }
 
@@ -653,7 +670,9 @@ export default function StampaOperativaSection() {
         <div style={styles.comandaPreviewCol}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Layout anteprima</div>
           <FieldHint style={{ marginBottom: 8 }}>
-            Anteprima con ordine di esempio (consegna + 2 righe prodotto). Salva per persistere su tutti i dispositivi del locale.
+            Anteprima allineata alla stampa reale: ordine ricetta degli ingredienti e fasi
+            (in cottura / a fine cottura / senza / aggiunte). Trascina i dettagli a sinistra
+            per vedere l&apos;effetto subito. Salva per persistere su tutti i dispositivi del locale.
           </FieldHint>
           <div style={styles.previewFrame}>
             <iframe title="Anteprima comanda" srcDoc={previewDoc} style={{ width: "100%", height: "100%", border: "none", display: "block" }} />
@@ -680,7 +699,9 @@ const styles = {
   twoColGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 16 },
   comandaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, alignItems: "start" },
   comandaCol: { minWidth: 0 },
-  comandaPreviewCol: { minWidth: 220 },
+  // Sticky: l'anteprima resta visibile mentre si scorre il resto del form, senza dover
+  // continuamente scorrere su e giù per confrontare una modifica col risultato.
+  comandaPreviewCol: { minWidth: 220, position: "sticky", top: 16, alignSelf: "start" },
   previewFrame: { height: 440, border: "1px solid #ccc", borderRadius: 8, overflow: "hidden", background: "#fff", boxShadow: "inset 0 0 0 1px #eee" },
   dragRow: {
     display: "flex",

@@ -240,6 +240,7 @@ export async function createOrder(tenantId, payload) {
     turnoOperatoriId = null,
     telefonoRitiro = "",
     idempotencyKey = null,
+    webClienteUserId = null,
   } = payload
 
   const rpcArgs = {
@@ -260,6 +261,11 @@ export async function createOrder(tenantId, payload) {
     p_orario_ritiro: orarioRitiro ?? "",
     p_indirizzo_consegna: indirizzoConsegna ?? "",
   }
+  const webUid =
+    webClienteUserId != null && String(webClienteUserId).trim() !== ""
+      ? String(webClienteUserId).trim()
+      : null
+  if (webUid) rpcArgs.p_web_cliente_user_id = webUid
   rpcArgs.p_consegna_lng =
     consegnaLng != null && Number.isFinite(Number(consegnaLng)) ? Number(consegnaLng) : null
   rpcArgs.p_consegna_lat =
@@ -592,6 +598,49 @@ export async function updateOrder(ordineId, updates) {
     .from("Ordine")
     .update(row)
     .eq("id", ordineId)
+  if (error) throw error
+}
+
+/**
+ * Salva (o cancella, se vuoto) il carrello in sospeso di un cliente — CA-15: se un cliente a
+ * domicilio inserisce un ordine (da casa o al telefono con cassa) ma non lo conferma e richiama
+ * il negozio, cercando/selezionando quel cliente in cassa si ritrova lo stesso carrello.
+ */
+export async function upsertCarrelloSospeso(tenantId, clienteId, draft) {
+  if (!tenantId || !clienteId) return
+  const { error } = await supabase.rpc("upsert_carrello_sospeso", {
+    p_tenant_id: tenantId,
+    p_cliente_id: clienteId,
+    p_origine: draft?.origine || "cassa",
+    p_tipo_ordine: draft?.tipoOrdine ?? null,
+    p_cart: Array.isArray(draft?.cart) ? draft.cart : [],
+    p_checkout_note: draft?.checkoutNote ?? null,
+    p_checkout_nome_cliente: draft?.checkoutNomeCliente ?? null,
+    p_checkout_telefono_cliente: draft?.checkoutTelefonoCliente ?? null,
+    p_checkout_selected_slot: draft?.checkoutSelectedSlot ?? null,
+    p_delivery_search: draft?.deliverySearch ?? null,
+  })
+  if (error) throw error
+}
+
+/** Legge il carrello in sospeso di un cliente (null se non presente o scaduto oltre 5 giorni). */
+export async function getCarrelloSospesoCliente(tenantId, clienteId) {
+  if (!tenantId || !clienteId) return null
+  const { data, error } = await supabase.rpc("get_carrello_sospeso_cliente", {
+    p_tenant_id: tenantId,
+    p_cliente_id: clienteId,
+  })
+  if (error) throw error
+  return data || null
+}
+
+/** Cancella esplicitamente il carrello in sospeso di un cliente (es. dopo conferma reale dell'ordine). */
+export async function deleteCarrelloSospeso(tenantId, clienteId) {
+  if (!tenantId || !clienteId) return
+  const { error } = await supabase.rpc("delete_carrello_sospeso", {
+    p_tenant_id: tenantId,
+    p_cliente_id: clienteId,
+  })
   if (error) throw error
 }
 
@@ -1054,8 +1103,34 @@ export async function enrichOrdineDetailIngredientiSummaries(tenantId, detail) {
   return { ...detail, righe: newRighe }
 }
 
-/** Restituisce per ogni ordineId il totale pizze (somma quantita righe). Utile per planning. */
-export async function getRigheAggregateByOrdineIds(ordineIds) {
+/**
+ * Restituisce per ogni ordineId il totale PIZZE (somma quantita righe di sola categoria pizza).
+ * Usato per planning/capacità forno: fritti, dolci e bibite non occupano un posto in forno e non
+ * vanno contati qui (CA-02) — passare tenantId per il filtro categoria; senza, per compatibilità
+ * con eventuali chiamate legacy, conta tutte le righe come prima (comportamento pre-fix).
+ */
+/**
+ * true se la categoria NON va contata come capacità forno (fritti/dolci/bibite/ingredienti sfusi).
+ * A differenza di macroCategoriaVenditaFromCat() (usata per i report vendite), qui il criterio è
+ * "escludi solo quello che sicuramente non cuoce in forno" invece di "includi solo se il nome
+ * contiene la parola pizza": molti locali hanno le pizze suddivise in sottocategorie (Classiche,
+ * Speciali, Bianche, Chiuse, Gourmet...) che non contengono affatto la parola "pizza" nel nome —
+ * con il criterio "a inclusione" venivano tutte scambiate per "altro" e il conteggio forno
+ * risultava sempre a 0 pur avendo l'ordine pizze vere (bug osservato dal vivo: categoria
+ * "Classiche" con Capricciosa/Marinara/Margherita, forno rimasto a 0/12).
+ */
+function categoriaEsclusaDalForno(cat) {
+  if (!cat) return false // categoria sconosciuta: fail-open, meglio contare che azzerare il planning
+  const hay = `${cat.slug || ""} ${cat.nome || ""}`.toLowerCase().trim()
+  if (!hay) return false
+  if (hay.includes("fritt")) return true
+  if (hay.includes("dolc")) return true
+  if (hay.includes("bibit") || hay.includes("bevand") || hay.includes("bevan")) return true
+  if (hay.includes("ingredient")) return true
+  return false
+}
+
+export async function getRigheAggregateByOrdineIds(ordineIds, tenantId) {
   if (!ordineIds?.length) return {}
   if (nestOperativeWritesEnabled()) {
     try {
@@ -1073,10 +1148,46 @@ export async function getRigheAggregateByOrdineIds(ordineIds) {
     .select("*")
     .in("ordineId", ordineIds)
   if (error) throw error
+
+  let pizzaProductIds = null
+  if (tenantId) {
+    const productIds = [
+      ...new Set((righe || []).map((r) => r.prodottoId ?? r.prodotto_id).filter(Boolean)),
+    ]
+    if (productIds.length) {
+      try {
+        const [{ data: prodottiRows }, categorie] = await Promise.all([
+          supabase.from("Prodotto").select("id, categoria_id").eq("tenant_id", tenantId).in("id", productIds),
+          getCategories(tenantId),
+        ])
+        const catById = {}
+        for (const c of categorie || []) catById[c.id] = c
+        pizzaProductIds = new Set(
+          (prodottiRows || [])
+            .filter((p) => {
+              const cid = p.categoria_id ?? p.categoriaId
+              const cat = cid ? catById[cid] : null
+              return !categoriaEsclusaDalForno(cat)
+            })
+            .map((p) => p.id),
+        )
+      } catch (e) {
+        console.warn("[adminService] getRigheAggregateByOrdineIds filtro categoria pizza:", e)
+        pizzaProductIds = null // in caso di errore, non filtrare (fail-safe: meglio contare di più che azzerare il planning)
+      }
+    } else {
+      pizzaProductIds = new Set()
+    }
+  }
+
   const out = {}
   for (const r of righe || []) {
     const id = r.ordineId ?? r.ordine_id
     if (id == null) continue
+    if (pizzaProductIds) {
+      const pid = r.prodottoId ?? r.prodotto_id
+      if (!pizzaProductIds.has(pid)) continue
+    }
     const key = String(id)
     out[key] = (out[key] || 0) + (Number(r.quantita ?? r.qty) || 0)
   }
@@ -1149,25 +1260,78 @@ export async function updateAnagraficaCliente(tenantId, clienteId, payload) {
   return data
 }
 
-/** Cerca anagrafica clienti per tenant (indirizzo, nome, telefono, email). Cerca in ogni colonna con ilike. */
+function rowMatchesClienteQuery(row, words) {
+  if (!words.length) return true
+  const searchable = [row.nome, row.indirizzo, row.telefono, row.email].filter(Boolean).join(" ").toLowerCase()
+  return words.every((word) => searchable.includes(word))
+}
+
+function clienteDedupeKey(row) {
+  const email = String(row?.email || "")
+    .trim()
+    .toLowerCase()
+  if (email) return `e:${email}`
+  const tel = String(row?.telefono || "").replace(/\D/g, "")
+  if (tel.length >= 7) return `t:${tel.slice(-9)}`
+  const nome = String(row?.nome || "")
+    .trim()
+    .toLowerCase()
+  const ind = String(row?.indirizzo || "")
+    .trim()
+    .toLowerCase()
+  if (nome && ind) return `n:${nome}|${ind}`
+  return `id:${row?.id}`
+}
+
+/**
+ * Cerca clienti per la cassa: unisce anagrafica_cassa + account area cliente (public.clienti).
+ * «Cliente Test» / registrati dal menù online sono in `clienti`; «Nuovo cliente» in cassa scrive `anagrafica_clienti`.
+ */
 export async function searchAnagraficaClienti(tenantId, query) {
   const q = (query || "").trim()
   if (!tenantId) return []
-  const builder = supabase
-    .from("anagrafica_clienti")
-    .select("id, nome, indirizzo, telefono, email, created_at")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(100)
-  const { data, error } = await builder
-  if (error) throw error
-  const list = data || []
-  if (!q) return list
-  const qLower = q.toLowerCase()
-  const words = qLower.split(/\s+/).filter(Boolean)
-  return list.filter((row) => {
-    const searchable = [row.nome, row.indirizzo, row.telefono, row.email].filter(Boolean).join(" ").toLowerCase()
-    return words.every((word) => searchable.includes(word))
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+
+  // CA-23: un tetto troppo basso qui fa scomparire in silenzio un cliente più vecchio dell'ultimo
+  // blocco inserito, anche cercandolo per nome/telefono esatto — 1000 per fonte copre comodamente
+  // l'archivio di un locale per anni restando comunque un fetch indicizzato (tenant_id) veloce.
+  const [anagRes, webRes] = await Promise.all([
+    supabase
+      .from("anagrafica_clienti")
+      .select("id, nome, indirizzo, telefono, email, created_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+    supabase
+      .from("clienti")
+      .select("id, nome, indirizzo, telefono, email, created_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+  ])
+
+  if (anagRes.error) throw anagRes.error
+  // Se RLS nega lettura clienti web (es. ruolo senza policy), non bloccare la ricerca anagrafica.
+  if (webRes.error) {
+    console.warn("[searchAnagraficaClienti] clienti web non leggibili:", webRes.error.message)
+  }
+
+  const merged = new Map()
+  for (const row of anagRes.data || []) {
+    if (!rowMatchesClienteQuery(row, words)) continue
+    merged.set(clienteDedupeKey(row), { ...row, fonte: "anagrafica" })
+  }
+  for (const row of webRes.data || []) {
+    if (!rowMatchesClienteQuery(row, words)) continue
+    const key = clienteDedupeKey(row)
+    if (merged.has(key)) continue
+    merged.set(key, { ...row, fonte: "web" })
+  }
+
+  return [...merged.values()].sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+    return tb - ta
   })
 }
 

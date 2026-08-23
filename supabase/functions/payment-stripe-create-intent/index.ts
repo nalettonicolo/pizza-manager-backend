@@ -83,7 +83,8 @@ Deno.serve(async (req) => {
     pi = await stripe.paymentIntents.create({
       amount: amountCent,
       currency: "eur",
-      automatic_payment_methods: { enabled: true },
+      // Solo carta: niente Klarna/Satispay/Amazon Pay/wallet dinamici da Dashboard.
+      payment_method_types: ["card"],
       metadata: {
         tenant_id: tenantId,
         ordine_id: ordineId,

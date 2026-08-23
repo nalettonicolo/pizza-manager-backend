@@ -37,7 +37,7 @@ async function flushOne(action) {
     return { ok: true, skipped: true }
   }
   const p = action.payload || {}
-  const { data, error } = await supabase.rpc("create_order_with_items", {
+  const rpcArgs = {
     p_tenant_id: p.tenant_id,
     p_totale: Number(p.totale),
     p_stato: p.stato ?? "IN_PREPARAZIONE",
@@ -61,7 +61,10 @@ async function flushOne(action) {
     p_turno_operatori_id: p.turno_operatori_id ?? p.turnoOperatoriId ?? null,
     p_telefono_ritiro: p.telefono_ritiro ?? p.telefonoRitiro ?? null,
     p_idempotency_key: p.idempotency_key ?? p.idempotencyKey ?? action.idempotency_key ?? null,
-  })
+  }
+  const webUid = p.web_cliente_user_id ?? p.webClienteUserId ?? null
+  if (webUid) rpcArgs.p_web_cliente_user_id = webUid
+  const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
   if (error) throw error
   await removePendingAction(action.id)
   return { ok: true, ordineId: data }

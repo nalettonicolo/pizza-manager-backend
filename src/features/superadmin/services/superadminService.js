@@ -80,14 +80,14 @@ function fromCore(table) {
 const TENANT_SELECT_FULL =
   "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
   "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
-  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, prova_valida_fino, " +
+  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, sconto_scadenza, prova_valida_fino, " +
   "public_domain, public_domain_status, public_domain_requested_at, sito_web_cliente, parametri_operativi";
 
 /** Come FULL ma senza sito_web_cliente (DB non ancora migrato). */
 const TENANT_SELECT_NO_SITO_WEB =
   "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
   "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
-  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, prova_valida_fino, " +
+  "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, sconto_scadenza, prova_valida_fino, " +
   "public_domain, public_domain_status, public_domain_requested_at, parametri_operativi";
 
 const TENANT_SELECT_LEGACY = "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at";
@@ -221,6 +221,8 @@ function tenantRowFromPayload(payload) {
       payload.sconto_percentuale === "" || payload.sconto_percentuale == null
         ? 0
         : Math.min(100, Math.max(0, Number(payload.sconto_percentuale) || 0)),
+    sconto_scadenza:
+      payload.sconto_scadenza === "" || payload.sconto_scadenza == null ? null : payload.sconto_scadenza,
     prova_valida_fino:
       payload.prova_valida_fino === "" || payload.prova_valida_fino == null
         ? null

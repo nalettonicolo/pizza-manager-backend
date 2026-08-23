@@ -207,11 +207,11 @@ export default function CassaImpostazioniPage({ onBack }) {
       </div>
 
       <div style={styles.twoColGrid}>
-        <section style={styles.section}>
+      <section style={styles.section}>
           <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Capacità e slot</h3>
-          <div style={styles.fields}>
-            <label>
-              Pony disponibili (lun–gio)
+        <div style={styles.fields}>
+          <label>
+            Pony disponibili (lun–gio)
               <input
                 type="number"
                 min={0}
@@ -220,9 +220,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("pony_lun_gio", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Pony disponibili (ven–dom)
+          </label>
+          <label>
+            Pony disponibili (ven–dom)
               <input
                 type="number"
                 min={0}
@@ -231,9 +231,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("pony_ven_dom", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Pizze ogni 15 minuti
+          </label>
+          <label>
+            Pizze ogni 15 minuti
               <input
                 type="number"
                 min={1}
@@ -242,9 +242,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("pizze_ogni_15_min", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Consegne ogni (min)
+          </label>
+          <label>
+            Consegne ogni (min)
               <input
                 type="number"
                 min={1}
@@ -253,9 +253,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("consegne_ogni_min", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Ritiro in negozio ogni (min)
+          </label>
+          <label>
+            Ritiro in negozio ogni (min)
               <input
                 type="number"
                 min={1}
@@ -264,9 +264,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("ritiro_ogni_min", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Tempo preparazione pizza (min)
+          </label>
+          <label>
+            Tempo preparazione pizza (min)
               <input
                 type="number"
                 min={1}
@@ -275,9 +275,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("tempo_preparazione_pizza", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Velocità pony (km/h)
+          </label>
+          <label>
+            Velocità pony (km/h)
               <input
                 type="number"
                 min={1}
@@ -287,9 +287,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("velocita_pony_kmh", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-            <label>
-              Soglia giallo (pizze)
+          </label>
+          <label>
+            Soglia giallo (pizze)
               <input
                 type="number"
                 min={0}
@@ -298,14 +298,14 @@ export default function CassaImpostazioniPage({ onBack }) {
                 onChange={(e) => setField("soglia_giallo_pizze", e.target.value === "" ? "" : e.target.value)}
                 style={inputStyle}
               />
-            </label>
-          </div>
-        </section>
-        <section style={styles.section}>
-          <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Pizzaiolo e consegne</h3>
-          <div style={styles.fields}>
-            <label>
-              Ordini visibili (minuti prima dell&apos;orario)
+          </label>
+        </div>
+      </section>
+      <section style={styles.section}>
+        <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Pizzaiolo e consegne</h3>
+        <div style={styles.fields}>
+          <label>
+            Ordini visibili (minuti prima dell&apos;orario)
               <input
                 type="number"
                 min={15}
@@ -316,8 +316,8 @@ export default function CassaImpostazioniPage({ onBack }) {
                 }
                 style={inputStyle}
               />
-            </label>
-            <label>
+          </label>
+          <label>
               Pronte in forno (minuti prima della consegna)
               <input
                 type="number"
@@ -334,9 +334,9 @@ export default function CassaImpostazioniPage({ onBack }) {
               <span style={{ display: "block", fontSize: 12, color: "#666", marginTop: 4, fontWeight: 400 }}>
                 Es. consegna 19:15 → pizze pronte entro 19:05 se valore 10.
               </span>
-            </label>
-            <label>
-              Tempo viaggio consegna (minuti)
+          </label>
+          <label>
+            Tempo viaggio consegna (minuti)
               <input
                 type="number"
                 min={5}
@@ -347,9 +347,9 @@ export default function CassaImpostazioniPage({ onBack }) {
                 }
                 style={inputStyle}
               />
-            </label>
-          </div>
-        </section>
+          </label>
+        </div>
+      </section>
       </div>
 
       <section style={{ ...styles.section, background: "#f8fafc" }}>
@@ -395,7 +395,7 @@ export default function CassaImpostazioniPage({ onBack }) {
                   <span style={{ color: "#64748b" }}>
                     {" — "}
                     {keys.map((k) => LABELS[k] || k).join(", ") || "parametri"}
-                  </span>
+                    </span>
                 </li>
               )
             })}

@@ -34,10 +34,10 @@ export default function OrdineOnlineDisattivoModal({ open, onDismiss, localeNome
         <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: "#475569" }}>
           {localeNome ? (
             <>
-              Al momento <strong>{localeNome}</strong> non accetta ordini dalla vetrina online. Puoi comunque consultare il menù; per ordinare contatta il locale.
+              Al momento <strong>{localeNome}</strong> non accetta ordini online. Puoi comunque consultare il menù; per ordinare contatta il locale.
             </>
           ) : (
-            <>Al momento non sono accettati ordini dalla vetrina online. Puoi comunque consultare il menù; per ordinare contatta il locale.</>
+            <>Al momento non sono accettati ordini online. Puoi comunque consultare il menù; per ordinare contatta il locale.</>
           )}
         </p>
         <button

@@ -1,4 +1,3 @@
-import { supabase } from "@/lib/supabaseClient"
 import {
   PAYMENT_LINK_PROVIDER_KEYS,
   paymentLinkProviderImplementationStatus,
@@ -16,7 +15,7 @@ import { PAYMENT_LINK_STATUS } from "@/integrations/fiscal/fiscalConstants"
  *   paymentLinkProviderKey: string | null | undefined,
  *   destinatarioTelefono?: string | null,
  * }} args
- * @returns {Promise<{ ok: boolean, intentId?: string, message?: string, error?: string, stripePaymentIntentId?: string }>}
+ * @returns {Promise<{ ok: boolean, intentId?: string, paymentUrl?: string, message?: string, error?: string }>}
  */
 export async function runUnifiedPayByLinkSetup(args) {
   const {
@@ -52,55 +51,37 @@ export async function runUnifiedPayByLinkSetup(args) {
     return { ok: false, error: "Intent creato senza id" }
   }
 
+  const paymentUrl = `${window.location.origin}/paga/${intentId}`
+
   if (provider === PAYMENT_LINK_PROVIDER_KEYS.STRIPE) {
-    const { data: sess } = await supabase.auth.getSession()
-    const token = sess?.session?.access_token
-    if (!token) {
-      await updatePaymentLinkIntent(intentId, {
-        last_error: "Sessione assente: impossibile chiamare Edge Stripe",
-        status: PAYMENT_LINK_STATUS.FAILED,
-      })
-      return { ok: false, intentId, error: "Sessione non valida" }
-    }
-    const { data: fnData, error: fnErr } = await supabase.functions.invoke("payment-stripe-create-intent", {
-      body: { ordine_id: ordineId },
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (fnErr || fnData?.error) {
-      const msg = fnData?.error || fnErr?.message || "Edge Stripe fallita"
-      await updatePaymentLinkIntent(intentId, {
-        last_error: String(msg),
-        status: PAYMENT_LINK_STATUS.FAILED,
-        provider_payload: fnData && typeof fnData === "object" ? fnData : null,
-      })
-      return { ok: false, intentId, error: String(msg) }
-    }
-    const piId = fnData?.paymentIntentId
+    // Il PaymentIntent Stripe viene creato più tardi, quando il link viene davvero aperto
+    // (Edge Function `payment-link-checkout`, chiamata dalla pagina di pagamento ospitata senza
+    // richiedere login) — non qui: qui chi chiama è cassa (staff), non il cliente proprietario
+    // dell'ordine, e l'unica altra Edge Function disponibile (payment-stripe-create-intent)
+    // richiede che l'ordine sia collegato all'utente che chiama, cosa mai vera per un ordine
+    // preso a telefono da cassa. Creare il PaymentIntent solo all'apertura del link evita anche
+    // di generarne di orfani per link mai aperti dal cliente.
     await updatePaymentLinkIntent(intentId, {
-      provider_intent_id: piId ?? null,
-      provider_payload: {
-        stripe_payment_intent_id: piId ?? null,
-        /** Non persistiamo client_secret su DB */
-        has_client_secret: Boolean(fnData?.clientSecret),
-      },
-      status: PAYMENT_LINK_STATUS.SENT,
+      payment_url: paymentUrl,
+      status: PAYMENT_LINK_STATUS.PENDING,
     })
     return {
       ok: true,
       intentId,
-      stripePaymentIntentId: piId,
-      message:
-        "PaymentIntent Stripe creato e collegato all’ordine. Link SMS/hosted page: in roadmap; per incasso immediato usare POS manuale o checkout vetrina se configurato.",
+      paymentUrl,
+      message: "Link di pagamento pronto: invialo al cliente (SMS/WhatsApp) o condividilo da qui.",
     }
   }
 
   await updatePaymentLinkIntent(intentId, {
+    payment_url: paymentUrl,
     last_error: `Provider "${provider}" in predisposizione: nessuna Edge Function collegata`,
     status: PAYMENT_LINK_STATUS.PENDING,
   })
   return {
     ok: true,
     intentId,
+    paymentUrl,
     message: `Richiesta registrata per provider "${provider}". Attivazione con dati cliente e worker dedicato.`,
   }
 }

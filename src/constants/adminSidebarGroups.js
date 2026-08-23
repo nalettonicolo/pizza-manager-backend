@@ -28,6 +28,10 @@ export const SETTINGS_SIDEBAR_GROUPS = [
       { to: "/admin/settings/stampa-operativa", label: "Stampa operativa" },
     ],
   },
+  {
+    label: "Account",
+    items: [{ to: "/admin/settings/account", label: "Il mio account" }],
+  },
 ]
 
 /** @type {AdminSidebarGroup[]} */

@@ -113,7 +113,7 @@ export default function ParametriSection() {
     cassa_pagamento_contanti: raw.cassa_pagamento_contanti !== false,
     cassa_pagamento_carta: raw.cassa_pagamento_carta !== false,
     cassa_pagamento_paga_online: raw.cassa_pagamento_paga_online !== false,
-    vetrina_consegna_filtro_quarto_attivo: raw.vetrina_consegna_filtro_quarto_attivo !== false,
+    vetrina_consegna_filtro_quarto_attivo: raw.vetrina_consegna_filtro_quarto_attivo === true,
     vetrina_consegna_filtro_quarto_ora_fine:
       raw.vetrina_consegna_filtro_quarto_ora_fine !== undefined && raw.vetrina_consegna_filtro_quarto_ora_fine !== ""
         ? raw.vetrina_consegna_filtro_quarto_ora_fine
@@ -190,7 +190,7 @@ export default function ParametriSection() {
         cassa_pagamento_contanti: p.cassa_pagamento_contanti !== false,
         cassa_pagamento_carta: p.cassa_pagamento_carta !== false,
         cassa_pagamento_paga_online: p.cassa_pagamento_paga_online !== false,
-        vetrina_consegna_filtro_quarto_attivo: p.vetrina_consegna_filtro_quarto_attivo !== false,
+        vetrina_consegna_filtro_quarto_attivo: p.vetrina_consegna_filtro_quarto_attivo === true,
         vetrina_consegna_filtro_quarto_ora_fine:
           p.vetrina_consegna_filtro_quarto_ora_fine === "" ? 15 : Math.min(23, Math.max(0, Number(p.vetrina_consegna_filtro_quarto_ora_fine) || 15)),
         vetrina_consegna_filtro_quarto_minuto: [0, 15, 30, 45].includes(Number(p.vetrina_consegna_filtro_quarto_minuto))
@@ -251,62 +251,197 @@ export default function ParametriSection() {
             Verifica allineamento foodcost in corso...
           </p>
         ) : null}
-        <div className="dashboard-settings-fields" style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 420 }}>
-          <label>
-            Pony disponibili per consegna da lunedì a giovedì 
-            <input
-              type="number"
-              min={0}
-              placeholder="es. 2"
-              value={p.pony_lun_gio === "" ? "" : p.pony_lun_gio}
-              onChange={(e) => setParam("pony_lun_gio", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Pony disponibili per consegna da venerdì a domenica 
-            <input
-              type="number"
-              min={0}
-              placeholder="es. 3"
-              value={p.pony_ven_dom === "" ? "" : p.pony_ven_dom}
-              onChange={(e) => setParam("pony_ven_dom", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Pizze ogni 15 minuti - capacità forno 
-            <input
-              type="number"
-              min={1}
-              placeholder="es. 8"
-              value={p.pizze_ogni_15_min === "" ? "" : p.pizze_ogni_15_min}
-              onChange={(e) => setParam("pizze_ogni_15_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Consegne programmate ogni tot. di minuti 
-            <input
-              type="number"
-              min={1}
-              placeholder="es. 15"
-              value={p.consegne_ogni_min === "" ? "" : p.consegne_ogni_min}
-              onChange={(e) => setParam("consegne_ogni_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Ritiro in negozio ogni tot. di minuti 
-            <input
-              type="number"
-              min={1}
-              placeholder="es. 15 (quarti d’ora)"
-              value={p.ritiro_ogni_min === "" ? "" : p.ritiro_ogni_min}
-              onChange={(e) => setParam("ritiro_ogni_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
+        <div className="dashboard-settings-fields" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Capacità e logistica</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 340px)", gap: 24, alignItems: "start" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+              <label>
+                Pony disponibili per consegna da lunedì a giovedì
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="es. 2"
+                  value={p.pony_lun_gio === "" ? "" : p.pony_lun_gio}
+                  onChange={(e) => setParam("pony_lun_gio", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Pony disponibili per consegna da venerdì a domenica
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="es. 3"
+                  value={p.pony_ven_dom === "" ? "" : p.pony_ven_dom}
+                  onChange={(e) => setParam("pony_ven_dom", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Velocità media pony in consegna (km/h)
+                <input
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={p.rider_velocita_media_kmh === "" ? "" : p.rider_velocita_media_kmh}
+                  onChange={(e) => setParam("rider_velocita_media_kmh", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Velocità pony in condizioni avverse (km/h, più bassa = tempi più lunghi)
+                <input
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={p.rider_velocita_mal_tempo_kmh === "" ? "" : p.rider_velocita_mal_tempo_kmh}
+                  onChange={(e) => setParam("rider_velocita_mal_tempo_kmh", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Pizze ogni 15 minuti - capacità forno
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="es. 8"
+                  value={p.pizze_ogni_15_min === "" ? "" : p.pizze_ogni_15_min}
+                  onChange={(e) => setParam("pizze_ogni_15_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Tempo di preparazione di 1 pizza completa (minuti)
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="es. 5"
+                  value={p.tempo_preparazione_pizza === "" ? "" : p.tempo_preparazione_pizza}
+                  onChange={(e) => setParam("tempo_preparazione_pizza", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Soglia giallo (pizze sotto il max per mostrare slot in giallo)
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="es. 10"
+                  value={p.soglia_giallo_pizze === "" ? "" : p.soglia_giallo_pizze}
+                  onChange={(e) => setParam("soglia_giallo_pizze", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Consegne programmate ogni tot. di minuti
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="es. 15"
+                  value={p.consegne_ogni_min === "" ? "" : p.consegne_ogni_min}
+                  onChange={(e) => setParam("consegne_ogni_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Ritiro in negozio ogni tot. di minuti
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="es. 15 (quarti d’ora)"
+                  value={p.ritiro_ogni_min === "" ? "" : p.ritiro_ogni_min}
+                  onChange={(e) => setParam("ritiro_ogni_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Soglia ritardo consegne (minuti) per allarmi tra reparti
+                <input
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={p.rider_ritardo_soglia_min === "" ? "" : p.rider_ritardo_soglia_min}
+                  onChange={(e) => setParam("rider_ritardo_soglia_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Tempo medio al citofono / consegna fisica (minuti per fermata)
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={p.rider_tempo_fermata_cliente_min === "" ? "" : p.rider_tempo_fermata_cliente_min}
+                  onChange={(e) => setParam("rider_tempo_fermata_cliente_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Evidenza forno — minuti prima della scadenza “pronto per partenza rider” (cucina / pizzaioli)
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={p.rider_forno_evidenza_min === "" ? "" : p.rider_forno_evidenza_min}
+                  onChange={(e) => setParam("rider_forno_evidenza_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label>
+                Buffer partenza rider (minuti prima dell’orario cliente) — bancone pronto
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={p.rider_partenza_buffer_min === "" ? "" : p.rider_partenza_buffer_min}
+                  onChange={(e) => setParam("rider_partenza_buffer_min", e.target.value === "" ? "" : e.target.value)}
+                  style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
+                />
+              </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", gridColumn: "1 / -1" }}>
+                <input
+                  type="checkbox"
+                  checked={p.rider_ricalcolo_automatico}
+                  onChange={(e) => setParam("rider_ricalcolo_automatico", e.target.checked)}
+                  style={{ marginTop: 4 }}
+                />
+                <span>
+                  Ricalcolo automatico consegne (quando il modulo sarà attivo; altrimenti resta solo ricalcolo manuale in cassa).
+                </span>
+              </label>
+            </div>
+
+            <fieldset style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", margin: 0 }}>
+              <legend style={{ padding: "0 6px", fontSize: 13, fontWeight: 600 }}>Accettazione ordini online</legend>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 10 }}>
+                <input
+                  type="radio"
+                  name="ordini_web_accettazione_mode"
+                  checked={p.ordini_web_accettazione_mode !== "manuale"}
+                  onChange={() => setParam("ordini_web_accettazione_mode", "auto")}
+                  style={{ marginTop: 4 }}
+                />
+                <span>
+                  <strong>Automatica</strong> — il sistema accetta l&apos;ordine in base alla capacità (pizze ogni 15 min /
+                  fasce orarie). La cassa riceve comunque l&apos;avviso in sala se configurato.
+                </span>
+              </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="ordini_web_accettazione_mode"
+                  checked={p.ordini_web_accettazione_mode === "manuale"}
+                  onChange={() => setParam("ordini_web_accettazione_mode", "manuale")}
+                  style={{ marginTop: 4 }}
+                />
+                <span>
+                  <strong>Manuale in cassa</strong> — ogni ordine web resta in attesa: la cassa deve accettarlo, spostare
+                  l&apos;orario o rifiutarlo. Non entra in cucina finché non è accettato.
+                </span>
+              </label>
+            </fieldset>
+          </div>
+
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
             <input
               type="checkbox"
@@ -378,35 +513,6 @@ export default function ParametriSection() {
             </label>
           </fieldset>
           <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Ordini web (vetrina)</h3>
-          <fieldset style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", margin: "0 0 12px" }}>
-            <legend style={{ padding: "0 6px", fontSize: 13, fontWeight: 600 }}>Accettazione ordini</legend>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 10 }}>
-              <input
-                type="radio"
-                name="ordini_web_accettazione_mode"
-                checked={p.ordini_web_accettazione_mode !== "manuale"}
-                onChange={() => setParam("ordini_web_accettazione_mode", "auto")}
-                style={{ marginTop: 4 }}
-              />
-              <span>
-                <strong>Automatica</strong> — il sistema accetta l&apos;ordine in base alla capacità (pizze ogni 15 min /
-                fasce orarie). La cassa riceve comunque l&apos;avviso in sala se configurato.
-              </span>
-            </label>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="ordini_web_accettazione_mode"
-                checked={p.ordini_web_accettazione_mode === "manuale"}
-                onChange={() => setParam("ordini_web_accettazione_mode", "manuale")}
-                style={{ marginTop: 4 }}
-              />
-              <span>
-                <strong>Manuale in cassa</strong> — ogni ordine web resta in attesa: la cassa deve accettarlo, spostare
-                l&apos;orario o rifiutarlo. Non entra in cucina finché non è accettato.
-              </span>
-            </label>
-          </fieldset>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
             <input
               type="checkbox"
@@ -539,111 +645,6 @@ export default function ParametriSection() {
             </select>
           </label>
 
-          <h3 style={{ margin: "20px 0 8px", fontSize: 16 }}>Consegne / rider (logistica)</h3>
-          <p className="dati-pizzeria-hint" style={{ marginBottom: 12, lineHeight: 1.5 }}>
-            Parametri per pianificazione percorsi (Google Maps), soglie ritardo e evidenziazione in cucina/bancone. Il ricalcolo
-            percorsi non sposta ordini già in forno (regola operativa). Valori modificabili in qualsiasi momento.
-          </p>
-          <label>
-            Velocità media pianificazione (km/h)
-            <input
-              type="number"
-              min={5}
-              max={120}
-              value={p.rider_velocita_media_kmh === "" ? "" : p.rider_velocita_media_kmh}
-              onChange={(e) => setParam("rider_velocita_media_kmh", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Velocità in condizioni avverse (km/h, più bassa = tempi più lunghi)
-            <input
-              type="number"
-              min={5}
-              max={120}
-              value={p.rider_velocita_mal_tempo_kmh === "" ? "" : p.rider_velocita_mal_tempo_kmh}
-              onChange={(e) => setParam("rider_velocita_mal_tempo_kmh", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Soglia ritardo consegne (minuti) per allarmi tra reparti
-            <input
-              type="number"
-              min={1}
-              max={180}
-              value={p.rider_ritardo_soglia_min === "" ? "" : p.rider_ritardo_soglia_min}
-              onChange={(e) => setParam("rider_ritardo_soglia_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Tempo medio al citofono / consegna fisica (minuti per fermata)
-            <input
-              type="number"
-              min={0}
-              max={60}
-              value={p.rider_tempo_fermata_cliente_min === "" ? "" : p.rider_tempo_fermata_cliente_min}
-              onChange={(e) => setParam("rider_tempo_fermata_cliente_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Evidenza forno — minuti prima della scadenza “pronto per partenza rider” (cucina / pizzaioli)
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={p.rider_forno_evidenza_min === "" ? "" : p.rider_forno_evidenza_min}
-              onChange={(e) => setParam("rider_forno_evidenza_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Buffer partenza rider (minuti prima dell’orario cliente) — bancone pronto
-            <input
-              type="number"
-              min={0}
-              max={60}
-              value={p.rider_partenza_buffer_min === "" ? "" : p.rider_partenza_buffer_min}
-              onChange={(e) => setParam("rider_partenza_buffer_min", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={p.rider_ricalcolo_automatico}
-              onChange={(e) => setParam("rider_ricalcolo_automatico", e.target.checked)}
-              style={{ marginTop: 4 }}
-            />
-            <span>
-              Ricalcolo automatico consegne (quando il modulo sarà attivo; altrimenti resta solo ricalcolo manuale in cassa).
-            </span>
-          </label>
-
-          <label>
-            Tempo di preparazione pizza in minuti 
-            <input
-              type="number"
-              min={1}
-              placeholder="es. 5"
-              value={p.tempo_preparazione_pizza === "" ? "" : p.tempo_preparazione_pizza}
-              onChange={(e) => setParam("tempo_preparazione_pizza", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
-          <label>
-            Soglia giallo (pizze sotto il max per mostrare slot in giallo)
-            <input
-              type="number"
-              min={0}
-              placeholder="es. 10"
-              value={p.soglia_giallo_pizze === "" ? "" : p.soglia_giallo_pizze}
-              onChange={(e) => setParam("soglia_giallo_pizze", e.target.value === "" ? "" : e.target.value)}
-              style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
-            />
-          </label>
           <h3 style={{ margin: "16px 0 8px", fontSize: 16 }}>Comanda</h3>
           <label>
             Numero copie comanda

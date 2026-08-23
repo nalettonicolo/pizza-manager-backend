@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useAuth } from "@/app/contexts/AuthContext"
+import {
+  upsertCarrelloSospeso,
+  deleteCarrelloSospeso,
+  getCarrelloSospesoCliente,
+} from "@/features/admin/services/adminService"
+import { listClienteOrdini } from "@/features/public/services/clienteAuthService"
 
 /**
  * Carrello vetrina (dominio pizzeria). Persistenza sessione per tab.
@@ -25,6 +32,11 @@ const PublicCartContext = createContext(null)
 
 function storageKey(tenantId) {
   return `pm_public_cart_${tenantId || "unknown"}`
+}
+
+/** Flag: bozza salvata su DB in questa sessione (per rilevare delete da cassa). */
+function draftSyncedKey(tenantId) {
+  return `pm_public_cart_draft_synced_${tenantId || "unknown"}`
 }
 
 function lineKey(p) {
@@ -74,8 +86,44 @@ function loadFromStorage(tenantId) {
   }
 }
 
+function markDraftSynced(tenantId) {
+  try {
+    sessionStorage.setItem(draftSyncedKey(tenantId), "1")
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearDraftSynced(tenantId) {
+  try {
+    sessionStorage.removeItem(draftSyncedKey(tenantId))
+  } catch {
+    /* ignore */
+  }
+}
+
+function hadDraftSynced(tenantId) {
+  try {
+    return sessionStorage.getItem(draftSyncedKey(tenantId)) === "1"
+  } catch {
+    return false
+  }
+}
+
+function cartTotal(items) {
+  return (items || []).reduce(
+    (s, p) => s + (Number(p.prezzo) || 0) * (Number(p.qty) || 0),
+    0,
+  )
+}
+
 export function PublicCartProvider({ children, tenantId }) {
   const [items, setItems] = useState(() => loadFromStorage(tenantId))
+  const { user, tipoUtente } = useAuth()
+  const clienteId = tipoUtente === "cliente" ? user?.id || null : null
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const reconcileBusyRef = useRef(false)
 
   useEffect(() => {
     if (!tenantId) return
@@ -93,6 +141,92 @@ export function PublicCartProvider({ children, tenantId }) {
     },
     [tenantId],
   )
+
+  const clearCart = useCallback(() => {
+    persist([])
+    clearDraftSynced(tenantId)
+    // Carrello svuotato (ordine confermato o svuotamento manuale): la bozza in sospeso non serve più.
+    if (tenantId && clienteId) {
+      void deleteCarrelloSospeso(tenantId, clienteId).catch(() => {
+        /* best-effort */
+      })
+    }
+  }, [persist, tenantId, clienteId])
+
+  /**
+   * Se cassa ha già chiuso l'ordine (bozza DB cancellata / ordine in "Ultimi ordini"),
+   * svuota il sessionStorage locale che altrimenti resterebbe pieno al refresh.
+   */
+  const reconcileAfterCassaOrder = useCallback(async () => {
+    if (!tenantId || !clienteId || reconcileBusyRef.current) return
+    const local = itemsRef.current
+    if (!Array.isArray(local) || local.length === 0) return
+
+    reconcileBusyRef.current = true
+    try {
+      if (hadDraftSynced(tenantId)) {
+        try {
+          const remote = await getCarrelloSospesoCliente(tenantId, clienteId)
+          const remoteCart = remote && typeof remote === "object" ? remote.cart : null
+          const remoteEmpty =
+            remote == null ||
+            !Array.isArray(remoteCart) ||
+            remoteCart.length === 0
+          if (remoteEmpty) {
+            clearCart()
+            return
+          }
+        } catch {
+          /* best-effort */
+        }
+      }
+
+      const localTot = cartTotal(local)
+      const { data: orders } = await listClienteOrdini({ limit: 15, offset: 0 })
+      if (!Array.isArray(orders) || orders.length === 0) return
+      const match = orders.find((o) => {
+        const created = new Date(o.created_at || o.createdAt || 0).getTime()
+        if (!Number.isFinite(created)) return false
+        if (Date.now() - created > 36 * 60 * 60 * 1000) return false
+        return Math.abs(Number(o.totale) - localTot) < 0.051
+      })
+      if (match) clearCart()
+    } finally {
+      reconcileBusyRef.current = false
+    }
+  }, [tenantId, clienteId, clearCart])
+
+  /**
+   * CA-15: se il cliente inizia un ordine da casa (carrello con articoli) ma non conferma e poi
+   * richiama il negozio, cassa deve poterlo ritrovare cercandolo. Salvataggio solo "quando si esce
+   * dal carrello" (cambio tab/app, chiusura pagina) — non ad ogni singola modifica.
+   */
+  useEffect(() => {
+    if (!tenantId || !clienteId) return undefined
+    const saveDraft = () => {
+      const current = itemsRef.current
+      if (!Array.isArray(current) || current.length === 0) return
+      markDraftSynced(tenantId)
+      void upsertCarrelloSospeso(tenantId, clienteId, { origine: "web", cart: current }).catch(() => {
+        /* best-effort: il cliente non deve accorgersi di un fallimento di sincronizzazione */
+      })
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveDraft()
+      if (document.visibilityState === "visible") void reconcileAfterCassaOrder()
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("pagehide", saveDraft)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("pagehide", saveDraft)
+    }
+  }, [tenantId, clienteId, reconcileAfterCassaOrder])
+
+  useEffect(() => {
+    if (!tenantId || !clienteId) return
+    void reconcileAfterCassaOrder()
+  }, [tenantId, clienteId, reconcileAfterCassaOrder])
 
   const addItem = useCallback(
     (product) => {
@@ -182,10 +316,6 @@ export function PublicCartProvider({ children, tenantId }) {
     },
     [tenantId],
   )
-
-  const clearCart = useCallback(() => {
-    persist([])
-  }, [persist])
 
   const total = useMemo(
     () => items.reduce((s, p) => s + (Number(p.prezzo) || 0) * (Number(p.qty) || 0), 0),

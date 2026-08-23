@@ -3781,6 +3781,21 @@ ul.pizza-modal-ing-list {
   line-height: 1.5;
 }
 
+.online-pay-card-feedback {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.online-pay-card-feedback--ok {
+  color: #15803d;
+}
+
+.online-pay-card-feedback--error {
+  color: #b91c1c;
+}
+
 .online-pay-card-form {
   display: flex;
   flex-direction: column;

@@ -34,6 +34,7 @@ const SelectPuntoVendita = lazy(() => import("@/features/public/pages/SelectPunt
 const WebAppPreview = lazy(() => import("@/features/public/pages/WebAppPreview"));
 const OrdinePage = lazy(() => import("@/pages/OrdinePage"));
 const OrdineConfermato = lazy(() => import("@/pages/OrdineConfermato"));
+const PagamentoLinkPage = lazy(() => import("@/features/public/pages/PagamentoLinkPage"));
 
 /* ================= SUPERADMIN (lazy) ================= */
 const Login = lazy(() => import("@/features/public/pages/Login"));
@@ -87,6 +88,7 @@ const Report = lazy(() => import("@/features/admin/pages/Report"));
 const AdminOrdiniPage = lazy(() => import("@/features/admin/pages/AdminOrdiniPage"));
 const SettingsLayout = lazy(() => import("@/features/admin/pages/settings/SettingsLayout"));
 const DatiPizzeriaSection = lazy(() => import("@/features/admin/pages/settings/DatiPizzeriaSection"));
+const AccountSection = lazy(() => import("@/features/admin/pages/settings/AccountSection"));
 const PagamentiOnlinePage = lazy(() => import("@/features/admin/pages/settings/PagamentiOnlinePage"));
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
 const OrariSection = lazy(() => import("@/features/admin/pages/settings/OrariSection"));
@@ -186,6 +188,17 @@ export default function AppRouter() {
   useSupportPresenceHeartbeat()
   return (
     <Routes>
+
+      {/* Pagina di pagamento ospitata (pay-by-link, WhatsApp/SMS): standalone, nessun login,
+          multi-tenant (il tenant si risolve dall'intent, non da PublicLayout). */}
+      <Route
+        path="/paga/:intentId"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <PagamentoLinkPage />
+          </Suspense>
+        }
+      />
 
       {/* =================================================
           PUBLIC AREA (SaaS + Public Store entry)
@@ -564,6 +577,7 @@ export default function AppRouter() {
             <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
             <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
             <Route path="stampa-operativa" element={<Suspense fallback={<PageFallback />}><StampaOperativaSection /></Suspense>} />
+            <Route path="account" element={<Suspense fallback={<PageFallback />}><AccountSection /></Suspense>} />
           </Route>
           <Route path="/admin/menu" element={<Navigate to="/admin/menu/categorie" replace />} />
           <Route path="/admin/menu/categorie" element={<Suspense fallback={<PageFallback />}><CategoriePage /></Suspense>} />
