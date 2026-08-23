@@ -283,7 +283,9 @@ export class OperativeService {
           AND id IN (${Prisma.join(ingIds.map((id) => Prisma.sql`${id}::uuid`))})
       `);
 
-      const byIng = new Map(ingRows.map((ing) => [String(ing.id), ing]));
+      const byIng = new Map(
+        ingRows.map((ing) => [String(ing.id as string | number), ing]),
+      );
 
       const out: Record<string, unknown> = {};
       for (const pid of uniqueIds) {
@@ -297,7 +299,10 @@ export class OperativeService {
 
         if (prRows[0] && prRows[0].ordine === null) {
           ordered = [...ordered].sort((a, b) =>
-            String(a?.nome ?? '').localeCompare(String(b?.nome ?? ''), 'it'),
+            String((a?.nome as string | undefined) ?? '').localeCompare(
+              String((b?.nome as string | undefined) ?? ''),
+              'it',
+            ),
           );
         }
 

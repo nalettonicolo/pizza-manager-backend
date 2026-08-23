@@ -27,7 +27,7 @@ export class PuntiVenditaService {
       return rows.map((row) => this.serializeRow(row));
     } catch (err: unknown) {
       this.logger.warn(
-        `listForJwtTenant fallita (tenant=${tenantId}): ${err instanceof Error ? err.message : String(err)}`,
+        `listForJwtTenant fallita (tenant=${tenantId}): ${err instanceof Error ? err.message : JSON.stringify(err)}`,
       );
       return [];
     }

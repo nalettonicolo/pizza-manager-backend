@@ -176,8 +176,8 @@ export class OperativeWritesService {
 
     if (existing?.length) {
       const ex = existing[0];
-      const epv =
-        ex.punto_vendita_id != null ? String(ex.punto_vendita_id) : null;
+      const rawPvId = ex.punto_vendita_id as string | number | null;
+      const epv = rawPvId != null ? String(rawPvId) : null;
       if (epv && epv !== String(pvId)) {
         throw new ForbiddenException('turno_aperto_altro_pv');
       }

@@ -49,7 +49,10 @@ async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
 
   app.use(helmet());
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  const httpInstance = app.getHttpAdapter().getInstance() as {
+    set: (key: string, value: unknown) => void;
+  };
+  httpInstance.set('trust proxy', 1);
 
   // In produzione la documentazione API non viene esposta per default.
   if (process.env.SWAGGER_ENABLED === 'true') {
@@ -89,11 +92,16 @@ async function bootstrap() {
         .filter(Boolean)
     : ['http://localhost:5173', 'http://127.0.0.1:5173'];
   app.enableCors({
-    origin(origin, callback) {
+    origin(
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) {
       // Richieste server-to-server e strumenti CLI non hanno l'header Origin.
-      if (!origin || allowedOrigins.includes(origin))
-        return callback(null, true);
-      return callback(new Error('Origine CORS non consentita'));
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Origine CORS non consentita'));
     },
     credentials: true,
   });
