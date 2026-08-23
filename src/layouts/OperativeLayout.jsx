@@ -199,6 +199,9 @@ export default function OperativeLayout() {
   const isCassaPage = location.pathname === "/operative/cassa" || location.pathname.startsWith("/operative/cassa/");
   const isDemoHubPage = location.pathname === "/operative/dashboard";
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
+  const isCucinaPage = location.pathname === "/operative/cucina";
+  const isBanconePage = location.pathname === "/operative/bancone";
+  const isDeliveryFlowPage = location.pathname === "/operative/delivery" || location.pathname === "/operative/rider";
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
   const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
   /** Mappa live pony: ha già la sua intestazione compatta con link "← Lista delivery" — sidebar,
@@ -208,14 +211,34 @@ export default function OperativeLayout() {
   /** SA / demo / Sala QA: sidebar sempre utile per cambiare reparto (niente full-bleed pizzaiolo). */
   const keepOperativeSidebar =
     fullDemoAccess || ruoloKey === "superadmin" || isSaSupport || inDemoLive || isSuperAdminRole(ruolo);
+  /** Reparti "da tablet/app" — schermate pensate per stare montate fisse in sala/cucina, non per
+   * navigare tra sezioni: schermo pieno SEMPRE (anche per Super Admin/demo, su richiesta esplicita
+   * — prima restava con menu laterale per poter cambiare reparto al volo), con una barra minima
+   * (orologio + uscita) al posto del menu completo. Cassa resta esclusa per ora: ha una sua
+   * toolbar (Ordini/Planning/Live) iniettata nell'header che andrebbe prima spostata dentro la
+   * barra flottante. */
+  const isRepartoTabletPage = isPizzaioloPage || isCucinaPage || isBanconePage || isDeliveryFlowPage;
   const operativeFullBleed =
-    (isPizzaioloPage && !keepOperativeSidebar) ||
+    isRepartoTabletPage ||
     isRepartiQuadTestPage ||
     isOperativeIngressoPage ||
     isDeliveryMapPage;
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
+  /** Orologio nella barra flottante dei reparti a schermo pieno: senza header/menu resta l'unico
+   * riferimento visibile all'orario. Per ora è solo un'etichetta — il tocco per uscire arriverà
+   * in un secondo momento, su indicazione esplicita ("in caso... diventerà cliccabile"). */
+  const [nowLabel, setNowLabel] = useState(() =>
+    new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+  );
+  useEffect(() => {
+    if (!operativeFullBleed) return undefined;
+    const id = window.setInterval(() => {
+      setNowLabel(new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }));
+    }, 15000);
+    return () => window.clearInterval(id);
+  }, [operativeFullBleed]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** Alias stabile per effetti/HMR (evita ReferenceError se un bundle stale usa il nome precedente). */
   const setMobileSidebarOpen = setSidebarOpen;
@@ -480,8 +503,11 @@ export default function OperativeLayout() {
       )}
       <div className={`dashboard-main${operativeFullBleed ? " pizzaiolo-fullscreen-main" : ""}`}>
         <CassaHeaderContext.Provider value={{ setContent: setCassaToolbar, setSidebar: setCassaSidebar }}>
-          {isPizzaioloPage && operativeFullBleed && (
-            <div className="pizzaiolo-floating-bar" role="toolbar" aria-label="Azioni Pizzaiolo">
+          {isRepartoTabletPage && operativeFullBleed && (
+            <div className="pizzaiolo-floating-bar" role="toolbar" aria-label="Azioni reparto">
+              <span className="pizzaiolo-clock" aria-label="Orario attuale">
+                {nowLabel}
+              </span>
               {tabletLike && (
                 <button
                   type="button"
@@ -493,7 +519,9 @@ export default function OperativeLayout() {
                   ⛶
                 </button>
               )}
-              {isSaUser ? <SaHomeButton compact mode={inDemoLive ? "demoHub" : "ingresso"} /> : null}
+              {isSaUser || inDemoLive || fullDemoAccess ? (
+                <SaHomeButton compact mode={inDemoLive ? "demoHub" : "ingresso"} />
+              ) : null}
               <button type="button" className="btn-logout btn-logout-red" onClick={() => void handleLogout()}>
                 Esci
               </button>
