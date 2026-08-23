@@ -10,6 +10,7 @@ import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaio
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import LiveClock from "@/components/LiveClock"
 import { sortOrdersByNearestNeighbor } from "@/features/operative/delivery/utils/deliveryRouteUtils"
 import { useRiderPositionSync } from "@/features/operative/delivery/hooks/useRiderPositionSync"
 import ConsegnaProofDialog from "@/features/operative/delivery/components/ConsegnaProofDialog"
@@ -430,6 +431,11 @@ export default function DeliveryDashboard(props) {
 
   return (
     <div style={{ padding: pad }}>
+      {stripQuadChrome ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+          <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
+        </div>
+      ) : null}
       {!stripQuadChrome ? (
         <>
           <h1

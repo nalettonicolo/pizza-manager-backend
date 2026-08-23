@@ -18,6 +18,7 @@ import {
   markAggregatedPrepDone,
 } from "@/features/operative/cucina/utils/cucinaPrepTasks"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import LiveClock from "@/components/LiveClock"
 import {
   mergeCucinaPrepColorsFromParametri,
   resolvePrepTaskBackgroundColor,
@@ -196,7 +197,11 @@ export default function Cucina() {
           Ingredienti da preparare per fascia oraria (conteggio). Tocca quando pronti. Nessun riepilogo pizza: quello
           resta al forno (Pizzaioli).
         </p>
-      ) : null}
+      ) : (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+          <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
+        </div>
+      )}
 
       {error && <div style={styles.error}>{error}</div>}
 

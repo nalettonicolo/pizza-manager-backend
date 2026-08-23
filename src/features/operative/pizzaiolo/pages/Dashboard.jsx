@@ -27,6 +27,7 @@ import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/pla
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
+import LiveClock from "@/components/LiveClock"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
@@ -460,7 +461,13 @@ export default function PizzaioloDashboard() {
 
   return (
     <div className="pizzaiolo-dashboard-root">
-      {!quad ? <h1 style={styles.title}>Pizzaiolo</h1> : null}
+      {!quad ? (
+        <h1 style={styles.title}>Pizzaiolo</h1>
+      ) : (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+          <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
+        </div>
+      )}
 
       {error && <div style={styles.error}>{error}</div>}
 

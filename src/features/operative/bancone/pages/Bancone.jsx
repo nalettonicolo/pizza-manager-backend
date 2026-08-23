@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useTenant } from "@/app/contexts/TenantContext"
+import LiveClock from "@/components/LiveClock"
 import {
   getOrders,
   getOrderDetail,
@@ -585,7 +586,11 @@ export default function Bancone() {
               : "Preparazioni cucina + ordini pronti (tablet cucina non attivo: prep integrate qui)"}
           </p>
         </>
-      ) : null}
+      ) : (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+          <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
+        </div>
+      )}
 
       {error && <div style={styles.error}>{error}</div>}
 
