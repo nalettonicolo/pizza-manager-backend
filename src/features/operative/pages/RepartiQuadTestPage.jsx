@@ -6,6 +6,7 @@ import { isSuperAdminRole } from "@/utils/superAdminAccess"
 import { isDemoGiroSearch } from "@/utils/demoGiro"
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { RepartiQuadTestProvider } from "@/features/operative/contexts/RepartiQuadTestContext"
+import LiveClock from "@/components/LiveClock"
 
 /**
  * Stessa SPA dei route operativi, senza iframe: in Edge (Tracking Prevention) gli iframe
@@ -158,6 +159,7 @@ export default function RepartiQuadTestPage() {
         >
           Ricarica tutte le viste
         </button>
+        <LiveClock style={{ fontSize: 13, minHeight: 30, padding: "4px 12px" }} />
         <button
           type="button"
           className="btn-logout btn-logout-red"

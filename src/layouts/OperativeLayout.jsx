@@ -30,6 +30,7 @@ import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 import { DEMO_GIRO_ADMIN_LINKS, isDemoGiroSessionActive, withDemoGiroQuery } from "@/utils/demoGiro";
 import { openDemoClienteArea } from "@/utils/demoClienteSession";
 import SaHomeButton from "@/components/SaHomeButton";
+import LiveClock from "@/components/LiveClock";
 import { resolveSupportTenantOverride } from "@/utils/supportTenantOverride";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
@@ -226,19 +227,6 @@ export default function OperativeLayout() {
   const [cassaToolbar, setCassaToolbar] = useState(null);
   const [cassaSidebar, setCassaSidebar] = useState(null);
   const [tabletLike, setTabletLike] = useState(false);
-  /** Orologio nella barra flottante dei reparti a schermo pieno: senza header/menu resta l'unico
-   * riferimento visibile all'orario. Per ora è solo un'etichetta — il tocco per uscire arriverà
-   * in un secondo momento, su indicazione esplicita ("in caso... diventerà cliccabile"). */
-  const [nowLabel, setNowLabel] = useState(() =>
-    new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-  );
-  useEffect(() => {
-    if (!operativeFullBleed) return undefined;
-    const id = window.setInterval(() => {
-      setNowLabel(new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }));
-    }, 15000);
-    return () => window.clearInterval(id);
-  }, [operativeFullBleed]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** Alias stabile per effetti/HMR (evita ReferenceError se un bundle stale usa il nome precedente). */
   const setMobileSidebarOpen = setSidebarOpen;
@@ -505,9 +493,7 @@ export default function OperativeLayout() {
         <CassaHeaderContext.Provider value={{ setContent: setCassaToolbar, setSidebar: setCassaSidebar }}>
           {isRepartoTabletPage && operativeFullBleed && (
             <div className="pizzaiolo-floating-bar" role="toolbar" aria-label="Azioni reparto">
-              <span className="pizzaiolo-clock" aria-label="Orario attuale">
-                {nowLabel}
-              </span>
+              <LiveClock />
               {tabletLike && (
                 <button
                   type="button"
