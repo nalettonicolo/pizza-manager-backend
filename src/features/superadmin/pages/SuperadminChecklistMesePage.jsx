@@ -229,6 +229,34 @@ export default function SuperadminChecklistMesePage() {
         Cita il <strong>codice</strong> in chat (es. <code>CL-05</code>) per adattare quel pezzo. Flag e note sono
         salvati nel database (condivisi tra ambienti: locale e produzione vedono lo stesso stato).
       </p>
+      <a
+        href="https://claude.ai/code/artifact/9973cbc8-0356-4a2a-a188-5483cbc17a25"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          margin: "0 0 16px",
+          padding: "12px 14px",
+          borderRadius: 10,
+          background: "#fdf4ec",
+          border: "1px solid #f3d5b5",
+          fontSize: 14,
+          color: "#7c3a0e",
+          lineHeight: 1.5,
+          textDecoration: "none",
+        }}
+      >
+        <span style={{ fontSize: 20 }} aria-hidden>
+          🚀
+        </span>
+        <span>
+          <strong>Checklist go-live</strong> — questa (Chek-Sviluppi) traccia i bug; quella è la checklist di test
+          manuale da percorrere prima di aprire ai clienti veri (pagamenti, ordine dal sito, cassa dal vivo,
+          reparti, ruoli...). Apre in una scheda a parte.
+        </span>
+      </a>
       <p
         style={{
           margin: "0 0 16px",
