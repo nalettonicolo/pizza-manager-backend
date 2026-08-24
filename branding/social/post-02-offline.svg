@@ -1,0 +1,21 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Non perdi mai un ordine</title>
+  <rect width="1080" height="1080" fill="#241a12"/>
+  <circle cx="80" cy="1000" r="220" fill="#2e2117"/>
+  <g transform="translate(440,150)">
+    <path d="M100,140 Q100,20 200,20 Q300,20 300,140" fill="none" stroke="#5c4d3c" stroke-width="18" stroke-linecap="round"/>
+    <path d="M140,140 Q140,60 200,60 Q260,60 260,140" fill="none" stroke="#8a7259" stroke-width="18" stroke-linecap="round"/>
+    <line x1="40" y1="20" x2="360" y2="240" stroke="#c0392b" stroke-width="20" stroke-linecap="round"/>
+    <circle cx="200" cy="180" r="20" fill="#d35400"/>
+  </g>
+  <text x="540" y="480" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="4" fill="#e0a848">ANCHE SENZA INTERNET</text>
+  <text x="540" y="580" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="70" font-weight="800" fill="#faf7f2">
+    <tspan x="540" dy="0">Non perdi mai</tspan>
+    <tspan x="540" dy="82">un ordine</tspan>
+  </text>
+  <text x="540" y="800" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="28" font-weight="500" fill="#c4b5a0">
+    <tspan x="540" dy="0">La cassa continua a funzionare anche se salta la rete</tspan>
+    <tspan x="540" dy="38">un venerdì sera pieno — e invia tutto da sola</tspan>
+    <tspan x="540" dy="38">appena la connessione torna.</tspan>
+  </text>
+</svg>

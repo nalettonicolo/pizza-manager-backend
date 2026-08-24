@@ -1,0 +1,33 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Le consegne non sono più un'incognita</title>
+  <rect width="1080" height="1080" fill="#faf7f2"/>
+  <circle cx="960" cy="960" r="260" fill="#f0e6d6"/>
+
+  <g transform="translate(390,110)">
+    <path d="M110,20 C50,20 10,65 10,120 C10,190 110,290 110,290 C110,290 210,190 210,120 C210,65 170,20 110,20 Z"
+          fill="#c0392b" stroke="#8a2d21" stroke-width="4"/>
+    <circle cx="110" cy="115" r="46" fill="#faf7f2"/>
+    <path d="M110,115 L110,75 A40,40 0 0 1 148,138 Z" fill="#d35400"/>
+  </g>
+
+  <g transform="translate(690,220)">
+    <circle cx="60" cy="60" r="60" fill="#e0a848"/>
+    <path d="M32,72 L32,50 Q32,36 46,36 L66,36 Q80,36 80,50 L80,72 M40,72 L40,60 L74,60 L74,72"
+          fill="none" stroke="#241a12" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="44" cy="76" r="8" fill="#241a12"/>
+    <circle cx="72" cy="76" r="8" fill="#241a12"/>
+  </g>
+
+  <text x="540" y="560" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="4" fill="#c0392b">CONSEGNE SOTTO CONTROLLO</text>
+  <text x="540" y="656" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="60" font-weight="800" fill="#241a12">
+    <tspan x="540" dy="0">Sai sempre dove sono</tspan>
+    <tspan x="540" dy="70">i tuoi fattorini</tspan>
+  </text>
+  <text x="540" y="800" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="27" font-weight="500" fill="#6b5a48">
+    <tspan x="540" dy="0">Disegni tu l'area che copri: un indirizzo fuori zona</tspan>
+    <tspan x="540" dy="38">viene segnalato subito, prima di prendere l'ordine.</tspan>
+    <tspan x="540" dy="38">E vedi i pony in tempo reale sulla mappa.</tspan>
+  </text>
+  <rect x="440" y="900" width="200" height="4" rx="2" fill="#e2d5c0"/>
+  <text x="540" y="960" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="3" fill="#93816a">PIZZAMANAGER</text>
+</svg>

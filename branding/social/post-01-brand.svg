@@ -1,0 +1,11 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager — la tua pizzeria, finalmente sotto controllo</title>
+  <rect width="1080" height="1080" fill="#faf7f2"/>
+  <circle cx="900" cy="140" r="260" fill="#f0e6d6"/>
+  <circle cx="120" cy="980" r="200" fill="#f0e6d6"/>
+  <text x="540" y="700" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="86" font-weight="800" fill="#241a12">PIZZAMANAGER</text>
+  <text x="540" y="770" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="34" font-weight="600" fill="#6b5a48">La tua pizzeria, finalmente</text>
+  <text x="540" y="814" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="34" font-weight="800" fill="#c0392b">sotto controllo.</text>
+  <rect x="390" y="900" width="300" height="4" rx="2" fill="#e2d5c0"/>
+  <text x="540" y="960" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="22" font-weight="600" letter-spacing="3" fill="#93816a">SOFTWARE GESTIONALE PER PIZZERIE</text>
+</svg>
