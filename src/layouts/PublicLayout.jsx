@@ -291,6 +291,8 @@ export default function PublicLayout() {
         </div>
       </header>
 
+      <PwaInstallBanner />
+
       <main className="public-layout-main">
         <Outlet />
       </main>
@@ -307,7 +309,6 @@ export default function PublicLayout() {
         </div>
       </footer>
 
-      <PwaInstallBanner />
       <CookieBanner />
 
       <OrdineOnlineDisattivoModal open={showOrdineOnlineModal} onDismiss={dismissOrdineOnlineModal} localeNome={tenantName} />

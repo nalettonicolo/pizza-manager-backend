@@ -664,14 +664,10 @@
   background: #f97316;
 }
 
-/* Banner "Aggiungi a schermata Home": in alto apposta, per non sovrapporsi al cookie banner
-   (fisso in basso) quando entrambi sono visibili al primo accesso. */
+/* Banner "Aggiungi a schermata Home": nel flusso normale, subito sotto la topbar (che è sticky) —
+   non "fixed" in cima, altrimenti si sovrappone alla topbar invece di starci sotto. */
 .pwa-install-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 101;
+  position: relative;
   padding: 10px 16px;
   background: #c0392b;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
