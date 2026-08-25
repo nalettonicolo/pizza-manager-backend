@@ -664,6 +664,88 @@
   background: #f97316;
 }
 
+/* Banner "Aggiungi a schermata Home": in alto apposta, per non sovrapporsi al cookie banner
+   (fisso in basso) quando entrambi sono visibili al primo accesso. */
+.pwa-install-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 101;
+  padding: 10px 16px;
+  background: #c0392b;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.pwa-install-banner-inner {
+  max-width: none;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-left: clamp(16px, 3vw, 40px);
+  padding-right: clamp(16px, 3vw, 40px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.pwa-install-banner-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.pwa-install-banner-text {
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #fdf2f0;
+}
+
+.pwa-install-banner-text strong {
+  color: #fff;
+}
+
+.pwa-install-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pwa-install-banner-btn {
+  padding: 8px 18px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #c0392b;
+  background: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pwa-install-banner-btn:hover {
+  background: #fdf2f0;
+}
+
+.pwa-install-banner-close {
+  padding: 6px 10px;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #fdf2f0;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.pwa-install-banner-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 /* Account cliente in header vetrina */
 .cliente-header-account {
   display: flex;

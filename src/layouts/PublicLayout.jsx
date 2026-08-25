@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import CookieBanner from "@/features/public/components/CookieBanner"
+import PwaInstallBanner from "@/features/public/components/PwaInstallBanner"
+import { applyPublicPwaManifest, removePublicPwaManifest } from "@/utils/publicPwaManifest"
 import OrdineOnlineDisattivoModal from "@/features/public/components/OrdineOnlineDisattivoModal"
 import ClienteHeaderAccount from "@/features/public/components/ClienteHeaderAccount"
 import { useAuth } from "@/app/contexts/AuthContext"
@@ -138,6 +140,13 @@ export default function PublicLayout() {
   useEffect(() => {
     void applyTenantFavicon(logoUrl || logoPizzaManager)
   }, [logoUrl])
+
+  // Manifest PWA solo sulle pagine pubbliche (vetrina/checkout/area cliente) — mai su
+  // admin/superadmin/operative, che hanno le loro schermate dedicate (es. manifest-rider).
+  useEffect(() => {
+    applyPublicPwaManifest()
+    return () => removePublicPwaManifest()
+  }, [])
 
   const prefetchLogin = () => {
     void import("@/features/public/pages/Login")
@@ -298,6 +307,7 @@ export default function PublicLayout() {
         </div>
       </footer>
 
+      <PwaInstallBanner />
       <CookieBanner />
 
       <OrdineOnlineDisattivoModal open={showOrdineOnlineModal} onDismiss={dismissOrdineOnlineModal} localeNome={tenantName} />
