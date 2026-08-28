@@ -1,16 +1,13 @@
 /**
- * Titolo scheda browser dinamico per nome tenant — prima index.html aveva un <title> statico
- * ("Pizzeria Manager") mai aggiornato da nessun layout: ogni pagina di ogni tenant mostrava lo
- * stesso nome, impossibile distinguere le schede con più pizzerie aperte in tab diverse.
+ * Titolo scheda browser: sempre e solo "PizzaManager", per ogni pagina e ogni tenant, senza
+ * eccezioni — richiesta esplicita dell'utente. Una versione precedente mostrava il nome del
+ * tenant (per distinguere più pizzerie aperte in tab diverse), ma un tenant tecnico/residuo
+ * chiamato letteralmente "PizzaManager.it" finiva in scheda al posto del brand, creando
+ * confusione ("ancora il nome scheda deve essere pizzamanager"): tornati al titolo fisso.
  *
- * @param {string | null | undefined} tenantNome
- * @param {string} [suffisso] - es. "Admin", "Operativo" — area della piattaforma
+ * @param {string | null | undefined} [_tenantNome] - ignorato, mantenuto per compatibilità delle chiamate esistenti
+ * @param {string} [_suffisso] - ignorato, mantenuto per compatibilità delle chiamate esistenti
  */
-export function applyTenantDocumentTitle(tenantNome, suffisso) {
-  const nome = (tenantNome || "").trim()
-  if (!nome) {
-    document.title = suffisso ? `PizzaManager · ${suffisso}` : "PizzaManager"
-    return
-  }
-  document.title = suffisso ? `${nome} · ${suffisso}` : nome
+export function applyTenantDocumentTitle(_tenantNome, _suffisso) {
+  document.title = "PizzaManager"
 }

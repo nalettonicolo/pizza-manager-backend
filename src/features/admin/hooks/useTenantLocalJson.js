@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 
 export function newLocalId() {
@@ -18,9 +18,18 @@ export function useTenantLocalJson(keySuffix, initialValue) {
   const [data, setDataState] = useState(initialValue);
   const [ready, setReady] = useState(false);
 
+  // I chiamanti passano quasi sempre un letterale inline (es. { righe: [] }): un nuovo oggetto
+  // a ogni render. Se initialValue restasse nelle dipendenze dell'effect sotto, la sua identità
+  // che cambia ad ogni render lo farebbe ripartire in loop — e nei hook che lo usano (es.
+  // useContabilitaFoodcostManualStorage) quel loop cancella ripetutamente il caricamento da
+  // Supabase prima che completi, lasciando la pagina bloccata per sempre su "Caricamento…".
+  // Il ref cattura sempre il valore più recente senza dover essere nelle dipendenze.
+  const initialValueRef = useRef(initialValue);
+  initialValueRef.current = initialValue;
+
   useEffect(() => {
     if (!storageKey) {
-      setDataState(initialValue);
+      setDataState(initialValueRef.current);
       setReady(true);
       return;
     }
@@ -30,13 +39,13 @@ export function useTenantLocalJson(keySuffix, initialValue) {
         const parsed = JSON.parse(raw);
         setDataState(parsed);
       } else {
-        setDataState(initialValue);
+        setDataState(initialValueRef.current);
       }
     } catch {
-      setDataState(initialValue);
+      setDataState(initialValueRef.current);
     }
     setReady(true);
-  }, [storageKey, initialValue]);
+  }, [storageKey]);
 
   const setData = useCallback(
     (updater) => {
