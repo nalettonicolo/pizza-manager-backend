@@ -23,8 +23,8 @@ import {
 } from "@/features/superadmin/services/noleggiAttrezzatureService";
 
 const CATEGORIE_ATTREZZATURA = ["tablet", "pc", "stampante", "pos", "router", "lettore_barcode", "kit_completo", "altro"];
-import { buildContrattoCommercialeParagrafi } from "@/features/superadmin/utils/buildContrattoCommercialeParagrafi";
-import { generaPdfBlob } from "@/utils/contrattoPdfBuilder";
+import { buildContrattoCommercialeDati } from "@/features/superadmin/utils/buildContrattoCommercialeDati";
+import { generaContrattoCommercialePdfBlob } from "@/utils/contrattoCommercialePdfBuilder";
 import { formatEuroMonth } from "@/features/superadmin/catalog/servicesStorage";
 
 const boxStyle = {
@@ -71,7 +71,7 @@ export default function SuperadminPreventiviContrattiPage() {
   });
   const [savingAttrezzatura, setSavingAttrezzatura] = useState(false);
 
-  const [paragrafi, setParagrafi] = useState(null);
+  const [datiContratto, setDatiContratto] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [firmatoDa, setFirmatoDa] = useState("");
   const [saving, setSaving] = useState(false);
@@ -113,7 +113,7 @@ export default function SuperadminPreventiviContrattiPage() {
     if (!id) return;
     setLoadingTenantData(true);
     setError(null);
-    setParagrafi(null);
+    setDatiContratto(null);
     setPreviewUrl("");
     try {
       const [full, fiscale, nol, docs] = await Promise.all([
@@ -227,16 +227,16 @@ export default function SuperadminPreventiviContrattiPage() {
   }
 
   function generaAnteprima() {
-    const p = buildContrattoCommercialeParagrafi({
+    const d = buildContrattoCommercialeDati({
       fornitore,
       tenant: tenantFiscale,
       serviziSelezionati,
       attrezzatureAttive,
       nomePiano: tenantFull?.parametri_operativi?.piano_listino_nome || tenantFull?.piano || "",
     });
-    setParagrafi(p);
+    setDatiContratto(d);
     void (async () => {
-      const blob = await generaPdfBlob({ titolo: `Contratto commerciale — ${tenantFiscale?.nome || ""}`, paragrafi: p });
+      const blob = await generaContrattoCommercialePdfBlob({ dati: d });
       setPreviewUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return URL.createObjectURL(blob);
@@ -245,7 +245,7 @@ export default function SuperadminPreventiviContrattiPage() {
   }
 
   async function handleFirma() {
-    if (!paragrafi) return;
+    if (!datiContratto) return;
     if (!sigRef.current || sigRef.current.isEmpty()) {
       setSaveError(new Error("Disegna la firma prima di confermare."));
       return;
@@ -261,19 +261,18 @@ export default function SuperadminPreventiviContrattiPage() {
         extra: {
           servizi: serviziSelezionati,
           attrezzature: attrezzatureAttive,
-          paragrafi,
+          dati: datiContratto,
           totale_mensile: totaleServizi + totaleNoleggio,
         },
       });
       const firmaDataUrl = sigRef.current.toDataURL("image/png");
-      const pdfBlob = await generaPdfBlob({
-        titolo: `Contratto commerciale — ${tenantFiscale?.nome || ""}`,
-        paragrafi,
+      const pdfBlob = await generaContrattoCommercialePdfBlob({
+        dati: datiContratto,
         firmaDataUrl,
         firmatoDa,
       });
       await firmaEDepositaDocumento({ documentoId: bozza.id, tenantId, pdfBlob, firmaDataUrl, firmatoDa });
-      setParagrafi(null);
+      setDatiContratto(null);
       setPreviewUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return "";
