@@ -173,6 +173,47 @@ export async function firmaEDepositaDocumento({ documentoId, tenantId, pdfBlob, 
   return data
 }
 
+/**
+ * Carica il PDF di un preventivo (tipo_documento = 'preventivo_commerciale') senza passare dalla
+ * firma: un preventivo non è mai firmato, resta sempre stato='bozza' — è solo uno snapshot
+ * salvabile e consultabile, tenant può richiederne quanti ne vuole prima di scegliere quale far
+ * diventare contratto vero e proprio.
+ */
+export async function salvaPdfPreventivo({ documentoId, tenantId, pdfBlob }) {
+  if (!documentoId || !tenantId || !pdfBlob) throw new Error("Parametri mancanti")
+  const pdfPath = `${tenantId}/${documentoId}.pdf`
+  const { error: pdfErr } = await supabase.storage.from(CONTRATTI_BUCKET).upload(pdfPath, pdfBlob, {
+    cacheControl: "3600",
+    upsert: true,
+    contentType: "application/pdf",
+  })
+  if (pdfErr) {
+    logSupabaseError("tenantDocumentiService.salvaPdfPreventivo:pdf", pdfErr)
+    throw pdfErr
+  }
+  const { data, error } = await supabase
+    .from("tenant_documenti")
+    .update({ pdf_url: pdfPath })
+    .eq("id", documentoId)
+    .select()
+    .single()
+  if (error) {
+    logSupabaseError("tenantDocumentiService.salvaPdfPreventivo:update", error)
+    throw error
+  }
+  return data
+}
+
+/** Segna un documento (tipicamente un preventivo non più valido) come annullato. Mai un documento firmato. */
+export async function annullaDocumento(documentoId) {
+  if (!documentoId) throw new Error("documentoId mancante")
+  const { error } = await supabase.from("tenant_documenti").update({ stato: "annullato" }).eq("id", documentoId)
+  if (error) {
+    logSupabaseError("tenantDocumentiService.annullaDocumento", error)
+    throw error
+  }
+}
+
 export async function getDocumentoSignedUrl(storagePath, expiresSec = 3600) {
   if (!storagePath) return ""
   const { data, error } = await supabase.storage.from(CONTRATTI_BUCKET).createSignedUrl(storagePath, expiresSec)

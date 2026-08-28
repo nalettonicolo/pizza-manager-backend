@@ -11,6 +11,8 @@ import {
   listTenantDocumenti,
   creaBozzaDocumento,
   firmaEDepositaDocumento,
+  salvaPdfPreventivo,
+  annullaDocumento,
   getDocumentoSignedUrl,
 } from "@/features/admin/services/tenantDocumentiService";
 import {
@@ -21,11 +23,11 @@ import {
   createAttrezzaturaCatalogo,
   updateAttrezzaturaCatalogo,
 } from "@/features/superadmin/services/noleggiAttrezzatureService";
-
-const CATEGORIE_ATTREZZATURA = ["tablet", "pc", "stampante", "pos", "router", "lettore_barcode", "kit_completo", "altro"];
 import { buildContrattoCommercialeDati } from "@/features/superadmin/utils/buildContrattoCommercialeDati";
 import { generaContrattoCommercialePdfBlob } from "@/utils/contrattoCommercialePdfBuilder";
 import { formatEuroMonth } from "@/features/superadmin/catalog/servicesStorage";
+
+const CATEGORIE_ATTREZZATURA = ["tablet", "pc", "stampante", "pos", "router", "lettore_barcode", "kit_completo", "altro"];
 
 const boxStyle = {
   padding: 18,
@@ -44,6 +46,12 @@ const inputStyle = {
 };
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4, color: "#475569" };
 
+function formatEuro(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  return new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(v);
+}
+
 export default function SuperadminPreventiviContrattiPage() {
   const [tenants, setTenants] = useState([]);
   const [tenantId, setTenantId] = useState("");
@@ -56,25 +64,31 @@ export default function SuperadminPreventiviContrattiPage() {
   const [catalogServices, setCatalogServices] = useState([]);
   const [catalogoAttrezzature, setCatalogoAttrezzature] = useState([]);
   const [noleggi, setNoleggi] = useState([]);
-  const [documenti, setDocumenti] = useState([]);
+  const [contratti, setContratti] = useState([]);
+  const [preventivi, setPreventivi] = useState([]);
   const [loadingTenantData, setLoadingTenantData] = useState(false);
 
-  const [nuovoNoleggio, setNuovoNoleggio] = useState({ attrezzaturaId: "", quantita: 1, canone: "", cauzione: "" });
+  const [nuovoNoleggio, setNuovoNoleggio] = useState({ attrezzaturaId: "", quantita: 1, modalita: "noleggio" });
   const [savingNoleggio, setSavingNoleggio] = useState(false);
 
   const [nuovaAttrezzatura, setNuovaAttrezzatura] = useState({
     nome: "",
     categoria: "tablet",
     canone_noleggio_mensile: "",
+    prezzo_vendita: "",
     cauzione: "",
     descrizione: "",
   });
   const [savingAttrezzatura, setSavingAttrezzatura] = useState(false);
+  const [editingCatalogoId, setEditingCatalogoId] = useState(null);
+  const [catalogoDraft, setCatalogoDraft] = useState({ canone_noleggio_mensile: "", prezzo_vendita: "", cauzione: "" });
+  const [savingCatalogoDraft, setSavingCatalogoDraft] = useState(false);
 
   const [datiContratto, setDatiContratto] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [firmatoDa, setFirmatoDa] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingPreventivo, setSavingPreventivo] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const sigRef = useRef(null);
 
@@ -101,7 +115,7 @@ export default function SuperadminPreventiviContrattiPage() {
       const cat = await listAttrezzatureCatalogo({});
       setCatalogoAttrezzature(cat);
     } catch (err) {
-      setError(err?.message || "Impossibile caricare il catalogo attrezzature.");
+      setError(err?.message || "Impossibile caricare il catalogo hardware.");
     }
   }, []);
 
@@ -125,7 +139,8 @@ export default function SuperadminPreventiviContrattiPage() {
       setTenantFull(full);
       setTenantFiscale(fiscale);
       setNoleggi(nol);
-      setDocumenti((docs || []).filter((d) => d.tipo_documento === "contratto_commerciale"));
+      setContratti((docs || []).filter((d) => d.tipo_documento === "contratto_commerciale"));
+      setPreventivi((docs || []).filter((d) => d.tipo_documento === "preventivo_commerciale"));
     } catch (err) {
       setError(err?.message || "Impossibile caricare i dati del cliente.");
     } finally {
@@ -147,41 +162,65 @@ export default function SuperadminPreventiviContrattiPage() {
     () => noleggi.filter((n) => n.stato === "attivo" || n.stato === "in_attesa"),
     [noleggi],
   );
+  const noleggiAttivi = useMemo(() => attrezzatureAttive.filter((a) => (a.tipo || "noleggio") === "noleggio"), [attrezzatureAttive]);
+  const venditeAttive = useMemo(() => attrezzatureAttive.filter((a) => a.tipo === "vendita"), [attrezzatureAttive]);
 
   const totaleServizi = serviziSelezionati.reduce((s, r) => s + (Number(r.prezzoMensile) || 0), 0);
-  const totaleNoleggio = attrezzatureAttive.reduce((s, r) => s + (Number(r.canone_mensile) || 0), 0);
+  const totaleNoleggio = noleggiAttivi.reduce((s, r) => s + (Number(r.canone_mensile) || 0), 0);
+  const totaleVenditaUnaTantum = venditeAttive.reduce((s, r) => s + (Number(r.prezzo_vendita_totale) || 0), 0);
+
+  const attrezzaturaSelezionata = catalogoAttrezzature.find((a) => a.id === nuovoNoleggio.attrezzaturaId) || null;
+
+  function buildDatiCorrenti() {
+    return buildContrattoCommercialeDati({
+      fornitore,
+      tenant: tenantFiscale,
+      serviziSelezionati,
+      attrezzatureAttive,
+      nomePiano: tenantFull?.parametri_operativi?.piano_listino_nome || tenantFull?.piano || "",
+    });
+  }
 
   async function handleAggiungiNoleggio() {
-    const att = catalogoAttrezzature.find((a) => a.id === nuovoNoleggio.attrezzaturaId);
+    const att = attrezzaturaSelezionata;
     if (!att) {
-      setError("Seleziona un'attrezzatura dal catalogo.");
+      setError("Seleziona un prodotto dal catalogo hardware.");
       return;
     }
     const quantita = Math.max(1, Number(nuovoNoleggio.quantita) || 1);
-    const canone = nuovoNoleggio.canone !== "" ? Number(nuovoNoleggio.canone) : Number(att.canone_noleggio_mensile) * quantita;
-    const cauzione = nuovoNoleggio.cauzione !== "" ? Number(nuovoNoleggio.cauzione) : Number(att.cauzione || 0) * quantita;
+    const modalita = nuovoNoleggio.modalita === "vendita" ? "vendita" : "noleggio";
+    if (modalita === "vendita" && !(Number(att.prezzo_vendita) > 0)) {
+      setError("Questo prodotto non ha un prezzo di vendita impostato nel catalogo: aggiungilo qui sopra oppure scegli \"Noleggio\".");
+      return;
+    }
+    if (modalita === "noleggio" && !(Number(att.canone_noleggio_mensile) > 0)) {
+      setError("Questo prodotto non ha un canone di noleggio impostato nel catalogo: aggiungilo qui sopra oppure scegli \"Vendita\".");
+      return;
+    }
     setSavingNoleggio(true);
     setError(null);
     try {
       await createTenantNoleggio({
         tenant_id: tenantId,
         stato: "attivo",
+        tipo: modalita,
         elenco_attrezzature: `${att.nome} (${att.categoria})`,
         quantita_totale: quantita,
-        canone_mensile: canone,
-        cauzione,
+        canone_mensile: modalita === "noleggio" ? Number(att.canone_noleggio_mensile || 0) * quantita : 0,
+        cauzione: modalita === "noleggio" ? Number(att.cauzione || 0) * quantita : 0,
+        prezzo_vendita_totale: modalita === "vendita" ? Number(att.prezzo_vendita || 0) * quantita : null,
       });
-      setNuovoNoleggio({ attrezzaturaId: "", quantita: 1, canone: "", cauzione: "" });
+      setNuovoNoleggio({ attrezzaturaId: "", quantita: 1, modalita: "noleggio" });
       await loadTenantData(tenantId);
     } catch (err) {
-      setError(err?.message || "Impossibile aggiungere l'attrezzatura.");
+      setError(err?.message || "Impossibile aggiungere il prodotto.");
     } finally {
       setSavingNoleggio(false);
     }
   }
 
   async function handleRimuoviNoleggio(id) {
-    if (!window.confirm("Segnare questa attrezzatura come conclusa/annullata? Il contratto andrà rigenerato e rifirmato.")) return;
+    if (!window.confirm("Segnare questo prodotto come concluso/annullato? Il contratto andrà rigenerato e rifirmato.")) return;
     try {
       await updateTenantNoleggio(id, { stato: "annullato" });
       await loadTenantData(tenantId);
@@ -192,9 +231,14 @@ export default function SuperadminPreventiviContrattiPage() {
 
   async function handleAggiungiAttrezzaturaCatalogo() {
     const nome = nuovaAttrezzatura.nome.trim();
-    const canone = Number(nuovaAttrezzatura.canone_noleggio_mensile);
-    if (!nome || !Number.isFinite(canone) || canone < 0) {
-      setError("Nome e canone mensile (≥ 0) sono obbligatori per aggiungere un'attrezzatura al catalogo.");
+    const canone = nuovaAttrezzatura.canone_noleggio_mensile !== "" ? Number(nuovaAttrezzatura.canone_noleggio_mensile) : 0;
+    const vendita = nuovaAttrezzatura.prezzo_vendita !== "" ? Number(nuovaAttrezzatura.prezzo_vendita) : 0;
+    if (!nome) {
+      setError("Il nome è obbligatorio.");
+      return;
+    }
+    if (!(canone > 0) && !(vendita > 0)) {
+      setError("Imposta almeno un prezzo standard: canone di noleggio o prezzo di vendita.");
       return;
     }
     setSavingAttrezzatura(true);
@@ -204,14 +248,15 @@ export default function SuperadminPreventiviContrattiPage() {
         nome,
         categoria: nuovaAttrezzatura.categoria,
         canone_noleggio_mensile: canone,
+        prezzo_vendita: vendita || null,
         cauzione: nuovaAttrezzatura.cauzione !== "" ? Number(nuovaAttrezzatura.cauzione) : 0,
         descrizione: nuovaAttrezzatura.descrizione.trim() || null,
         disponibile: true,
       });
-      setNuovaAttrezzatura({ nome: "", categoria: "tablet", canone_noleggio_mensile: "", cauzione: "", descrizione: "" });
+      setNuovaAttrezzatura({ nome: "", categoria: "tablet", canone_noleggio_mensile: "", prezzo_vendita: "", cauzione: "", descrizione: "" });
       await loadCatalogoAttrezzature();
     } catch (err) {
-      setError(err?.message || "Impossibile aggiungere l'attrezzatura al catalogo.");
+      setError(err?.message || "Impossibile aggiungere il prodotto al catalogo.");
     } finally {
       setSavingAttrezzatura(false);
     }
@@ -226,14 +271,35 @@ export default function SuperadminPreventiviContrattiPage() {
     }
   }
 
-  function generaAnteprima() {
-    const d = buildContrattoCommercialeDati({
-      fornitore,
-      tenant: tenantFiscale,
-      serviziSelezionati,
-      attrezzatureAttive,
-      nomePiano: tenantFull?.parametri_operativi?.piano_listino_nome || tenantFull?.piano || "",
+  function iniziaModificaPrezzi(item) {
+    setEditingCatalogoId(item.id);
+    setCatalogoDraft({
+      canone_noleggio_mensile: item.canone_noleggio_mensile != null ? String(item.canone_noleggio_mensile) : "",
+      prezzo_vendita: item.prezzo_vendita != null ? String(item.prezzo_vendita) : "",
+      cauzione: item.cauzione != null ? String(item.cauzione) : "",
     });
+  }
+
+  async function handleSalvaPrezziCatalogo(item) {
+    setSavingCatalogoDraft(true);
+    setError(null);
+    try {
+      await updateAttrezzaturaCatalogo(item.id, {
+        canone_noleggio_mensile: catalogoDraft.canone_noleggio_mensile !== "" ? Number(catalogoDraft.canone_noleggio_mensile) : 0,
+        prezzo_vendita: catalogoDraft.prezzo_vendita !== "" ? Number(catalogoDraft.prezzo_vendita) : null,
+        cauzione: catalogoDraft.cauzione !== "" ? Number(catalogoDraft.cauzione) : 0,
+      });
+      setEditingCatalogoId(null);
+      await loadCatalogoAttrezzature();
+    } catch (err) {
+      setError(err?.message || "Impossibile aggiornare i prezzi.");
+    } finally {
+      setSavingCatalogoDraft(false);
+    }
+  }
+
+  function generaAnteprima() {
+    const d = buildDatiCorrenti();
     setDatiContratto(d);
     void (async () => {
       const blob = await generaContrattoCommercialePdfBlob({ dati: d });
@@ -242,6 +308,38 @@ export default function SuperadminPreventiviContrattiPage() {
         return URL.createObjectURL(blob);
       });
     })();
+  }
+
+  async function handleSalvaPreventivo() {
+    setSavingPreventivo(true);
+    setError(null);
+    try {
+      const d = buildDatiCorrenti();
+      const bozza = await creaBozzaDocumento({
+        tenantId,
+        tipoDocumento: "preventivo_commerciale",
+        fornitore,
+        tenant: tenantFiscale,
+        extra: { servizi: serviziSelezionati, attrezzature: attrezzatureAttive, dati: d },
+      });
+      const pdfBlob = await generaContrattoCommercialePdfBlob({ dati: d, titolo: "PREVENTIVO" });
+      await salvaPdfPreventivo({ documentoId: bozza.id, tenantId, pdfBlob });
+      await loadTenantData(tenantId);
+    } catch (err) {
+      setError(err?.message || "Impossibile salvare il preventivo.");
+    } finally {
+      setSavingPreventivo(false);
+    }
+  }
+
+  async function handleAnnullaPreventivo(doc) {
+    if (!window.confirm("Annullare questo preventivo? Resta nello storico ma segnato come non più valido.")) return;
+    try {
+      await annullaDocumento(doc.id);
+      await loadTenantData(tenantId);
+    } catch (err) {
+      setError(err?.message || "Operazione non riuscita.");
+    }
   }
 
   async function handleFirma() {
@@ -287,7 +385,7 @@ export default function SuperadminPreventiviContrattiPage() {
     }
   }
 
-  async function apriDocumentoFirmato(doc) {
+  async function apriDocumentoPdf(doc) {
     if (!doc?.pdf_url) return;
     try {
       const url = await getDocumentoSignedUrl(doc.pdf_url);
@@ -303,14 +401,16 @@ export default function SuperadminPreventiviContrattiPage() {
         <p className="sa-page-kicker">Super Admin · commerciale</p>
         <h1 className="dashboard-page-title sa-page-title">Preventivi e contratti</h1>
         <p className="sa-page-lede" style={{ maxWidth: 820 }}>
-          Compila il contratto con i <strong>servizi</strong> e le <strong>attrezzature a noleggio</strong> reali del
-          cliente, genera l&apos;anteprima e fai firmare su tablet. Ogni modifica a servizi o attrezzature richiede
-          una nuova firma: il contratto già firmato non è mai modificabile, solo sostituibile con uno nuovo.
+          Compila il contratto con i <strong>servizi</strong> e l&apos;<strong>hardware</strong> reali del cliente
+          (prezzi standard di catalogo, noleggio o vendita), salva quanti <strong>preventivi</strong> vuoi per
+          confrontarli, e quando il cliente sceglie genera l&apos;anteprima e fai firmare su tablet. Ogni modifica a
+          servizi o hardware richiede una nuova firma: il contratto già firmato non è mai modificabile, solo
+          sostituibile con uno nuovo.
         </p>
         <p style={{ fontSize: 12.5, color: "#b91c1c", marginTop: 8 }}>
           ⚠️ Le clausole legali generali (durata, recesso, foro competente) restano testo placeholder non validato
           da un legale — vedi <Link to="/admin/documenti">Documenti</Link>. Solo la parte economica (servizi/
-          attrezzature) è compilata con dati reali.
+          hardware) è compilata con dati reali.
         </p>
       </header>
 
@@ -318,26 +418,67 @@ export default function SuperadminPreventiviContrattiPage() {
 
       <details style={{ ...boxStyle, padding: 0 }}>
         <summary style={{ cursor: "pointer", padding: 18, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-          Catalogo attrezzature a noleggio ({catalogoAttrezzature.length})
+          Catalogo Hardware ({catalogoAttrezzature.length})
         </summary>
         <div style={{ padding: "0 18px 18px" }}>
+          <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 12px" }}>
+            Prezzi standard, non modificabili in fase di preventivo: scegli qui una volta per tutte quanto costa
+            ogni prodotto a noleggio e/o in vendita — poi in un preventivo si sceglie solo prodotto, modalità e
+            quantità.
+          </p>
           {catalogoAttrezzature.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#64748b" }}>Catalogo vuoto: aggiungi la prima attrezzatura qui sotto.</p>
+            <p style={{ fontSize: 13, color: "#64748b" }}>Catalogo vuoto: aggiungi il primo prodotto qui sotto.</p>
           ) : (
             <ul style={{ margin: "0 0 14px", padding: 0, listStyle: "none" }}>
-              {catalogoAttrezzature.map((a) => (
-                <li key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13.5, opacity: a.disponibile ? 1 : 0.5 }}>
-                  <strong>{a.nome}</strong> ({a.categoria}) — {formatEuroMonth(Number(a.canone_noleggio_mensile) || 0)}/mese
-                  {Number(a.cauzione) > 0 ? `, cauzione ${formatEuroMonth(Number(a.cauzione))}` : ""}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleDisponibileCatalogo(a)}
-                    style={{ marginLeft: 10, background: "none", border: "none", color: "#962d22", cursor: "pointer", fontSize: 12.5, textDecoration: "underline" }}
-                  >
-                    {a.disponibile ? "Rendi non disponibile" : "Rendi disponibile"}
-                  </button>
-                </li>
-              ))}
+              {catalogoAttrezzature.map((a) =>
+                editingCatalogoId === a.id ? (
+                  <li key={a.id} style={{ padding: "10px 0", borderBottom: "1px solid #e2e8f0" }}>
+                    <p style={{ margin: "0 0 8px", fontSize: 13.5, fontWeight: 700 }}>{a.nome} ({a.categoria})</p>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                      <div style={{ width: 140 }}>
+                        <label style={labelStyle}>Noleggio (€/mese)</label>
+                        <input type="number" step="0.01" value={catalogoDraft.canone_noleggio_mensile} onChange={(e) => setCatalogoDraft((d) => ({ ...d, canone_noleggio_mensile: e.target.value }))} style={inputStyle} />
+                      </div>
+                      <div style={{ width: 140 }}>
+                        <label style={labelStyle}>Vendita (€)</label>
+                        <input type="number" step="0.01" value={catalogoDraft.prezzo_vendita} onChange={(e) => setCatalogoDraft((d) => ({ ...d, prezzo_vendita: e.target.value }))} style={inputStyle} />
+                      </div>
+                      <div style={{ width: 130 }}>
+                        <label style={labelStyle}>Cauzione (€)</label>
+                        <input type="number" step="0.01" value={catalogoDraft.cauzione} onChange={(e) => setCatalogoDraft((d) => ({ ...d, cauzione: e.target.value }))} style={inputStyle} />
+                      </div>
+                      <button type="button" className="btn-primary-dashboard" disabled={savingCatalogoDraft} onClick={() => handleSalvaPrezziCatalogo(a)}>
+                        {savingCatalogoDraft ? "Salvo…" : "Salva prezzi"}
+                      </button>
+                      <button type="button" onClick={() => setEditingCatalogoId(null)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13 }}>
+                        Annulla
+                      </button>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13.5, opacity: a.disponibile ? 1 : 0.5 }}>
+                    <strong>{a.nome}</strong> ({a.categoria}) —{" "}
+                    {Number(a.canone_noleggio_mensile) > 0 ? `noleggio ${formatEuroMonth(Number(a.canone_noleggio_mensile))}` : "noleggio n/d"}
+                    {" · "}
+                    {Number(a.prezzo_vendita) > 0 ? `vendita € ${formatEuro(a.prezzo_vendita)}` : "vendita n/d"}
+                    {Number(a.cauzione) > 0 ? `, cauzione € ${formatEuro(a.cauzione)}` : ""}
+                    <button
+                      type="button"
+                      onClick={() => iniziaModificaPrezzi(a)}
+                      style={{ marginLeft: 10, background: "none", border: "none", color: "#0f172a", cursor: "pointer", fontSize: 12.5, textDecoration: "underline" }}
+                    >
+                      Modifica prezzi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDisponibileCatalogo(a)}
+                      style={{ marginLeft: 10, background: "none", border: "none", color: "#962d22", cursor: "pointer", fontSize: 12.5, textDecoration: "underline" }}
+                    >
+                      {a.disponibile ? "Rendi non disponibile" : "Rendi disponibile"}
+                    </button>
+                  </li>
+                ),
+              )}
             </ul>
           )}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
@@ -354,11 +495,15 @@ export default function SuperadminPreventiviContrattiPage() {
               </select>
             </div>
             <div style={{ width: 140 }}>
-              <label style={labelStyle}>Canone (€/mese)</label>
-              <input type="number" step="0.01" value={nuovaAttrezzatura.canone_noleggio_mensile} onChange={(e) => setNuovaAttrezzatura((n) => ({ ...n, canone_noleggio_mensile: e.target.value }))} style={inputStyle} />
+              <label style={labelStyle}>Noleggio (€/mese)</label>
+              <input type="number" step="0.01" value={nuovaAttrezzatura.canone_noleggio_mensile} onChange={(e) => setNuovaAttrezzatura((n) => ({ ...n, canone_noleggio_mensile: e.target.value }))} style={inputStyle} placeholder="0 = non disponibile" />
+            </div>
+            <div style={{ width: 140 }}>
+              <label style={labelStyle}>Vendita (€, una tantum)</label>
+              <input type="number" step="0.01" value={nuovaAttrezzatura.prezzo_vendita} onChange={(e) => setNuovaAttrezzatura((n) => ({ ...n, prezzo_vendita: e.target.value }))} style={inputStyle} placeholder="0 = non disponibile" />
             </div>
             <div style={{ width: 130 }}>
-              <label style={labelStyle}>Cauzione (€)</label>
+              <label style={labelStyle}>Cauzione noleggio (€)</label>
               <input type="number" step="0.01" value={nuovaAttrezzatura.cauzione} onChange={(e) => setNuovaAttrezzatura((n) => ({ ...n, cauzione: e.target.value }))} style={inputStyle} />
             </div>
             <button type="button" className="btn-primary-dashboard" disabled={savingAttrezzatura} onClick={handleAggiungiAttrezzaturaCatalogo}>
@@ -410,15 +555,32 @@ export default function SuperadminPreventiviContrattiPage() {
           </div>
 
           <div style={boxStyle}>
-            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Attrezzature a noleggio</h2>
+            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Hardware</h2>
             {attrezzatureAttive.length === 0 ? (
-              <p style={{ fontSize: 13, color: "#64748b" }}>Nessuna attrezzatura a noleggio attiva.</p>
+              <p style={{ fontSize: 13, color: "#64748b" }}>Nessun prodotto hardware in questo preventivo.</p>
             ) : (
               <ul style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 13.5 }}>
                 {attrezzatureAttive.map((a) => (
                   <li key={a.id} style={{ marginBottom: 4 }}>
-                    {a.elenco_attrezzature} (x{a.quantita_totale}) — {formatEuroMonth(Number(a.canone_mensile) || 0)}
-                    {Number(a.cauzione) > 0 ? ` · cauzione ${formatEuroMonth(Number(a.cauzione))}` : ""}{" "}
+                    <span
+                      style={{
+                        display: "inline-block",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: "1px 7px",
+                        borderRadius: 999,
+                        marginRight: 6,
+                        background: a.tipo === "vendita" ? "#fef3c7" : "#e0f2fe",
+                        color: a.tipo === "vendita" ? "#92400e" : "#075985",
+                      }}
+                    >
+                      {a.tipo === "vendita" ? "Vendita" : "Noleggio"}
+                    </span>
+                    {a.elenco_attrezzature} (x{a.quantita_totale}) —{" "}
+                    {a.tipo === "vendita"
+                      ? `€ ${formatEuro(a.prezzo_vendita_totale)} una tantum`
+                      : formatEuroMonth(Number(a.canone_mensile) || 0)}
+                    {a.tipo !== "vendita" && Number(a.cauzione) > 0 ? ` · cauzione € ${formatEuro(a.cauzione)}` : ""}{" "}
                     <button
                       type="button"
                       onClick={() => handleRimuoviNoleggio(a.id)}
@@ -432,11 +594,12 @@ export default function SuperadminPreventiviContrattiPage() {
             )}
             <p style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 14 }}>
               Totale noleggio: {formatEuroMonth(totaleNoleggio)}
+              {totaleVenditaUnaTantum > 0 ? ` · Totale vendita: € ${formatEuro(totaleVenditaUnaTantum)} (una tantum)` : ""}
             </p>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
               <div style={{ minWidth: 220 }}>
-                <label style={labelStyle}>Aggiungi attrezzatura dal catalogo</label>
+                <label style={labelStyle}>Aggiungi prodotto dal catalogo</label>
                 <select
                   value={nuovoNoleggio.attrezzaturaId}
                   onChange={(e) => setNuovoNoleggio((n) => ({ ...n, attrezzaturaId: e.target.value }))}
@@ -445,9 +608,24 @@ export default function SuperadminPreventiviContrattiPage() {
                   <option value="">— Scegli —</option>
                   {catalogoAttrezzature.filter((a) => a.disponibile !== false).map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.nome} — {formatEuroMonth(Number(a.canone_noleggio_mensile) || 0)}/mese
+                      {a.nome}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div style={{ width: 150 }}>
+                <label style={labelStyle}>Modalità</label>
+                <select
+                  value={nuovoNoleggio.modalita}
+                  onChange={(e) => setNuovoNoleggio((n) => ({ ...n, modalita: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="noleggio">
+                    Noleggio{attrezzaturaSelezionata ? ` — ${formatEuroMonth(Number(attrezzaturaSelezionata.canone_noleggio_mensile) || 0)}` : ""}
+                  </option>
+                  <option value="vendita">
+                    Vendita{attrezzaturaSelezionata ? ` — € ${formatEuro(attrezzaturaSelezionata.prezzo_vendita)}` : ""}
+                  </option>
                 </select>
               </div>
               <div style={{ width: 90 }}>
@@ -460,28 +638,6 @@ export default function SuperadminPreventiviContrattiPage() {
                   style={inputStyle}
                 />
               </div>
-              <div style={{ width: 130 }}>
-                <label style={labelStyle}>Canone (€/mese)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="auto"
-                  value={nuovoNoleggio.canone}
-                  onChange={(e) => setNuovoNoleggio((n) => ({ ...n, canone: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div style={{ width: 130 }}>
-                <label style={labelStyle}>Cauzione (€)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="auto"
-                  value={nuovoNoleggio.cauzione}
-                  onChange={(e) => setNuovoNoleggio((n) => ({ ...n, cauzione: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
               <button type="button" className="btn-primary-dashboard" disabled={savingNoleggio} onClick={handleAggiungiNoleggio}>
                 {savingNoleggio ? "Aggiungo…" : "+ Aggiungi"}
               </button>
@@ -489,13 +645,53 @@ export default function SuperadminPreventiviContrattiPage() {
           </div>
 
           <div style={boxStyle}>
-            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Genera contratto</h2>
-            <p style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>
-              Totale mensile complessivo: {formatEuroMonth(totaleServizi + totaleNoleggio)}
+            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Preventivi e contratto</h2>
+            <p style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>
+              Totale canone mensile: {formatEuroMonth(totaleServizi + totaleNoleggio)}
+              {totaleVenditaUnaTantum > 0 ? ` + € ${formatEuro(totaleVenditaUnaTantum)} hardware una tantum` : ""}
             </p>
-            <button type="button" className="btn-primary-dashboard" onClick={generaAnteprima}>
-              Genera anteprima
-            </button>
+            <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 12px" }}>
+              Salva un preventivo per tenerne traccia o confrontarne più di uno (puoi salvarne quanti vuoi); quando il
+              cliente sceglie, genera l&apos;anteprima e fai firmare.
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button type="button" className="sa-btn-outline" disabled={savingPreventivo} onClick={handleSalvaPreventivo}>
+                {savingPreventivo ? "Salvataggio…" : "💾 Salva come preventivo"}
+              </button>
+              <button type="button" className="btn-primary-dashboard" onClick={generaAnteprima}>
+                Genera anteprima contratto
+              </button>
+            </div>
+
+            {preventivi.length > 0 ? (
+              <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0, borderTop: "1px solid #e2e8f0", paddingTop: 12 }}>
+                {preventivi.map((d) => (
+                  <li key={d.id} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13.5, opacity: d.stato === "annullato" ? 0.55 : 1 }}>
+                    <strong>{d.stato === "annullato" ? "Annullato" : "Preventivo"}</strong>
+                    {" · "}
+                    {new Date(d.created_at).toLocaleString("it-IT")}
+                    {d.pdf_url ? (
+                      <button
+                        type="button"
+                        onClick={() => apriDocumentoPdf(d)}
+                        style={{ marginLeft: 10, background: "none", border: "none", color: "#962d22", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}
+                      >
+                        Apri PDF
+                      </button>
+                    ) : null}
+                    {d.stato !== "annullato" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleAnnullaPreventivo(d)}
+                        style={{ marginLeft: 10, background: "none", border: "none", color: "#b91c1c", cursor: "pointer", fontSize: 12.5 }}
+                      >
+                        Annulla
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
             {previewUrl ? (
               <div style={{ marginTop: 16 }}>
@@ -530,11 +726,11 @@ export default function SuperadminPreventiviContrattiPage() {
 
           <div style={boxStyle}>
             <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Storico contratti commerciali</h2>
-            {documenti.length === 0 ? (
+            {contratti.length === 0 ? (
               <p style={{ fontSize: 13, color: "#64748b" }}>Nessun contratto commerciale generato finora per questo cliente.</p>
             ) : (
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {documenti.map((d) => (
+                {contratti.map((d) => (
                   <li key={d.id} style={{ padding: "10px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13.5 }}>
                     <strong>{d.stato === "firmato" ? "✓ Firmato" : d.stato === "annullato" ? "Annullato" : "Bozza"}</strong>
                     {" · "}
@@ -543,7 +739,7 @@ export default function SuperadminPreventiviContrattiPage() {
                     {d.stato === "firmato" && d.pdf_url ? (
                       <button
                         type="button"
-                        onClick={() => apriDocumentoFirmato(d)}
+                        onClick={() => apriDocumentoPdf(d)}
                         style={{ marginLeft: 10, background: "none", border: "none", color: "#962d22", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}
                       >
                         Apri PDF

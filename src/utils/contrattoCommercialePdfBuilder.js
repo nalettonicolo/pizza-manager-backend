@@ -142,11 +142,12 @@ function formatEuro(n) {
 /**
  * @param {object} args
  * @param {ReturnType<typeof import('@/features/superadmin/utils/buildContrattoCommercialeDati').buildContrattoCommercialeDati>} args.dati
+ * @param {string} [args.titolo] - "CONTRATTO COMMERCIALE" (default) o "PREVENTIVO" — un preventivo non è mai firmato.
  * @param {string} [args.firmaDataUrl] - PNG data URL dal canvas di firma
  * @param {string} [args.firmatoDa]
  * @returns {Promise<Blob>}
  */
-export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, firmatoDa }) {
+export async function generaContrattoCommercialePdfBlob({ dati, titolo = "CONTRATTO COMMERCIALE", firmaDataUrl, firmatoDa }) {
   const pdfDoc = await PDFDocument.create()
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
@@ -154,7 +155,7 @@ export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, fi
   const w = createWriter(pdfDoc)
 
   // ---- Titolo ----
-  w.page.drawText("CONTRATTO COMMERCIALE", { x: MARGIN, y: w.y, size: 18, font: fontBold, color: DARK })
+  w.page.drawText(titolo, { x: MARGIN, y: w.y, size: 18, font: fontBold, color: DARK })
   w.y -= 20
   w.page.drawText(`PizzaManager — ${dati.cliente.nome}`, { x: MARGIN, y: w.y, size: 10.5, font, color: MUTED })
   w.y -= 12
@@ -223,42 +224,80 @@ export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, fi
     })
   }
 
-  // ---- Tabella attrezzature ----
+  // ---- Tabella attrezzature (Hardware): noleggio mensile e vendita una tantum nella stessa
+  // tabella, distinte dalla colonna "Modalità" — richiesta esplicita dell'utente di poter
+  // scegliere per ogni prodotto se noleggiarlo o venderlo, a prezzo standard di catalogo.
   if (dati.attrezzature.length > 0) {
     w.ensureSpace(28)
-    w.page.drawText("Attrezzature a noleggio", { x: MARGIN, y: w.y, size: 12, font: fontBold, color: DARK })
+    w.page.drawText("Hardware", { x: MARGIN, y: w.y, size: 12, font: fontBold, color: DARK })
     w.y -= 15
+    const importi = dati.attrezzature.map((a) =>
+      a.tipo === "vendita" ? `€ ${formatEuro(a.prezzoVenditaTotale)} (una tantum)` : `€ ${formatEuro(a.canoneMensile)}/mese`,
+    )
     drawTable(w, {
       fontBold,
       fontRegular: font,
       columns: [
-        { key: "nome", label: "Attrezzatura", width: CONTENT_W - 320 },
-        { key: "qty", label: "Qtà", width: 60, align: "right" },
-        { key: "canone", label: "Canone mensile", width: 130, align: "right" },
-        { key: "cauzione", label: "Cauzione", width: 130, align: "right" },
+        { key: "nome", label: "Prodotto", width: CONTENT_W - 350 },
+        { key: "modalita", label: "Modalità", width: 90 },
+        { key: "qty", label: "Qtà", width: 40, align: "right" },
+        { key: "importo", label: "Importo", width: 130, align: "right" },
+        { key: "cauzione", label: "Cauzione", width: 90, align: "right" },
       ],
-      rows: dati.attrezzature.map((a) => ({
+      rows: dati.attrezzature.map((a, i) => ({
         nome: a.nome,
+        modalita: a.tipo === "vendita" ? "Vendita" : "Noleggio",
         qty: String(a.quantita),
-        canone: `€ ${formatEuro(a.canoneMensile)}`,
-        cauzione: a.cauzione > 0 ? `€ ${formatEuro(a.cauzione)}` : "—",
+        importo: importi[i],
+        cauzione: a.tipo === "noleggio" && a.cauzione > 0 ? `€ ${formatEuro(a.cauzione)}` : "—",
       })),
-      totalLabel: "Totale noleggio attrezzature",
-      totalValue:
-        dati.totaleCauzioni > 0
-          ? `€ ${formatEuro(dati.totaleNoleggio)}/mese + € ${formatEuro(dati.totaleCauzioni)} cauzione (una tantum)`
-          : `€ ${formatEuro(dati.totaleNoleggio)}/mese`,
     })
+    const righeTotali = []
+    if (dati.totaleNoleggio > 0) righeTotali.push(`Noleggio: € ${formatEuro(dati.totaleNoleggio)}/mese`)
+    if (dati.totaleCauzioni > 0) righeTotali.push(`cauzioni € ${formatEuro(dati.totaleCauzioni)} (una tantum)`)
+    if (dati.totaleVenditaUnaTantum > 0) righeTotali.push(`Vendita: € ${formatEuro(dati.totaleVenditaUnaTantum)} (una tantum)`)
+    if (righeTotali.length) {
+      w.ensureSpace(16)
+      const label = `Totale hardware — ${righeTotali.join(" · ")}`
+      const size = 10
+      const textW = fontBold.widthOfTextAtSize(label, size)
+      w.page.drawText(label, { x: MARGIN + CONTENT_W - textW, y: w.y - 12, size, font: fontBold, color: DARK })
+      w.y -= 20
+    }
   }
 
-  // ---- Box totale evidenziato ----
-  w.ensureSpace(48)
-  const boxW = 240
+  // ---- Box totale/i evidenziato/i ----
+  // Un secondo box (contorno, non pieno) per la vendita una tantum, se presente: distinto dal
+  // canone mensile ricorrente per non farli sembrare sommabili nello stesso importo periodico.
+  const hasVendita = dati.totaleVenditaUnaTantum > 0
+  w.ensureSpace(hasVendita ? 48 : 48)
   const boxH = 38
-  const boxX = MARGIN + CONTENT_W - boxW
-  w.page.drawRectangle({ x: boxX, y: w.y - boxH, width: boxW, height: boxH, color: RED })
-  w.page.drawText("TOTALE CANONE MENSILE", { x: boxX + 14, y: w.y - 15, size: 8.5, font: fontBold, color: WHITE })
-  w.page.drawText(`€ ${formatEuro(dati.totaleMensile)}`, { x: boxX + 14, y: w.y - 30, size: 15, font: fontBold, color: WHITE })
+  const boxW = hasVendita ? 224 : 240
+  const gapBox = 10
+  const boxXTotale = MARGIN + CONTENT_W - boxW
+  if (hasVendita) {
+    const boxXVendita = boxXTotale - gapBox - boxW
+    w.page.drawRectangle({
+      x: boxXVendita,
+      y: w.y - boxH,
+      width: boxW,
+      height: boxH,
+      borderColor: RED,
+      borderWidth: 1.5,
+      color: WHITE,
+    })
+    w.page.drawText("HARDWARE (UNA TANTUM)", { x: boxXVendita + 14, y: w.y - 15, size: 8, font: fontBold, color: RED })
+    w.page.drawText(`€ ${formatEuro(dati.totaleVenditaUnaTantum)}`, {
+      x: boxXVendita + 14,
+      y: w.y - 30,
+      size: 14,
+      font: fontBold,
+      color: DARK,
+    })
+  }
+  w.page.drawRectangle({ x: boxXTotale, y: w.y - boxH, width: boxW, height: boxH, color: RED })
+  w.page.drawText("TOTALE CANONE MENSILE", { x: boxXTotale + 14, y: w.y - 15, size: 8.5, font: fontBold, color: WHITE })
+  w.page.drawText(`€ ${formatEuro(dati.totaleMensile)}`, { x: boxXTotale + 14, y: w.y - 30, size: 15, font: fontBold, color: WHITE })
   w.y -= boxH + 8
   drawParagraph(w, "IVA esclusa salvo diversa indicazione in fattura — fatturazione mensile posticipata salvo diverso accordo scritto tra le parti.", {
     font: fontItalic,
