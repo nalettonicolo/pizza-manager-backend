@@ -14,7 +14,14 @@ export function prefetchWhenIdle(importers, options = {}) {
       const tid = window.setTimeout(() => {
         staggerIds.delete(tid);
         try {
-          void fn();
+          // fn() ritorna una Promise: un try/catch sincrono non intercetta un suo reject
+          // (es. chunk JS con hash ormai vecchio dopo un deploy) — senza .catch() qui, il
+          // reject sfugge come unhandledrejection globale e finisce loggato come errore vero
+          // in log_errori_operativi, pur essendo solo un prefetch in background non bloccante.
+          void fn()?.catch(() => {
+            /* prefetch best-effort: un fallimento (es. chunk stale post-deploy) si
+               autorisolve alla prossima navigazione reale via lazyWithReload */
+          });
         } catch {
           /* ignore */
         }
