@@ -72,7 +72,15 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
   const [savingAttrezzatura, setSavingAttrezzatura] = useState(false);
 
   const [editingCatalogoId, setEditingCatalogoId] = useState(null);
-  const [catalogoDraft, setCatalogoDraft] = useState({ canone_noleggio_mensile: "", prezzo_vendita: "", costo_acquisto: "", cauzione: "" });
+  const [catalogoDraft, setCatalogoDraft] = useState({
+    nome: "",
+    categoria: "tablet",
+    descrizione: "",
+    canone_noleggio_mensile: "",
+    prezzo_vendita: "",
+    costo_acquisto: "",
+    cauzione: "",
+  });
   const [savingCatalogoDraft, setSavingCatalogoDraft] = useState(false);
 
   async function handleAggiungiAttrezzaturaCatalogo() {
@@ -118,9 +126,12 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
     }
   }
 
-  function iniziaModificaPrezzi(item) {
+  function iniziaModificaProdotto(item) {
     setEditingCatalogoId(item.id);
     setCatalogoDraft({
+      nome: item.nome || "",
+      categoria: item.categoria || "tablet",
+      descrizione: item.descrizione || "",
       canone_noleggio_mensile: item.canone_noleggio_mensile != null ? String(item.canone_noleggio_mensile) : "",
       prezzo_vendita: item.prezzo_vendita != null ? String(item.prezzo_vendita) : "",
       costo_acquisto: item.costo_acquisto != null ? String(item.costo_acquisto) : "",
@@ -128,11 +139,19 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
     });
   }
 
-  async function handleSalvaPrezziCatalogo(item) {
+  async function handleSalvaModificaProdotto(item) {
+    const nome = catalogoDraft.nome.trim();
+    if (!nome) {
+      setError("Il nome è obbligatorio.");
+      return;
+    }
     setSavingCatalogoDraft(true);
     setError(null);
     try {
       await updateAttrezzaturaCatalogo(item.id, {
+        nome,
+        categoria: catalogoDraft.categoria,
+        descrizione: catalogoDraft.descrizione.trim() || null,
         canone_noleggio_mensile: catalogoDraft.canone_noleggio_mensile !== "" ? Number(catalogoDraft.canone_noleggio_mensile) : 0,
         prezzo_vendita: catalogoDraft.prezzo_vendita !== "" ? Number(catalogoDraft.prezzo_vendita) : null,
         costo_acquisto: catalogoDraft.costo_acquisto !== "" ? Number(catalogoDraft.costo_acquisto) : null,
@@ -141,7 +160,7 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
       setEditingCatalogoId(null);
       await onReload();
     } catch (err) {
-      setError(err?.message || "Impossibile aggiornare i prezzi.");
+      setError(err?.message || "Impossibile aggiornare il prodotto.");
     } finally {
       setSavingCatalogoDraft(false);
     }
@@ -165,7 +184,24 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
           {catalogo.map((a) =>
             editingCatalogoId === a.id ? (
               <li key={a.id} style={{ padding: "10px 0", borderBottom: "1px solid #e2e8f0" }}>
-                <p style={{ margin: "0 0 8px", fontSize: 13.5, fontWeight: 700 }}>{a.nome} ({a.categoria})</p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+                  <div style={{ minWidth: 160 }}>
+                    <label style={labelStyle}>Nome</label>
+                    <input type="text" value={catalogoDraft.nome} onChange={(e) => setCatalogoDraft((d) => ({ ...d, nome: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ width: 150 }}>
+                    <label style={labelStyle}>Categoria</label>
+                    <select value={catalogoDraft.categoria} onChange={(e) => setCatalogoDraft((d) => ({ ...d, categoria: e.target.value }))} style={inputStyle}>
+                      {CATEGORIE_ATTREZZATURA.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ minWidth: 200 }}>
+                    <label style={labelStyle}>Descrizione (facoltativa)</label>
+                    <input type="text" value={catalogoDraft.descrizione} onChange={(e) => setCatalogoDraft((d) => ({ ...d, descrizione: e.target.value }))} style={inputStyle} />
+                  </div>
+                </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ width: 140 }}>
                     <label style={labelStyle}>Noleggio (€/mese)</label>
@@ -183,8 +219,8 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
                     <label style={labelStyle}>Costo acquisto (€, interno)</label>
                     <input type="number" step="0.01" value={catalogoDraft.costo_acquisto} onChange={(e) => setCatalogoDraft((d) => ({ ...d, costo_acquisto: e.target.value }))} style={inputStyle} placeholder="quanto paghi tu al fornitore" />
                   </div>
-                  <button type="button" className="btn-primary-dashboard" disabled={savingCatalogoDraft} onClick={() => handleSalvaPrezziCatalogo(a)}>
-                    {savingCatalogoDraft ? "Salvo…" : "Salva prezzi"}
+                  <button type="button" className="btn-primary-dashboard" disabled={savingCatalogoDraft} onClick={() => handleSalvaModificaProdotto(a)}>
+                    {savingCatalogoDraft ? "Salvo…" : "Salva prodotto"}
                   </button>
                   <button type="button" onClick={() => setEditingCatalogoId(null)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13 }}>
                     Annulla
@@ -205,10 +241,10 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => iniziaModificaPrezzi(a)}
+                  onClick={() => iniziaModificaProdotto(a)}
                   style={{ marginLeft: 10, background: "none", border: "none", color: "#0f172a", cursor: "pointer", fontSize: 12.5, textDecoration: "underline" }}
                 >
-                  Modifica prezzi
+                  Modifica prodotto
                 </button>
                 <button
                   type="button"

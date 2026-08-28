@@ -383,7 +383,11 @@ export default function SuperadminPreventiviContrattiPage() {
           </div>
 
           <div style={boxStyle}>
-            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Hardware</h2>
+            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Hardware nel preventivo di questo cliente</h2>
+            <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 10px" }}>
+              Questa sezione aggiunge il prodotto al preventivo del cliente selezionato sopra — diversa dal
+              &quot;Catalogo Hardware&quot; qui sopra, che gestisce solo il listino generale.
+            </p>
             {attrezzatureAttive.length === 0 ? (
               <p style={{ fontSize: 13, color: "#64748b" }}>Nessun prodotto hardware in questo preventivo.</p>
             ) : (
