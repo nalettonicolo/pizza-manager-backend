@@ -22,7 +22,7 @@ import {
   updateAttrezzaturaCatalogo,
 } from "@/features/superadmin/services/noleggiAttrezzatureService";
 
-const CATEGORIE_ATTREZZATURA = ["tablet", "stampante", "pos", "router", "lettore_barcode", "kit_completo", "altro"];
+const CATEGORIE_ATTREZZATURA = ["tablet", "pc", "stampante", "pos", "router", "lettore_barcode", "kit_completo", "altro"];
 import { buildContrattoCommercialeParagrafi } from "@/features/superadmin/utils/buildContrattoCommercialeParagrafi";
 import { generaPdfBlob } from "@/utils/contrattoPdfBuilder";
 import { formatEuroMonth } from "@/features/superadmin/catalog/servicesStorage";
