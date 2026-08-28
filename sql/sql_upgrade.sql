@@ -116,4 +116,7 @@
 -- 47_fix_vista_ordine_security_invoker, 48_magazzino_giacenza_valorizzata,
 -- 49_gestione_tavoli, 50_password_nota_richiesta_conferma.
 -- TODO: esportarle come file sql/modules/ locali per non dipendere solo dalla cronologia remota.
+--
+-- Modulo 113 — Registro attività superadmin (monitoraggio continuo):
+--   sql/modules/113_registro_attivita_monitor.sql
 -- =============================================================================

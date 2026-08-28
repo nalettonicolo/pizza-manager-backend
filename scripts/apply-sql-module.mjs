@@ -7,13 +7,13 @@
  *
  * Token: `supabase login` oppure env SUPABASE_ACCESS_TOKEN.
  */
-import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { resolveSupabaseProjectRef, runSupabaseDatabaseQuery } from "./lib/supabaseProjectAccess.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
-const projectRef = readFileSync(join(root, "supabase", ".temp", "project-ref"), "utf8").trim()
+const projectRef = resolveSupabaseProjectRef(root)
 
 /** Pattern vietati senza conferma esplicita (--force). */
 const BLOCKED = [
@@ -23,27 +23,6 @@ const BLOCKED = [
   /\bDELETE\s+FROM\b/i,
   /\bDROP\s+COLUMN\b/i,
 ]
-
-function getAccessToken() {
-  if (process.env.SUPABASE_ACCESS_TOKEN?.trim()) {
-    return process.env.SUPABASE_ACCESS_TOKEN.trim()
-  }
-  try {
-    return execFileSync(
-      "powershell",
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        join(root, "scripts", "lib", "supabase-cli-token.ps1"),
-      ],
-      { encoding: "utf8" },
-    ).trim()
-  } catch {
-    return null
-  }
-}
 
 function assertSafeSql(sql, force) {
   if (force) return
@@ -70,24 +49,6 @@ function resolveModulePath(arg) {
   return p
 }
 
-async function applyQuery(token, sql) {
-  const url = `https://api.supabase.com/v1/projects/${projectRef}/database/query`
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: sql }),
-  })
-  const text = await res.text()
-  if (!res.ok) {
-    console.error("apply failed:", res.status, text)
-    process.exit(1)
-  }
-  return text ? JSON.parse(text) : null
-}
-
 async function main() {
   const args = process.argv.slice(2).filter((a) => a !== "--force")
   const force = process.argv.includes("--force")
@@ -102,17 +63,16 @@ async function main() {
   const sql = readFileSync(path, "utf8")
   assertSafeSql(sql, force)
 
-  const token = getAccessToken()
-  if (!token) {
-    console.error("Token mancante. Esegui `npx supabase login` oppure imposta SUPABASE_ACCESS_TOKEN.")
-    process.exit(1)
-  }
-
   console.log(`Applicazione ${basename(path)} su ${projectRef}…`)
-  const result = await applyQuery(token, sql)
-  console.log("OK:", basename(path))
-  if (result != null && result !== "" && !(Array.isArray(result) && result.length === 0)) {
-    console.log(JSON.stringify(result, null, 2))
+  try {
+    const { json: result } = await runSupabaseDatabaseQuery({ root, sql })
+    console.log("OK:", basename(path))
+    if (result != null && result !== "" && !(Array.isArray(result) && result.length === 0)) {
+      console.log(JSON.stringify(result, null, 2))
+    }
+  } catch (err) {
+    console.error("apply failed:", err?.message || err)
+    process.exit(1)
   }
 }
 
