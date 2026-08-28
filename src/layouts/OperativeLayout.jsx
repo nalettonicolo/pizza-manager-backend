@@ -21,6 +21,7 @@ import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { applyTenantFavicon } from "@/utils/tenantFavicon";
+import { applyTenantDocumentTitle } from "@/utils/tenantDocumentTitle";
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview";
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
 import { isSuperAdminRole } from "@/utils/superAdminAccess";
@@ -31,6 +32,7 @@ import { DEMO_GIRO_ADMIN_LINKS, isDemoGiroSessionActive, withDemoGiroQuery } fro
 import { openDemoClienteArea } from "@/utils/demoClienteSession";
 import SaHomeButton from "@/components/SaHomeButton";
 import LiveClock from "@/components/LiveClock";
+import CassaStressTestButton from "@/features/operative/cassa/components/CassaStressTestButton";
 import { resolveSupportTenantOverride } from "@/utils/supportTenantOverride";
 
 const ROLE_NAV = OPERATIVE_AREA_NAV;
@@ -86,6 +88,10 @@ export default function OperativeLayout() {
   useEffect(() => {
     void applyTenantFavicon(logoUrl);
   }, [logoUrl]);
+
+  useEffect(() => {
+    applyTenantDocumentTitle(brandName, "Operativo");
+  }, [brandName]);
 
   /** Ripristina `_demo_giro=1` in URL se perso da navigate() interni (es. Cassa → Stampanti). */
   useEffect(() => {
@@ -541,6 +547,7 @@ export default function OperativeLayout() {
                 </div>
               )}
               <div className="dashboard-header-actions">
+                {isCassaPage && (inDemoLive || fullDemoAccess) ? <CassaStressTestButton /> : null}
                 {isSaUser ? (
                   // Sull'hub demo stesso "torna all'hub demo" è ridondante (ci siamo già): qui
                   // mostriamo la via di uscita vera verso l'ingresso Super Admin.

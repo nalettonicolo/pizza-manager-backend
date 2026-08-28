@@ -21,6 +21,7 @@ import {
   resolveIngredienteCategoriaForSelect,
   labelIngredienteCategoria,
 } from "@/constants/ingredienteCategoria";
+import { suggerisciAllergeniDaNome } from "@/constants/allergeneSuggeritoDaNome";
 
 /** Ordine colonne allergeni per Formato B (foglio con spunte). Deve coincidere con GUIDA_CSV_INGREDIENTI.md */
 const ALLERGENE_COLUMN_NAMES = [
@@ -210,6 +211,8 @@ export default function IngredientiPage() {
   const [newColore, setNewColore] = useState("");
   const [newOrdine, setNewOrdine] = useState("");
   const [newAllergeni, setNewAllergeni] = useState([]);
+  /** True appena l'utente spunta/togli un allergene a mano: da lì in poi il nome non suggerisce più nulla in automatico. */
+  const [newAllergeniToccatiAMano, setNewAllergeniToccatiAMano] = useState(false);
   const [editIngredient, setEditIngredient] = useState(null);
   const [editNome, setEditNome] = useState("");
   const [editPrezzo, setEditPrezzo] = useState("");
@@ -310,6 +313,7 @@ export default function IngredientiPage() {
       setNewColore("");
       setNewOrdine("");
       setNewAllergeni([]);
+      setNewAllergeniToccatiAMano(false);
       setModalOpen(false);
       load();
       if (tenantId) {
@@ -331,9 +335,23 @@ export default function IngredientiPage() {
   }
 
   function toggleNewAllergene(allergeneId) {
+    setNewAllergeniToccatiAMano(true);
     setNewAllergeni((prev) =>
       prev.includes(allergeneId) ? prev.filter((id) => id !== allergeneId) : [...prev, allergeneId]
     );
+  }
+
+  /** Suggerisce gli allergeni dal nome mentre l'utente digita — solo finché non li tocca a mano
+   * (vedi toggleNewAllergene), così non sovrascrive mai una scelta esplicita. */
+  function handleNewNomeChange(value) {
+    setNewNome(value);
+    if (newAllergeniToccatiAMano) return;
+    const suggeriti = suggerisciAllergeniDaNome(value);
+    if (!suggeriti.length) return;
+    const ids = suggeriti
+      .map((nome) => allergeni.find((a) => (a.nome || "").toLowerCase() === nome.toLowerCase())?.id)
+      .filter(Boolean);
+    if (ids.length) setNewAllergeni(ids);
   }
 
   async function handleToggle(ing) {
@@ -554,6 +572,7 @@ export default function IngredientiPage() {
 
       let created = 0;
       let updated = 0;
+      const rowErrors = [];
 
       /** Elabora una riga: crea o aggiorna l'ingrediente + allergeni. Righe indipendenti tra
        * loro, quindi si possono processare in parallelo (a lotti) invece che una alla volta. */
@@ -645,7 +664,9 @@ export default function IngredientiPage() {
             }
             return "updated";
           } catch (err) {
-            console.warn("Ingrediente non aggiornato:", nome, err?.message);
+            const msg = err?.message || String(err);
+            console.warn("Ingrediente non aggiornato:", nome, msg);
+            rowErrors.push(`${nome}: ${msg}`);
             return null;
           }
         }
@@ -662,7 +683,9 @@ export default function IngredientiPage() {
           }
           return "created";
         } catch (err) {
-          console.warn("Ingrediente saltato:", nome, err?.message);
+          const msg = err?.message || String(err);
+          console.warn("Ingrediente saltato:", nome, msg);
+          rowErrors.push(`${nome}: ${msg}`);
           return null;
         }
       }
@@ -691,7 +714,13 @@ export default function IngredientiPage() {
       const parts = [];
       if (updated > 0) parts.push(`${updated} aggiornati`);
       if (created > 0) parts.push(`${created} inseriti`);
-      alert(parts.length ? `Import CSV: ${parts.join(", ")}.` : "Nessuna riga elaborata.");
+      let msg = parts.length ? `Import CSV: ${parts.join(", ")}.` : "Nessuna riga elaborata.";
+      if (rowErrors.length) {
+        const shown = rowErrors.slice(0, 8);
+        msg += `\n\n${rowErrors.length} riga/e con errore:\n${shown.join("\n")}`;
+        if (rowErrors.length > shown.length) msg += `\n… e altre ${rowErrors.length - shown.length}.`;
+      }
+      alert(msg);
     } catch (err) {
       console.error(err);
       alert("Errore lettura file CSV.");
@@ -1000,7 +1029,7 @@ export default function IngredientiPage() {
             type="text"
             placeholder="Nome ingrediente"
             value={newNome}
-            onChange={(e) => setNewNome(e.target.value)}
+            onChange={(e) => handleNewNomeChange(e.target.value)}
           />
           <input
             type="number"
@@ -1102,8 +1131,13 @@ export default function IngredientiPage() {
           </label>
         </div>
         {allergeni.length > 0 && (
-          <div className="dashboard-form-row">
-            <span style={{ marginRight: 8 }}>Allergeni:</span>
+          <div className="dashboard-form-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span>
+              Allergeni:{" "}
+              {!newAllergeniToccatiAMano && newAllergeni.length > 0 ? (
+                <span style={{ fontSize: 12, fontWeight: 400, color: "#0f766e" }}>suggeriti dal nome, correggi se serve</span>
+              ) : null}
+            </span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {allergeni.map((a) => (
                 <label key={a.id} className="dashboard-checkbox-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>

@@ -22,6 +22,7 @@ import Cart from "@/features/operative/cassa/components/Cart"
 import CassaModificaOrdineModal from "@/features/operative/cassa/components/CassaModificaOrdineModal"
 import CassaPlanningBoard from "@/features/operative/cassa/components/CassaPlanningBoard"
 import DeliveryCommandMapPage from "@/features/operative/delivery/pages/DeliveryCommandMapPage"
+import CalibrazioneProposalModal from "@/features/admin/components/CalibrazioneProposalModal"
 import {
   ordineTipoOrdine,
   ordineIsDelivery,
@@ -417,7 +418,20 @@ export default function CassaPage() {
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
   const pvLoading = pvCtx?.loading ?? false
-  const pvList = pvCtx?.pvList ?? []
+  const pvList = useMemo(() => pvCtx?.pvList ?? [], [pvCtx?.pvList])
+  // Area di consegna: il PV attivo può avere un poligono proprio (`consegna_area_poligono`) che
+  // sostituisce quello di tenant — per tenant multi-sede il poligono di tenant spesso non è
+  // nemmeno configurato (resta null) e senza questo fallback la verifica "fuori area" in checkout
+  // e la mappa in "Nuovo cliente" restavano silenziosamente disattivate.
+  const parametriOperativiConsegna = useMemo(() => {
+    const po = tenantData?.parametri_operativi
+    const activePv = pvList.find((p) => String(p.id) === String(activePvId)) ?? null
+    const pvPoly = activePv?.consegna_area_poligono
+    if (pvPoly && typeof pvPoly === "object" && pvPoly.type === "Polygon") {
+      return { ...(po || {}), consegna_area_poligono: pvPoly }
+    }
+    return po
+  }, [tenantData?.parametri_operativi, pvList, activePvId])
   const { user, ruolo } = useAuth()
   const canAnnullaOrdineCassa = useMemo(() => normalizeRuoloOperativo(ruolo) === "cassa", [ruolo])
   const pagamentoLinkFeature = useFeatureReadiness("pagamento_link_whatsapp")
@@ -518,6 +532,21 @@ export default function CassaPage() {
   const bypassFuoriAreaCheckRef = useRef(false)
   /** Area prodotti (scroll) per tornare in cima dopo ordine concluso. */
   const cassaProductsAreaRef = useRef(null)
+  /**
+   * Chiave di idempotenza stabile per il tentativo di checkout in corso (stesso carrello): se il
+   * primo tentativo crea l'ordine ma la risposta si perde per un problema di rete, il retry
+   * riusa la stessa chiave e create_order_with_items restituisce l'ordine già creato invece di
+   * duplicarlo. Azzerata dopo un checkout riuscito o quando il carrello cambia (vedi sotto), così
+   * un ordine successivo genuinamente diverso non viene mai deduplicato per errore.
+   */
+  const checkoutIdempotencyKeyRef = useRef(null)
+  // Il carrello è cambiato (aggiunta/rimozione/modifica riga dopo un checkout fallito): un nuovo
+  // tentativo deve creare un ordine nuovo, non farsi deduplicare contro il payload precedente
+  // ormai diverso — create_order_with_items ignora il payload e restituisce l'ordine esistente se
+  // la chiave combacia, quindi la chiave va invalidata qui.
+  useEffect(() => {
+    checkoutIdempotencyKeyRef.current = null
+  }, [cart])
   const [ordiniSearch, setOrdiniSearch] = useState("")
   const [planningSlotModal, setPlanningSlotModal] = useState(null) // { type: 'delivery'|'ritiro'|'totale', slotKey, slotLabel, ordini, slotsDisponibili }
   const [planningSpostaLoading, setPlanningSpostaLoading] = useState(null) // ordineId while moving
@@ -1898,6 +1927,7 @@ export default function CassaPage() {
     checkoutNomeCliente,
     checkoutTelefonoCliente,
     checkoutSelectedSlot,
+    tenantId,
   ])
 
   /////////////////////////////////////////////////////////
@@ -2311,6 +2341,16 @@ export default function CassaPage() {
     const fidelitySaldoSnap = selectedFidelitySaldo
     let telemetryCtx = null
     let pendingOfflinePayload = null
+    // Bug trovato in audit: senza questa chiave, un ordine creato con successo lato server ma la
+    // cui risposta si perde per un problema di rete (connessione instabile in cassa) fa vedere un
+    // errore allo staff, che riprova e crea un secondo ordine identico. create_order_with_items
+    // supporta già p_idempotency_key (usata dal percorso offline in syncQueue.js) — qui il
+    // percorso online la ignorava del tutto. Il ref (non un const locale) è quello che rende
+    // la chiave stabile tra un tentativo e il retry: vedi checkoutIdempotencyKeyRef sopra.
+    if (!checkoutIdempotencyKeyRef.current) {
+      checkoutIdempotencyKeyRef.current = `cassa:${tenantId}:${Date.now()}:${Math.random().toString(36).slice(2, 9)}`
+    }
+    const checkoutIdempotencyKey = checkoutIdempotencyKeyRef.current
     try {
       setLoading(true)
       telemetryCtx = markCheckoutStart()
@@ -2411,7 +2451,7 @@ export default function CassaPage() {
       let consegnaLng
       let consegnaLat
       if (tipoOrdine === TIPO_ORDINE.DELIVERY) {
-        const ring = getDeliveryPolygonOuterRing(tenantData?.parametri_operativi)
+        const ring = getDeliveryPolygonOuterRing(parametriOperativiConsegna)
         const addr = (indirizzoConsegna || "").trim()
         if (ring && addr) {
           const coords = await geocodeAddressForDelivery(addr)
@@ -2448,6 +2488,7 @@ export default function CassaPage() {
         tenant_id: tenantId,
         totale: totalCheckout,
         stato: ORDER_STATUS,
+        idempotency_key: checkoutIdempotencyKey,
         items: cart.map((p) => ({
           prodotto_id: p.id,
           quantita: p.qty,
@@ -2474,6 +2515,7 @@ export default function CassaPage() {
       const orderId = await createOrder(tenantId, {
         totale: totalCheckout,
         stato: ORDER_STATUS,
+        idempotencyKey: checkoutIdempotencyKey,
         puntoVenditaId: activePvId || undefined,
         turnoOperatoriId:
           turnoCassa?.id != null && Number.isFinite(Number(turnoCassa.id)) ? Number(turnoCassa.id) : undefined,
@@ -2744,7 +2786,9 @@ export default function CassaPage() {
     return set
   }, [filteredProducts, productIngredientIdsMap, ingredientiEsauritiIds, tenantData?.parametri_operativi?.prodotti_esauriti])
 
-  const parametri = tenantData?.parametri_operativi || {}
+  // Riferimento stabile: senza useMemo, "|| {}" crea un nuovo oggetto a ogni render quando
+  // parametri_operativi è assente, invalidando inutilmente i useMemo sotto che lo usano come dipendenza.
+  const parametri = useMemo(() => tenantData?.parametri_operativi || {}, [tenantData?.parametri_operativi])
   const turnoCassaBloccante =
     parametri.cassa_turno_obbligatorio === true &&
     !turnoCassaLoading &&
@@ -3096,14 +3140,14 @@ export default function CassaPage() {
           onClose={() => setNuovoClienteModalOpen(false)}
           tenantId={tenantId}
           onSuccess={handleNuovoClienteSuccess}
-          parametriOperativi={tenantData?.parametri_operativi}
+          parametriOperativi={parametriOperativiConsegna}
         />
         <NuovoClienteModal
           open={nuovoFidelityClienteModalOpen}
           onClose={() => setNuovoFidelityClienteModalOpen(false)}
           tenantId={tenantId}
           onSuccess={handleNuovoFidelityClienteSuccess}
-          parametriOperativi={tenantData?.parametri_operativi}
+          parametriOperativi={parametriOperativiConsegna}
         />
       </>
     )
@@ -4241,7 +4285,7 @@ export default function CassaPage() {
         onClose={() => setNuovoClienteModalOpen(false)}
         tenantId={tenantId}
         onSuccess={handleNuovoClienteSuccess}
-        parametriOperativi={tenantData?.parametri_operativi}
+        parametriOperativi={parametriOperativiConsegna}
       />
 
       <NuovoClienteModal
@@ -4251,7 +4295,7 @@ export default function CassaPage() {
         tenantId={tenantId}
         onSuccess={handleProfiloClienteSuccess}
         initialData={selectedCliente}
-        parametriOperativi={tenantData?.parametri_operativi}
+        parametriOperativi={parametriOperativiConsegna}
       />
 
       {clienteDomicilioQuickOpen && selectedCliente ? (
@@ -4886,6 +4930,7 @@ export default function CassaPage() {
           </button>
         </nav>
       ) : null}
+      <CalibrazioneProposalModal />
     </div>
   )
 }

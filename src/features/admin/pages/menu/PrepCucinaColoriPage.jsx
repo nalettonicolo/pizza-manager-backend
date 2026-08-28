@@ -7,6 +7,7 @@ import {
   DEFAULT_CUCINA_PREP_CATEGORY_COLORS,
   mergeCucinaPrepColorsFromParametri,
 } from "@/utils/cucinaPrepCategoryTheme"
+import { readStampaModalita } from "@/utils/stampaOperativaConfig"
 
 const LABELS = {
   congelato: { title: "Congelato / surgelati", hint: 'Tipo «congelato» (o testo con «congel» / «surgel»).' },
@@ -23,6 +24,7 @@ function isHexColor(s) {
 
 export default function PrepCucinaColoriPage() {
   const { tenantId, tenantData, refreshTenant } = useTenant()
+  const tabletAttivo = readStampaModalita(tenantData?.parametri_operativi) === "con_tablet"
   const merged = useMemo(
     () => mergeCucinaPrepColorsFromParametri(tenantData?.parametri_operativi),
     [tenantData?.parametri_operativi],
@@ -78,6 +80,33 @@ export default function PrepCucinaColoriPage() {
     setDraft({ ...DEFAULT_CUCINA_PREP_CATEGORY_COLORS })
   }, [])
 
+  if (!tabletAttivo) {
+    return (
+      <div className="dashboard-menu-area">
+        <div className="dashboard-title-row">
+          <h1 className="dashboard-page-title">Colori preparazione Cucina</h1>
+        </div>
+        <div className="dashboard-box" style={{ padding: 20, maxWidth: 560 }}>
+          <p style={{ margin: 0, color: "#475569", fontSize: 14, lineHeight: 1.55 }}>
+            Questa impostazione si applica solo ai locali che lavorano <strong>«Con tablet nei reparti»</strong>: con
+            «Solo cassa» le comande escono su carta termica, dove i colori non compaiono mai — quindi qui non c&apos;è
+            nulla da configurare.
+          </p>
+          <p style={{ margin: "12px 0 0", fontSize: 14 }}>
+            Per attivare i tablet nei reparti vai in{" "}
+            <Link
+              to="/admin/settings/stampa-operativa"
+              style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline" }}
+            >
+              Impostazioni → Stampa operativa
+            </Link>
+            .
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="dashboard-menu-area">
       <div className="dashboard-title-row">
@@ -85,7 +114,7 @@ export default function PrepCucinaColoriPage() {
       </div>
       <p className="dashboard-menu-intro">
         Sfondo dei pulsanti <strong>preparazione</strong> in <strong>Area operativa → Cucina</strong> (task cliccabili, non le tab
-        orarie). Priorità: 1) colore sull&apos;ingrediente in{" "}
+        orarie) o nel <strong>Bancone</strong> se il tablet dedicato Cucina non è attivo. Priorità: 1) colore sull&apos;ingrediente in{" "}
         <Link to="/admin/menu/ingredienti" style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline" }}>
           Ingredienti
         </Link>

@@ -7,13 +7,32 @@ import { loadServicesCatalog } from "@/features/superadmin/catalog/servicesStora
 import {
   listArchivioPasswordAccounts,
   upsertStaffPasswordNote,
+  creaAccountStaffBulk,
 } from "@/features/admin/services/adminService";
 import {
+  RUOLO_BASE_OPTIONS,
+  nuovaStaffRow,
+  nuoveStaffRowsStandard,
+} from "@/features/admin/utils/staffAccountRows";
+
+/** Dominio suggerito per il placeholder email (ruolo@dominio): dominio personalizzato del tenant
+ * se già impostato, altrimenti il sottodominio piattaforma, altrimenti un fallback generico. */
+function emailDomainForModal(modal) {
+  const custom = (modal?.public_domain || "").trim();
+  if (custom) return custom.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  const slug = (modal?.slug || "").trim();
+  if (slug) return `${slug}.pizzamanager.it`;
+  return "illocale.it";
+}
+import {
   createTenant,
+  getGoLiveChecklist,
   getSubscriptionRow,
   getTenants,
   updateTenant,
+  resetAccountPasswordReale,
 } from "@/features/superadmin/services/superadminService";
+import { seedMenuBase } from "@/features/admin/services/menuBaseSeed";
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { pianoDisplayLabel, tenantListinoLabel } from "@/features/superadmin/utils/pianoLabels";
 import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
@@ -84,6 +103,7 @@ function emptyModal(mode, services, reloadInclusioniFromPiano) {
     sito_web_cliente: "",
     public_domain: "",
     public_domain_status: "none",
+    caricaMenuBase: true,
   };
 }
 
@@ -182,6 +202,19 @@ export default function Tenants() {
     drafts: {},
     savingUserId: null,
   });
+  /** Checklist go-live del tenant in modifica, per non far attivare un cliente col dominio a metà. */
+  const [goLiveChecks, setGoLiveChecks] = useState(null);
+  /**
+   * Creazione account staff dalla tab "Account attivi" — prima di questo il superadmin non aveva
+   * ALCUN modo di creare un account per un tenant senza entrare come admin di quel tenant (blocco
+   * reale trovato testando dal vivo il pannello). Stessa logica/edge function di Admin → Ruoli →
+   * "Crea account standard" (crea-account-staff accetta già il superadmin come chiamante).
+   */
+  const [staffRows, setStaffRows] = useState([]);
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [staffResults, setStaffResults] = useState(null);
+  const [applyingUserId, setApplyingUserId] = useState(null);
+  const [applyMsg, setApplyMsg] = useState({});
 
   const catalogServices = useMemo(() => loadServicesCatalog(), []);
   const commercialPlans = useMemo(() => {
@@ -270,6 +303,41 @@ export default function Tenants() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `modal` cambia a ogni campo del form; serve solo tenant/mode
   }, [modal?.mode, modal?.id]);
 
+  // Righe "crea account standard" pre-selezionate in base ai ruoli già presenti sul tenant —
+  // aspetta che l'archivio finisca di caricare, altrimenti la preselezione partirebbe alla cieca.
+  useEffect(() => {
+    if (!modal || modal.mode !== "edit" || !modal.id) {
+      setStaffRows([]);
+      setStaffResults(null);
+      return;
+    }
+    if (archivio.loading) return;
+    setStaffRows(nuoveStaffRowsStandard(archivio.ruoli));
+    setStaffResults(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al termine del caricamento, non ad ogni modifica di archivio.ruoli
+  }, [modal?.mode, modal?.id, archivio.loading]);
+
+  useEffect(() => {
+    if (!modal || modal.mode !== "edit" || !modal.id) {
+      setGoLiveChecks(null);
+      return undefined;
+    }
+    const tenantId = modal.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const checks = await getGoLiveChecklist(tenantId);
+        if (!cancelled) setGoLiveChecks(checks ?? null);
+      } catch {
+        if (!cancelled) setGoLiveChecks(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- serve solo tenant/mode, non ogni campo del form
+  }, [modal?.mode, modal?.id]);
+
   const saveArchivioNote = async (userId, text) => {
     const tid = modal?.id;
     if (!tid || !userId) return;
@@ -283,6 +351,82 @@ export default function Tenants() {
     }
     setArchivio((a) => ({ ...a, savingUserId: null }));
   };
+
+  async function applyPasswordReale(userId, password, nome) {
+    const tid = modal?.id;
+    const testo = String(password || "").trim();
+    if (!tid || !userId) return;
+    if (testo.length < 6) {
+      setApplyMsg((m) => ({ ...m, [userId]: { ok: false, testo: "Minimo 6 caratteri per applicarla su Supabase." } }));
+      return;
+    }
+    const conferma = window.confirm(
+      `Sovrascrivere la password reale di ${nome} su Supabase con il testo qui sopra? L'account non potrà più usare la password precedente.`,
+    );
+    if (!conferma) return;
+    setApplyingUserId(userId);
+    setApplyMsg((m) => ({ ...m, [userId]: null }));
+    try {
+      await resetAccountPasswordReale({ tenantId: tid, userId, password: testo });
+      setApplyMsg((m) => ({ ...m, [userId]: { ok: true, testo: "Password applicata su Supabase." } }));
+    } catch (err) {
+      setApplyMsg((m) => ({ ...m, [userId]: { ok: false, testo: err?.message || "Applicazione non riuscita." } }));
+    } finally {
+      setApplyingUserId(null);
+    }
+  }
+
+  function updateStaffRow(id, patch) {
+    setStaffRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function selezionaTutteStaffRow(selezionata) {
+    setStaffRows((rows) => rows.map((r) => ({ ...r, selezionata })));
+  }
+
+  function aggiungiStaffRow() {
+    setStaffRows((rows) => [...rows, nuovaStaffRow("cassa")]);
+  }
+
+  function rimuoviStaffRow(id) {
+    setStaffRows((rows) => rows.filter((r) => r.id !== id));
+  }
+
+  async function handleCreaStaffBulk() {
+    const tenantId = modal?.id;
+    if (!tenantId) return;
+    const daInviare = staffRows.filter((r) => r.selezionata && r.email.trim());
+    if (daInviare.length === 0) {
+      alert("Seleziona (flag a sinistra) almeno una riga con l'email compilata.");
+      return;
+    }
+    setStaffBusy(true);
+    setStaffResults(null);
+    try {
+      const risultati = await creaAccountStaffBulk(
+        tenantId,
+        daInviare.map((r) => ({
+          email: r.email.trim(),
+          password: r.password,
+          ruolo: r.ruolo,
+          nome_visualizzato: r.nomeVisualizzato.trim(),
+        })),
+      );
+      setStaffResults(risultati);
+      if (risultati.some((r) => r.ok)) {
+        const { accounts, notesByUser } = await listArchivioPasswordAccounts(tenantId);
+        const drafts = {};
+        for (const r of accounts || []) drafts[r.user_id] = notesByUser[r.user_id] ?? "";
+        setArchivio({ loading: false, error: null, ruoli: accounts || [], drafts, savingUserId: null });
+        setStaffRows(nuoveStaffRowsStandard(accounts || []));
+      }
+    } catch (err) {
+      console.error(err);
+      setStaffResults([{ email: "—", ok: false, errore: err?.message || "Chiamata non riuscita." }]);
+    } finally {
+      setStaffBusy(false);
+    }
+  }
 
   const openCreate = () => {
     setModalTab("anagrafica");
@@ -366,7 +510,24 @@ export default function Tenants() {
             : null,
       };
       if (modal.mode === "create") {
-        await createTenant(payload);
+        const created = await createTenant(payload);
+        if (modal.caricaMenuBase && created?.id) {
+          try {
+            const esito = await seedMenuBase(created.id);
+            if (esito.errori.length) {
+              console.warn("[Tenants] seedMenuBase con errori parziali:", esito.errori);
+              alert(
+                `Tenant creato. Menu base caricato parzialmente (${esito.categorie} categorie, ${esito.ingredienti} ingredienti, ${esito.pizze} pizze). ` +
+                  `${esito.errori.length} elemento/i non creato/i — puoi ricaricarlo da Admin → Menu → Categorie. Dettaglio in console.`,
+              );
+            }
+          } catch (seedErr) {
+            console.error("[Tenants] seedMenuBase fallito:", seedErr);
+            alert(
+              "Tenant creato, ma il caricamento del menu base non è riuscito. Puoi riprovare da Admin → Menu → Categorie con un account admin di quel tenant.",
+            );
+          }
+        }
       } else {
         await updateTenant(modal.id, payload);
       }
@@ -404,6 +565,14 @@ export default function Tenants() {
   };
 
   const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6, color: "#475569" };
+
+  // Con un dominio pubblico personalizzato impostato, il cliente non va attivato finché DNS e
+  // Firebase Hosting non sono verificati (wizard "Aggiungi dominio") — altrimenti si attiva un
+  // account che punta a un dominio non ancora raggiungibile. Senza dominio personalizzato il
+  // tenant lavora sullo slug *.pizzamanager.it, sempre pronto: nessuna verifica da attendere.
+  const dominioPersonalizzato = Boolean((modal?.public_domain || "").trim());
+  const dominioPronto = !dominioPersonalizzato || Boolean(goLiveChecks?.firebase_host && goLiveChecks?.dns);
+  const attivazioneBloccata = Boolean(modal && !modal.attivo && dominioPersonalizzato && !dominioPronto);
 
   if (loading) {
     return (
@@ -645,7 +814,7 @@ export default function Tenants() {
                       value={modal.sito_web_cliente}
                       onChange={(e) => setModalField("sito_web_cliente", e.target.value)}
                       style={inputStyle}
-                      placeholder="https://francypizza.pizzamanager.it"
+                      placeholder="https://miapizzeria.pizzamanager.it"
                       autoComplete="off"
                     />
                     <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
@@ -659,22 +828,53 @@ export default function Tenants() {
                       value={modal.public_domain}
                       onChange={(e) => setModalField("public_domain", e.target.value)}
                       style={inputStyle}
-                      placeholder="francypizza.pizzamanager.it"
+                      placeholder="miapizzeria.pizzamanager.it"
                       autoComplete="off"
                     />
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-                  <input
-                    type="checkbox"
-                    id="attivo"
-                    checked={modal.attivo}
-                    onChange={(e) => setModalField("attivo", e.target.checked)}
-                  />
-                  <label htmlFor="attivo" style={{ fontSize: 14 }}>
-                    Cliente attivo
-                  </label>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      id="attivo"
+                      checked={modal.attivo}
+                      disabled={attivazioneBloccata}
+                      onChange={(e) => setModalField("attivo", e.target.checked)}
+                    />
+                    <label htmlFor="attivo" style={{ fontSize: 14, opacity: attivazioneBloccata ? 0.6 : 1 }}>
+                      Cliente attivo
+                    </label>
+                  </div>
+                  {attivazioneBloccata ? (
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#b45309" }}>
+                      Blocco attivazione: hostname personalizzato impostato ma DNS/Firebase Hosting non ancora
+                      verificati nella checklist Go-live. Completa il wizard{" "}
+                      <Link
+                        to={modal.slug ? `/superadmin/go-live?tenant=${encodeURIComponent(modal.slug)}` : "/superadmin/go-live"}
+                        style={{ fontWeight: 600, color: "#b45309" }}
+                      >
+                        Aggiungi dominio
+                      </Link>{" "}
+                      prima di attivare il cliente.
+                    </p>
+                  ) : null}
                 </div>
+                {modal.mode === "create" ? (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12 }}>
+                    <input
+                      type="checkbox"
+                      id="carica-menu-base"
+                      checked={modal.caricaMenuBase}
+                      onChange={(e) => setModalField("caricaMenuBase", e.target.checked)}
+                      style={{ marginTop: 3 }}
+                    />
+                    <label htmlFor="carica-menu-base" style={{ fontSize: 14 }}>
+                      Carica menu base (4 pizze classiche, ingredienti, categorie, formati) — il locale parte già con
+                      un menu funzionante da modificare invece che da zero.
+                    </label>
+                  </div>
+                ) : null}
               </section>
               ) : null}
 
@@ -754,6 +954,153 @@ export default function Tenants() {
                     </Link>
                     .
                   </p>
+
+                  <div
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 10,
+                      padding: 14,
+                      marginBottom: 20,
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>Crea account standard per questo tenant</h4>
+                    <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "#64748b", lineHeight: 1.55 }}>
+                      Flagga solo i reparti che servono — i ruoli già collegati partono deselezionati. Password
+                      generata ma modificabile; annotala prima di chiudere, qui resta visibile solo ora.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                      <button
+                        type="button"
+                        className="sa-table-action"
+                        onClick={() => selezionaTutteStaffRow(true)}
+                      >
+                        Seleziona tutto
+                      </button>
+                      <button
+                        type="button"
+                        className="sa-table-action"
+                        onClick={() => selezionaTutteStaffRow(false)}
+                      >
+                        Deseleziona tutto
+                      </button>
+                    </div>
+                    <div style={{ overflowX: "auto", marginBottom: 12 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ textAlign: "left", color: "#64748b", fontSize: 11, textTransform: "uppercase" }}>
+                            <th style={{ padding: "4px 6px" }} />
+                            <th style={{ padding: "4px 6px" }}>Ruolo</th>
+                            <th style={{ padding: "4px 6px" }}>Email</th>
+                            <th style={{ padding: "4px 6px" }}>Nome (facoltativo)</th>
+                            <th style={{ padding: "4px 6px" }}>Password</th>
+                            <th style={{ padding: "4px 6px" }} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {staffRows.map((r) => (
+                            <tr key={r.id} style={{ borderTop: "1px solid #e2e8f0", opacity: r.selezionata ? 1 : 0.5 }}>
+                              <td style={{ padding: "6px" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={r.selezionata}
+                                  onChange={(e) => updateStaffRow(r.id, { selezionata: e.target.checked })}
+                                  title="Crea questo account"
+                                />
+                              </td>
+                              <td style={{ padding: "6px" }}>
+                                <select
+                                  value={r.ruolo}
+                                  onChange={(e) => updateStaffRow(r.id, { ruolo: e.target.value })}
+                                  style={{ minWidth: 110 }}
+                                >
+                                  {RUOLO_BASE_OPTIONS.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td style={{ padding: "6px" }}>
+                                <input
+                                  type="email"
+                                  value={r.email}
+                                  onChange={(e) => updateStaffRow(r.id, { email: e.target.value })}
+                                  placeholder={`${r.ruolo}@${emailDomainForModal(modal)}`}
+                                  style={{ ...inputStyle, minWidth: 200 }}
+                                  autoComplete="off"
+                                />
+                              </td>
+                              <td style={{ padding: "6px" }}>
+                                <input
+                                  type="text"
+                                  value={r.nomeVisualizzato}
+                                  onChange={(e) => updateStaffRow(r.id, { nomeVisualizzato: e.target.value })}
+                                  placeholder="es. Marco"
+                                  style={{ ...inputStyle, minWidth: 110 }}
+                                  autoComplete="off"
+                                />
+                              </td>
+                              <td style={{ padding: "6px" }}>
+                                <input
+                                  type="text"
+                                  value={r.password}
+                                  onChange={(e) => updateStaffRow(r.id, { password: e.target.value })}
+                                  style={{ ...inputStyle, minWidth: 130, fontFamily: "monospace" }}
+                                  spellCheck={false}
+                                  autoComplete="off"
+                                />
+                              </td>
+                              <td style={{ padding: "6px" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => rimuoviStaffRow(r.id)}
+                                  style={{ background: "none", border: "none", color: "#b91c1c", cursor: "pointer", fontSize: 13 }}
+                                >
+                                  Rimuovi
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button
+                      type="button"
+                      className="sa-table-action"
+                      onClick={aggiungiStaffRow}
+                      style={{ marginBottom: 12 }}
+                    >
+                      + Aggiungi riga
+                    </button>
+                    {staffResults ? (
+                      <ul style={{ listStyle: "none", padding: 0, margin: "0 0 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+                        {staffResults.map((r, i) => (
+                          <li
+                            key={`${r.email}-${i}`}
+                            style={{
+                              fontSize: 12.5,
+                              padding: "5px 8px",
+                              borderRadius: 6,
+                              background: r.ok ? "#ecfdf5" : "#fef2f2",
+                              color: r.ok ? "#166534" : "#b91c1c",
+                            }}
+                          >
+                            {r.ok ? "✓" : "✕"} {r.email}: {r.ok ? r.azione : r.errore}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn-primary-dashboard"
+                      disabled={staffBusy}
+                      onClick={() => void handleCreaStaffBulk()}
+                    >
+                      {staffBusy ? "Creazione…" : "Crea account e collega ruoli"}
+                    </button>
+                  </div>
+
                   {archivio.loading ? (
                     <p style={{ fontSize: 14, color: "#64748b" }}>Caricamento account staff…</p>
                   ) : null}
@@ -794,16 +1141,39 @@ export default function Tenants() {
                             autoComplete="off"
                             spellCheck={false}
                           />
-                          <div style={{ marginTop: 8 }}>
+                          <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                             <button
                               type="button"
                               className="sa-table-action"
                               disabled={archivio.savingUserId === r.user_id}
                               onClick={() => saveArchivioNote(r.user_id, archivio.drafts[r.user_id] ?? "")}
                             >
-                              {archivio.savingUserId === r.user_id ? "Salvataggio…" : "Salva password"}
+                              {archivio.savingUserId === r.user_id ? "Salvataggio…" : "Salva nota"}
+                            </button>
+                            <button
+                              type="button"
+                              className="sa-table-action"
+                              disabled={applyingUserId === r.user_id}
+                              onClick={() =>
+                                applyPasswordReale(r.user_id, archivio.drafts[r.user_id], labelFromEmailPrefix(r.email) || r.email)
+                              }
+                              title="Sovrascrive la password reale dell'account su Supabase con il testo qui sopra"
+                            >
+                              {applyingUserId === r.user_id ? "Applico…" : "🔑 Applica su Supabase"}
                             </button>
                           </div>
+                          {applyMsg[r.user_id] ? (
+                            <p
+                              style={{
+                                margin: "6px 0 0",
+                                fontSize: 12,
+                                color: applyMsg[r.user_id].ok ? "#166534" : "#b91c1c",
+                              }}
+                            >
+                              {applyMsg[r.user_id].ok ? "✓ " : "✕ "}
+                              {applyMsg[r.user_id].testo}
+                            </p>
+                          ) : null}
                         </li>
                       ))}
                     </ul>

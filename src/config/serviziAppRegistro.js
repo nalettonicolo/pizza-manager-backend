@@ -10,6 +10,12 @@
  * - prezzoDefaultEuro: canone mensile suggerito (modificabile in Catalogo servizi).
  * - avanzamentoDefaultPercentuale: stima 0–100% per Sviluppo / CSV (ripristino catalogo).
  * - codiceRiferimento: hint opzionale su dove sta l’implementazione (per chi aggiorna il registro).
+ *
+ * 2026-08: ordini_cassa (25→22€), stampa_comanda (10→8€) e magazzino_gestione (15→12€) ridotti
+ * per avvicinare il piano Base (somma IDS_BASE) da 83€ a 75€/mese, in linea con la fascia 40-100€
+ * di "Cassa in Cloud" (TeamSystem) — competitor diretto sullo stesso segmento — invece di quasi 2x
+ * il loro prezzo base (40€). Vedi sql/modules/97_note_pricing_2026_08.sql e la nota in
+ * note_marketing per l'analisi completa e le fonti.
  */
 
 /**
@@ -34,7 +40,7 @@ export const SERVIZI_APP = [
       "Crea gli ordini in cassa; alla conferma stampa la ricevuta",
       "Incassi e gestione del flusso ordini al banco",
     ],
-    prezzoDefaultEuro: 25,
+    prezzoDefaultEuro: 22,
     avanzamentoDefaultPercentuale: 94,
     codiceRiferimento: "operative/cassa, flusso ordini area operativa",
   },
@@ -59,7 +65,7 @@ export const SERVIZI_APP = [
       "Stampa della comanda in base ai reparti coinvolti dall’ordine",
       "Integrazione con flusso cassa e reparti (cucina, bancone, ecc.)",
     ],
-    prezzoDefaultEuro: 10,
+    prezzoDefaultEuro: 8,
     avanzamentoDefaultPercentuale: 90,
     codiceRiferimento: "flusso cassa / bancone",
   },
@@ -160,7 +166,7 @@ export const SERVIZI_APP = [
       "Registro documenti di trasporto in entrata (DDT)",
       "Dati per tenant salvati nel browser fino a integrazione database",
     ],
-    prezzoDefaultEuro: 15,
+    prezzoDefaultEuro: 12,
     avanzamentoDefaultPercentuale: 48,
     codiceRiferimento: "admin/magazzino/*, useTenantLocalJson",
   },

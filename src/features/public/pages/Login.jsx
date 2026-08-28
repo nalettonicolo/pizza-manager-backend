@@ -11,6 +11,7 @@ import { getIsSaaSClient } from "@/utils/saasHost"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
 import { isViewportLayoutPreviewSearch, isQaSupportSearch } from "@/utils/viewportLayoutPreview"
 import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
+import { translateAuthError } from "@/utils/translateAuthError"
 import {
   DEMO_CLIENTE_FLAG_KEY,
   DEMO_CLIENTE_QUERY,
@@ -330,7 +331,7 @@ export default function Login() {
 
     if (err) {
       devLog("Login", "submit error", err.message)
-      setError(err.message || "Errore di accesso")
+      setError(translateAuthError(err, "Errore di accesso"))
     } else {
       devLog("Login", "submit ok, in attesa redirect", { userId: result?.data?.user?.id })
       try {

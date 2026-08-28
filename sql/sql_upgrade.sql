@@ -69,6 +69,43 @@
 --   sql/modules/74_turni_cassa_storico.sql
 --   sql/modules/75_ordine_transizione_stato.sql
 --
+-- Moduli 76-84: da handoff sessione Claude mobile (documenti Fornitore/tenant + firma,
+-- noleggio attrezzature, marketing/concorrenza, SEO/FAQ, blog/landing, ads, agente AI).
+-- Riscritti il 2026-08-26 per lo schema reale (admin.tenants, public.utenti_ruoli — il
+-- testo originale assumeva public.tenants/public.profiles.is_superadmin, MAI esistiti).
+-- Non ancora applicati al remoto: in attesa di revisione componenti frontend collegate.
+--   sql/modules/76_tenant_documenti_firma.sql
+--   sql/modules/77_noleggio_attrezzature.sql
+--   sql/modules/78_marketing_concorrenza.sql
+--   sql/modules/79_piano_attacco_seo_faq.sql
+--   sql/modules/80_marketing_contenuti_blog_landing.sql
+--   sql/modules/81_campagne_ads.sql
+--   sql/modules/82_ads_pubblicazione_automazione.sql
+--   sql/modules/83_agente_ai_configurazione_conversazioni.sql
+--   sql/modules/84_agente_supporto_piano_escalation.sql
+--   sql/modules/85_fix_grant_tabelle_marketing.sql (GRANT mancanti, trovato in verifica live)
+--   sql/modules/86_fix_grant_tenant_admins_anon.sql (GRANT propedeutico su tenant_admins)
+--   sql/modules/87_fix_policy_select_pubbliche_no_utenti_ruoli.sql (fix architetturale:
+--     separa le policy di scrittura superadmin da quelle di lettura pubblica, cos che un
+--     SELECT anonimo non debba mai valutare l'RLS di utenti_ruoli)
+--
+--   sql/modules/88_roadmap_priorita_note.sql (mod 60 handoff)
+--   sql/modules/89_contenuti_reali_landing_moduli.sql (mod 61 handoff — testo reale delle 8
+--     landing page modulo, tutte restano pubblicata=false in attesa di revisione stile)
+--   sql/modules/90_promemoria_linee_guida_stile.sql (mod 62 handoff)
+--
+-- STATO: moduli 76-90 applicati al remoto (flfhrwzlrftuhkrfwzse) il 2026-08-26, verificati
+-- con `set local role anon` e live nel browser (sezione FAQ della Landing). Edge Function
+-- pubblica-campagna-ads e agente-chat deployate (ACTIVE) lo stesso giorno.
+--
+-- NOTA — bug preesistente scoperto per caso durante questa verifica, NON introdotto da questi
+-- moduli e NON ancora corretto: public.punti_vendita (vista security_invoker su
+-- core.punti_vendita) nega l'accesso al ruolo anon con lo stesso meccanismo (GRANT mancante
+-- su core.punti_vendita), quindi probabilmente rompe oggi la vetrina pubblica per i visitatori
+-- non loggati. Segnalato in note_marketing (categoria 'altro', priorità alta) — da verificare
+-- e correggere con Nicolò prima di considerarlo chiuso, dato che tocca un'area (vetrina/negozio)
+-- fuori dal perimetro di questa sessione.
+--
 -- Moduli 41-50 "reali" (rider capacità/routing/OAuth/tavoli/audit, applicati stasera
 -- direttamente su Supabase da un'altra chat, MAI salvati come file sql/modules/ locali):
 -- vedi cronologia in supabase_migrations.schema_migrations (project flfhrwzlrftuhkrfwzse) —

@@ -16,6 +16,7 @@ export async function signUpCliente({
   email,
   password,
   tenantId,
+  tenantNome,
   nome,
   telefono,
   indirizzo,
@@ -35,6 +36,11 @@ export async function signUpCliente({
       emailRedirectTo: clientePostConfirmUrl(origin),
       data: {
         tenant_id: tenantId,
+        // Nome del locale salvato nei metadata utente: resta disponibile come {{ .Data.tenant_nome }}
+        // nei template email Auth (conferma, reset password, magic link) anche per le richieste
+        // future, non solo alla registrazione — serve a indirizzare il cliente al locale giusto
+        // invece che al supporto della piattaforma per problemi legati al suo ordine.
+        tenant_nome: tenantNome != null ? String(tenantNome).trim() : "",
         nome: nome != null ? String(nome).trim() : "",
         telefono: telefono != null ? String(telefono).trim() : "",
         indirizzo: indirizzo != null ? String(indirizzo).trim() : "",

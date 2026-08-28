@@ -71,6 +71,7 @@ export default function CassaConsegnaMappaSlot({ currentCoords, altreConsegne, s
       mapRef.current = null
       layerRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init una tantum (guardia mapRef.current sopra); coords lette solo al primo mount, poi aggiornate dal marker nel secondo effect
   }, [])
 
   useEffect(() => {

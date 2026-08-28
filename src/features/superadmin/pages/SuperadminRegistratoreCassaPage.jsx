@@ -6,6 +6,10 @@ import {
   REGISTRATORE_STORAGE_KEY,
   useSuperadminRegistratoreEnterprise,
 } from "@/features/superadmin/hooks/useSuperadminRegistratoreEnterprise";
+import { getTenants } from "@/features/superadmin/services/superadminService";
+import { getFornitoreConfig } from "@/features/admin/services/tenantDocumentiService";
+import { loadServicesCatalog } from "@/features/superadmin/catalog/servicesStorage";
+import { listAttrezzatureCatalogo, listTenantNoleggi } from "@/features/superadmin/services/noleggiAttrezzatureService";
 
 const ALIQUOTE = [
   { value: 22, label: "22%" },
@@ -83,12 +87,38 @@ export default function SuperadminRegistratoreCassaPage() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [printPayload, setPrintPayload] = useState(null);
 
+  // Dati reali PizzaManager (clienti/servizi/attrezzature/fornitore) — prima il registratore era
+  // completamente generico (righe demo "Pizza margherita", cliente a testo libero): richiesta
+  // esplicita di collegarlo alle funzioni reali della piattaforma invece di un tool scollegato.
+  const [fornitore, setFornitore] = useState(null);
+  const [tenantsPm, setTenantsPm] = useState([]);
+  const [catalogServices, setCatalogServices] = useState([]);
+  const [catalogoAttrezzature, setCatalogoAttrezzature] = useState([]);
+
   useEffect(() => {
     function onAfterPrint() {
       setPrintPayload(null);
     }
     window.addEventListener("afterprint", onAfterPrint);
     return () => window.removeEventListener("afterprint", onAfterPrint);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [forn, tl, cat] = await Promise.all([
+          getFornitoreConfig(),
+          getTenants(),
+          listAttrezzatureCatalogo({ soloDisponibili: true }),
+        ]);
+        setFornitore(forn);
+        setTenantsPm(tl || []);
+        setCatalogoAttrezzature(cat || []);
+      } catch {
+        /* il registratore resta usabile anche senza questi dati (fallback manuale) */
+      }
+      setCatalogServices(loadServicesCatalog());
+    })();
   }, []);
 
   const totalsCarrello = useMemo(() => calcRighe(data.carrello?.righe || []), [data.carrello?.righe]);
@@ -317,26 +347,73 @@ export default function SuperadminRegistratoreCassaPage() {
             Cassa
           </h2>
           <div className="sa-reg-panel">
-            <h3 className="sa-form-section-title">Aggiungi righe</h3>
-            <p className="sa-form-section-lede">Prezzi come imponibile unitario; IVA calcolata per riga.</p>
+            <h3 className="sa-form-section-title">Aggiungi righe — servizi PizzaManager</h3>
+            <p className="sa-form-section-lede">Canone mensile dei servizi a catalogo, IVA 22% (aliquota standard SaaS).</p>
             <div className="sa-quick-grid">
-              {[
-                { descrizione: "Pizza margherita", prezzoImponibileUnit: 5.5, aliquotaIva: 10 },
-                { descrizione: "Bibita 0,33 l", prezzoImponibileUnit: 1.2, aliquotaIva: 22 },
-                { descrizione: "Coperto", prezzoImponibileUnit: 2, aliquotaIva: 10 },
-              ].map((p) => (
-                <button key={p.descrizione} type="button" className="sa-chip-add" onClick={() => addRigaCarrello(p)}>
-                  + {p.descrizione}
+              {catalogServices.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="sa-chip-add"
+                  onClick={() => addRigaCarrello({ descrizione: s.nome, prezzoImponibileUnit: Number(s.prezzoMensile) || 0, aliquotaIva: 22 })}
+                >
+                  + {s.nome}
                 </button>
               ))}
             </div>
+
+            {catalogoAttrezzature.length > 0 ? (
+              <>
+                <h3 className="sa-form-section-title" style={{ marginTop: 20 }}>
+                  Aggiungi righe — attrezzature a noleggio
+                </h3>
+                <div className="sa-quick-grid">
+                  {catalogoAttrezzature.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className="sa-chip-add"
+                      onClick={() => addRigaCarrello({ descrizione: `Noleggio ${a.nome}`, prezzoImponibileUnit: Number(a.canone_noleggio_mensile) || 0, aliquotaIva: 22 })}
+                    >
+                      + {a.nome}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+
             <button type="button" className="sa-btn-outline" style={{ marginTop: 12 }} onClick={() => addRigaCarrello()}>
-              + Riga vuota
+              + Riga vuota (generica)
             </button>
 
             <h3 className="sa-form-section-title" style={{ marginTop: 24 }}>
-              Cliente (opzionale)
+              Cliente
             </h3>
+            {tenantsPm.length > 0 ? (
+              <label className="sa-field" style={{ marginBottom: 12, display: "block" }}>
+                Cliente PizzaManager (compila i campi sotto)
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const t = tenantsPm.find((x) => x.id === e.target.value);
+                    if (!t) return;
+                    updateCarrello((c) => ({
+                      ...c,
+                      clienteNome: t.nome || "",
+                      clientePiva: t.partita_iva || "",
+                      clienteIndirizzo: t.indirizzo || "",
+                    }));
+                  }}
+                >
+                  <option value="">— Seleziona per compilare, oppure scrivi a mano sotto —</option>
+                  {tenantsPm.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nome} {t.slug ? `(${t.slug})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <div className="sa-field-grid">
               <label className="sa-field">
                 Ragione sociale / nome
@@ -590,14 +667,18 @@ export default function SuperadminRegistratoreCassaPage() {
         </section>
       )}
 
-      {tab === "fatture" && <FattureSection data={data} setData={setData} ddtNumeri={ddtNumeri} openPrint={openPrint} />}
+      {tab === "fatture" && (
+        <FattureSection data={data} setData={setData} ddtNumeri={ddtNumeri} openPrint={openPrint} />
+      )}
 
-      {tab === "ddt" && <DdtSection data={data} setData={setData} openPrint={openPrint} />}
+      {tab === "ddt" && (
+        <DdtSection data={data} setData={setData} openPrint={openPrint} tenantsPm={tenantsPm} />
+      )}
 
       {printPayload &&
         createPortal(
           <div className="sa-print-root" role="presentation">
-            <PrintBlock payload={printPayload} />
+            <PrintBlock payload={printPayload} fornitore={fornitore} />
           </div>,
           document.body,
         )}
@@ -776,7 +857,7 @@ function FattureSection({ data, setData, ddtNumeri, openPrint }) {
   );
 }
 
-function DdtSection({ data, setData, openPrint }) {
+function DdtSection({ data, setData, openPrint, tenantsPm }) {
   const [numero, setNumero] = useState("");
   const [dataDoc, setDataDoc] = useState(() => new Date().toISOString().slice(0, 10));
   const [destinatario, setDestinatario] = useState("");
@@ -786,6 +867,37 @@ function DdtSection({ data, setData, openPrint }) {
   const [rigaDesc, setRigaDesc] = useState("");
   const [rigaQty, setRigaQty] = useState("1");
   const [righeDraft, setRigheDraft] = useState([]);
+  const [tenantSelezionato, setTenantSelezionato] = useState("");
+  const [caricandoAttrezzature, setCaricandoAttrezzature] = useState(false);
+
+  function selezionaTenant(id) {
+    setTenantSelezionato(id);
+    const t = (tenantsPm || []).find((x) => x.id === id);
+    if (!t) return;
+    setDestinatario(t.nome || "");
+    setIndirizzo(t.indirizzo || "");
+  }
+
+  async function caricaAttrezzatureNoleggiate() {
+    if (!tenantSelezionato) return;
+    setCaricandoAttrezzature(true);
+    try {
+      const noleggi = await listTenantNoleggi(tenantSelezionato);
+      const attive = noleggi.filter((n) => n.stato === "attivo" || n.stato === "in_attesa");
+      if (attive.length === 0) {
+        window.alert("Nessuna attrezzatura a noleggio attiva per questo cliente (vedi Preventivi e contratti).");
+        return;
+      }
+      setRigheDraft((r) => [
+        ...r,
+        ...attive.map((a) => ({ id: newLocalId(), descrizione: a.elenco_attrezzature, qty: a.quantita_totale || 1 })),
+      ]);
+    } catch {
+      window.alert("Impossibile caricare le attrezzature noleggiate.");
+    } finally {
+      setCaricandoAttrezzature(false);
+    }
+  }
 
   function addRigaDraft() {
     if (!rigaDesc.trim()) return;
@@ -829,6 +941,29 @@ function DdtSection({ data, setData, openPrint }) {
       </div>
       <div className="sa-reg-panel sa-reg-panel-wide">
         <h3 className="sa-form-section-title">Nuovo DDT</h3>
+        {(tenantsPm || []).length > 0 ? (
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 14 }}>
+            <label className="sa-field" style={{ flex: "1 1 260px" }}>
+              Cliente PizzaManager (compila destinatario/indirizzo)
+              <select value={tenantSelezionato} onChange={(e) => selezionaTenant(e.target.value)}>
+                <option value="">— Seleziona, oppure scrivi a mano sotto —</option>
+                {tenantsPm.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome} {t.slug ? `(${t.slug})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="sa-btn-outline"
+              disabled={!tenantSelezionato || caricandoAttrezzature}
+              onClick={caricaAttrezzatureNoleggiate}
+            >
+              {caricandoAttrezzature ? "Carico…" : "Carica attrezzature noleggiate"}
+            </button>
+          </div>
+        ) : null}
         <div className="sa-field-grid">
           <label className="sa-field">
             Numero DDT
@@ -929,11 +1064,16 @@ function DdtSection({ data, setData, openPrint }) {
   );
 }
 
-function PrintBlock({ payload }) {
+function PrintBlock({ payload, fornitore }) {
   const { kind, doc, at } = payload;
   return (
     <div className="sa-print-sheet">
-      <p className="sa-print-brand">PizzaManager — Registratore standalone (prova)</p>
+      <p className="sa-print-brand">{fornitore?.ragione_sociale || "PizzaManager"} — Registratore standalone (prova)</p>
+      {fornitore ? (
+        <p style={{ margin: "0 0 4px", fontSize: 12, color: "#64748b" }}>
+          {fornitore.indirizzo} · P.IVA {fornitore.piva}
+        </p>
+      ) : null}
       <p style={{ margin: "0 0 8px", fontSize: 12, color: "#64748b" }}>Generato: {new Date(at).toLocaleString("it-IT")}</p>
       <h1 className="sa-print-title">{String(kind)}</h1>
       <PrintDocBody kind={kind} doc={doc} />

@@ -43,6 +43,16 @@ export default [
     },
   },
   {
+    // Service worker serviti staticamente da public/ (fuori dal bundle Vite, mai importati da
+    // src/): girano in ServiceWorkerGlobalScope, non nel browser DOM — self/caches/clients ecc.
+    files: ["public/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "script",
+      globals: { ...globals.serviceworker },
+    },
+  },
+  {
     files: ["tests/unit/**/*.{js,jsx}"],
     languageOptions: {
       globals: {

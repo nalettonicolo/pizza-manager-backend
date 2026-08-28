@@ -81,6 +81,33 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "SumUp non configurato per questo locale (API key)" }, 400)
   }
 
+  // Idempotenza: se l'ordine ha già un checkout SumUp attaccato e non ancora concluso (doppio
+  // submit, retry di rete, doppia tab), riusa quello invece di crearne uno nuovo — creare un
+  // secondo checkout orfanerebbe il primo (se il cliente lo paga comunque, l'ordine punterebbe al
+  // secondo checkout, mai pagato, e la conferma fallirebbe pur avendo Stripe/SumUp incassato).
+  const { data: ctxRows } = await admin.rpc("edge_get_ordine_payment_context", { p_ordine_id: ordineId })
+  const ctxRow = Array.isArray(ctxRows) ? ctxRows[0] : null
+  const existingOnline = (ctxRow?.online_payment ?? {}) as Record<string, string>
+  const existingCheckoutId = String(existingOnline?.sumup_checkout_id || "").trim()
+  if (existingCheckoutId && existingOnline?.status !== "succeeded") {
+    const existing = await sumupApi<SumUpCheckout>(secret.trim(), `/v0.1/checkouts/${existingCheckoutId}`, {
+      method: "GET",
+    })
+    const existingStatus = String(existing.data?.status || "").toUpperCase()
+    const stillUsable = existing.ok && existing.data && !["FAILED", "EXPIRED", "CANCELLED"].includes(existingStatus)
+    if (stillUsable) {
+      const existingHostedUrl = String(existing.data?.hosted_checkout_url || "").trim()
+      if (existingHostedUrl) {
+        return jsonResponse({
+          checkoutId: existingCheckoutId,
+          hostedCheckoutUrl: existingHostedUrl,
+          checkoutReference: existingCheckoutId,
+        })
+      }
+    }
+    // Checkout precedente fallito/scaduto/introvabile: procedi a crearne uno nuovo sotto.
+  }
+
   const checkoutReference = `pm-${ordineId}-${Date.now()}`
   const payload = {
     checkout_reference: checkoutReference,
@@ -99,6 +126,15 @@ Deno.serve(async (req) => {
 
   if (!created.ok || !created.data?.id) {
     console.error("sumup create checkout", created.status, created.raw)
+    admin
+      .rpc("pm_registra_errore_operativo", {
+        p_tenant_id: tenantId,
+        p_origine: "edge:payment-sumup-create-checkout:create",
+        p_messaggio: `SumUp: creazione checkout fallita (HTTP ${created.status})`,
+        p_gravita: "critico",
+        p_dettaglio: { ordine_id: ordineId, detail: created.raw?.slice(0, 500) || "" },
+      })
+      .then(undefined, () => {})
     return jsonResponse(
       {
         error: "SumUp: impossibile creare il checkout",
@@ -122,6 +158,18 @@ Deno.serve(async (req) => {
   })
   if (attachErr) {
     console.error("edge_sumup_attach_checkout", attachErr)
+    // Grave: SumUp ha già creato il checkout (checkout.id esiste) ma l'ordine non lo sa — se il
+    // cliente paga comunque, la riconciliazione periodica (sumup-reconcile-pending) non troverà
+    // l'ordine perché non ha sumup_checkout_id in online_payment.
+    admin
+      .rpc("pm_registra_errore_operativo", {
+        p_tenant_id: tenantId,
+        p_origine: "edge:payment-sumup-create-checkout:attach",
+        p_messaggio: `Checkout SumUp creato (${checkout.id}) ma non associato all'ordine: ${attachErr.message}`,
+        p_gravita: "critico",
+        p_dettaglio: { ordine_id: ordineId, checkout_id: checkout.id },
+      })
+      .then(undefined, () => {})
     return jsonResponse({ error: "Impossibile associare il checkout all'ordine" }, 500)
   }
 

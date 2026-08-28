@@ -114,6 +114,15 @@ Deno.serve(async (req) => {
   })
   if (markErr) {
     console.error("edge_sumup_mark_payment_succeeded", markErr)
+    admin
+      .rpc("pm_registra_errore_operativo", {
+        p_tenant_id: tenantId,
+        p_origine: "edge:payment-sumup-confirm:mark_succeeded",
+        p_messaggio: `Pagamento SumUp confermato ma ordine non aggiornato: ${markErr.message}`,
+        p_gravita: "critico",
+        p_dettaglio: { ordine_id: ordineId, checkout_id: checkoutId },
+      })
+      .then(undefined, () => {})
     return jsonResponse({ error: markErr.message || "Conferma ordine non riuscita" }, 500)
   }
 

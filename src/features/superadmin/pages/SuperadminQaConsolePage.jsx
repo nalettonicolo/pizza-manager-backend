@@ -45,6 +45,7 @@ export const QA_PRESETS = {
       { path: "/admin/settings/parametri", label: "Parametri" },
       { path: "/admin/report", label: "Report" },
       { path: "/admin/notifiche-outbox", label: "Coda notifiche" },
+      { path: "/admin/documenti", label: "Documenti (firma contratto)" },
     ],
   },
   mix: {

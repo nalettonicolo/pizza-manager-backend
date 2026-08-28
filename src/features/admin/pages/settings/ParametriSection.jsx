@@ -7,6 +7,7 @@ import {
   getFoodcostPriceMismatchReport,
 } from "@/features/admin/services/adminService";
 import PromozioniCalendarioEditor from "@/features/admin/components/PromozioniCalendarioEditor";
+import CalibrazioneStoricoSection from "@/features/admin/pages/settings/CalibrazioneStoricoSection";
 import { sortByOrdine } from "@/utils/sortByOrdine";
 import {
   NOTIFICATION_CHANNELS,
@@ -70,6 +71,7 @@ const defaultParametri = () => ({
   comanda_copie: "1",
   comanda_font_size: "13",
   comanda_stampanti: "",
+  ricalibrazione_tempi_ai_attiva: false,
 });
 
 export default function ParametriSection() {
@@ -202,6 +204,7 @@ export default function ParametriSection() {
         capienza_bauletto:
           p.capienza_bauletto === "" ? 12 : Math.min(99, Math.max(1, Number(p.capienza_bauletto) || 12)),
         pizze_ogni_15_min: p.pizze_ogni_15_min === "" ? 0 : Number(p.pizze_ogni_15_min) || 0,
+        ricalibrazione_tempi_ai_attiva: p.ricalibrazione_tempi_ai_attiva === true,
         consegne_ogni_min: p.consegne_ogni_min === "" ? 0 : Number(p.consegne_ogni_min) || 0,
         ritiro_ogni_min: p.ritiro_ogni_min === "" ? 0 : Number(p.ritiro_ogni_min) || 0,
         tempo_preparazione_pizza: p.tempo_preparazione_pizza === "" ? 0 : Number(p.tempo_preparazione_pizza) || 0,
@@ -355,6 +358,23 @@ export default function ParametriSection() {
                   onChange={(e) => setParam("pizze_ogni_15_min", e.target.value === "" ? "" : e.target.value)}
                   style={{ marginTop: 6, padding: "8px 10px", width: "100%", boxSizing: "border-box" }}
                 />
+              </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, gridColumn: "1 / -1" }}>
+                <input
+                  type="checkbox"
+                  checked={p.ricalibrazione_tempi_ai_attiva === true}
+                  onChange={(e) => setParam("ricalibrazione_tempi_ai_attiva", e.target.checked)}
+                  style={{ marginTop: 3 }}
+                />
+                <span>
+                  Ricalibrazione AI settimanale della capacità forno
+                  <br />
+                  <span style={{ fontSize: 12, color: "#64748b", fontWeight: 400 }}>
+                    Ogni lunedì notte analizza gli ordini della settimana e, se serve, <strong>propone</strong> (mai
+                    applica da sola) un nuovo valore di "pizze ogni 15 minuti". La proposta arriva via email e come
+                    popup da autorizzare qui in Admin o in Cassa — puoi sempre tornare al valore precedente.
+                  </span>
+                </span>
               </label>
               <label>
                 Tempo di preparazione di 1 pizza completa (minuti)
@@ -805,6 +825,8 @@ export default function ParametriSection() {
           onChange={(v) => setParam("promozioni_calendario", v)}
         />
       </section>
+
+      <CalibrazioneStoricoSection />
 
       <div className="dashboard-settings-actions" style={{ marginTop: 16 }}>
         <button type="button" className="btn-primary-dashboard" onClick={handleSave} disabled={saving}>

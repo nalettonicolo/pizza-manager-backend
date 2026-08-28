@@ -1,0 +1,20 @@
+-- Modulo 86 — Fix: GRANT mancante su public.tenant_admins per il ruolo anon
+--
+-- Causa radice trovata in verifica live (2026-08-26): le policy RLS "superadmin" dei moduli
+-- 78-85 (es. faq_pubbliche_superadmin_write) fanno "EXISTS (SELECT 1 FROM utenti_ruoli ...)".
+-- Per un comando SELECT, Postgres valuta TUTTE le policy PERMISSIVE applicabili (sia quella
+-- "public_select" sia quella "superadmin_write" con cmd=ALL) per combinarle con OR — quindi
+-- deve anche valutare la RLS di utenti_ruoli, la cui policy preesistente
+-- "utenti_ruoli_select_own" referenzia a sua volta public.tenant_admins.
+-- Il ruolo anon non aveva MAI avuto GRANT su tenant_admins: risultato, qualsiasi SELECT anon
+-- su una tabella con questo pattern (incluse le mie nuove tabelle pubbliche, e la vista
+-- preesistente public.punti_vendita) falliva con 42501 "permission denied for table
+-- tenant_admins", mascherando l'errore reale.
+--
+-- Fix sicuro: tenant_admins ha una sola policy SELECT ("auth.uid() = user_id"), quindi per
+-- anon (auth.uid() è NULL) la RLS continua a non restituire alcuna riga — questo GRANT
+-- permette solo di VALUTARE il controllo di permesso, non espone alcun dato.
+--
+-- Applicato al remoto (flfhrwzlrftuhkrfwzse) il 2026-08-26. Non risolutivo da solo — vedi
+-- modulo 87 per il fix architetturale completo.
+GRANT SELECT ON public.tenant_admins TO anon;

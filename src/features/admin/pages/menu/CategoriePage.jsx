@@ -9,6 +9,7 @@ import {
   createCategory,
   updateCategory,
 } from "@/features/admin/services/adminService";
+import { seedMenuBase } from "@/features/admin/services/menuBaseSeed";
 
 import { sortByOrdine } from "@/utils/sortByOrdine";
 
@@ -25,6 +26,7 @@ export default function CategoriePage() {
   const [editNome, setEditNome] = useState("");
   const [editOrdine, setEditOrdine] = useState(0);
   const [editAttivo, setEditAttivo] = useState(true);
+  const [seedBusy, setSeedBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -73,6 +75,29 @@ export default function CategoriePage() {
     } catch (err) {
       console.error(err);
       alert("Errore creazione categoria.");
+    }
+  }
+
+  async function handleCaricaMenuBase() {
+    if (!tenantId) return;
+    setSeedBusy(true);
+    try {
+      const esito = await seedMenuBase(tenantId);
+      await load();
+      if (esito.errori.length) {
+        alert(
+          `Menu base caricato parzialmente: ${esito.categorie} categorie, ${esito.ingredienti} ingredienti, ${esito.pizze} pizze. ` +
+            `${esito.errori.length} elemento/i non creato/i (dettaglio in console).`,
+        );
+        console.warn("[CategoriePage] seedMenuBase con errori parziali:", esito.errori);
+      } else {
+        alert(`Menu base caricato: ${esito.categorie} categorie, ${esito.ingredienti} ingredienti, ${esito.pizze} pizze.`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Caricamento menu base non riuscito.");
+    } finally {
+      setSeedBusy(false);
     }
   }
 
@@ -201,6 +226,17 @@ export default function CategoriePage() {
           {searchTerm.trim() ? "Nessuna categoria corrisponde alla ricerca." : "Nessuna categoria. Aggiungine una per iniziare."}
         </p>
       )}
+      {categories.length === 0 && !searchTerm.trim() ? (
+        <div className="dashboard-box" style={{ padding: 16, marginTop: 12, maxWidth: 480 }}>
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#475569", lineHeight: 1.5 }}>
+            Menu completamente vuoto: invece di creare tutto a mano, puoi partire da un piccolo kit già pronto (4
+            pizze classiche, ingredienti, categorie, formati) e poi modificarlo.
+          </p>
+          <button type="button" className="dashboard-settings-btn-secondary" onClick={handleCaricaMenuBase} disabled={seedBusy}>
+            {seedBusy ? "Caricamento…" : "Carica menu base"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

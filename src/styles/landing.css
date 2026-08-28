@@ -1047,54 +1047,52 @@
 
 /* ================= DARK MODE ================= */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-light: #0c1222;
-    --bg-white: #151b2e;
-    --text-dark: #f1f5f9;
-    --text-muted: #94a3b8;
-    --border-soft: rgba(148, 163, 184, 0.12);
-  }
+:root[data-theme="dark"] {
+  --bg-light: #0c1222;
+  --bg-white: #151b2e;
+  --text-dark: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-soft: rgba(148, 163, 184, 0.12);
+}
 
-  .landing-bg {
-    background:
-      radial-gradient(ellipse 900px 500px at 15% -5%, rgba(192, 57, 43, 0.2), transparent 55%),
-      radial-gradient(ellipse 700px 450px at 95% 15%, rgba(232, 93, 76, 0.08), transparent 50%),
-      linear-gradient(180deg, #0f172a 0%, #0c1222 50%, #0a0f1a 100%);
-  }
+[data-theme="dark"] .landing-bg {
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -5%, rgba(192, 57, 43, 0.2), transparent 55%),
+    radial-gradient(ellipse 700px 450px at 95% 15%, rgba(232, 93, 76, 0.08), transparent 50%),
+    linear-gradient(180deg, #0f172a 0%, #0c1222 50%, #0a0f1a 100%);
+}
 
-  .landing-nav {
-    background: rgba(15, 23, 42, 0.85);
-    border-bottom-color: var(--border-soft);
-  }
+[data-theme="dark"] .landing-nav {
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom-color: var(--border-soft);
+}
 
-  .btn-outline {
-    background: rgba(30, 41, 59, 0.6);
-    border-color: rgba(148, 163, 184, 0.25);
-    color: var(--text-dark);
-  }
+[data-theme="dark"] .btn-outline {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: var(--text-dark);
+}
 
-  .hero-card,
-  .bento,
-  .role-card,
-  .pricing-card {
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-  }
+[data-theme="dark"] .hero-card,
+[data-theme="dark"] .bento,
+[data-theme="dark"] .role-card,
+[data-theme="dark"] .pricing-card {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
 
-  .mock-kpi,
-  .mock-stage {
-    background: rgba(30, 41, 59, 0.5);
-  }
+[data-theme="dark"] .mock-kpi,
+[data-theme="dark"] .mock-stage {
+  background: rgba(30, 41, 59, 0.5);
+}
 
-  .mock-chip {
-    background: rgba(15, 23, 42, 0.6);
-  }
+[data-theme="dark"] .mock-chip {
+  background: rgba(15, 23, 42, 0.6);
+}
 
-  .bento-large {
-    background: linear-gradient(145deg, #1a2236 0%, #1e1a24 100%);
-  }
+[data-theme="dark"] .bento-large {
+  background: linear-gradient(145deg, #1a2236 0%, #1e1a24 100%);
+}
 
-  .stat-strip-item {
-    background: var(--bg-white);
-  }
+[data-theme="dark"] .stat-strip-item {
+  background: var(--bg-white);
 }

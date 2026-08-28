@@ -10,10 +10,17 @@ import {
   listStaffPasswordNotes,
   upsertStaffPasswordNote,
   aggiungiRuoloPizzeria,
+  creaAccountStaffBulk,
 } from "@/features/admin/services/adminService";
 import { isDefaultAreaForRole, isDedicatedRepartoRole } from "@/utils/operativeAreaAccess";
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { verifyCurrentAdminPassword } from "@/utils/adminPasswordReverify";
+import {
+  RUOLO_BASE_OPTIONS,
+  generateStaffPassword,
+  nuovaStaffRow,
+  nuoveStaffRowsStandard,
+} from "@/features/admin/utils/staffAccountRows";
 
 const ARCHIVIO_PASSWORD_MS = 10 * 60 * 1000;
 
@@ -36,17 +43,6 @@ const ACCESS_TO_AREA_KEY = {
   accesso_delivery: "delivery",
   accesso_pony: "pony",
 };
-
-const RUOLO_BASE_OPTIONS = [
-  { value: "admin", label: "Amministratore" },
-  { value: "operatore", label: "Operatore (multi-reparto)" },
-  { value: "cassa", label: "Cassa" },
-  { value: "bancone", label: "Bancone" },
-  { value: "cucina", label: "Cucina" },
-  { value: "pizzaiolo", label: "Pizzaiolo" },
-  { value: "delivery", label: "Delivery" },
-  { value: "pony", label: "Pony" },
-];
 
 const RUOLO_BASE_VALUES = new Set(RUOLO_BASE_OPTIONS.map((o) => o.value));
 
@@ -97,8 +93,17 @@ function getCosaPuoFare(ruolo, puoModificareParametri) {
   return list;
 }
 
+/** Dominio suggerito per il placeholder email (ruolo@dominio), coerente con Superadmin → Clienti. */
+function emailDomainForTenant(tenantData) {
+  const custom = (tenantData?.public_domain || "").trim();
+  if (custom) return custom.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  const slug = (tenantData?.slug || "").trim();
+  if (slug) return `${slug}.pizzamanager.it`;
+  return "ilnomedeltuolocale.it";
+}
+
 export default function RuoliPage() {
-  const { tenantId } = useTenant();
+  const { tenantId, tenantData } = useTenant();
   const [ruoli, setRuoli] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -116,6 +121,10 @@ export default function RuoliPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRuolo, setInviteRuolo] = useState("cassa");
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+  const [staffRows, setStaffRows] = useState([]);
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [staffResults, setStaffResults] = useState(null);
 
   const archivioSbloccato = typeof archivioUnlockUntil === "number" && Date.now() < archivioUnlockUntil;
 
@@ -290,6 +299,66 @@ export default function RuoliPage() {
     }
   }
 
+  function apriStaffModal() {
+    setStaffRows(nuoveStaffRowsStandard(ruoli));
+    setStaffResults(null);
+    setStaffModalOpen(true);
+  }
+
+  function selezionaTutteStaffRow(selezionata) {
+    setStaffRows((rows) => rows.map((r) => ({ ...r, selezionata })));
+  }
+
+  function chiudiStaffModal() {
+    if (staffBusy) return;
+    setStaffModalOpen(false);
+  }
+
+  function updateStaffRow(id, patch) {
+    setStaffRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function rigeneraStaffPassword(id) {
+    updateStaffRow(id, { password: generateStaffPassword() });
+  }
+
+  function aggiungiStaffRow() {
+    setStaffRows((rows) => [...rows, nuovaStaffRow("cassa")]);
+  }
+
+  function rimuoviStaffRow(id) {
+    setStaffRows((rows) => rows.filter((r) => r.id !== id));
+  }
+
+  async function handleCreaStaffBulk() {
+    if (!tenantId) return;
+    const daInviare = staffRows.filter((r) => r.selezionata && r.email.trim());
+    if (daInviare.length === 0) {
+      alert("Seleziona (flag a sinistra) almeno una riga con l'email compilata.");
+      return;
+    }
+    setStaffBusy(true);
+    setStaffResults(null);
+    try {
+      const risultati = await creaAccountStaffBulk(
+        tenantId,
+        daInviare.map((r) => ({
+          email: r.email.trim(),
+          password: r.password,
+          ruolo: r.ruolo,
+          nome_visualizzato: r.nomeVisualizzato.trim(),
+        })),
+      );
+      setStaffResults(risultati);
+      if (risultati.some((r) => r.ok)) await loadRuoli();
+    } catch (err) {
+      console.error(err);
+      setStaffResults([{ email: "—", ok: false, errore: err?.message || "Chiamata non riuscita." }]);
+    } finally {
+      setStaffBusy(false);
+    }
+  }
+
   async function handleRuoloBaseChange(record, nuovoRuolo) {
     if (!tenantId || !record?.user_id) return;
     if (record.ruolo === nuovoRuolo) return;
@@ -358,6 +427,15 @@ export default function RuoliPage() {
             {inviteBusy ? "Invio…" : "Collega"}
           </button>
         </form>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #e2e8f0" }}>
+          <p style={{ color: "#64748b", fontSize: 13, marginBottom: 10, lineHeight: 1.5 }}>
+            Apertura locale nuovo? Genera in un colpo solo gli account standard per reparto (email, password e ruolo
+            editabili prima di creare) invece di ripetere il modulo sopra uno per uno.
+          </p>
+          <button type="button" className="dashboard-settings-btn-secondary" onClick={apriStaffModal}>
+            Crea account standard
+          </button>
+        </div>
       </section>
 
       <section className="dashboard-box dashboard-settings-section">
@@ -676,6 +754,164 @@ export default function RuoliPage() {
             </button>
             <button type="button" className="btn-primary-dashboard" disabled={reauthBusy} onClick={() => void confermaReauth()}>
               {reauthBusy ? "Verifica…" : "Conferma"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={staffModalOpen} onClose={chiudiStaffModal} title="Crea account standard">
+        <div style={{ padding: "8px 0 0" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+            Flagga (colonna a sinistra) solo i reparti che ti servono per questo locale — i ruoli già
+            collegati al tenant partono deselezionati. Riga per riga: correggi email, ruolo e nome; la
+            password è generata ma è modificabile o rigenerabile. Al termine annota le password
+            consegnate — qui restano visibili solo finché la finestra è aperta.
+          </p>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <button
+              type="button"
+              className="dashboard-settings-btn-secondary"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+              onClick={() => selezionaTutteStaffRow(true)}
+            >
+              Seleziona tutto
+            </button>
+            <button
+              type="button"
+              className="dashboard-settings-btn-secondary"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+              onClick={() => selezionaTutteStaffRow(false)}
+            >
+              Deseleziona tutto
+            </button>
+          </div>
+          <div className="table-wrap" style={{ overflowX: "auto", marginBottom: 14 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "#64748b", fontSize: 11, textTransform: "uppercase" }}>
+                  <th style={{ padding: "4px 6px" }} />
+                  <th style={{ padding: "4px 6px" }}>Ruolo</th>
+                  <th style={{ padding: "4px 6px" }}>Email</th>
+                  <th style={{ padding: "4px 6px" }}>Nome (facoltativo)</th>
+                  <th style={{ padding: "4px 6px" }}>Password</th>
+                  <th style={{ padding: "4px 6px" }} />
+                </tr>
+              </thead>
+              <tbody>
+                {staffRows.map((r) => (
+                  <tr
+                    key={r.id}
+                    style={{ borderTop: "1px solid #e2e8f0", opacity: r.selezionata ? 1 : 0.5 }}
+                  >
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="checkbox"
+                        checked={r.selezionata}
+                        onChange={(e) => updateStaffRow(r.id, { selezionata: e.target.checked })}
+                        title="Crea questo account"
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <select
+                        className="dipendenti-role-select"
+                        value={r.ruolo}
+                        onChange={(e) => updateStaffRow(r.id, { ruolo: e.target.value })}
+                        style={{ minWidth: 120 }}
+                      >
+                        {RUOLO_BASE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="email"
+                        className="dashboard-search-input"
+                        value={r.email}
+                        onChange={(e) => updateStaffRow(r.id, { email: e.target.value })}
+                        placeholder={`${r.ruolo}@${emailDomainForTenant(tenantData)}`}
+                        style={{ minWidth: 220 }}
+                        autoComplete="off"
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="text"
+                        className="dashboard-search-input"
+                        value={r.nomeVisualizzato}
+                        onChange={(e) => updateStaffRow(r.id, { nomeVisualizzato: e.target.value })}
+                        placeholder="es. Marco"
+                        style={{ minWidth: 120 }}
+                        autoComplete="off"
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input
+                          type="text"
+                          className="dashboard-search-input"
+                          value={r.password}
+                          onChange={(e) => updateStaffRow(r.id, { password: e.target.value })}
+                          style={{ minWidth: 140, fontFamily: "monospace" }}
+                          spellCheck={false}
+                          autoComplete="off"
+                        />
+                        <button
+                          type="button"
+                          className="dashboard-settings-btn-secondary"
+                          style={{ padding: "4px 8px", fontSize: 12 }}
+                          onClick={() => rigeneraStaffPassword(r.id)}
+                          title="Rigenera password"
+                        >
+                          ↻
+                        </button>
+                      </div>
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => rimuoviStaffRow(r.id)}
+                        style={{ background: "none", border: "none", color: "#b91c1c", cursor: "pointer", fontSize: 13 }}
+                      >
+                        Rimuovi
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" className="dashboard-settings-btn-secondary" onClick={aggiungiStaffRow} style={{ marginBottom: 16 }}>
+            + Aggiungi riga
+          </button>
+
+          {staffResults ? (
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+              {staffResults.map((r, i) => (
+                <li
+                  key={`${r.email}-${i}`}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    background: r.ok ? "#ecfdf5" : "#fef2f2",
+                    color: r.ok ? "#166534" : "#b91c1c",
+                  }}
+                >
+                  {r.ok ? "✓" : "✕"} {r.email}: {r.ok ? r.azione : r.errore}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button type="button" className="dashboard-settings-btn-secondary" disabled={staffBusy} onClick={chiudiStaffModal}>
+              Chiudi
+            </button>
+            <button type="button" className="btn-primary-dashboard" disabled={staffBusy} onClick={() => void handleCreaStaffBulk()}>
+              {staffBusy ? "Creazione…" : "Crea account e collega ruoli"}
             </button>
           </div>
         </div>

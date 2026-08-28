@@ -2,9 +2,14 @@ import { useEffect, useMemo, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import CookieBanner from "@/features/public/components/CookieBanner"
 import PwaInstallBanner from "@/features/public/components/PwaInstallBanner"
-import { applyPublicPwaManifest, removePublicPwaManifest } from "@/utils/publicPwaManifest"
+import {
+  applyPublicPwaManifest,
+  removePublicPwaManifest,
+  registerPublicServiceWorker,
+} from "@/utils/publicPwaManifest"
 import OrdineOnlineDisattivoModal from "@/features/public/components/OrdineOnlineDisattivoModal"
 import ClienteHeaderAccount from "@/features/public/components/ClienteHeaderAccount"
+import AgenteChatWidget from "@/features/public/components/AgenteChatWidget"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { adminHomeWithSupportSearch } from "@/constants/adminTenantHome"
 import { getIsSaaSClient } from "@/utils/saasHost"
@@ -12,10 +17,13 @@ import { getPublicTenantInfo } from "@/features/services/publicService"
 import { PublicCartProvider } from "@/app/contexts/PublicCartContext"
 import { readOrdiniOnlineVetrinaAllowed } from "@/utils/ordiniOnlineAttivi"
 import { applyTenantFavicon } from "@/utils/tenantFavicon"
+import { applyTenantDocumentTitle } from "@/utils/tenantDocumentTitle"
 import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
 import SaHomeButton from "@/components/SaHomeButton"
+import ThemeToggle from "@/components/ThemeToggle"
 import { isDemoGiroSearch, isDemoGiroSessionActive } from "@/utils/demoGiro"
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
+import { setCurrentTenantId } from "@/utils/currentTenantContext"
 import logoPizzaManager from "@/assets/logo/logo-pizzamanager.png"
 import "@/styles/public-layout.css"
 
@@ -90,6 +98,13 @@ export default function PublicLayout() {
     }
   }, [isLanding, search])
 
+  // Tenant della vetrina visitata, noto anche fuori da React per il listener globale
+  // window.onerror/unhandledrejection in main.jsx — solo per visitatori anonimi: se c'è già una
+  // sessione autenticata (staff/cliente), TenantContext resta la fonte di verità.
+  useEffect(() => {
+    if (!authTenantId) setCurrentTenantId(publicTenantId)
+  }, [publicTenantId, authTenantId])
+
   useEffect(() => {
     setMobileNavOpen(false)
   }, [pathname, search])
@@ -141,10 +156,15 @@ export default function PublicLayout() {
     void applyTenantFavicon(logoUrl || logoPizzaManager)
   }, [logoUrl])
 
+  useEffect(() => {
+    applyTenantDocumentTitle(isLanding ? null : tenantName)
+  }, [isLanding, tenantName])
+
   // Manifest PWA solo sulle pagine pubbliche (vetrina/checkout/area cliente) — mai su
   // admin/superadmin/operative, che hanno le loro schermate dedicate (es. manifest-rider).
   useEffect(() => {
     applyPublicPwaManifest()
+    registerPublicServiceWorker()
     return () => removePublicPwaManifest()
   }, [])
 
@@ -241,6 +261,7 @@ export default function PublicLayout() {
           </>
         ) : null}
         <div className="public-layout-header-trailing">
+          <ThemeToggle />
           {(isDemoGiroSearch(search) || isDemoGiroSessionActive()) &&
           isSuperAdminRole(ruolo) &&
           tipoUtente === "staff" ? (
@@ -310,6 +331,11 @@ export default function PublicLayout() {
       </footer>
 
       <CookieBanner />
+
+      {/* Assistente marketing: solo sito pubblico SaaS, non sulla vetrina ordini del singolo tenant. */}
+      {isSaaS && !isVetrinaPage ? <AgenteChatWidget modalita="marketing" /> : null}
+      {/* Assistente cliente: sulla vetrina di un tenant, per menu/orari/tempi di attesa — mai domande fuori tema. */}
+      {isVetrinaPage && publicTenantId ? <AgenteChatWidget modalita="cliente" tenantId={publicTenantId} /> : null}
 
       <OrdineOnlineDisattivoModal open={showOrdineOnlineModal} onDismiss={dismissOrdineOnlineModal} localeNome={tenantName} />
       </div>

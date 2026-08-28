@@ -186,17 +186,22 @@ Value: ${PUBLIC_DOMAIN_CNAME_TARGET}`,
   },
 ]
 
-export const FRANCY_GO_LIVE_GUIDELINES = {
-  title: "Go-live Francy Pizza (dominio reale)",
-  intro:
-    "Checklist operativa per portare Francy sul proprio dominio menu, senza deploy Firebase dedicato (il codice è già quello della piattaforma).",
+/**
+ * Checklist operativa end-to-end per portare un tenant sul proprio dominio menu, senza deploy
+ * Firebase dedicato (il codice è già quello della piattaforma) — stesso contenuto di
+ * DNS_GENERIC_GUIDELINES.checklist ma in forma di procedura ordinata invece di elenco puntato:
+ * questa è pensata come "segui i passi in ordine", quella come riferimento concettuale.
+ */
+export const DOMINIO_GO_LIVE_CHECKLIST = {
+  title: "Go-live dominio reale — procedura passo passo",
+  intro: "Segui i passi in ordine per portare un tenant dal sottodominio piattaforma al proprio dominio.",
   steps: [
-    "In Go-live seleziona Francy Pizza e verifica slug + anteprima https://{slug}.pizzamanager.it.",
-    "Decidi l’hostname menu (es. menu.francypizza.it oppure www se la root deve essere la webapp).",
+    "In Go-live seleziona il tenant e verifica slug + anteprima https://{slug}.pizzamanager.it.",
+    "Decidi l'hostname menu (es. menu.cliente.it oppure www se la root deve essere la webapp).",
     "Salva il dominio pubblico in piattaforma e imposta stato «DNS / Firebase in configurazione».",
     "Firebase Hosting → Aggiungi dominio personalizzato con lo stesso hostname.",
-    "Nel registrar di Francy (Register, Aruba, …) applica la guida host corrispondente (CNAME / A come da Firebase).",
-    "Quando HTTPS è verde: apri / e /ordina sul dominio, controlla menu e branding Francy.",
+    "Nel registrar del cliente (Register, Aruba, …) applica la guida host corrispondente qui sotto (CNAME / A come da Firebase).",
+    "Quando HTTPS è verde: apri / e /ordina sul dominio, controlla menu e branding.",
     "Supabase Auth → Redirect URLs per quel dominio (reimposta password).",
     "Stato pubblicazione → Dominio online.",
     "Se esiste un sito marketing separato: aggiorna i pulsanti «Ordina ora / Ordina online» verso https://<dominio-menu>/ordina (stesso dominio, non pizzamanager.it).",

@@ -99,6 +99,7 @@ export default function ClienteIndirizzoMappaField({
   const [searching, setSearching] = useState(false)
   const [geoLoading, setGeoLoading] = useState(false)
   const [geoError, setGeoError] = useState(null)
+  const [geoWarning, setGeoWarning] = useState(null)
 
   const deliveryRing = useMemo(
     () => getDeliveryPolygonOuterRing(tenant?.parametri_operativi),
@@ -263,13 +264,24 @@ export default function ClienteIndirizzoMappaField({
 
   async function handleUseMyLocation() {
     setGeoError(null)
+    setGeoWarning(null)
     setGeoLoading(true)
     try {
-      const { lat, lng, address } = await getBrowserLocationAddress()
+      const { lat, lng, address, accuracy } = await getBrowserLocationAddress()
       if (address) onIndirizzoChange?.(address)
       syncCoordsFromLatLng(lat, lng)
       setSuggestions([])
       setSuggestOpen(false)
+      // Su desktop il GPS del browser è spesso solo triangolazione WiFi/IP: con un errore ampio
+      // il pin può cadere lontano da dove ci si trova davvero. Avvisiamo invece di lasciare che
+      // sembri un salto "a caso" senza spiegazione — l'utente sa così di dover correggere il
+      // punto trascinandolo sulla mappa.
+      if (Number.isFinite(accuracy) && accuracy > 300) {
+        const metri = Math.round(accuracy)
+        setGeoWarning(
+          `Posizione rilevata con precisione bassa (~${metri} m). Controlla il punto sulla mappa e trascinalo sull'indirizzo esatto se necessario.`,
+        )
+      }
     } catch (err) {
       setGeoError(err?.message || "Impossibile ottenere la posizione.")
     } finally {
@@ -379,6 +391,11 @@ export default function ClienteIndirizzoMappaField({
       {geoError ? (
         <p className="login-brand-sub" style={{ fontSize: 12, marginTop: 2, color: "#b91c1c" }}>
           {geoError}
+        </p>
+      ) : null}
+      {!geoError && geoWarning ? (
+        <p className="login-brand-sub" style={{ fontSize: 12, marginTop: 2, color: "#b45309" }}>
+          {geoWarning}
         </p>
       ) : null}
 

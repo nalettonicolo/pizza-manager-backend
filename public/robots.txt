@@ -1,0 +1,37 @@
+# PizzaManager — pizzamanager.it
+# Apre esplicitamente i crawler AI oltre ai motori di ricerca classici, per essere citati
+# nelle risposte di ChatGPT/Perplexity/Claude/AI Overview (vedi note_marketing, categoria
+# ai_visibility). Nessuna area riservata (admin/superadmin/operative) è comunque indicizzabile:
+# richiede login, non per una regola qui.
+
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+Sitemap: https://pizzamanager.it/sitemap.xml

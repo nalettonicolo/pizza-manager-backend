@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
+import { translateAuthError } from "@/utils/translateAuthError"
 import "@/styles/login.css"
 
 export default function ClienteReimpostaPasswordPage() {
@@ -45,12 +46,12 @@ export default function ClienteReimpostaPasswordPage() {
     try {
       const { error: err } = await updatePassword(password)
       if (err) {
-        setError(err.message || "Aggiornamento non riuscito.")
+        setError(translateAuthError(err, "Aggiornamento non riuscito."))
         return
       }
       setOk(true)
     } catch (ex) {
-      setError(ex?.message || "Errore imprevisto.")
+      setError(translateAuthError(ex, "Errore imprevisto."))
     } finally {
       setBusy(false)
     }

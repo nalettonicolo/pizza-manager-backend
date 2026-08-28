@@ -5,6 +5,7 @@ import { devWarn } from "@/lib/devLog"
 import { isNestAuthEnabled } from "@/lib/nestAuthMode.js"
 import { getNestJwt } from "@/app/api/client.js"
 import { nestTenantMe } from "@/app/api/tenantApi.js"
+import { setCurrentTenantId } from "@/utils/currentTenantContext"
 import { useAuth } from "./AuthContext"
 
 const TenantContext = createContext()
@@ -178,6 +179,12 @@ export function TenantProvider({ children }) {
       setLoading(false)
     }
   }, [authLoading, isAuthenticated, loadTenantData])
+
+  // Tenant corrente noto anche fuori da React, per il listener globale window.onerror/
+  // unhandledrejection in main.jsx (vedi src/utils/currentTenantContext.js).
+  useEffect(() => {
+    setCurrentTenantId(tenantId || null)
+  }, [tenantId])
 
   const refreshTenant = async () => {
     tenantDataIdRef.current = null

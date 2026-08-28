@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { requestClientePasswordReset } from "@/features/public/services/clienteAuthService"
+import { translateAuthError } from "@/utils/translateAuthError"
 import "@/styles/login.css"
 
 export default function ClientePasswordDimenticataPage() {
@@ -16,12 +17,12 @@ export default function ClientePasswordDimenticataPage() {
     try {
       const { error: err } = await requestClientePasswordReset(email)
       if (err) {
-        setError(err.message || "Invio non riuscito.")
+        setError(translateAuthError(err, "Invio non riuscito."))
         return
       }
       setSent(true)
     } catch (ex) {
-      setError(ex?.message || "Errore imprevisto.")
+      setError(translateAuthError(ex, "Errore imprevisto."))
     } finally {
       setBusy(false)
     }

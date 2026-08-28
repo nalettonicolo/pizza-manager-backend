@@ -1,13 +1,33 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import LegalPageShell from "@/features/public/components/LegalPageShell";
+import { supabase } from "@/lib/supabaseClient";
 
-const SUPPORT_EMAIL = "support@pizzamanager.it";
+const SUPPORT_EMAIL_FALLBACK = "support@pizzamanager.it";
 const INFO_EMAIL = "info@pizzamanager.it";
 
 export default function Support() {
+  // Prima era fisso nel codice: ora legge da Superadmin → Impostazioni → Configurazione generale
+  // (public.piattaforma_configurazione_generale, lettura pubblica) — se il superadmin la cambia,
+  // questa pagina si aggiorna senza bisogno di un nuovo deploy.
+  const [supportEmail, setSupportEmail] = useState(SUPPORT_EMAIL_FALLBACK);
+
   useEffect(() => {
     document.title = "Supporto | PizzaManager";
+    let cancelled = false;
+    supabase
+      .from("piattaforma_configurazione_generale")
+      .select("email_supporto")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data?.email_supporto) setSupportEmail(data.email_supporto);
+      })
+      .catch(() => {
+        /* fallback statico già impostato */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -34,8 +54,8 @@ export default function Support() {
           Email assistenza tecnica
         </p>
         <p style={{ margin: 0, fontSize: "0.9375rem" }}>
-          <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: "#c0392b", fontWeight: 600 }}>
-            {SUPPORT_EMAIL}
+          <a href={`mailto:${supportEmail}`} style={{ color: "#c0392b", fontWeight: 600 }}>
+            {supportEmail}
           </a>
         </p>
         <p style={{ margin: "10px 0 0", fontSize: "0.875rem", color: "#64748b" }}>
@@ -61,7 +81,7 @@ export default function Support() {
       <h2>Problemi tecnici o errori</h2>
       <ul>
         <li>Verifica la connessione e prova un altro browser o una finestra in incognito.</li>
-        <li>Segnala a {SUPPORT_EMAIL} cosa stavi facendo, l&apos;orario approssimativo e il testo dell&apos;errore.</li>
+        <li>Segnala a {supportEmail} cosa stavi facendo, l&apos;orario approssimativo e il testo dell&apos;errore.</li>
       </ul>
 
       <h2>Commerciale, fatturazione e contratti</h2>

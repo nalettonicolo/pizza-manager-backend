@@ -717,7 +717,9 @@ function PlanningHeatCell({
   onOpenMap,
   coordOverrides = {},
 }) {
-  const deliveryList = row.deliveryOrdiniList || []
+  // Riferimento stabile: senza useMemo, "|| []" crea un nuovo array a ogni render quando la lista
+  // è assente, invalidando inutilmente i useMemo sotto che la usano come dipendenza.
+  const deliveryList = useMemo(() => row.deliveryOrdiniList || [], [row.deliveryOrdiniList])
   const ritiroList = row.ritiroOrdiniList || []
   /** Contatori = ciò che vedi in lista (anche già consegnati). Solo ⚙ usa ancora gli attivi. */
   const delN = deliveryList.length

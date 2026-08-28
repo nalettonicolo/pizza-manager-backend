@@ -5,6 +5,27 @@
     <link rel="icon" href="/favicon.png" type="image/png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Pizzeria Manager</title>
+    <script>
+      // Applica il tema (chiaro/scuro) prima che React monti, per evitare un flash della pagina
+      // nel tema sbagliato al primo caricamento. Preferenza salvata dallo switch manuale (vedi
+      // ThemeContext) se presente, altrimenti automatico in base all'ora: chiaro di giorno
+      // (7-20), scuro di notte — non più legato al tema del sistema operativo/browser.
+      (function () {
+        try {
+          var saved = localStorage.getItem("app_theme");
+          var theme;
+          if (saved === "light" || saved === "dark") {
+            theme = saved;
+          } else {
+            var h = new Date().getHours();
+            theme = h >= 7 && h < 20 ? "light" : "dark";
+          }
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {
+          /* localStorage non disponibile: resta il tema chiaro di default */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

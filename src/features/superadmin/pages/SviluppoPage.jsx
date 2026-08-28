@@ -17,7 +17,7 @@ const LINK_DOCS_SVILUPPO = [
   { slug: "punto-situazione-supervisor", label: "Punto situazione — Supervisore (verdetto)" },
   { slug: "punto-situazione-prodotto", label: "Punto situazione — Prodotto" },
   { slug: "punto-situazione-priorita", label: "Punto situazione — Priorità operative (P0–P4)" },
-  { slug: "go-live-francy-runbook", label: "Go-live Francy — runbook P2/P3" },
+  { slug: "go-live-francy-runbook", label: "Go-live — runbook P2/P3" },
   { slug: "roadmap-cassa-enterprise", label: "Roadmap enterprise (cassa → offline → fiscale IT)" },
   { slug: "backlog-stato-sviluppo", label: "Backlog e stato sviluppo" },
   { slug: "analisi-fiscale-questionario", label: "Analisi perimetro fiscale — questionario stakeholder" },

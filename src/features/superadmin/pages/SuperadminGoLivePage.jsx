@@ -21,6 +21,7 @@ import {
 } from "@/config/publicDomain"
 import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter"
 import DnsHostGuidesPanel from "@/features/pubblicazione/DnsHostGuidesPanel"
+import GoLiveWizardModal from "@/features/pubblicazione/GoLiveWizardModal"
 
 function statusLabel(v) {
   const m = {
@@ -55,6 +56,7 @@ export default function SuperadminGoLivePage() {
   const [checks, setChecks] = useState(() => emptyGoLiveChecks())
   const [checkBusy, setCheckBusy] = useState(false)
   const [checkMsg, setCheckMsg] = useState(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const loadTenants = useCallback(async () => {
     try {
@@ -186,11 +188,11 @@ export default function SuperadminGoLivePage() {
 
       <section style={card} id="guida-dns-host">
         <h2 className="dashboard-settings-section-title" style={{ marginTop: 0 }}>
-          Guide DNS per host + go-live Francy
+          Guide DNS per host + go-live
         </h2>
         <p style={{ margin: "0 0 16px", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
           Register.it, Aruba, Cloudflare, OVH, GoDaddy, Namecheap e guida generica. Incluse linee guida CTA sul sito
-          esterno e checklist Francy Pizza.
+          esterno e checklist di go-live.
         </p>
         <DnsHostGuidesPanel />
       </section>
@@ -257,6 +259,21 @@ export default function SuperadminGoLivePage() {
             </table>
           </div>
         )}
+        {selected ? (
+          <div style={{ margin: "14px 0 0", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="btn-primary"
+              style={{ padding: "10px 18px", fontWeight: 700, cursor: "pointer" }}
+            >
+              Aggiungi dominio
+            </button>
+            <span style={{ fontSize: 13, color: "#64748b" }}>
+              Ti accompagna nei passi in ordine, uno alla volta, senza saltarne nessuno.
+            </span>
+          </div>
+        ) : null}
         {selected ? (
           <p style={{ margin: "12px 0 0", fontSize: 13, color: "#475569" }}>
             Selezionato: <strong>{selected.nome}</strong>
@@ -406,6 +423,16 @@ export default function SuperadminGoLivePage() {
           </section>
         </>
       ) : null}
+
+      <GoLiveWizardModal
+        open={wizardOpen}
+        tenantId={tenantId}
+        onClose={() => {
+          setWizardOpen(false)
+          void loadTenants()
+          void loadChecks(tenantId)
+        }}
+      />
     </div>
   )
 }

@@ -57,7 +57,7 @@ const TITLES = {
   "punto-situazione-copywriter": "Punto situazione — Copywriter",
   "punto-situazione-supervisor": "Punto situazione — Supervisore",
   "punto-situazione-priorita": "Punto situazione — Priorità operative",
-  "go-live-francy-runbook": "Go-live Francy (Stripe / dominio / P3)",
+  "go-live-francy-runbook": "Go-live (Stripe / dominio / P3)",
   "punto-situazione-webapp": "Punto situazione — indice per settore",
 };
 

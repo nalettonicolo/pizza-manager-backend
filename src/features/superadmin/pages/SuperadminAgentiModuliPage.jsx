@@ -65,7 +65,7 @@ export default function SuperadminAgentiModuliPage() {
       <h1 className="dashboard-page-title sa-page-title">Moduli agenti — aree di sviluppo aperte</h1>
       <p style={{ margin: "0 0 8px", fontSize: 14, color: "#64748b", lineHeight: 1.55 }}>
         Ogni <strong>area mancante</strong> elenca gli agenti coinvolti e cosa devono produrre. Se un pezzo
-        tocca più profili, sono tutti nel punto. Priorità allineate a go-live Francy e roadmap servizi.
+        tocca più profili, sono tutti nel punto. Priorità allineate a go-live e roadmap servizi.
       </p>
       <p style={{ margin: "0 0 16px", fontSize: 13 }}>
         <Link to="/superadmin/sviluppo" style={linkStyle}>
@@ -81,7 +81,7 @@ export default function SuperadminAgentiModuliPage() {
         </Link>
         {" · "}
         <Link to="/superadmin/guide/go-live-francy-runbook" style={linkStyle}>
-          Runbook Francy
+          Runbook go-live
         </Link>
       </p>
 

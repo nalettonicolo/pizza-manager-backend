@@ -35,6 +35,7 @@
     "supabase:auth:apply": "node scripts/supabase-auth-remote.mjs apply-all",
     "supabase:auth:sync-redirects": "node scripts/supabase-auth-remote.mjs sync-redirects --from-db",
     "sql:apply": "node scripts/apply-sql-module.mjs",
+    "log:attivita": "node scripts/log-attivita.mjs",
     "demo:cliente": "node scripts/ensure-demo-cliente.mjs",
     "demo:cliente:sumup": "node scripts/ensure-demo-cliente.mjs --sumup",
     "verify:public-po": "node scripts/verify-public-parametri-whitelist.mjs",
@@ -57,12 +58,14 @@
     "axios": "^1.7.9",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.575.0",
+    "pdf-lib": "^1.17.1",
     "prop-types": "^15.8.1",
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "^6.30.3"
+    "react-router-dom": "^6.30.3",
+    "react-signature-canvas": "^1.1.0-alpha.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

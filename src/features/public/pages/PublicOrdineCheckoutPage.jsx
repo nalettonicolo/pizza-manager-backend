@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/app/contexts/AuthContext"
@@ -64,6 +64,16 @@ export default function PublicOrdineCheckoutPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  /**
+   * Bug trovato in audit: senza questa chiave, una connessione instabile (molto comune su mobile
+   * durante il checkout — es. rete che scatta proprio mentre l'ordine parte) fa vedere un errore
+   * al cliente anche quando l'ordine è stato creato lato server; il cliente riprova e si ritrova
+   * con due ordini (e, se paga online, potenzialmente due addebiti). Una chiave stabile per tutto
+   * il montaggio della pagina fa sì che i retry dello stesso tentativo restituiscano lo stesso
+   * ordine invece di crearne uno nuovo (create_order_with_items la supporta già via
+   * p_idempotency_key, semplicemente non era mai stata collegata qui).
+   */
+  const idempotencyKeyRef = useRef(null)
   const [address, setAddress] = useState("")
   const [coords, setCoords] = useState(null)
   const [geoBusy, setGeoBusy] = useState(false)
@@ -426,9 +436,15 @@ export default function PublicOrdineCheckoutPage() {
         notePay = "Ordine web · consegna · pagamento contanti alla consegna"
       }
 
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `web-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }
+
       const orderId = await createOrder(authTenantId, {
         totale: total,
         stato: statoFinale,
+        idempotencyKey: idempotencyKeyRef.current,
         items: items.map((p) => ({
           prodotto_id: p.id,
           quantita: p.qty,

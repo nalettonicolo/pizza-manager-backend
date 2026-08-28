@@ -51,6 +51,14 @@ function manualChunks(id) {
 
   if (id.includes("qrcode.react")) return "vendor-qrcode";
 
+  // Stesso motivo delle regole sopra: react-signature-canvas (firma documenti tenant) referenzia
+  // React a livello di modulo (class ... extends React.Component valutata subito all'esecuzione
+  // del chunk, non solo al render). Lasciata cadere nel fallback "vendor" generico insieme a
+  // librerie eterogenee, l'ordine di esecuzione tra chunk non garantiva che vendor-react fosse
+  // già inizializzato: "Cannot read properties of undefined (reading 'Component')" su OGNI
+  // pagina (il chunk vendor è caricato sempre, non solo dove la firma serve).
+  if (id.includes("react-signature-canvas") || id.includes("signature_pad")) return "vendor-signature";
+
   if (id.includes("/react-dom/") || id.includes("\\react-dom\\") || id.includes("node_modules/scheduler")) {
     return "vendor-react";
   }

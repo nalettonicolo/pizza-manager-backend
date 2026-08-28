@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTenant } from "@/app/contexts/TenantContext";
 import Loader from "@/components/feedback/Loader";
 import ErrorState from "@/components/feedback/ErrorState";
@@ -6,6 +6,7 @@ import Modal from "@/components/dashboard/Modal";
 import SearchBar from "@/components/dashboard/SearchBar";
 import {
   getCategories,
+  createCategory,
   getProductsByCategoryId,
   getProducts,
   getFormati,
@@ -61,6 +62,12 @@ export default function PizzePage() {
   const [editIngredientSearch, setEditIngredientSearch] = useState("");
   const [editCustomizingIngredient, setEditCustomizingIngredient] = useState(null);
   const [editSelectedPosizioneCottura, setEditSelectedPosizioneCottura] = useState({});
+
+  // Import CSV: nome;categoria;prezzo;descrizione;ingredienti (ingredienti separati da virgola,
+  // devono già esistere — creali prima in Admin → Ingredienti o importa quelli prima).
+  const [csvImporting, setCsvImporting] = useState(false);
+  const csvFileInputId = useId();
+  const csvFileInputRef = useRef(null);
 
   const loadCategories = useCallback(async () => {
     if (!tenantId) return [];
@@ -292,6 +299,150 @@ export default function PizzePage() {
     }
   }
 
+  /** nome;categoria;prezzo;descrizione;ingredienti (ingredienti separati da virgola). */
+  function parsePizzeCsv(text) {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return [];
+    const sep = text.includes(";") ? ";" : ",";
+    const dataRows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(sep).map((p) => p.replace(/^"|"$/g, "").trim());
+      if (parts[0]) dataRows.push(parts);
+    }
+    return dataRows;
+  }
+
+  async function handleCsvPizzeFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file || !tenantId) return;
+    e.target.value = "";
+    setCsvImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parsePizzeCsv(text);
+      if (rows.length === 0) {
+        alert(
+          "Nessuna riga dati nel file. Intestazione attesa: nome;categoria;prezzo;descrizione;ingredienti (ingredienti separati da virgola, devono già esistere in Admin → Ingredienti).",
+        );
+        return;
+      }
+
+      const [tuttiProdotti, tutteCategorie, tuttiIngredienti] = await Promise.all([
+        getProducts(tenantId),
+        getCategories(tenantId),
+        getIngredients(tenantId),
+      ]);
+      const prodottoByNome = new Map();
+      (tuttiProdotti || []).forEach((p) => {
+        const k = (p.nome || "").trim().toLowerCase();
+        if (k) prodottoByNome.set(k, p);
+      });
+      const categoriaByNome = new Map();
+      (tutteCategorie || []).forEach((c) => {
+        const k = (c.nome || "").trim().toLowerCase();
+        if (k) categoriaByNome.set(k, c);
+      });
+      const ingredienteByNome = new Map();
+      (tuttiIngredienti || []).forEach((i) => {
+        const k = (i.nome || "").trim().toLowerCase();
+        if (k) ingredienteByNome.set(k, i);
+      });
+
+      let created = 0;
+      let updated = 0;
+      const rowErrors = [];
+
+      for (const row of rows) {
+        const nome = (row[0] || "").trim();
+        if (!nome) continue;
+        const categoriaNome = (row[1] || "").trim();
+        const prezzo = row[2] !== undefined && row[2] !== "" ? Number(String(row[2]).replace(",", ".")) : undefined;
+        const descrizione = (row[3] || "").trim();
+        const ingredientiNomi = (row[4] || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        try {
+          let categoriaId;
+          if (categoriaNome) {
+            const kCat = categoriaNome.toLowerCase();
+            let cat = categoriaByNome.get(kCat);
+            if (!cat) {
+              const slug = categoriaNome.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "categoria";
+              cat = await createCategory({ tenant_id: tenantId, nome: categoriaNome, slug, ordine: categoriaByNome.size, attivo: true });
+              categoriaByNome.set(kCat, cat);
+            }
+            categoriaId = cat.id;
+          }
+
+          const ingredienteIds = [];
+          const ingredientiMancanti = [];
+          for (const nomeIng of ingredientiNomi) {
+            const ing = ingredienteByNome.get(nomeIng.toLowerCase());
+            if (ing) ingredienteIds.push(ing.id);
+            else ingredientiMancanti.push(nomeIng);
+          }
+          if (ingredientiMancanti.length) {
+            rowErrors.push(`${nome}: ingredienti non trovati (creali prima): ${ingredientiMancanti.join(", ")}`);
+          }
+
+          const esistente = prodottoByNome.get(nome.toLowerCase());
+          let prodottoId;
+          if (esistente) {
+            const updates = {};
+            if (categoriaId !== undefined) updates.categoriaId = categoriaId;
+            if (prezzo !== undefined && !Number.isNaN(prezzo)) updates.prezzo = prezzo;
+            if (descrizione) updates.descrizione = descrizione;
+            if (Object.keys(updates).length) await updateProduct(esistente.id, updates);
+            prodottoId = esistente.id;
+            updated += 1;
+          } else {
+            const nuovo = await createProduct({
+              tenantId,
+              categoriaId,
+              nome,
+              prezzo: prezzo !== undefined && !Number.isNaN(prezzo) ? prezzo : 0,
+              descrizione: descrizione || undefined,
+              attivo: true,
+            });
+            prodottoId = nuovo.id;
+            prodottoByNome.set(nome.toLowerCase(), nuovo);
+            created += 1;
+          }
+          if (ingredienteIds.length) {
+            await setProdottoIngredienti(
+              tenantId,
+              prodottoId,
+              ingredienteIds.map((ingrediente_id, idx) => ({ ingrediente_id, ordine: idx })),
+            );
+          }
+        } catch (err) {
+          const msg = err?.message || String(err);
+          console.warn("Pizza non importata:", nome, msg);
+          rowErrors.push(`${nome}: ${msg}`);
+        }
+      }
+
+      await loadPizze();
+      const parts = [];
+      if (created > 0) parts.push(`${created} create`);
+      if (updated > 0) parts.push(`${updated} aggiornate`);
+      let msg = parts.length ? `Import CSV pizze: ${parts.join(", ")}.` : "Nessuna riga elaborata.";
+      if (rowErrors.length) {
+        const shown = rowErrors.slice(0, 8);
+        msg += `\n\n${rowErrors.length} avviso/i:\n${shown.join("\n")}`;
+        if (rowErrors.length > shown.length) msg += `\n… e altri ${rowErrors.length - shown.length}.`;
+      }
+      alert(msg);
+    } catch (err) {
+      console.error(err);
+      alert("Errore lettura file CSV.");
+    } finally {
+      setCsvImporting(false);
+    }
+  }
+
   async function handleToggle(id, current) {
     try {
       await toggleProductActive(id, !current);
@@ -402,12 +553,36 @@ export default function PizzePage() {
       <div className="dashboard-title-row">
         <h1 className="dashboard-page-title">Pizze</h1>
         <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Cerca pizze..." />
+        <button
+          type="button"
+          className="btn-primary-dashboard"
+          onClick={() => csvFileInputRef.current?.click()}
+          disabled={csvImporting}
+          style={{ marginRight: 8, background: "#555", opacity: csvImporting ? 0.7 : 1 }}
+          title="CSV: nome;categoria;prezzo;descrizione;ingredienti (ingredienti separati da virgola, devono già esistere)"
+        >
+          {csvImporting ? "Import CSV…" : "Importa CSV"}
+        </button>
+        <input
+          ref={csvFileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={handleCsvPizzeFileChange}
+          style={{ display: "none" }}
+          id={csvFileInputId}
+          aria-hidden
+          tabIndex={-1}
+        />
         <button type="button" className="btn-primary-dashboard" onClick={openAddModal}>
           Inserisci
         </button>
       </div>
       <p className="dashboard-menu-intro">
         Nome, categoria, formato e ingredienti. Il prezzo si calcola in automatico: <strong>costo base</strong> (Impasti) + <strong>formato</strong> + <strong>ingredienti</strong>.
+        {" "}<strong>Importa CSV</strong>: <code>nome;categoria;prezzo;descrizione;ingredienti</code> — ingredienti separati da virgola, devono
+        già esistere (creali prima in Admin → Ingredienti o importali con il loro CSV); categorie assenti vengono create al volo; una
+        pizza con nome già esistente viene aggiornata invece che duplicata. Il prezzo da CSV è solo un punto di partenza: usa «Ricalcola
+        prezzi» (Admin → Ingredienti) per riallinearlo a costo base + ingredienti.
       </p>
 
       {categoriesForPizza.length > 0 && (

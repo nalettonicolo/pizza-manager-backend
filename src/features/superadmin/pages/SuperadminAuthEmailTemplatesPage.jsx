@@ -2,10 +2,16 @@ import { useMemo, useState } from "react"
 import { AUTH_EMAIL_TEMPLATES } from "@/features/superadmin/config/authEmailTemplates"
 
 const PREVIEW_SAMPLE = {
-  "{{ .ConfirmationURL }}": "https://francypizza.pizzamanager.it/reimposta-password?token=…",
+  "{{ .ConfirmationURL }}": "https://miapizzeria.pizzamanager.it/reimposta-password?token=…",
   "{{ .Email }}": "cliente@esempio.it",
   "{{ .NewEmail }}": "nuovo@esempio.it",
   "{{ .SiteURL }}": "https://pizzamanager.it",
+  // {{ if .Data.tenant_nome }}...{{ end }} nei template: qui in anteprima simuliamo il caso "presente"
+  // sostituendo il costrutto if/end con il solo contenuto — un cliente registrato ha sempre questo
+  // dato nei metadata (impostato alla registrazione), uno staff creato da Admin/Superadmin no.
+  "{{ if .Data.tenant_nome }}": "",
+  "{{ end }}": "",
+  "{{ .Data.tenant_nome }}": "Pizzeria Da Mario",
 }
 
 function applyPreviewSamples(html) {

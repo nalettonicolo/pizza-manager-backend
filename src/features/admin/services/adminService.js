@@ -427,6 +427,23 @@ export async function updateOrderStato(ordineId, stato) {
   if (error) throw error
 }
 
+/**
+ * Cancellazione definitiva di un gruppo di ordini (per id), scoping obbligatorio sul tenant.
+ * Da usare SOLO per dati sintetici (es. reset dello stress test demo) — mai su ordini reali:
+ * qui non c'è soft-cancel, la riga sparisce (le tabelle figlie sono in ON DELETE CASCADE lato DB).
+ */
+export async function deleteOrdersByIds(tenantId, ids) {
+  const list = Array.isArray(ids) ? ids.filter(Boolean) : []
+  if (!tenantId || !list.length) return 0
+  const { error, count } = await supabase
+    .from("Ordine")
+    .delete({ count: "exact" })
+    .eq("tenantId", tenantId)
+    .in("id", list)
+  if (error) throw error
+  return count || 0
+}
+
 /** Delivery: transizione atomica a CONSEGNATO (stato_consegna + stato ordine). */
 export async function markDeliveryConsegnatoAtomic(ordineId) {
   if (!ordineId) throw new Error("ordineId mancante")
@@ -1843,6 +1860,23 @@ export async function aggiungiRuoloPizzeria(tenantId, email, ruolo) {
   })
   if (error) throw error
   return data
+}
+
+/**
+ * Crea (o riusa, aggiornando la password) fino a 20 account Auth in blocco e li collega al
+ * tenant con il ruolo indicato — "Ruoli → Crea account standard". Passa dalla Edge Function
+ * crea-account-staff perché creare un utente con password arbitraria richiede la service_role
+ * key, che non deve mai stare nel bundle frontend.
+ * @param {string} tenantId
+ * @param {Array<{ email: string, password: string, ruolo: string, nome_visualizzato?: string }>} accounts
+ * @returns {Promise<Array<{ email: string, ok: boolean, azione?: string, errore?: string }>>}
+ */
+export async function creaAccountStaffBulk(tenantId, accounts) {
+  const { data, error } = await supabase.functions.invoke("crea-account-staff", {
+    body: { tenant_id: tenantId, accounts },
+  })
+  if (error) throw error
+  return data?.risultati || []
 }
 
 function mapSupabaseRuoliError(error) {
@@ -3666,6 +3700,64 @@ export async function listCassaAuditEvents(tenantId, { eventType, limit = 20 } =
 export { getTenantSettings, updateTenantSettings, patchTenantParametriOperativi } from "./parametriService.js"
 
 /** Stripe / pagamenti online — implementazione in `onlinePaymentsAdminService.js` (re-export compat). */
+///////////////////////////////////////////////////////////
+// ============ CALIBRAZIONE AI TEMPI (Piano B) ============
+///////////////////////////////////////////////////////////
+// Vedi sql/modules/94_calibrazione_tempi_ai_settimanale.sql. Proposte mai applicate in
+// automatico: solo un admin, o chi ha puo_modificare_parametri (stesso permesso già usato per i
+// parametri cassa), può approvare/rifiutare/ripristinare — enforced lato RPC, non solo qui.
+
+/** Proposta 'in_attesa' più recente per il tenant, o null se non ce n'è. */
+export async function getProposteCalibrazionePending(tenantId) {
+  if (!tenantId) return null
+  const { data, error } = await supabase
+    .from("agente_calibrazione_proposte")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("stato", "in_attesa")
+    .order("creato_il", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+/** Storico proposte (tutti gli stati) per il tenant, più recenti prima. */
+export async function getStoricoCalibrazioneProposte(tenantId, limit = 20) {
+  if (!tenantId) return []
+  const { data, error } = await supabase
+    .from("agente_calibrazione_proposte")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("creato_il", { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+/** True se l'utente corrente può approvare/rifiutare le proposte di calibrazione per il tenant. */
+export async function puoDecidereCalibrazione(tenantId) {
+  if (!tenantId) return false
+  const { data, error } = await supabase.rpc("pm_puo_decidere_calibrazione", { p_tenant_id: tenantId })
+  if (error) return false
+  return data === true
+}
+
+export async function applicaCalibrazioneProposta(propostaId) {
+  const { error } = await supabase.rpc("pm_applica_calibrazione_proposta", { p_proposta_id: propostaId })
+  if (error) throw error
+}
+
+export async function rifiutaCalibrazioneProposta(propostaId) {
+  const { error } = await supabase.rpc("pm_rifiuta_calibrazione_proposta", { p_proposta_id: propostaId })
+  if (error) throw error
+}
+
+export async function ripristinaCalibrazioneProposta(propostaId) {
+  const { error } = await supabase.rpc("pm_ripristina_calibrazione_proposta", { p_proposta_id: propostaId })
+  if (error) throw error
+}
+
 export {
   saveTenantStripeSecret,
   fetchTenantStripeSecretConfigured,

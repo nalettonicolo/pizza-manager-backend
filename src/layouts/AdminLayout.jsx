@@ -6,10 +6,14 @@ import { usePv } from "@/app/contexts/PvContext";
 import { useTenantServizi } from "@/app/hooks/useTenantServizi";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { adminLayoutCssVarsFromTheme, resolveMenuTheme } from "@/utils/tenantMenuTheme";
+import { readStampaModalita } from "@/utils/stampaOperativaConfig";
 import { prefetchWhenIdle } from "@/utils/idlePrefetch";
 import { ADMIN_TENANT_HOME } from "@/constants/adminTenantHome";
 import { ADMIN_TOP_NAV } from "@/constants/adminTenantNav";
 import { applyTenantFavicon } from "@/utils/tenantFavicon";
+import { applyTenantDocumentTitle } from "@/utils/tenantDocumentTitle";
+import AgenteChatWidget from "@/features/public/components/AgenteChatWidget";
+import CalibrazioneProposalModal from "@/features/admin/components/CalibrazioneProposalModal";
 import { isSuperAdminRole } from "@/utils/superAdminAccess";
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride";
 import { isDemoGiroSearch } from "@/utils/demoGiro";
@@ -46,7 +50,7 @@ function topNavLinkEnd(item) {
 }
 
 export default function AdminLayout() {
-  const { user, logout, ruolo } = useAuth();
+  const { user, logout, ruolo, tenantId } = useAuth();
   const navigate = useNavigate();
   const { tenantData } = useTenant();
   const { activePv, pvList, loading: pvLoading } = usePv();
@@ -69,17 +73,28 @@ export default function AdminLayout() {
   const isMagazzinoArea = location.pathname.startsWith("/admin/magazzino");
   const isContabilitaArea = location.pathname.startsWith("/admin/contabilita");
   const showSectionSidebar = isMenuArea || isSettingsArea || isMagazzinoArea || isContabilitaArea;
+  // Senza "Con tablet nei reparti" (Impostazioni → Stampa operativa) le comande escono su carta
+  // termica: i colori prep Cucina non sono mai visibili da nessuna parte, quindi la voce di
+  // configurazione va nascosta invece di far credere che serva a qualcosa.
+  const tabletAttivo = readStampaModalita(tenantData?.parametri_operativi) === "con_tablet";
+  const menuSidebarGroupsVisibili = useMemo(() => {
+    if (tabletAttivo) return menuSidebarGroups;
+    return menuSidebarGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.to !== "/admin/menu/prep-cucina-colori"),
+    }));
+  }, [tabletAttivo]);
   const sidebarGroups = isSettingsArea
     ? settingsSidebarGroups
     : isMenuArea
-      ? menuSidebarGroups
+      ? menuSidebarGroupsVisibili
       : isMagazzinoArea
         ? magazzinoSidebarGroups
         : isContabilitaArea
           ? contabilitaMode === "semplice"
             ? contabilitaSempliceSidebarGroups
             : contabilitaSidebarGroups
-          : menuSidebarGroups;
+          : menuSidebarGroupsVisibili;
   const sidebarLinkEndFor =
     isMagazzinoArea ? "/admin/magazzino" : isContabilitaArea ? "/admin/contabilita" : null;
   const sidebarTitle = isSettingsArea
@@ -184,6 +199,10 @@ export default function AdminLayout() {
   useEffect(() => {
     void applyTenantFavicon(logoUrl);
   }, [logoUrl]);
+
+  useEffect(() => {
+    applyTenantDocumentTitle(brandName, "Admin");
+  }, [brandName]);
 
   if (blockedRedirect) {
     return <Navigate to={`${blockedRedirect}${location.search || ""}`} replace />;
@@ -322,6 +341,8 @@ export default function AdminLayout() {
           <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
         </main>
       </div>
+      <AgenteChatWidget modalita="supporto" tenantId={tenantId} utenteId={user?.id} />
+      <CalibrazioneProposalModal />
     </Fragment>
   );
 }

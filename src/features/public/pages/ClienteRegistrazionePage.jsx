@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { getPublicTenantInfo } from "@/features/services/publicService"
 import { signUpCliente, iscriviClienteFidelity } from "@/features/public/services/clienteAuthService"
+import { translateAuthError } from "@/utils/translateAuthError"
 import ClienteIndirizzoMappaField from "@/features/public/components/ClienteIndirizzoMappaField"
 import Loader from "@/components/feedback/Loader"
 import ErrorState from "@/components/feedback/ErrorState"
@@ -82,6 +83,19 @@ export default function ClienteRegistrazionePage() {
     setError(null)
     setDoneMessage(null)
     if (!tenant?.id) return
+    // Il form ha noValidate (per gestire il messaggio d'errore nello stile del resto della pagina
+    // invece del balloon nativo del browser): senza questi controlli, un submit con email/nome
+    // vuoti arriva fino a Supabase Auth, che risponde con un errore tecnico in inglese
+    // ("Anonymous sign-ins are disabled") mostrato così com'è all'utente — trovato con un submit
+    // vuoto durante lo stress test pre-produzione.
+    if (!nome.trim()) {
+      setError("Inserisci nome e cognome.")
+      return
+    }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Inserisci un indirizzo email valido.")
+      return
+    }
     if (password.length < 6) {
       setError("La password deve avere almeno 6 caratteri.")
       return
@@ -93,6 +107,7 @@ export default function ClienteRegistrazionePage() {
         email,
         password,
         tenantId: tenant.id,
+        tenantNome: tenant.nome,
         nome,
         telefono,
         indirizzo,
@@ -102,7 +117,7 @@ export default function ClienteRegistrazionePage() {
         iscriviFidelity: wantFidelity,
       })
       if (err) {
-        setError(err.message || "Registrazione non riuscita.")
+        setError(translateAuthError(err, "Registrazione non riuscita."))
         return
       }
       if (data?.session) {
@@ -128,7 +143,7 @@ export default function ClienteRegistrazionePage() {
           : "Ti abbiamo inviato un’email di conferma. Apri il link per attivare l’account, poi accedi da Login.",
       )
     } catch (ex) {
-      setError(ex?.message || "Errore imprevisto.")
+      setError(translateAuthError(ex, "Errore imprevisto."))
     } finally {
       setBusy(false)
     }

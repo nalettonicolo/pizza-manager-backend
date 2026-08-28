@@ -81,7 +81,7 @@ const DOCS_SVILUPPO = [
   {
     slug: "punto-situazione-prodotto",
     title: "Punto situazione — Prodotto",
-    description: "Flussi cassa/web/delivery, Francy, gap e priorità Fase 6.",
+    description: "Flussi cassa/web/delivery, gap e priorità Fase 6.",
   },
   {
     slug: "punto-situazione-database",
@@ -130,7 +130,7 @@ const DOCS_SVILUPPO = [
   },
   {
     slug: "go-live-francy-runbook",
-    title: "Go-live Francy (Stripe / dominio / P3)",
+    title: "Go-live (Stripe / dominio / P3)",
     description: "Runbook P2/P3: chiavi live, DNS, HIBP, SMTP/RT-SDI.",
   },
 ];

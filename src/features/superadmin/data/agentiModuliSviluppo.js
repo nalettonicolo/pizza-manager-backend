@@ -53,7 +53,7 @@ export const AGENTI_CATALOGO = Object.freeze([
 export const AREE_SVILUPPO_MANCANTI = Object.freeze([
   {
     id: "stripe-live-francy",
-    titolo: "Stripe live — Francy (pagamenti web veri)",
+    titolo: "Stripe live (pagamenti web veri)",
     priorita: "P2",
     stato: "blocco_esterno",
     servizioId: "ordini_online",
@@ -96,7 +96,7 @@ export const AREE_SVILUPPO_MANCANTI = Object.freeze([
       {
         agenteId: "test",
         ruolo: "Smoke pagamento live",
-        richieste: ["Tenant Francy", "Carta test live mode se prevista"],
+        richieste: ["Tenant di go-live", "Carta test live mode se prevista"],
         deliverable: ["Checklist smoke + esito"],
       },
       {
@@ -107,11 +107,11 @@ export const AREE_SVILUPPO_MANCANTI = Object.freeze([
       },
     ],
     promptCursor:
-      "@agents/product.md @agents/security.md @agents/test.md Area: Stripe live Francy. Aggiorna DoD sala, checklist secrets e smoke. Non inventare chiavi.",
+      "@agents/product.md @agents/security.md @agents/test.md Area: Stripe live. Aggiorna DoD sala, checklist secrets e smoke. Non inventare chiavi.",
   },
   {
     id: "dominio-menu-francy",
-    titolo: "Dominio menu Francy (URL marca)",
+    titolo: "Dominio menu (URL marca)",
     priorita: "P2",
     stato: "blocco_esterno",
     servizioId: "ordini_online",
@@ -164,7 +164,7 @@ export const AREE_SVILUPPO_MANCANTI = Object.freeze([
       },
     ],
     promptCursor:
-      "@agents/product.md @agents/architecture.md @agents/copywriter.md Area: dominio menu Francy. Checklist cutover + copy. Nessun codice se blocco DNS.",
+      "@agents/product.md @agents/architecture.md @agents/copywriter.md Area: dominio menu. Checklist cutover + copy. Nessun codice se blocco DNS.",
   },
   {
     id: "notifiche-adapter-live",
@@ -192,7 +192,7 @@ export const AREE_SVILUPPO_MANCANTI = Object.freeze([
       {
         agenteId: "product",
         ruolo: "Decisione canale",
-        richieste: ["Cosa vuole Francy: stampa only o messaggi"],
+        richieste: ["Cosa vuole il locale: stampa only o messaggi"],
         deliverable: ["Regola se/allora + anti-spam"],
       },
       {
@@ -437,7 +437,7 @@ export const AREE_SVILUPPO_MANCANTI = Object.freeze([
       {
         agenteId: "product",
         ruolo: "Soglie SLA e cosa dire al cliente",
-        richieste: ["Tempi tipici Francy"],
+        richieste: ["Tempi tipici del locale"],
         deliverable: ["Regole ritardo"],
       },
       {

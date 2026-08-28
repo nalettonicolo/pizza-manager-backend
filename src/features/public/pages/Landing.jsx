@@ -1,28 +1,13 @@
 import { Link } from "react-router-dom"
 import LandingPlansSection from "@/features/public/components/LandingPlansSection"
-import logoPizzaManager from "@/assets/logo/logo-pizzamanager.png"
+import FaqSection from "@/features/public/components/FaqSection"
+import SoftwareApplicationSchema from "@/features/public/components/SoftwareApplicationSchema"
 import "../../../styles/landing.css"
 
 export default function Landing() {
   return (
     <div className="landing-wrapper">
       <div className="landing-bg" aria-hidden="true" />
-
-      <nav className="landing-nav" aria-label="Principale">
-        <Link to="/" className="logo logo-with-mark">
-          <img src={logoPizzaManager} alt="" width={36} height={36} className="logo-mark-img" />
-          <span>PizzaManager</span>
-        </Link>
-        <div className="nav-center">
-          <a href="#perche" className="nav-anchor">Perché</a>
-          <a href="#funzionalita" className="nav-anchor">Funzionalità</a>
-          <a href="#piani" className="nav-anchor">Piani</a>
-        </div>
-        <div className="nav-links">
-          <Link to="/login" className="btn-outline">Accedi</Link>
-          <Link to="/contatti#prova-gratuita" className="btn-primary">Prova gratuita</Link>
-        </div>
-      </nav>
 
       <section className="hero">
         <div className="hero-text">
@@ -206,6 +191,9 @@ export default function Landing() {
 
       <LandingPlansSection />
 
+      <FaqSection />
+      <SoftwareApplicationSchema />
+
       <section className="cta-block">
         <div className="cta-inner">
           <h2>PizzaManager. La cucina non aspetta, e nemmeno il tuo gestionale dovrebbe farlo.</h2>
@@ -220,24 +208,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
-      <footer className="landing-footer">
-        <div className="footer-inner">
-          <span className="footer-brand">
-            <img src={logoPizzaManager} alt="" className="footer-brand-logo" width={28} height={28} />
-            PizzaManager
-          </span>
-          <nav className="footer-legal" aria-label="Informative legali">
-            <Link to="/privacy">Privacy</Link>
-            <Link to="/cookie">Cookie</Link>
-            <Link to="/termini">Termini</Link>
-            <Link to="/support">Supporto</Link>
-          </nav>
-          <Link to="/login" className="footer-link">
-            Accedi
-          </Link>
-        </div>
-      </footer>
     </div>
   )
 }

@@ -1,6 +1,38 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
 import Stripe from "npm:stripe@17.5.0"
 
+/**
+ * Segnala un fallimento di RPC del webhook all'alert email di supporto (bucket "fallimenti
+ * critici backend", vedi sql/modules/102_alert_errori_supporto.sql). Questi sono gli errori più
+ * costosi del sistema pagamenti: se falliscono in silenzio, un ordine può restare "non pagato" nel
+ * DB anche se Stripe ha già incassato — nessuno se ne accorge finché non lo segnala il cliente.
+ * Risolve il tenant_id dal payment_intent_id perché il webhook non ha altro modo di saperlo.
+ */
+async function segnalaErroreWebhook(
+  admin: ReturnType<typeof createClient>,
+  piId: string | null | undefined,
+  origine: string,
+  messaggio: string,
+  dettaglio: Record<string, unknown> = {},
+): Promise<void> {
+  if (!piId) return
+  try {
+    const { data: tenantId } = await admin.rpc("get_tenant_id_by_stripe_payment_intent", {
+      p_payment_intent_id: piId,
+    })
+    if (!tenantId) return
+    await admin.rpc("pm_registra_errore_operativo", {
+      p_tenant_id: tenantId,
+      p_origine: origine,
+      p_messaggio: messaggio,
+      p_gravita: "critico",
+      p_dettaglio: { payment_intent_id: piId, ...dettaglio },
+    })
+  } catch {
+    // telemetria: mai propagare
+  }
+}
+
 function extractPaymentIntentId(event: Stripe.Event): string | null {
   const obj = event.data?.object as { id?: string } | undefined
   if (!obj?.id) return null
@@ -104,7 +136,16 @@ Deno.serve(async (req) => {
           p_payment_intent_id: pi.id,
           p_charge_id: chargeId,
         })
-        if (error) console.error("edge_stripe_mark_payment_succeeded", error)
+        if (error) {
+          console.error("edge_stripe_mark_payment_succeeded", error)
+          await segnalaErroreWebhook(
+            admin,
+            pi.id,
+            "edge:payment-stripe-webhook:mark_succeeded",
+            `Pagamento incassato da Stripe ma non registrato: ${error.message}`,
+            { charge_id: chargeId },
+          )
+        }
         break
       }
       case "payment_intent.payment_failed": {
@@ -114,7 +155,16 @@ Deno.serve(async (req) => {
           p_payment_intent_id: pi.id,
           p_message: msg,
         })
-        if (error) console.error("edge_stripe_mark_payment_failed", error)
+        if (error) {
+          console.error("edge_stripe_mark_payment_failed", error)
+          await segnalaErroreWebhook(
+            admin,
+            pi.id,
+            "edge:payment-stripe-webhook:mark_failed",
+            `Fallimento pagamento Stripe non registrato: ${error.message}`,
+            { motivo_stripe: msg },
+          )
+        }
         break
       }
       case "charge.refunded": {
@@ -128,7 +178,16 @@ Deno.serve(async (req) => {
             p_refund_id: (ch.refunds?.data?.[0]?.id) || ch.id,
             p_amount_cent: ch.amount_refunded ?? 0,
           })
-          if (error) console.error("edge_stripe_append_refund", error)
+          if (error) {
+            console.error("edge_stripe_append_refund", error)
+            await segnalaErroreWebhook(
+              admin,
+              piId,
+              "edge:payment-stripe-webhook:append_refund",
+              `Rimborso Stripe non registrato: ${error.message}`,
+              { charge_id: ch.id },
+            )
+          }
         }
         break
       }
@@ -137,6 +196,13 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     console.error("webhook handler", e)
+    await segnalaErroreWebhook(
+      admin,
+      extractPaymentIntentId(event),
+      "edge:payment-stripe-webhook:handler",
+      (e as Error)?.message || "Errore imprevisto nel webhook Stripe",
+      { event_type: event.type },
+    )
     return new Response("Handler error", { status: 500 })
   }
 

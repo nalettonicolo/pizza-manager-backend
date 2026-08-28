@@ -1,0 +1,35 @@
+# PizzaManager
+
+> Gestionale software-as-a-service per pizzerie: unisce ordini online, cassa, comande in
+> cucina, gestione delivery e rider, magazzino con inventario valorizzato, programma fidelity,
+> contabilità di base e gestione multi-sede in un'unica piattaforma web, pensata specificamente
+> per il flusso di lavoro di una pizzeria (non un gestionale generico per ristorazione).
+
+## Prodotto
+
+- Funziona da browser su tablet, PC e smartphone già in dotazione: non richiede hardware
+  proprietario, salvo si scelga volontariamente il noleggio operativo di attrezzature.
+- Moduli principali: Ordini Online, Cassa, Comanda, Delivery e Rider, Magazzino, Fidelity,
+  Contabilità, Multi-sede.
+- Rivolto a pizzerie con o senza consegna a domicilio, singola sede o catene multi-locale.
+
+## Piani e prezzi
+
+<!-- I prezzi reali dei piani sono gestiti in console superadmin (catalogo servizi) e mostrati
+     su https://pizzamanager.it/#piani — non duplicarli qui staticamente per evitare che questo
+     file diventi disallineato dal prezzo reale mostrato sul sito. -->
+
+Per i prezzi aggiornati vedi https://pizzamanager.it/#piani
+
+## Pagine utili
+
+- Home e panoramica prodotto: https://pizzamanager.it/
+- Domande frequenti: https://pizzamanager.it/#faq
+- Contatti / richiesta prova: https://pizzamanager.it/contatti
+
+## Contatti
+
+<!-- TODO prima della pubblicazione: confermare email di contatto pubblica e città/sede,
+     per ora placeholder coerenti con fornitore_config -->
+- Email: info@pizzamanager.it
+- Sito: https://pizzamanager.it

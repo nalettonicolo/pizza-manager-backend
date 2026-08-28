@@ -87,6 +87,15 @@ Deno.serve(async (req) => {
     chargeId = typeof lc === "string" ? lc : (lc as Stripe.Charge)?.id || ""
   } catch (e) {
     console.error("retrieve pi", e)
+    admin
+      .rpc("pm_registra_errore_operativo", {
+        p_tenant_id: tenantId,
+        p_origine: "edge:payment-stripe-refund:retrieve",
+        p_messaggio: (e as Error)?.message || "Impossibile leggere il pagamento Stripe",
+        p_gravita: "critico",
+        p_dettaglio: { ordine_id: ordineId, payment_intent_id: piId },
+      })
+      .then(undefined, () => {})
     return jsonResponse({ error: "Impossibile leggere il pagamento Stripe" }, 502)
   }
 
@@ -109,6 +118,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ refund_id: refund.id, status: refund.status, amount: refund.amount })
   } catch (e) {
     console.error("refund", e)
+    // Bucket "fallimenti critici backend" dell'alert email al supporto: qui finiscono anche i
+    // rifiuti di Stripe stesso (es. account con rimborsi automatici bloccati da policy/saldo
+    // insufficiente, che richiedono intervento manuale dalla Dashboard Stripe) — vedi
+    // sql/modules/102_alert_errori_supporto.sql.
+    admin
+      .rpc("pm_registra_errore_operativo", {
+        p_tenant_id: tenantId,
+        p_origine: "edge:payment-stripe-refund:create",
+        p_messaggio: (e as Error)?.message || "Rimborso Stripe fallito",
+        p_gravita: "critico",
+        p_dettaglio: { ordine_id: ordineId, payment_intent_id: piId, charge_id: chargeId },
+      })
+      .then(undefined, () => {})
     return jsonResponse({ error: (e as Error).message || "Rimborso fallito" }, 502)
   }
 })

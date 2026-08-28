@@ -805,6 +805,109 @@ export async function upsertRegistratoreState(userId, payload) {
 /**
  * Ultime voci audit append-only (solo superadmin, proprio user_id).
  */
+///////////////////////////////////////////////////////////
+// ================ AGENTE AI (configurazione) ================
+///////////////////////////////////////////////////////////
+// Riga singola (agente_configurazione_singleton), RLS: solo superadmin. Vedi
+// sql/modules/83_agente_ai_configurazione_conversazioni.sql.
+
+export async function getAgenteConfigurazione() {
+  const { data, error } = await supabase.from("agente_configurazione").select("*").maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateAgenteConfigurazione(updates) {
+  const { data: existing } = await supabase.from("agente_configurazione").select("id").maybeSingle();
+  if (!existing?.id) throw new Error("Configurazione agente non trovata.");
+  const { error } = await supabase
+    .from("agente_configurazione")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", existing.id);
+  if (error) throw error;
+}
+
+/**
+ * Configurazione dell'alert email al supporto per errori nei tenant operativi (vedi
+ * sql/modules/102_alert_errori_supporto.sql). Passa da RPC SECURITY DEFINER (non da
+ * .from("piattaforma_alert_configurazione")) perché la RLS della tabella richiede comunque il
+ * controllo ruolo, già incapsulato nella RPC — coerente con getAgenteConfigurazione sopra ma con
+ * un controllo esplicito lato server invece che affidarsi solo a RLS.
+ */
+export async function getAlertErroriConfigurazione() {
+  const { data, error } = await supabase.rpc("pm_get_alert_configurazione");
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] || null : data || null;
+}
+
+export async function updateAlertErroriConfigurazione({ emailSupporto, attivo }) {
+  const { error } = await supabase.rpc("pm_set_alert_configurazione", {
+    p_email: emailSupporto ?? null,
+    p_attivo: Boolean(attivo),
+  });
+  if (error) throw error;
+}
+
+/**
+ * Configurazione generale piattaforma (nome applicazione, contatti supporto mostrati ai clienti).
+ * Lettura pubblica via RLS (grant a anon+authenticated), scrittura solo superadmin.
+ */
+export async function getConfigurazioneGenerale() {
+  const { data, error } = await supabase
+    .from("piattaforma_configurazione_generale")
+    .select("nome_applicazione, email_supporto, url_supporto, updated_at")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateConfigurazioneGenerale({ nomeApplicazione, emailSupporto, urlSupporto }) {
+  const { data: existing } = await supabase
+    .from("piattaforma_configurazione_generale")
+    .select("id")
+    .maybeSingle();
+  if (!existing?.id) throw new Error("Configurazione generale non trovata.");
+  const { error } = await supabase
+    .from("piattaforma_configurazione_generale")
+    .update({
+      nome_applicazione: (nomeApplicazione || "").trim() || "PizzaManager",
+      email_supporto: (emailSupporto || "").trim() || null,
+      url_supporto: (urlSupporto || "").trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", existing.id);
+  if (error) throw error;
+}
+
+/**
+ * Reimposta la password REALE (Supabase Auth) di un account staff/cliente di un tenant — solo
+ * superadmin (verificato anche server-side nella edge function). Usata da "Archivio password
+ * staff" per evitare di dover aprire il pannello Supabase a parte.
+ */
+export async function resetAccountPasswordReale({ tenantId, userId, password }) {
+  const { data, error } = await supabase.functions.invoke("reset-account-password", {
+    body: { tenant_id: tenantId, user_id: userId, password },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+/**
+ * Registro richieste/azioni di sviluppo (log_richieste_sviluppo) — visibile solo superadmin via
+ * RLS. Sola lettura da qui: le righe vengono aggiunte da Claude direttamente via SQL dopo ogni
+ * richiesta significativa, non tramite l'app.
+ */
+export async function getRegistroRichiesteSviluppo({ limit = 200 } = {}) {
+  const { data, error } = await supabase
+    .from("log_richieste_sviluppo")
+    .select("id, richiesta, azioni, area, creato_il")
+    .order("creato_il", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 export async function fetchRegistratoreAuditLog(userId, { limit = 20 } = {}) {
   if (!userId) {
     return { rows: [], error: null, unavailable: true };

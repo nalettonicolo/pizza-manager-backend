@@ -25,3 +25,17 @@ export function removePublicPwaManifest() {
   if (el?.parentNode) el.parentNode.removeChild(el);
   linkEl = null;
 }
+
+/**
+ * Registra il service worker minimo della vetrina pubblica: senza un SW registrato, Chrome/
+ * Android non considerano il sito installabile e l'evento beforeinstallprompt non scatta mai —
+ * il banner "Installa" resterebbe muto lì (funzionava solo su iOS, che non ne ha bisogno).
+ * Idempotente: chiamarla più volte non registra copie multiple.
+ */
+export function registerPublicServiceWorker() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw-public.js").catch(() => {
+    // Ambiente senza HTTPS/localhost valido o SW non supportato: il banner iOS resta comunque
+    // utile, quello Android/Chrome semplicemente non offrirà il prompt nativo.
+  });
+}

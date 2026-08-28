@@ -1,0 +1,25 @@
+# Registro attività — istruzione permanente per Cursor
+
+Questo progetto (PizzaManager) ha un "Registro attività" condiviso e visibile solo al superadmin
+online (Superadmin → Piattaforma → 📋 Registro attività, `/superadmin/registro-attivita`), che
+tiene traccia di ogni richiesta fatta dall'utente e delle azioni svolte su questo repository —
+indipendentemente da quale assistente AI ha eseguito il lavoro (Claude Code, Cursor, ecc.). Serve
+all'utente per restare sempre allineato su cosa è stato fatto, senza dover riaprire ogni singola
+chat.
+
+**Alla fine di ogni richiesta significativa dell'utente su questo progetto** (non per piccole
+domande o chiarimenti), esegui questo comando per registrarla:
+
+```bash
+node scripts/log-attivita.mjs --richiesta "riassunto breve di cosa ha chiesto l'utente" --azioni "riassunto breve di cosa hai effettivamente fatto" --area "categoria"
+```
+
+- `--richiesta` e `--azioni`: 1-2 frasi ciascuno, in italiano, concisi ma specifici (non "fix bug",
+  ma "corretto il calcolo del totale ordine che ignorava lo sconto fidelity").
+- `--area` (facoltativo): una tra `sicurezza`, `pagamenti`, `audit`, `ai`, `ui`, `dati`,
+  `infrastruttura`, `marketing`, `menu`, `bug` — o omettila se nessuna calza.
+- Non serve nessuna nuova credenziale: lo script riusa lo stesso token di `supabase login` già
+  presente sulla macchina (o `SUPABASE_ACCESS_TOKEN` se impostato), lo stesso meccanismo già usato
+  da `scripts/apply-sql-module.mjs`.
+- Se il comando fallisce (token mancante, rete assente), non bloccare il lavoro per questo: prova
+  a rieseguirlo più tardi o segnala all'utente che la riga non è stata registrata.

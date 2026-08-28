@@ -4,7 +4,7 @@ import {
   listArchivioPasswordAccounts,
   upsertStaffPasswordNote,
 } from "@/features/admin/services/adminService"
-import { getTenant } from "@/features/superadmin/services/superadminService"
+import { getTenant, resetAccountPasswordReale } from "@/features/superadmin/services/superadminService"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
 import SaListSearchField from "@/features/superadmin/components/SaListSearchField"
 import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter"
@@ -46,6 +46,8 @@ export default function SuperadminTenantArchivioPasswordPage() {
     savingUserId: null,
   })
   const [listQuery, setListQuery] = useState("")
+  const [applyingUserId, setApplyingUserId] = useState(null)
+  const [applyMsg, setApplyMsg] = useState({})
 
   const ruoliFiltered = useMemo(() => {
     const q = normalizeListSearchQuery(listQuery)
@@ -121,6 +123,28 @@ export default function SuperadminTenantArchivioPasswordPage() {
     setArchivio((a) => ({ ...a, savingUserId: null }))
   }
 
+  async function applyPasswordReale(userId, password, nome) {
+    const testo = String(password || "").trim()
+    if (testo.length < 6) {
+      setApplyMsg((m) => ({ ...m, [userId]: { ok: false, testo: "Minimo 6 caratteri per applicarla su Supabase." } }))
+      return
+    }
+    const conferma = window.confirm(
+      `Sovrascrivere la password reale di ${nome} su Supabase con il testo qui sopra? L'account non potrà più usare la password precedente.`,
+    )
+    if (!conferma) return
+    setApplyingUserId(userId)
+    setApplyMsg((m) => ({ ...m, [userId]: null }))
+    try {
+      await resetAccountPasswordReale({ tenantId, userId, password: testo })
+      setApplyMsg((m) => ({ ...m, [userId]: { ok: true, testo: "Password applicata su Supabase." } }))
+    } catch (err) {
+      setApplyMsg((m) => ({ ...m, [userId]: { ok: false, testo: err?.message || "Applicazione non riuscita." } }))
+    } finally {
+      setApplyingUserId(null)
+    }
+  }
+
   if (loadingTenant) {
     return (
       <div className="dashboard-loading">
@@ -158,10 +182,12 @@ export default function SuperadminTenantArchivioPasswordPage() {
           ) : null}
         </p>
         <p style={{ marginTop: 8, maxWidth: 720, fontSize: 14, color: "#64748b", lineHeight: 1.55 }}>
-          Qui registri le <strong>note opzionali</strong> (password date allo staff o al Cliente Test). Non sono le
-          credenziali tecniche Supabase: il titolare le consulta in <strong>Admin → Ruoli</strong> dopo aver sbloccato
-          l&apos;archivio con la propria password. Gli account con ruolo <strong>cliente</strong> compaiono se hanno una
-          nota salvata.
+          Qui registri le <strong>note opzionali</strong> (password date allo staff o al Cliente Test) — il titolare
+          le consulta in <strong>Admin → Ruoli</strong> dopo aver sbloccato l&apos;archivio con la propria password.
+          Gli account con ruolo <strong>cliente</strong> compaiono se hanno una nota salvata. Il pulsante{" "}
+          <strong>🔑 Applica su Supabase</strong> sovrascrive davvero la password dell&apos;account con il testo
+          scritto qui sopra — tutto da questa pagina, senza aprire il pannello Supabase a parte. "Salva nota" da solo
+          resta invece solo un promemoria, senza toccare Supabase.
         </p>
         <div style={{ marginTop: 16 }}>
           <Link to="/superadmin/tenants" className="sa-table-action">
@@ -224,7 +250,7 @@ export default function SuperadminTenantArchivioPasswordPage() {
                   spellCheck={false}
                   placeholder="Es. password provvisoria consegnata al dipendente, o promemoria interno"
                 />
-                <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
+                <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <button
                     type="button"
                     className="btn-primary-dashboard"
@@ -233,10 +259,31 @@ export default function SuperadminTenantArchivioPasswordPage() {
                   >
                     {archivio.savingUserId === r.user_id ? "Salvataggio…" : "Salva nota"}
                   </button>
+                  <button
+                    type="button"
+                    className="sa-table-action"
+                    disabled={applyingUserId === r.user_id}
+                    onClick={() => applyPasswordReale(r.user_id, archivio.drafts[r.user_id], nomeInSedeOEmail(r))}
+                    title="Sovrascrive la password reale dell'account su Supabase con il testo qui sopra"
+                  >
+                    {applyingUserId === r.user_id ? "Applico…" : "🔑 Applica su Supabase"}
+                  </button>
                   <span style={{ fontSize: 12, color: "#94a3b8" }}>
                     Lasciare vuoto e salvare rimuove la nota dall&apos;archivio.
                   </span>
                 </div>
+                {applyMsg[r.user_id] ? (
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 12.5,
+                      color: applyMsg[r.user_id].ok ? "#166534" : "#b91c1c",
+                    }}
+                  >
+                    {applyMsg[r.user_id].ok ? "✓ " : "✕ "}
+                    {applyMsg[r.user_id].testo}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

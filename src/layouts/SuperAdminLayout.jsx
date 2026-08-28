@@ -7,9 +7,12 @@ import {
   resolveSupportTenantOverride,
   withSupportTenantQuery,
 } from "@/utils/supportTenantOverride";
+import { applyTenantDocumentTitle } from "@/utils/tenantDocumentTitle";
 import "@/styles/superadmin-enterprise.css";
 
 const PIATTAFORMA_ITEMS_BASE = [
+  { to: "/superadmin/registro-attivita", label: "📋 Registro attività" },
+  { to: "/superadmin/azioni-da-completare", label: "⚠️ Azioni da completare" },
   { to: "/superadmin/sala-qa", label: "Sala QA e supporto" },
   { to: "/superadmin/guide", label: "Documentazione" },
   { to: "/superadmin/auth-email-templates", label: "Template email Auth" },
@@ -28,10 +31,11 @@ const PIATTAFORMA_ITEMS = ENABLE_TEST_REPARTI
 /** Menu compatto desktop: solo queste voci in barra; sottovoci in dropdown al passaggio del mouse. */
 const NAV_DROPDOWNS = [
   {
-    label: "Commercio",
+    label: "Commerciale",
     items: [
       { to: "/superadmin/dashboard", label: "Panoramica" },
       { to: "/superadmin/tenants", label: "Clienti" },
+      { to: "/superadmin/preventivi-contratti", label: "Preventivi e contratti" },
       { to: "/superadmin/piani", label: "Piani e listini" },
       { to: "/superadmin/servizi", label: "Catalogo servizi" },
       { to: "/superadmin/licenses", label: "Abbonamenti" },
@@ -40,6 +44,14 @@ const NAV_DROPDOWNS = [
   {
     label: "Go Live",
     items: [{ to: "/superadmin/go-live", label: "Go-live cliente" }],
+  },
+  {
+    label: "Marketing",
+    items: [
+      { to: "/superadmin/marketing/concorrenza", label: "Concorrenza" },
+      { to: "/superadmin/marketing/contenuti", label: "Contenuti (blog/landing)" },
+      { to: "/superadmin/marketing/ads", label: "Ads" },
+    ],
   },
   {
     label: "Piattaforma",
@@ -85,6 +97,10 @@ export default function SuperAdminLayout() {
   }, [location.pathname]);
 
   useEffect(() => {
+    applyTenantDocumentTitle(null, "Super Admin");
+  }, []);
+
+  useEffect(() => {
     const mq = window.matchMedia(MOBILE_NAV_MQ);
     const onChange = () => {
       if (!mq.matches) setMobileNavOpen(false);
@@ -126,6 +142,7 @@ export default function SuperAdminLayout() {
       // — stesso motivo di ManualeUtentePage in AdminLayout.jsx (vedi commento lì).
       () => import("@/features/superadmin/pages/SviluppoPage"),
       () => import("@/features/superadmin/pages/Settings"),
+      () => import("@/features/superadmin/pages/RegistroAttivitaPage"),
       () => import("@/features/superadmin/pages/ServizioSchedaPage"),
       () => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"),
       () => import("@/features/superadmin/pages/SuperadminViewportTesterPage"),

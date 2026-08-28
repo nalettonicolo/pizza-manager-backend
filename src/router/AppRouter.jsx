@@ -36,6 +36,8 @@ const WebAppPreview = lazy(() => import("@/features/public/pages/WebAppPreview")
 const OrdinePage = lazy(() => import("@/pages/OrdinePage"));
 const OrdineConfermato = lazy(() => import("@/pages/OrdineConfermato"));
 const PagamentoLinkPage = lazy(() => import("@/features/public/pages/PagamentoLinkPage"));
+const LandingPageView = lazy(() => import("@/features/public/pages/LandingPageView"));
+const BlogPostPage = lazy(() => import("@/features/public/pages/BlogPostPage"));
 
 /* ================= SUPERADMIN (lazy) ================= */
 const Login = lazy(() => import("@/features/public/pages/Login"));
@@ -73,6 +75,9 @@ const SuperadminGuideDocPage = lazy(() => import("@/features/superadmin/pages/Su
 const SviluppoPage = lazy(() => import("@/features/superadmin/pages/SviluppoPage"));
 const SuperadminAgentiModuliPage = lazy(() => import("@/features/superadmin/pages/SuperadminAgentiModuliPage"));
 const SuperadminChecklistMesePage = lazy(() => import("@/features/superadmin/pages/SuperadminChecklistMesePage"));
+const SuperadminAzioniDaCompletarePage = lazy(() => import("@/features/superadmin/pages/SuperadminAzioniDaCompletarePage"));
+const RegistroAttivitaPage = lazy(() => import("@/features/superadmin/pages/RegistroAttivitaPage"));
+const SuperadminPreventiviContrattiPage = lazy(() => import("@/features/superadmin/pages/SuperadminPreventiviContrattiPage"));
 const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/ServizioSchedaPage"));
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
@@ -83,6 +88,9 @@ const SuperadminGatePage = lazy(() => import("@/features/superadmin/pages/Supera
 const SuperadminAuthEmailTemplatesPage = lazy(
   () => import("@/features/superadmin/pages/SuperadminAuthEmailTemplatesPage"),
 );
+const MarketingConcorrenzaPage = lazy(() => import("@/features/superadmin/pages/MarketingConcorrenzaPage"));
+const MarketingContenutiPage = lazy(() => import("@/features/superadmin/pages/MarketingContenutiPage"));
+const AdsPage = lazy(() => import("@/features/superadmin/pages/AdsPage"));
 
 /* ================= ADMIN (lazy) ================= */
 const Report = lazy(() => import("@/features/admin/pages/Report"));
@@ -125,6 +133,7 @@ const GestioneIncassiPage = lazy(() => import("@/features/admin/pages/contabilit
 const FiscalOutboxMonitorPage = lazy(() => import("@/features/admin/pages/fiscal/FiscalOutboxMonitorPage"));
 const NotificheOutboxMonitorPage = lazy(() => import("@/features/admin/pages/notifiche/NotificheOutboxMonitorPage"));
 const FidelityCardPage = lazy(() => import("@/features/admin/pages/FidelityCardPage"));
+const TenantDocumentiPage = lazy(() => import("@/features/admin/pages/TenantDocumentiPage"));
 
 /* ================= OPERATIVE (lazy) ================= */
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
@@ -358,6 +367,24 @@ export default function AppRouter() {
                 </Suspense>
               }
             />
+            <Route
+              path="/blog/:slug"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <BlogPostPage />
+                </Suspense>
+              }
+            />
+            {/* Landing page marketing (moduli/confronti concorrenti): catch-all a un segmento,
+                react-router v6 dà comunque priorità alle rotte statiche sopra a parità di path. */}
+            <Route
+              path="/:slug"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <LandingPageView />
+                </Suspense>
+              }
+            />
           </>
         )}
       </Route>
@@ -459,10 +486,58 @@ export default function AppRouter() {
               }
             />
             <Route
+              path="/superadmin/azioni-da-completare"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminAzioniDaCompletarePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/registro-attivita"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <RegistroAttivitaPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/preventivi-contratti"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminPreventiviContrattiPage />
+                </Suspense>
+              }
+            />
+            <Route
               path="/superadmin/registratore-cassa"
               element={
                 <Suspense fallback={<PageFallback />}>
                   <SuperadminRegistratoreCassaPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/marketing/concorrenza"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <MarketingConcorrenzaPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/marketing/contenuti"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <MarketingContenutiPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/marketing/ads"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <AdsPage />
                 </Suspense>
               }
             />
@@ -569,6 +644,7 @@ export default function AppRouter() {
           <Route path="/admin/fiscal-outbox" element={<Suspense fallback={<PageFallback />}><FiscalOutboxMonitorPage /></Suspense>} />
           <Route path="/admin/dipendenti" element={<Suspense fallback={<PageFallback />}><UserManager /></Suspense>} />
           <Route path="/admin/ruoli" element={<Suspense fallback={<PageFallback />}><RuoliPage /></Suspense>} />
+          <Route path="/admin/documenti" element={<Suspense fallback={<PageFallback />}><TenantDocumentiPage /></Suspense>} />
           <Route path="/admin/settings" element={<Suspense fallback={<PageFallback />}><SettingsLayout /></Suspense>}>
             <Route index element={<Navigate to="dati-pizzeria" replace />} />
             <Route path="dati-pizzeria" element={<Suspense fallback={<PageFallback />}><DatiPizzeriaSection /></Suspense>} />

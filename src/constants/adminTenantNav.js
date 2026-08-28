@@ -12,6 +12,7 @@ export const ADMIN_TOP_NAV = Object.freeze([
   { to: "/admin/contabilita", label: "Contabilità", servizioId: null },
   { to: "/admin/fidelity", label: "Fidelity", servizioId: "fidelity_card" },
   { to: "/admin/dipendenti", label: "Staff", servizioId: null },
+  { to: "/admin/documenti", label: "Documenti", servizioId: null },
   { to: "/admin/settings", label: "Impostazioni", servizioId: null },
   { to: "/admin/manuale", label: "Guida", servizioId: null },
 ])
@@ -63,6 +64,11 @@ export const ADMIN_HOME_SECTIONS = Object.freeze([
         to: "/admin/ruoli",
         label: "Ruoli",
         description: "Permessi per tipo di operatore",
+      },
+      {
+        to: "/admin/documenti",
+        label: "Documenti",
+        description: "Termini, Privacy, Contratto e DPA precompilati, con firma",
       },
     ],
   },

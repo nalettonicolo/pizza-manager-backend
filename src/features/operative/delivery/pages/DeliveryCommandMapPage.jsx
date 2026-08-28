@@ -87,7 +87,9 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
   const { tenantId, tenantData } = useTenant()
   const pvCtx = usePv()
   const activePvId = pvCtx?.activePv ?? null
-  const pvList = pvCtx?.pvList ?? []
+  // Riferimento stabile: senza useMemo, "?? []" crea un nuovo array a ogni render quando pvList
+  // è assente, invalidando inutilmente il useMemo di activePv sotto.
+  const pvList = useMemo(() => pvCtx?.pvList ?? [], [pvCtx?.pvList])
   const activePv = useMemo(
     () => pvList.find((p) => String(p.id) === String(activePvId)) ?? null,
     [pvList, activePvId],

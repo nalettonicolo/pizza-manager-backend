@@ -41,7 +41,10 @@
             <tr>
               <td style="padding:16px 22px 24px 22px;font-size:12px;line-height:1.55;color:#64748b;border-top:1px solid #e2e8f0;">
                 Se non hai richiesto questo accesso, ignora l'email.<br />
-                Assistenza: <a href="mailto:support@pizzamanager.it" style="color:#c0392b;">support@pizzamanager.it</a><br />
+                {{ if .Data.tenant_nome }}
+                Problemi con un ordine presso <strong>{{ .Data.tenant_nome }}</strong>? Contatta direttamente il locale, non questo indirizzo.<br />
+                {{ end }}
+                Assistenza tecnica sull'app: <a href="mailto:support@pizzamanager.it" style="color:#c0392b;">support@pizzamanager.it</a><br />
                 Mittente automatico: no-reply@pizzamanager.it
               </td>
             </tr>
