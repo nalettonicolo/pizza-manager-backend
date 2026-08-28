@@ -24,6 +24,29 @@ function formatEuro(n) {
 }
 
 /**
+ * Margine interno PizzaManager (mai mostrato al tenant): sulla vendita è un importo secco
+ * (prezzo vendita − costo acquisto); sul noleggio non esiste un "margine" a importo fisso, ma
+ * un tempo di rientro dell'investimento (mesi di canone per ripagare il costo di acquisto) —
+ * indicatori diversi perché il flusso di cassa è diverso (una tantum vs ricorrente).
+ */
+function calcolaMargine(item) {
+  const costo = Number(item.costo_acquisto) || 0;
+  if (!(costo > 0)) return null;
+  const vendita = Number(item.prezzo_vendita) || 0;
+  const noleggio = Number(item.canone_noleggio_mensile) || 0;
+  const parti = [];
+  if (vendita > 0) {
+    const margine = vendita - costo;
+    parti.push(`vendita: margine € ${formatEuro(margine)} (${((margine / vendita) * 100).toFixed(0)}%)`);
+  }
+  if (noleggio > 0) {
+    const mesi = costo / noleggio;
+    parti.push(`noleggio: rientro in ${mesi.toFixed(1)} mesi`);
+  }
+  return parti.length ? `costo acquisto € ${formatEuro(costo)} — ${parti.join(" · ")}` : `costo acquisto € ${formatEuro(costo)}`;
+}
+
+/**
  * Gestione completa del catalogo Hardware (public.attrezzature_catalogo): prezzi STANDARD di
  * noleggio e/o vendita, mai da reinserire a mano in fase di preventivo — richiesta esplicita
  * dell'utente. Componente condiviso tra la pagina dedicata "Catalogo Hardware" (voce di menu
@@ -42,13 +65,14 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
     categoria: "tablet",
     canone_noleggio_mensile: "",
     prezzo_vendita: "",
+    costo_acquisto: "",
     cauzione: "",
     descrizione: "",
   });
   const [savingAttrezzatura, setSavingAttrezzatura] = useState(false);
 
   const [editingCatalogoId, setEditingCatalogoId] = useState(null);
-  const [catalogoDraft, setCatalogoDraft] = useState({ canone_noleggio_mensile: "", prezzo_vendita: "", cauzione: "" });
+  const [catalogoDraft, setCatalogoDraft] = useState({ canone_noleggio_mensile: "", prezzo_vendita: "", costo_acquisto: "", cauzione: "" });
   const [savingCatalogoDraft, setSavingCatalogoDraft] = useState(false);
 
   async function handleAggiungiAttrezzaturaCatalogo() {
@@ -71,11 +95,12 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
         categoria: nuovaAttrezzatura.categoria,
         canone_noleggio_mensile: canone,
         prezzo_vendita: vendita || null,
+        costo_acquisto: nuovaAttrezzatura.costo_acquisto !== "" ? Number(nuovaAttrezzatura.costo_acquisto) : null,
         cauzione: nuovaAttrezzatura.cauzione !== "" ? Number(nuovaAttrezzatura.cauzione) : 0,
         descrizione: nuovaAttrezzatura.descrizione.trim() || null,
         disponibile: true,
       });
-      setNuovaAttrezzatura({ nome: "", categoria: "tablet", canone_noleggio_mensile: "", prezzo_vendita: "", cauzione: "", descrizione: "" });
+      setNuovaAttrezzatura({ nome: "", categoria: "tablet", canone_noleggio_mensile: "", prezzo_vendita: "", costo_acquisto: "", cauzione: "", descrizione: "" });
       await onReload();
     } catch (err) {
       setError(err?.message || "Impossibile aggiungere il prodotto al catalogo.");
@@ -98,6 +123,7 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
     setCatalogoDraft({
       canone_noleggio_mensile: item.canone_noleggio_mensile != null ? String(item.canone_noleggio_mensile) : "",
       prezzo_vendita: item.prezzo_vendita != null ? String(item.prezzo_vendita) : "",
+      costo_acquisto: item.costo_acquisto != null ? String(item.costo_acquisto) : "",
       cauzione: item.cauzione != null ? String(item.cauzione) : "",
     });
   }
@@ -109,6 +135,7 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
       await updateAttrezzaturaCatalogo(item.id, {
         canone_noleggio_mensile: catalogoDraft.canone_noleggio_mensile !== "" ? Number(catalogoDraft.canone_noleggio_mensile) : 0,
         prezzo_vendita: catalogoDraft.prezzo_vendita !== "" ? Number(catalogoDraft.prezzo_vendita) : null,
+        costo_acquisto: catalogoDraft.costo_acquisto !== "" ? Number(catalogoDraft.costo_acquisto) : null,
         cauzione: catalogoDraft.cauzione !== "" ? Number(catalogoDraft.cauzione) : 0,
       });
       setEditingCatalogoId(null);
@@ -124,7 +151,9 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
     <div>
       <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 12px" }}>
         Prezzi standard, non modificabili in fase di preventivo: scegli qui una volta per tutte quanto costa ogni
-        prodotto a noleggio e/o in vendita — poi in un preventivo si sceglie solo prodotto, modalità e quantità.
+        prodotto a noleggio e/o in vendita — poi in un preventivo si sceglie solo prodotto, modalità e quantità. Il
+        <strong> costo di acquisto</strong> è per il tuo margine interno: non compare mai in contratti/preventivi del
+        cliente.
       </p>
 
       {error ? <div className="dashboard-error" style={{ marginBottom: 12 }}>{error}</div> : null}
@@ -150,6 +179,10 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
                     <label style={labelStyle}>Cauzione (€)</label>
                     <input type="number" step="0.01" value={catalogoDraft.cauzione} onChange={(e) => setCatalogoDraft((d) => ({ ...d, cauzione: e.target.value }))} style={inputStyle} />
                   </div>
+                  <div style={{ width: 150 }}>
+                    <label style={labelStyle}>Costo acquisto (€, interno)</label>
+                    <input type="number" step="0.01" value={catalogoDraft.costo_acquisto} onChange={(e) => setCatalogoDraft((d) => ({ ...d, costo_acquisto: e.target.value }))} style={inputStyle} placeholder="quanto paghi tu al fornitore" />
+                  </div>
                   <button type="button" className="btn-primary-dashboard" disabled={savingCatalogoDraft} onClick={() => handleSalvaPrezziCatalogo(a)}>
                     {savingCatalogoDraft ? "Salvo…" : "Salva prezzi"}
                   </button>
@@ -165,6 +198,11 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
                 {" · "}
                 {Number(a.prezzo_vendita) > 0 ? `vendita € ${formatEuro(a.prezzo_vendita)}` : "vendita n/d"}
                 {Number(a.cauzione) > 0 ? `, cauzione € ${formatEuro(a.cauzione)}` : ""}
+                {calcolaMargine(a) ? (
+                  <span style={{ display: "block", fontSize: 12, color: "#0369a1", marginTop: 2 }}>
+                    {calcolaMargine(a)}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => iniziaModificaPrezzi(a)}
@@ -209,6 +247,10 @@ export default function CatalogoHardwareManager({ catalogo, onReload }) {
         <div style={{ width: 130 }}>
           <label style={labelStyle}>Cauzione noleggio (€)</label>
           <input type="number" step="0.01" value={nuovaAttrezzatura.cauzione} onChange={(e) => setNuovaAttrezzatura((n) => ({ ...n, cauzione: e.target.value }))} style={inputStyle} />
+        </div>
+        <div style={{ width: 150 }}>
+          <label style={labelStyle}>Costo acquisto (€, interno)</label>
+          <input type="number" step="0.01" value={nuovaAttrezzatura.costo_acquisto} onChange={(e) => setNuovaAttrezzatura((n) => ({ ...n, costo_acquisto: e.target.value }))} style={inputStyle} placeholder="quanto paghi tu al fornitore" />
         </div>
         <div style={{ minWidth: 200 }}>
           <label style={labelStyle}>Descrizione (facoltativa)</label>
