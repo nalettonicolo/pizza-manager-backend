@@ -29,6 +29,7 @@ import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import LiveClock from "@/components/LiveClock"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
+import { emitOperativeOrderSync } from "@/features/operative/hooks/operativeOrderSync"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 import {
@@ -37,6 +38,7 @@ import {
   sortedCucinaSlotTabs,
   aggregatePrepTasksBySlot,
   markAggregatedPrepDone,
+  filterPrepTasksForPizzaiolo,
 } from "@/features/operative/cucina/utils/cucinaPrepTasks"
 import {
   mergeCucinaPrepColorsFromParametri,
@@ -45,8 +47,7 @@ import {
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_PRONTO = "PRONTO"
-/** Polling di sicurezza se Realtime non arriva */
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 1000
 
 function googleMapsUrl(indirizzo) {
   if (!indirizzo || !indirizzo.trim()) return null
@@ -69,7 +70,6 @@ export default function PizzaioloDashboard() {
   const [error, setError] = useState(null)
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
   const [cortesiaBusy, setCortesiaBusy] = useState(false)
 
   /** Catalogo ingredienti completo (nome→categoria/colore): fallback per gli "extra" aggiunti a
@@ -90,6 +90,7 @@ export default function PizzaioloDashboard() {
   }, [tenantId])
   const [prepActionKey, setPrepActionKey] = useState(null)
   const loadSeqRef = useRef(0)
+  const pendingProntoIdsRef = useRef(new Set())
 
   const parametri = tenantData?.parametri_operativi || {}
   const showPrintCortesia = canRepartoStampareRicevutaCortesia(parametri, "pizzaiolo")
@@ -114,8 +115,13 @@ export default function PizzaioloDashboard() {
         ids.length ? getRigheAggregateByOrdineIds(ids, tenantId) : {},
         ids.length ? getRigheByOrdineIds(ids) : [],
       ])
-      if (seq !== loadSeqRef.current) return
-      setOrders(data || [])
+        if (seq !== loadSeqRef.current) return
+        const pending = pendingProntoIdsRef.current
+        const list = (data || []).filter((o) => !pending.has(o.id))
+        for (const id of [...pending]) {
+          if (!(data || []).some((o) => o.id === id)) pending.delete(id)
+        }
+        setOrders(list)
       setPizzePerOrdine(pizze)
       setRigheAll(righe || [])
 
@@ -203,22 +209,22 @@ export default function PizzaioloDashboard() {
   }, [orders, pizzePerOrdine])
 
   /**
-   * Ingredienti "fuori linea" (congelati, affettati, dolci, fritti, generici — stessa logica
-   * colore/rilevamento di Cucina): il pizzaiolo li vede per non dimenticarli, anche se la
-   * preparazione fisica spetta a Cucina/Bancone. Click = "pronto", stesso `cucina_prep_stato`
-   * dell'ordine: coordinato con Cucina/Bancone, non una checklist separata.
+   * Ingredienti da preparare che vanno in cottura (es. mais, affettati): stessi colori e stato
+   * "pronto" di Cucina/Bancone, così il pizzaiolo li vede in stesura.
    */
   const tasksBySlot = useMemo(
     () =>
-      buildCucinaPrepTasks(
-        orders,
-        righeAll,
-        productNames,
-        ingredientsByProduct,
-        PLANNING_GRID_SLOT_MINUTES,
-        productPrepCucinaById,
-        productPrepMetaById,
-        ingredientiGlobali,
+      filterPrepTasksForPizzaiolo(
+        buildCucinaPrepTasks(
+          orders,
+          righeAll,
+          productNames,
+          ingredientsByProduct,
+          PLANNING_GRID_SLOT_MINUTES,
+          productPrepCucinaById,
+          productPrepMetaById,
+          ingredientiGlobali,
+        ),
       ),
     [orders, righeAll, productNames, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, ingredientiGlobali],
   )
@@ -233,13 +239,13 @@ export default function PizzaioloDashboard() {
     async (agg) => {
       if (!agg?.pendingTasks?.length) return
       setPrepActionKey(agg.pickKey)
+      const { nextByOrdineId } = markAggregatedPrepDone(orders, agg.pendingTasks)
+      setOrders((prev) =>
+        prev.map((o) => (nextByOrdineId[o.id] ? { ...o, cucina_prep_stato: nextByOrdineId[o.id] } : o)),
+      )
       try {
-        const { nextByOrdineId } = markAggregatedPrepDone(orders, agg.pendingTasks)
         const entries = Object.entries(nextByOrdineId)
         await Promise.all(entries.map(([oid, next]) => updateOrderCucinaPrepStato(oid, next)))
-        setOrders((prev) =>
-          prev.map((o) => (nextByOrdineId[o.id] ? { ...o, cucina_prep_stato: nextByOrdineId[o.id] } : o)),
-        )
       } catch (err) {
         console.error(err)
         setError("Errore nell'aggiornamento preparazione.")
@@ -274,19 +280,30 @@ export default function PizzaioloDashboard() {
   const markAsPronto = useCallback(
     async (ordineId) => {
       if (!ordineId) return
-      setActionLoading(true)
+      const snapshot = orders.find((o) => o.id === ordineId)
+      pendingProntoIdsRef.current.add(ordineId)
+      setOrders((prev) => prev.filter((o) => o.id !== ordineId))
+      setDetailOrder(null)
+      emitOperativeOrderSync({
+        kind: "stato",
+        ordineId,
+        stato: STATO_PRONTO,
+        order: snapshot ? { ...snapshot, stato: STATO_PRONTO } : null,
+        righe: righePerOrdine[ordineId] || [],
+        pizze: pizzePerOrdine[ordineId],
+      })
       try {
         await updateOrderStato(ordineId, STATO_PRONTO)
-        setOrders((prev) => prev.filter((o) => o.id !== ordineId))
-        setDetailOrder(null)
       } catch (err) {
         console.error(err)
+        pendingProntoIdsRef.current.delete(ordineId)
+        if (snapshot) {
+          setOrders((prev) => (prev.some((o) => o.id === snapshot.id) ? prev : [snapshot, ...prev]))
+        }
         setError("Errore aggiornamento ordine.")
-      } finally {
-        setActionLoading(false)
       }
     },
-    []
+    [orders, righePerOrdine, pizzePerOrdine],
   )
 
   const renderCard = (ord, isDelivery) => {
@@ -320,7 +337,6 @@ export default function PizzaioloDashboard() {
               ...(ritardo > 0 ? styles.btnInFornoRitardo : {}),
             }}
             onClick={(e) => { e.stopPropagation(); markAsPronto(ord.id); }}
-            disabled={actionLoading}
             title={
               ritardo > 0
                 ? `${ritardo} min oltre la scadenza forno${orarioPronte ? ` (${orarioPronte})` : ""}`
@@ -461,42 +477,38 @@ export default function PizzaioloDashboard() {
 
   return (
     <div className="pizzaiolo-dashboard-root">
-      {!quad ? (
-        <h1 style={styles.title}>Pizzaiolo</h1>
-      ) : (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-          <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
-        </div>
-      )}
+      {!quad ? <h1 style={styles.title}>Pizzaiolo</h1> : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
-      {/* Riquadri orari con numero pizze (tutti gli ordini IN_PREPARAZIONE caricati) — i riquadri
-          stessi bastano a far capire che ci sono ordini più avanti, senza bisogno di un testo. */}
-      {(slotLabels.length > 0 || pizzeSenzaOrarioSlot > 0) && (
-        <div style={styles.slotsWrap}>
-          {slotLabels.map((label) => (
-            <div key={label} style={styles.slotBox}>
-              <span style={styles.slotTime}>{label}</span>
-              <span style={styles.slotCount}>{slotPizze[label]}</span>
-              <span style={styles.slotUnit}>pizze</span>
-            </div>
-          ))}
-          {pizzeSenzaOrarioSlot > 0 ? (
-            <div key="no-time" style={{ ...styles.slotBox, background: "#fff3e0", borderColor: "#ffcc80" }}>
-              <span style={styles.slotTime}>Senza orario</span>
-              <span style={{ ...styles.slotCount, color: "#e65100" }}>{pizzeSenzaOrarioSlot}</span>
-              <span style={styles.slotUnit}>pizze</span>
-            </div>
+      {/* Riquadri orari + orologio in quad sulla stessa riga (niente fascia vuota sotto). */}
+      {(slotLabels.length > 0 || pizzeSenzaOrarioSlot > 0 || quad) && (
+        <div style={styles.slotsHeaderRow}>
+          <div style={styles.slotsWrap}>
+            {slotLabels.map((label) => (
+              <div key={label} style={styles.slotBox}>
+                <span style={styles.slotTime}>{label}</span>
+                <span style={styles.slotCount}>{slotPizze[label]}</span>
+                <span style={styles.slotUnit}>pizze</span>
+              </div>
+            ))}
+            {pizzeSenzaOrarioSlot > 0 ? (
+              <div key="no-time" style={{ ...styles.slotBox, background: "#fff3e0", borderColor: "#ffcc80" }}>
+                <span style={styles.slotTime}>Senza orario</span>
+                <span style={{ ...styles.slotCount, color: "#e65100" }}>{pizzeSenzaOrarioSlot}</span>
+                <span style={styles.slotUnit}>pizze</span>
+              </div>
+            ) : null}
+          </div>
+          {quad ? (
+            <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6, flexShrink: 0 }} />
           ) : null}
         </div>
       )}
 
-      {/* Ingredienti fuori linea (congelati, affettati, dolci, fritti, generici — stessi colori
-          e stato "pronto" condiviso con Cucina/Bancone; per non dimenticarli in fase di stesura). */}
-      {hasFuoriLinea && !quad ? (
+      {hasFuoriLinea ? (
         <div style={styles.fuoriLineaWrap}>
-          <h2 style={styles.fuoriLineaTitle}>Ingredienti fuori linea</h2>
+          {!quad ? <h2 style={styles.fuoriLineaTitle}>Da preparare in cottura</h2> : null}
           {fuoriLineaSlotKeys.map((slot) => {
             const pending = (fuoriLineaBySlot[slot] || []).filter((a) => (a.count || 0) > (a.doneCount || 0))
             if (pending.length === 0) return null
@@ -560,10 +572,10 @@ export default function PizzaioloDashboard() {
         <OrderDetailModal
           order={detailOrder}
           loading={detailLoading}
-          onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
-          actionLabel={actionLoading ? "Salvataggio..." : "Segna come pronto"}
+          onClose={() => !cortesiaBusy && setDetailOrder(null)}
+          actionLabel="Segna come pronto"
           onAction={markAsPronto}
-          actionDisabled={actionLoading || cortesiaBusy}
+          actionDisabled={cortesiaBusy}
           ingredientsByProduct={ingredientsByProduct}
           showPrintCortesia={showPrintCortesia}
           printCortesiaBusy={cortesiaBusy}
@@ -585,7 +597,14 @@ export default function PizzaioloDashboard() {
 const styles = {
   title: { fontSize: 22, margin: "0 0 12px", flexShrink: 0 },
   error: { padding: 12, background: "#ffebee", color: "#c62828", borderRadius: 8, marginBottom: 16 },
-  slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
+  slotsHeaderRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 8,
+  },
+  slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, flex: 1, minWidth: 0 },
   slotBox: {
     padding: "4px 8px",
     background: "#e8f5e9",

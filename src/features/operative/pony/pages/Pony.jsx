@@ -6,7 +6,7 @@ import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOpe
 
 const STATO_PRONTO = "PRONTO"
 const STATO_CONSEGNATO = "CONSEGNATO"
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 1000
 
 export default function Pony() {
   const { operatoreLabel } = useOutletContext() || {}

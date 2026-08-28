@@ -43,7 +43,7 @@ export function slotTabLabel(slot) {
 }
 
 export function sortedCucinaSlotTabs(tasksBySlot) {
-  const keys = Object.keys(tasksBySlot || {})
+  const keys = Object.keys(tasksBySlot || {}).filter((k) => (tasksBySlot[k] || []).length > 0)
   const sorted = keys.filter((k) => k !== CUCINA_SLOT_SENZA_ORARIO).sort((a, b) => {
     const [ha, ma] = a.split(":").map(Number)
     const [hb, mb] = b.split(":").map(Number)
@@ -71,6 +71,38 @@ export function ingredientNeedsPrepMonitor(ing) {
   if (cat) return true
   if (ing.vaInCottura === false || ing.va_in_cottura === false) return true
   return false
+}
+
+/** True se l’ingrediente va in forno (non solo a fine cottura / bancone). */
+export function ingredientGoesInCottura(ing) {
+  if (!ing) return false
+  if (ing.vaInCottura === false || ing.va_in_cottura === false) return false
+  return true
+}
+
+/**
+ * Task da mostrare ai pizzaioli: da preparare E da mettere in cottura.
+ * Esclude fritti/bibite/dolci “prodotto intero” (restano a Cucina/Bancone).
+ */
+export function pizzaioloShouldSeePrepTask(task) {
+  if (!task) return false
+  if (task.vaInCottura === false || task.va_in_cottura === false) return false
+  const cat = normalizeIngredienteCategoria(task.ingredienteCategoria || task.categoria)
+  if (task.kind === "prodotto" && (cat === "fritto" || cat === "bibita" || cat === "dolce")) {
+    return false
+  }
+  if (cat === "bibita") return false
+  return true
+}
+
+/** Filtra i task per fascia: solo prep che vanno in cottura. */
+export function filterPrepTasksForPizzaiolo(tasksBySlot) {
+  const out = {}
+  for (const [slot, tasks] of Object.entries(tasksBySlot || {})) {
+    const kept = (tasks || []).filter(pizzaioloShouldSeePrepTask)
+    if (kept.length) out[slot] = kept
+  }
+  return out
 }
 
 /**
@@ -198,7 +230,6 @@ export function buildCucinaPrepTasks(
   for (const ord of orders || []) {
     const orario = ord.orario_ritiro ?? ord.orarioRitiro
     const slot = orarioToSlotLabel(orario, slotMinutes) || CUCINA_SLOT_SENZA_ORARIO
-    if (!tasksBySlot[slot]) tasksBySlot[slot] = []
 
     const prepStato = ord.cucina_prep_stato ?? ord.cucinaPrepStato
     const stato = normalizeCucinaPrepStato(prepStato)
@@ -219,6 +250,7 @@ export function buildCucinaPrepTasks(
         if (!ingId || seenIds.has(String(ingId))) return
         seenIds.add(String(ingId))
         const done = (stato.doneByRiga[String(rigaId)] || []).includes(String(ingId))
+        if (!tasksBySlot[slot]) tasksBySlot[slot] = []
         tasksBySlot[slot].push({
           kind,
           ordineId: ord.id,
@@ -228,6 +260,7 @@ export function buildCucinaPrepTasks(
           ingredienteNome: ing.nome || "—",
           ingredienteCategoria: ing.categoria || "",
           ingredienteColore: ing.colore || "",
+          vaInCottura: ing.vaInCottura !== false && ing.va_in_cottura !== false,
           prodottoNome,
           formatoNome: formato,
           qty,
@@ -257,7 +290,7 @@ export function buildCucinaPrepTasks(
       for (const nome of signals.fineCottura) {
         const ing = resolveOrSyntheticIng(byNome, nome)
         if (!ing) continue
-        pushTask(ing, "ingrediente")
+        pushTask({ ...ing, vaInCottura: false, va_in_cottura: false }, "ingrediente")
       }
 
       const prepProdotto = productPrepCucinaById[pid] === true
@@ -267,6 +300,7 @@ export function buildCucinaPrepTasks(
           seenIds.add(prepKey)
           const done = (stato.doneByRiga[String(rigaId)] || []).includes(prepKey)
           const meta = productPrepMetaById[pid] || {}
+          if (!tasksBySlot[slot]) tasksBySlot[slot] = []
           tasksBySlot[slot].push({
             kind: "prodotto",
             ordineId: ord.id,
@@ -276,6 +310,7 @@ export function buildCucinaPrepTasks(
             ingredienteNome: prodottoNome,
             ingredienteCategoria: meta.categoria || "",
             ingredienteColore: meta.colore || "",
+            vaInCottura: false,
             prodottoNome,
             formatoNome: formato,
             qty,

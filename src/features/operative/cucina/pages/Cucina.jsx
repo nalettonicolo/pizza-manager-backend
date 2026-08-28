@@ -27,7 +27,7 @@ import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOpe
 import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 1000
 
 export default function Cucina() {
   const quad = useRepartiQuadTest()
@@ -164,13 +164,13 @@ export default function Cucina() {
     async (agg) => {
       if (!agg?.pendingTasks?.length) return
       setPrepActionKey(agg.pickKey)
+      const { nextByOrdineId } = markAggregatedPrepDone(orders, agg.pendingTasks)
+      setOrders((prev) =>
+        prev.map((o) => (nextByOrdineId[o.id] ? { ...o, cucina_prep_stato: nextByOrdineId[o.id] } : o)),
+      )
       try {
-        const { nextByOrdineId } = markAggregatedPrepDone(orders, agg.pendingTasks)
         const entries = Object.entries(nextByOrdineId)
         await Promise.all(entries.map(([oid, next]) => updateOrderCucinaPrepStato(oid, next)))
-        setOrders((prev) =>
-          prev.map((o) => (nextByOrdineId[o.id] ? { ...o, cucina_prep_stato: nextByOrdineId[o.id] } : o)),
-        )
       } catch (err) {
         console.error(err)
         setError("Errore salvataggio preparazione. Verifica di aver eseguito sql_upgrade (colonna cucina_prep_stato).")
