@@ -2290,7 +2290,7 @@ button:active:not(:disabled),
     padding: 16px;
   }
   .dashboard-modal--tall.dashboard-modal--wide {
-    max-width: min(1100px, 96vw);
+    max-width: clamp(560px, 82vw, 920px);
     width: 100%;
     max-height: none;
     margin-bottom: 24px;
@@ -2344,9 +2344,12 @@ button:active:not(:disabled),
   overflow-y: auto;
 }
 
-/* Admin Menu → Pizze: modale largo, scroll solo sulle liste ingredienti (no doppio scroll sul body) */
+/* Admin Menu → Pizze: modale adattivo (si restringe con lo schermo), scroll solo sulle liste
+   ingredienti (no doppio scroll sul body) — richiesta esplicita: "rimpiccioliscilo un po', fallo
+   adattivo in base allo schermo del dispositivo". clamp() invece di un unico breakpoint fisso, così
+   scala con la finestra invece di restare sempre alla dimensione massima su ogni desktop. */
 .dashboard-modal:has(.pizza-modal-shell) {
-  max-height: min(94vh, 1000px);
+  max-height: clamp(480px, 86vh, 780px);
 }
 
 .dashboard-modal:has(.pizza-modal-shell) .dashboard-modal-header {
@@ -2359,12 +2362,12 @@ button:active:not(:disabled),
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 14px 18px;
+  padding: 12px 16px;
 }
 
 @media (min-width: 900px) {
   .dashboard-modal--tall.dashboard-modal--wide:has(.pizza-modal-shell) {
-    max-height: min(94vh, 1000px);
+    max-height: clamp(480px, 86vh, 780px);
   }
 
   .dashboard-modal--tall.dashboard-modal--wide:has(.pizza-modal-shell) .dashboard-modal-body {
@@ -2424,9 +2427,9 @@ button:active:not(:disabled),
 .pizza-modal-ingredients {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
   flex: 1 1 0;
-  min-height: 220px;
+  min-height: 160px;
   overflow: hidden;
 }
 
