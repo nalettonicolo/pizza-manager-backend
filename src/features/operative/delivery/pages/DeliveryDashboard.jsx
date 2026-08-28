@@ -25,7 +25,7 @@ import {
 } from "@/features/operative/cassa/utils/cassaPaymentDisplay"
 
 const STATO_PRONTO = "PRONTO"
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 1000
 
 /** Chiave slot per ordini senza orario_ritiro (vista test griglia reparti). */
 const SLOT_SENZA_ORARIO = "__senza_orario__"

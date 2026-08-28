@@ -15,7 +15,7 @@ import {
 import {
   aggregateBanconeBibiteBySlot,
   aggregateBanconeIngredientsBySlot,
-  banconeSlotsFromOrders,
+  banconeSlotsWithPrepItems,
   BANCONE_BIBITE_PICKED_BG,
 } from "@/features/operative/bancone/utils/banconeSlotPick"
 import {
@@ -35,6 +35,7 @@ import { isDeliveryUrgentPartenzaBancone } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
+import { subscribeOperativeOrderSync } from "@/features/operative/hooks/operativeOrderSync"
 import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfig"
 import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
@@ -42,7 +43,7 @@ import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
 const STATO_PRONTO = "PRONTO"
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_CONSEGNATO = "CONSEGNATO"
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 1000
 const BANCONE_PICK_STORAGE_PREFIX = "pm_bancone_picked_v1"
 
 function getBanconePickStorageKey(tenantId) {
@@ -68,7 +69,6 @@ export default function Bancone() {
   const [error, setError] = useState(null)
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
   const [cortesiaBusy, setCortesiaBusy] = useState(false)
   const [bibiteProductIds, setBibiteProductIds] = useState(() => new Set())
   /** Chiave ingrediente/bibita/summary preso in busta (inverso cucina: parte grigio, tap = colore). */
@@ -217,6 +217,25 @@ export default function Bancone() {
     pollMs: POLL_FALLBACK_MS,
   })
 
+  useEffect(() => {
+    return subscribeOperativeOrderSync((ev) => {
+      if (ev?.kind !== "stato" || ev.stato !== STATO_PRONTO || !ev.order?.id) return
+      const incoming = { ...ev.order, stato: STATO_PRONTO }
+      setOrders((prev) => {
+        if (prev.some((o) => o.id === incoming.id)) {
+          return prev.map((o) => (o.id === incoming.id ? { ...o, ...incoming } : o))
+        }
+        return [incoming, ...prev]
+      })
+      if (Array.isArray(ev.righe) && ev.righe.length) {
+        setRighePerOrdine((prev) => ({ ...prev, [incoming.id]: ev.righe }))
+      }
+      if (ev.pizze != null) {
+        setPizzePerOrdine((prev) => ({ ...prev, [incoming.id]: ev.pizze }))
+      }
+    })
+  }, [])
+
   /** Catalogo ingredienti completo (nome→categoria/colore): fallback per gli "extra" aggiunti a
    * una riga che non fanno parte della ricetta base di nessun prodotto già caricato (altrimenti
    * risultano grigi "comune" anche se in anagrafica hanno una categoria impostata). Cambia raramente:
@@ -285,16 +304,6 @@ export default function Bancone() {
     [prepOrders]
   )
 
-  const banconeSlotOrder = useMemo(
-    () => banconeSlotsFromOrders(prepOrders.length ? prepOrders : ordiniVisibili, PLANNING_GRID_SLOT_MINUTES),
-    [prepOrders, ordiniVisibili]
-  )
-
-  // Con Cucina abilitata se ne occupa lei della preparazione (tocca quando pronto): a Bancone
-  // restano interattivi solo le bibite. Il resto lo mostriamo comunque, in sola visualizzazione
-  // (stesso stato "fatto" condiviso via cucina_prep_stato), così chi è al bancone sa cosa sta
-  // arrivando senza poter marcare pronto un task che non è suo — evita che due reparti si
-  // pestino i piedi sullo stesso ingrediente.
   const readOnlyPrep = cucinaTabletOn
   const ingredientsBySlot = useMemo(
     () =>
@@ -318,6 +327,11 @@ export default function Bancone() {
         PLANNING_GRID_SLOT_MINUTES
       ),
     [ordiniVisibili, righePerOrdine, productNames, bibiteProductIds]
+  )
+
+  const banconeSlotOrder = useMemo(
+    () => banconeSlotsWithPrepItems(ingredientsBySlot, bibiteBySlot),
+    [ingredientsBySlot, bibiteBySlot],
   )
 
   const availablePickKeys = useMemo(() => {
@@ -408,22 +422,21 @@ export default function Bancone() {
   const markAsConsegnato = useCallback(
     async (ordineId) => {
       if (!ordineId) return
-      setActionLoading(true)
+      const snapshot = orders.find((o) => o.id === ordineId)
+      setOrders((prev) => prev.filter((o) => o.id !== ordineId))
+      setPrepOrders((prev) => prev.filter((o) => o.id !== ordineId))
+      setDetailOrder(null)
       try {
         await updateOrderStato(ordineId, STATO_CONSEGNATO)
-        setOrders((prev) => prev.filter((o) => o.id !== ordineId))
-        // Rimuove subito anche dall'aggregazione "da preparare" (bibite/ingredienti), senza
-        // aspettare il prossimo refresh: l'ordine è concluso, i suoi chip non servono più.
-        setPrepOrders((prev) => prev.filter((o) => o.id !== ordineId))
-        setDetailOrder(null)
       } catch (err) {
         console.error(err)
+        if (snapshot) {
+          setOrders((prev) => (prev.some((o) => o.id === snapshot.id) ? prev : [snapshot, ...prev]))
+        }
         setError("Errore aggiornamento ordine.")
-      } finally {
-        setActionLoading(false)
       }
     },
-    []
+    [orders],
   )
 
   const renderCard = (ord, isDelivery) => {
@@ -460,7 +473,6 @@ export default function Bancone() {
               ...(ritardo > 0 ? styles.btnRitiratoRitardo : {}),
             }}
             onClick={(e) => { e.stopPropagation(); markAsConsegnato(ord.id); }}
-            disabled={actionLoading}
             title={ritardo > 0 ? `${ritardo} min in attesa` : "Segna come consegnato"}
           >
             {ritardo > 0 ? `${ritardo} min in attesa` : "Consegnato"}
@@ -771,10 +783,10 @@ export default function Bancone() {
         <OrderDetailModal
           order={detailOrder}
           loading={detailLoading}
-          onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
-          actionLabel={actionLoading ? "Salvataggio..." : "Consegnato"}
+          onClose={() => !cortesiaBusy && setDetailOrder(null)}
+          actionLabel="Consegnato"
           onAction={markAsConsegnato}
-          actionDisabled={actionLoading || cortesiaBusy}
+          actionDisabled={cortesiaBusy}
           ingredientsByProduct={ingredientsByProduct}
           showPrintCortesia={showPrintCortesia}
           printCortesiaBusy={cortesiaBusy}

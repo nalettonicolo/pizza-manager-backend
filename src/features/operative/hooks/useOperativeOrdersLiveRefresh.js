@@ -1,22 +1,18 @@
 import { useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { subscribeOperativeOrderSync } from "@/features/operative/hooks/operativeOrderSync"
 
 let channelSeq = 0
 
 /**
- * Refresh ordini operativi via Supabase Realtime (core.ordini) + polling di sicurezza.
+ * Refresh ordini operativi: bus in-process (istantaneo), Realtime, polling rapido.
  * @param {object} opts
  * @param {string|null|undefined} opts.tenantId
- * @param {() => void|Promise<void>} opts.onRefresh — tipicamente loadOrders({ silent: true })
- * @param {number} [opts.pollMs=30000] — fallback se Realtime non arriva
- * @param {number} [opts.debounceMs=300] — raggruppa più eventi Realtime ravvicinati (es. il
- *   pizzaiolo che clicca "In forno" su 3 ordini di fila) in un solo reload, invece di far
- *   partire un reload pesante e completo (più query in sequenza) per ognuno: senza questo,
- *   i reload si accavallano e competono per la rete, e lato reparto ricevente (es. Bancone)
- *   gli ordini appena segnati compaiono uno alla volta con un ritardo percepibile invece che
- *   tutti insieme.
+ * @param {() => void|Promise<void>} opts.onRefresh
+ * @param {number} [opts.pollMs=1000]
+ * @param {number} [opts.debounceMs=40]
  */
-export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30000, debounceMs = 300 }) {
+export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 1000, debounceMs = 40 }) {
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
@@ -24,9 +20,25 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
     if (!tenantId || typeof onRefreshRef.current !== "function") return undefined
 
     let cancelled = false
+    let inFlight = false
+    let queued = false
+
     const run = () => {
       if (cancelled) return
-      void Promise.resolve(onRefreshRef.current()).catch(() => {})
+      if (inFlight) {
+        queued = true
+        return
+      }
+      inFlight = true
+      void Promise.resolve(onRefreshRef.current())
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false
+          if (queued && !cancelled) {
+            queued = false
+            run()
+          }
+        })
     }
 
     let debounceTimer = null
@@ -36,18 +48,15 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null
         run()
-      }, debounceMs)
+      }, Math.max(0, debounceMs))
     }
 
-    run() // primo caricamento all'avvio: immediato, nessun debounce
+    run()
 
-    // Nome canale univoco per ogni mount dell'hook, non solo per tenant: in "Test 4 reparti"
-    // Pizzaioli/Bancone/Cucina/Delivery montano TUTTI questo hook contemporaneamente sullo stesso
-    // tenant — prima il topic era identico per tutti e quattro (`operative-ordini:${tenantId}`),
-    // e il client Realtime di Supabase non deduplica i join sullo stesso topic: le 4 subscribe
-    // concorrenti sullo stesso nome si intralciavano a vicenda, e in pratica gli eventi arrivavano
-    // solo al fallback di polling (30s) invece che in tempo reale — da cui il ritardo percepito
-    // segnalato dal vivo (click "In forno" su Pizzaioli → comparsa su Bancone dopo ~30s).
+    const unsubBus = subscribeOperativeOrderSync(() => {
+      scheduleRun()
+    })
+
     channelSeq += 1
     const channel = supabase
       .channel(`operative-ordini:${tenantId}:${channelSeq}`)
@@ -63,16 +72,17 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
       )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          // Non blocca l'app (il polling sotto resta attivo come fallback), ma senza questo log
-          // un fallimento di Realtime era invisibile: sembrava solo "un po' lento", non "rotto".
-          console.warn(`[useOperativeOrdersLiveRefresh] canale Realtime ${status.toLowerCase()} per tenant ${tenantId} — resto sul polling ogni ${Math.max(8000, pollMs) / 1000}s`)
+          console.warn(
+            `[useOperativeOrdersLiveRefresh] canale Realtime ${status.toLowerCase()} per tenant ${tenantId} — polling ogni ${Math.max(1000, pollMs) / 1000}s`,
+          )
         }
       })
 
-    const poll = window.setInterval(run, Math.max(8000, pollMs))
+    const poll = window.setInterval(run, Math.max(1000, pollMs))
 
     return () => {
       cancelled = true
+      unsubBus()
       if (debounceTimer) window.clearTimeout(debounceTimer)
       window.clearInterval(poll)
       void supabase.removeChannel(channel)

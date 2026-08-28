@@ -70,7 +70,6 @@ export function aggregateBanconeIngredientsBySlot(
   for (const ord of ordini || []) {
     const orario = ord.orario_ritiro ?? ord.orarioRitiro
     const slot = orarioToSlotLabel(orario, slotMinutes) ?? "Senza orario"
-    if (!bySlot[slot]) bySlot[slot] = new Map()
 
     const doneByRigaRaw =
       ord?.cucina_prep_stato && typeof ord.cucina_prep_stato === "object"
@@ -93,6 +92,7 @@ export function aggregateBanconeIngredientsBySlot(
         const id = ing.id
         if (!id || seen.has(String(id))) return
         seen.add(String(id))
+        if (!bySlot[slot]) bySlot[slot] = new Map()
         const pickKey = `ing:${slot}:${id}`
         const prev = bySlot[slot].get(pickKey)
         const label = ing.nome || "—"
@@ -199,12 +199,12 @@ export function aggregateBanconeBibiteBySlot(ordini, righePerOrdine, productName
   for (const ord of ordini || []) {
     const orario = ord.orario_ritiro ?? ord.orarioRitiro
     const slot = orarioToSlotLabel(orario, slotMinutes) ?? "Senza orario"
-    if (!bySlot[slot]) bySlot[slot] = new Map()
 
     const righe = righePerOrdine[ord.id] || []
     for (const r of righe) {
       const pid = r.prodottoId ?? r.prodotto_id
       if (!pid || !set.has(pid)) continue
+      if (!bySlot[slot]) bySlot[slot] = new Map()
       const q = Number(r.quantita) || 1
       const pickKey = `bib:${slot}:${pid}`
       const nome = productNames[pid] || "—"
@@ -221,6 +221,18 @@ export function aggregateBanconeBibiteBySlot(ordini, righePerOrdine, productName
     out[slot] = [...bySlot[slot].values()].sort((a, b) => a.label.localeCompare(b.label, "it"))
   }
   return out
+}
+
+/** Slot da mostrare in colonna prep: solo fasce con ingredienti, fritti o bibite da preparare. */
+export function banconeSlotsWithPrepItems(ingredientsBySlot, bibiteBySlot) {
+  const map = {}
+  for (const slot of Object.keys(ingredientsBySlot || {})) {
+    if ((ingredientsBySlot[slot] || []).length > 0) map[slot] = 1
+  }
+  for (const slot of Object.keys(bibiteBySlot || {})) {
+    if ((bibiteBySlot[slot] || []).length > 0) map[slot] = 1
+  }
+  return sortedSlotLabels(map)
 }
 
 /** Colore chip bibita (sempre uguale quando "preso"). */
