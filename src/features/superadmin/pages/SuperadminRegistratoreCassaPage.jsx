@@ -27,6 +27,7 @@ const PAGAMENTI = [
 function emptyCarrello() {
   return {
     righe: [],
+    clienteTenantId: "",
     clienteNome: "",
     clientePiva: "",
     clienteIndirizzo: "",
@@ -393,12 +394,18 @@ export default function SuperadminRegistratoreCassaPage() {
               <label className="sa-field" style={{ marginBottom: 12, display: "block" }}>
                 Cliente PizzaManager (compila i campi sotto)
                 <select
-                  value=""
+                  value={data.carrello?.clienteTenantId ?? ""}
                   onChange={(e) => {
-                    const t = tenantsPm.find((x) => x.id === e.target.value);
+                    const id = e.target.value;
+                    if (!id) {
+                      updateCarrello((c) => ({ ...c, clienteTenantId: "" }));
+                      return;
+                    }
+                    const t = tenantsPm.find((x) => x.id === id);
                     if (!t) return;
                     updateCarrello((c) => ({
                       ...c,
+                      clienteTenantId: t.id,
                       clienteNome: t.nome || "",
                       clientePiva: t.partita_iva || "",
                       clienteIndirizzo: t.indirizzo || "",
@@ -606,6 +613,7 @@ export default function SuperadminRegistratoreCassaPage() {
                     id: newLocalId(),
                     numero: `FC-${String((data.fattureCliente?.length || 0) + 1).padStart(4, "0")}`,
                     data: new Date().toISOString().slice(0, 10),
+                    clienteTenantId: data.carrello?.clienteTenantId || "",
                     clienteNome: (data.carrello?.clienteNome || "").trim() || "Cliente generico",
                     clientePiva: (data.carrello?.clientePiva || "").trim(),
                     clienteIndirizzo: (data.carrello?.clienteIndirizzo || "").trim(),
@@ -668,7 +676,7 @@ export default function SuperadminRegistratoreCassaPage() {
       )}
 
       {tab === "fatture" && (
-        <FattureSection data={data} setData={setData} ddtNumeri={ddtNumeri} openPrint={openPrint} />
+        <FattureSection data={data} setData={setData} ddtNumeri={ddtNumeri} openPrint={openPrint} tenantsPm={tenantsPm} />
       )}
 
       {tab === "ddt" && (
@@ -686,13 +694,121 @@ export default function SuperadminRegistratoreCassaPage() {
   );
 }
 
-function FattureSection({ data, setData, ddtNumeri, openPrint }) {
+function FattureSection({ data, setData, ddtNumeri, openPrint, tenantsPm }) {
   const [numero, setNumero] = useState("");
   const [dataDoc, setDataDoc] = useState(() => new Date().toISOString().slice(0, 10));
   const [fornitore, setFornitore] = useState("");
   const [riferimentoDdt, setRiferimentoDdt] = useState("");
   const [importo, setImporto] = useState("");
   const [noteFp, setNoteFp] = useState("");
+
+  // ---- Nuova fattura a cliente (creazione diretta, senza passare dal carrello di Cassa) ----
+  const [nuovaFC, setNuovaFC] = useState({
+    numero: "",
+    data: new Date().toISOString().slice(0, 10),
+    clienteTenantId: "",
+    clienteNome: "",
+    clientePiva: "",
+    clienteIndirizzo: "",
+    note: "",
+    ddtRiferimenti: [],
+  });
+  const [righeFC, setRigheFC] = useState([]);
+  const [rigaFCDraft, setRigaFCDraft] = useState({ descrizione: "", qty: 1, prezzoImponibileUnit: "", aliquotaIva: 10 });
+  const [ddtDaImportare, setDdtDaImportare] = useState("");
+  const totaliFC = calcRighe(righeFC);
+
+  // DDT già registrati per lo stesso destinatario (confronto testuale sul nome, i DDT non hanno
+  // un tenant_id proprio — sono compilati a mano o dal picker cliente della tab DDT).
+  const ddtDelCliente = (data.ddt || []).filter((d) => {
+    const nome = nuovaFC.clienteNome.trim().toLowerCase();
+    return nome && (d.destinatario || "").trim().toLowerCase() === nome;
+  });
+
+  function importaRigheDaDdt() {
+    const ddt = (data.ddt || []).find((d) => d.id === ddtDaImportare);
+    if (!ddt || !ddt.righe?.length) return;
+    setRigheFC((r) => [
+      ...r,
+      ...ddt.righe.map((x) => ({
+        id: newLocalId(),
+        descrizione: x.descrizione || "",
+        qty: Number(x.qty) || 1,
+        prezzoImponibileUnit: 0,
+        aliquotaIva: 10,
+      })),
+    ]);
+    setNuovaFC((f) => ({
+      ...f,
+      ddtRiferimenti: f.ddtRiferimenti.includes(ddt.numero) ? f.ddtRiferimenti : [...f.ddtRiferimenti, ddt.numero],
+    }));
+    setDdtDaImportare("");
+  }
+
+  function selezionaClienteFC(id) {
+    if (!id) {
+      setNuovaFC((f) => ({ ...f, clienteTenantId: "" }));
+      return;
+    }
+    const t = (tenantsPm || []).find((x) => x.id === id);
+    if (!t) return;
+    setNuovaFC((f) => ({
+      ...f,
+      clienteTenantId: t.id,
+      clienteNome: t.nome || "",
+      clientePiva: t.partita_iva || "",
+      clienteIndirizzo: t.indirizzo || "",
+    }));
+  }
+
+  function aggiungiRigaFC() {
+    if (!rigaFCDraft.descrizione.trim()) return;
+    setRigheFC((r) => [
+      ...r,
+      {
+        id: newLocalId(),
+        descrizione: rigaFCDraft.descrizione.trim(),
+        qty: Math.max(1, Number(rigaFCDraft.qty) || 1),
+        prezzoImponibileUnit: Number(rigaFCDraft.prezzoImponibileUnit) || 0,
+        aliquotaIva: Number(rigaFCDraft.aliquotaIva),
+      },
+    ]);
+    setRigaFCDraft({ descrizione: "", qty: 1, prezzoImponibileUnit: "", aliquotaIva: 10 });
+  }
+
+  function rimuoviRigaFC(id) {
+    setRigheFC((r) => r.filter((x) => x.id !== id));
+  }
+
+  function registraFatturaCliente() {
+    if (!righeFC.length) return;
+    const t = calcRighe(righeFC);
+    const f = {
+      id: newLocalId(),
+      numero: nuovaFC.numero.trim() || `FC-${String((data.fattureCliente?.length || 0) + 1).padStart(4, "0")}`,
+      data: nuovaFC.data,
+      clienteTenantId: nuovaFC.clienteTenantId || "",
+      clienteNome: nuovaFC.clienteNome.trim() || "Cliente generico",
+      clientePiva: nuovaFC.clientePiva.trim(),
+      clienteIndirizzo: nuovaFC.clienteIndirizzo.trim(),
+      righe: righeFC.map((x) => ({ ...x })),
+      ...t,
+      nota: nuovaFC.note.trim(),
+      ddtRiferimenti: nuovaFC.ddtRiferimenti,
+    };
+    setData((d) => ({ ...d, fattureCliente: [f, ...(d.fattureCliente || [])] }));
+    setNuovaFC({
+      numero: "",
+      data: new Date().toISOString().slice(0, 10),
+      clienteTenantId: "",
+      clienteNome: "",
+      clientePiva: "",
+      clienteIndirizzo: "",
+      note: "",
+      ddtRiferimenti: [],
+    });
+    setRigheFC([]);
+  }
 
   function addPassive() {
     if (!numero.trim()) return;
@@ -729,6 +845,152 @@ function FattureSection({ data, setData, ddtNumeri, openPrint }) {
       </div>
 
       <div className="sa-reg-panel sa-reg-panel-wide">
+        <h3 className="sa-form-section-title">Nuova fattura a cliente</h3>
+        <p className="sa-form-section-lede">
+          Creazione diretta, senza passare dal carrello di Cassa — resta comunque disponibile anche «Emetti fattura
+          da carrello» nella tab Cassa per fatturare quanto già battuto lì.
+        </p>
+        {(tenantsPm || []).length > 0 ? (
+          <label className="sa-field" style={{ marginBottom: 12, display: "block", maxWidth: 420 }}>
+            Cliente PizzaManager (compila i campi sotto)
+            <select value={nuovaFC.clienteTenantId} onChange={(e) => selezionaClienteFC(e.target.value)}>
+              <option value="">— Seleziona per compilare, oppure scrivi a mano sotto —</option>
+              {tenantsPm.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome} {t.slug ? `(${t.slug})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div className="sa-field-grid">
+          <label className="sa-field">
+            Numero (vuoto = automatico)
+            <input value={nuovaFC.numero} onChange={(e) => setNuovaFC((f) => ({ ...f, numero: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Data
+            <input type="date" value={nuovaFC.data} onChange={(e) => setNuovaFC((f) => ({ ...f, data: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Ragione sociale / nome
+            <input value={nuovaFC.clienteNome} onChange={(e) => setNuovaFC((f) => ({ ...f, clienteNome: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            P.IVA
+            <input value={nuovaFC.clientePiva} onChange={(e) => setNuovaFC((f) => ({ ...f, clientePiva: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Indirizzo
+            <input value={nuovaFC.clienteIndirizzo} onChange={(e) => setNuovaFC((f) => ({ ...f, clienteIndirizzo: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Note
+            <input value={nuovaFC.note} onChange={(e) => setNuovaFC((f) => ({ ...f, note: e.target.value }))} />
+          </label>
+        </div>
+
+        {ddtDelCliente.length > 0 ? (
+          <div className="sa-callout-muted" style={{ margin: "10px 0", padding: 10 }}>
+            <label className="sa-field" style={{ display: "flex", flexDirection: "row", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ flex: "1 1 260px" }}>
+                DDT già registrati per questo cliente — importa le righe
+                <select value={ddtDaImportare} onChange={(e) => setDdtDaImportare(e.target.value)}>
+                  <option value="">— Seleziona DDT —</option>
+                  {ddtDelCliente.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.numero} del {d.data} ({(d.righe || []).length} righe)
+                    </option>
+                  ))}
+                </select>
+              </span>
+              <button type="button" className="sa-btn-outline" disabled={!ddtDaImportare} onClick={importaRigheDaDdt}>
+                Importa righe dal DDT
+              </button>
+            </label>
+            {nuovaFC.ddtRiferimenti.length > 0 ? (
+              <p style={{ margin: "8px 0 0", fontSize: 12.5 }}>
+                DDT collegati a questa fattura: {nuovaFC.ddtRiferimenti.join(", ")}. Le righe importate hanno prezzo a
+                0 — un DDT è un documento di trasporto, non riporta prezzi: valorizzale prima di registrare.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <h4 style={{ margin: "18px 0 8px", fontSize: 14 }}>Righe</h4>
+        {righeFC.length > 0 ? (
+          <div className="sa-table-wrap" style={{ marginBottom: 10 }}>
+            <table className="sa-data-table">
+              <thead>
+                <tr>
+                  <th>Descrizione</th>
+                  <th>Qtà</th>
+                  <th>Prezzo unit.</th>
+                  <th>IVA</th>
+                  <th>Totale riga</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {righeFC.map((r) => {
+                  const c = calcRiga(r);
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.descrizione}</td>
+                      <td>{r.qty}</td>
+                      <td>{formatEuro(r.prezzoImponibileUnit)}</td>
+                      <td>{r.aliquotaIva}%</td>
+                      <td>{formatEuro(c.totale)}</td>
+                      <td>
+                        <button type="button" className="sa-table-action" onClick={() => rimuoviRigaFC(r.id)}>
+                          Rimuovi
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="sa-table-empty" style={{ marginBottom: 10 }}>Nessuna riga aggiunta.</p>
+        )}
+        <div className="sa-field-grid">
+          <label className="sa-field">
+            Descrizione
+            <input value={rigaFCDraft.descrizione} onChange={(e) => setRigaFCDraft((r) => ({ ...r, descrizione: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Quantità
+            <input type="number" min={1} value={rigaFCDraft.qty} onChange={(e) => setRigaFCDraft((r) => ({ ...r, qty: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Prezzo unit. imponibile
+            <input type="number" step="0.01" value={rigaFCDraft.prezzoImponibileUnit} onChange={(e) => setRigaFCDraft((r) => ({ ...r, prezzoImponibileUnit: e.target.value }))} />
+          </label>
+          <label className="sa-field">
+            Aliquota IVA
+            <select value={rigaFCDraft.aliquotaIva} onChange={(e) => setRigaFCDraft((r) => ({ ...r, aliquotaIva: e.target.value }))}>
+              {ALIQUOTE.map((a) => (
+                <option key={a.value} value={a.value}>{a.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <button type="button" className="sa-btn-outline" style={{ marginTop: 10 }} onClick={aggiungiRigaFC}>
+          + Aggiungi riga
+        </button>
+
+        <p style={{ marginTop: 14, fontWeight: 700 }}>
+          Imponibile {formatEuro(totaliFC.imponibile)} · IVA {formatEuro(totaliFC.iva)} · Totale{" "}
+          {formatEuro(totaliFC.totale)}
+        </p>
+        <button type="button" className="btn-primary-dashboard" disabled={!righeFC.length} onClick={registraFatturaCliente}>
+          Registra fattura
+        </button>
+      </div>
+
+      <div className="sa-reg-panel sa-reg-panel-wide">
         <h3 className="sa-form-section-title">Fatture a cliente</h3>
         <div className="sa-table-wrap">
           <table className="sa-data-table">
@@ -737,6 +999,7 @@ function FattureSection({ data, setData, ddtNumeri, openPrint }) {
                 <th>Numero</th>
                 <th>Data</th>
                 <th>Cliente</th>
+                <th>DDT collegati</th>
                 <th>Totale</th>
                 <th />
               </tr>
@@ -744,8 +1007,8 @@ function FattureSection({ data, setData, ddtNumeri, openPrint }) {
             <tbody>
               {(data.fattureCliente || []).length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="sa-table-empty">
-                    Nessuna fattura. Usa «Emetti fattura da carrello» nella tab Cassa.
+                  <td colSpan={6} className="sa-table-empty">
+                    Nessuna fattura. Usa il modulo qui sopra, oppure «Emetti fattura da carrello» nella tab Cassa.
                   </td>
                 </tr>
               ) : (
@@ -754,6 +1017,7 @@ function FattureSection({ data, setData, ddtNumeri, openPrint }) {
                     <td>{f.numero}</td>
                     <td>{f.data}</td>
                     <td>{f.clienteNome}</td>
+                    <td>{f.ddtRiferimenti?.length ? f.ddtRiferimenti.join(", ") : "—"}</td>
                     <td>{formatEuro(f.totale)}</td>
                     <td>
                       <button type="button" className="sa-table-action" onClick={() => openPrint("fatturaCliente", f)}>
