@@ -71,10 +71,10 @@ function drawParagraph(w, text, { font, size, color, maxWidth = CONTENT_W, x = M
 function drawInfoColumn(w, { x, width, label, fontBold, fontRegular, lines }) {
   const startY = w.y
   w.page.drawText(label, { x, y: startY, size: 9.5, font: fontBold, color: RED })
-  let y = startY - 16
+  let y = startY - 14
   for (const line of lines) {
     if (!line.text) continue
-    const lh = (line.size || 10) * 1.35
+    const lh = (line.size || 10) * 1.3
     const wrapped = wrapLines(line.text, line.bold ? fontBold : fontRegular, line.size || 10, width)
     for (const wl of wrapped) {
       w.page.drawText(wl, {
@@ -92,14 +92,14 @@ function drawInfoColumn(w, { x, width, label, fontBold, fontRegular, lines }) {
 
 /** Tabella semplice: header rosso, righe alternate, ultima colonna allineata a destra. */
 function drawTable(w, { fontBold, fontRegular, columns, rows, totalLabel, totalValue }) {
-  const rowH = 22
+  const rowH = 18
   // Header
   w.ensureSpace(rowH)
   w.page.drawRectangle({ x: MARGIN, y: w.y - rowH, width: CONTENT_W, height: rowH, color: RED })
   let colX = MARGIN
   columns.forEach((col) => {
     const textX = col.align === "right" ? colX + col.width - fontBold.widthOfTextAtSize(col.label, 9.5) - 10 : colX + 10
-    w.page.drawText(col.label, { x: textX, y: w.y - rowH + 7, size: 9.5, font: fontBold, color: WHITE })
+    w.page.drawText(col.label, { x: textX, y: w.y - rowH + 5.5, size: 9.5, font: fontBold, color: WHITE })
     colX += col.width
   })
   w.y -= rowH
@@ -115,7 +115,7 @@ function drawTable(w, { fontBold, fontRegular, columns, rows, totalLabel, totalV
       const size = 10
       const textW = fontRegular.widthOfTextAtSize(raw, size)
       const textX = col.align === "right" ? colX + col.width - textW - 10 : colX + 10
-      w.page.drawText(raw, { x: textX, y: w.y - rowH + 7, size, font: fontRegular, color: DARK })
+      w.page.drawText(raw, { x: textX, y: w.y - rowH + 5.5, size, font: fontRegular, color: DARK })
       colX += col.width
     })
     w.y -= rowH
@@ -123,15 +123,15 @@ function drawTable(w, { fontBold, fontRegular, columns, rows, totalLabel, totalV
 
   // Riga di bordo sotto la tabella
   w.page.drawLine({ start: { x: MARGIN, y: w.y }, end: { x: MARGIN + CONTENT_W, y: w.y }, thickness: 0.75, color: BORDER })
-  w.y -= 6
+  w.y -= 5
 
   if (totalLabel) {
-    w.ensureSpace(20)
+    w.ensureSpace(18)
     const label = `${totalLabel}: ${totalValue}`
-    const size = 11
+    const size = 10.5
     const textW = fontBold.widthOfTextAtSize(label, size)
-    w.page.drawText(label, { x: MARGIN + CONTENT_W - textW, y: w.y - 14, size, font: fontBold, color: DARK })
-    w.y -= 26
+    w.page.drawText(label, { x: MARGIN + CONTENT_W - textW, y: w.y - 12, size, font: fontBold, color: DARK })
+    w.y -= 20
   }
 }
 
@@ -154,12 +154,12 @@ export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, fi
   const w = createWriter(pdfDoc)
 
   // ---- Titolo ----
-  w.page.drawText("CONTRATTO COMMERCIALE", { x: MARGIN, y: w.y, size: 19, font: fontBold, color: DARK })
-  w.y -= 22
-  w.page.drawText(`PizzaManager — ${dati.cliente.nome}`, { x: MARGIN, y: w.y, size: 11, font, color: MUTED })
-  w.y -= 14
+  w.page.drawText("CONTRATTO COMMERCIALE", { x: MARGIN, y: w.y, size: 18, font: fontBold, color: DARK })
+  w.y -= 20
+  w.page.drawText(`PizzaManager — ${dati.cliente.nome}`, { x: MARGIN, y: w.y, size: 10.5, font, color: MUTED })
+  w.y -= 12
   w.page.drawRectangle({ x: MARGIN, y: w.y, width: CONTENT_W, height: 2.5, color: RED })
-  w.y -= 26
+  w.y -= 20
 
   // ---- Intestazione a due colonne: Fornitore (sx) / Cliente (dx) ----
   const gap = 24
@@ -194,21 +194,21 @@ export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, fi
     lines: clienteLines,
   })
 
-  w.y = topY - Math.max(hLeft, hRight) - 14
+  w.y = topY - Math.max(hLeft, hRight) - 12
   w.page.drawLine({ start: { x: MARGIN, y: w.y }, end: { x: MARGIN + CONTENT_W, y: w.y }, thickness: 1, color: RED })
-  w.y -= 22
+  w.y -= 16
 
   // ---- Tabella servizi ----
-  w.ensureSpace(30)
+  w.ensureSpace(28)
   const titoloServizi = dati.nomePiano
     ? `Servizi PizzaManager sottoscritti — piano "${dati.nomePiano}"`
     : "Servizi PizzaManager sottoscritti"
-  w.page.drawText(titoloServizi, { x: MARGIN, y: w.y, size: 12.5, font: fontBold, color: DARK })
-  w.y -= 18
+  w.page.drawText(titoloServizi, { x: MARGIN, y: w.y, size: 12, font: fontBold, color: DARK })
+  w.y -= 15
 
   if (dati.servizi.length === 0) {
     drawParagraph(w, "Nessun servizio a canone aggiuntivo oltre al piano base.", { font, size: 10, color: MUTED })
-    w.y -= 8
+    w.y -= 6
   } else {
     drawTable(w, {
       fontBold,
@@ -225,9 +225,9 @@ export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, fi
 
   // ---- Tabella attrezzature ----
   if (dati.attrezzature.length > 0) {
-    w.ensureSpace(30)
-    w.page.drawText("Attrezzature a noleggio", { x: MARGIN, y: w.y, size: 12.5, font: fontBold, color: DARK })
-    w.y -= 18
+    w.ensureSpace(28)
+    w.page.drawText("Attrezzature a noleggio", { x: MARGIN, y: w.y, size: 12, font: fontBold, color: DARK })
+    w.y -= 15
     drawTable(w, {
       fontBold,
       fontRegular: font,
@@ -252,47 +252,48 @@ export async function generaContrattoCommercialePdfBlob({ dati, firmaDataUrl, fi
   }
 
   // ---- Box totale evidenziato ----
-  w.ensureSpace(56)
-  const boxW = 260
-  const boxH = 46
+  w.ensureSpace(48)
+  const boxW = 240
+  const boxH = 38
   const boxX = MARGIN + CONTENT_W - boxW
   w.page.drawRectangle({ x: boxX, y: w.y - boxH, width: boxW, height: boxH, color: RED })
-  w.page.drawText("TOTALE CANONE MENSILE", { x: boxX + 16, y: w.y - 18, size: 9, font: fontBold, color: WHITE })
-  w.page.drawText(`€ ${formatEuro(dati.totaleMensile)}`, { x: boxX + 16, y: w.y - 36, size: 17, font: fontBold, color: WHITE })
-  w.y -= boxH + 10
+  w.page.drawText("TOTALE CANONE MENSILE", { x: boxX + 14, y: w.y - 15, size: 8.5, font: fontBold, color: WHITE })
+  w.page.drawText(`€ ${formatEuro(dati.totaleMensile)}`, { x: boxX + 14, y: w.y - 30, size: 15, font: fontBold, color: WHITE })
+  w.y -= boxH + 8
   drawParagraph(w, "IVA esclusa salvo diversa indicazione in fattura — fatturazione mensile posticipata salvo diverso accordo scritto tra le parti.", {
     font: fontItalic,
-    size: 9,
+    size: 8.5,
     color: MUTED,
+    lineHeight: 11,
   })
-  w.y -= 18
+  w.y -= 12
 
   // ---- Clausole generali ----
-  w.ensureSpace(20)
-  w.page.drawText("Clausole generali", { x: MARGIN, y: w.y, size: 12, font: fontBold, color: DARK })
-  w.y -= 16
+  w.ensureSpace(18)
+  w.page.drawText("Clausole generali", { x: MARGIN, y: w.y, size: 11.5, font: fontBold, color: DARK })
+  w.y -= 13
   for (const clausola of dati.clausole) {
-    drawParagraph(w, clausola, { font: fontItalic, size: 9.5, color: MUTED, lineHeight: 13 })
-    w.y -= 6
+    drawParagraph(w, clausola, { font: fontItalic, size: 9, color: MUTED, lineHeight: 11.5 })
+    w.y -= 4
   }
 
   // ---- Firma ----
   if (firmaDataUrl) {
-    w.ensureSpace(140)
-    w.y -= 10
+    w.ensureSpace(108)
+    w.y -= 8
     w.page.drawLine({ start: { x: MARGIN, y: w.y }, end: { x: MARGIN + CONTENT_W, y: w.y }, thickness: 0.75, color: BORDER })
-    w.y -= 22
-    w.page.drawText("Firma per accettazione:", { x: MARGIN, y: w.y, size: 10.5, font: fontBold, color: DARK })
-    w.y -= 12
+    w.y -= 16
+    w.page.drawText("Firma per accettazione:", { x: MARGIN, y: w.y, size: 10, font: fontBold, color: DARK })
+    w.y -= 10
     const pngBytes = await fetch(firmaDataUrl).then((r) => r.arrayBuffer())
     const png = await pdfDoc.embedPng(pngBytes)
-    const scaled = png.scaleToFit(200, 80)
+    const scaled = png.scaleToFit(170, 55)
     w.page.drawImage(png, { x: MARGIN, y: w.y - scaled.height, width: scaled.width, height: scaled.height })
-    w.y -= scaled.height + 14
+    w.y -= scaled.height + 10
     w.page.drawText(`Firmato da: ${firmatoDa || "-"} — ${new Date().toLocaleString("it-IT")}`, {
       x: MARGIN,
       y: w.y,
-      size: 9,
+      size: 8.5,
       font,
       color: MUTED,
     })
