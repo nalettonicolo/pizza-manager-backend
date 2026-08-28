@@ -6,6 +6,9 @@
  *   node scripts/supabase-auth-remote.mjs push-email-templates
  *   node scripts/supabase-auth-remote.mjs sync-redirects [--from-db]
  *
+ * `sync-redirects --from-db` aggiunge i `public_domain` dei tenant alla allow-list Auth
+ * e stampa no-reply/info/support (senza password SMTP). Non modifica l'SMTP Auth globale.
+ *
  * Token: `supabase login` (Windows Credential Manager) oppure env SUPABASE_ACCESS_TOKEN.
  */
 import { execFileSync } from "node:child_process"
@@ -158,15 +161,30 @@ async function fetchTenantDomainsFromDb(token) {
     },
     body: JSON.stringify({
       query:
-        "SELECT trim(public_domain) AS host FROM admin.tenants WHERE public_domain IS NOT NULL AND trim(public_domain) <> ''",
+        "SELECT trim(public_domain) AS host, parametri_operativi->>'email_noreply' AS email_noreply, parametri_operativi->>'email_info' AS email_info, parametri_operativi->>'email_support' AS email_support, nullif(trim(parametri_operativi->>'smtp_host'), '') AS smtp_host FROM admin.tenants WHERE public_domain IS NOT NULL AND trim(public_domain) <> ''",
     }),
   })
   if (!res.ok) return []
   const rows = await res.json()
   if (!Array.isArray(rows)) return []
   return rows
+}
+
+function hostsFromTenantRows(rows) {
+  return (rows || [])
     .map((r) => r.host || r.public_domain)
     .filter(Boolean)
+}
+
+function printTenantEmailSummary(rows) {
+  if (!rows.length) return
+  console.log("Profili email tenant (da DB, password SMTP non stampata):")
+  for (const r of rows) {
+    const host = r.host || r.public_domain || "?"
+    console.log(
+      `  ${host} | no-reply=${r.email_noreply || "—"} | info=${r.email_info || "—"} | support=${r.email_support || "—"} | smtp=${r.smtp_host ? "sì" : "no"}`,
+    )
+  }
 }
 
 function buildEmailTemplatePatch() {
@@ -221,9 +239,11 @@ async function main() {
     const token = getAccessToken()
     let extra = []
     if (fromDb && token) {
-      const hosts = await fetchTenantDomainsFromDb(token)
+      const rows = await fetchTenantDomainsFromDb(token)
+      const hosts = hostsFromTenantRows(rows)
       extra = hosts.flatMap(hostToRedirectUrls)
       console.log("Domini tenant da DB:", hosts.length)
+      printTenantEmailSummary(rows)
     }
     const uri_allow_list = mergeRedirectUrls(PRODUCTION_REDIRECT_URLS, extra).join(",")
     await api("PATCH", { uri_allow_list })
@@ -235,7 +255,9 @@ async function main() {
     const token = getAccessToken()
     let extra = []
     if (fromDb && token) {
-      extra = (await fetchTenantDomainsFromDb(token)).flatMap(hostToRedirectUrls)
+      const rows = await fetchTenantDomainsFromDb(token)
+      extra = hostsFromTenantRows(rows).flatMap(hostToRedirectUrls)
+      printTenantEmailSummary(rows)
     }
     await api("PATCH", {
       ...buildEmailTemplatePatch(),

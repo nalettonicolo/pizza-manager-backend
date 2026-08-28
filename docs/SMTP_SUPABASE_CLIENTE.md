@@ -1,31 +1,48 @@
-# SMTP Auth Supabase — email cliente (no-reply@pizzamanager.it)
+# SMTP Auth e email per tenant
 
-Configurazione **manuale** in Supabase Dashboard (Auth → SMTP). Non richiede Resend né cron PizzaManager.
+Due livelli distinti. Non coincidono: Supabase Auth ha **un solo SMTP per progetto**.
 
-## Passi
+## 1. Piattaforma — registrazione / reset password
+
+Configurazione **manuale** in Supabase Dashboard (Auth → SMTP). Mittente: `no-reply@pizzamanager.it`.
 
 1. **Supabase Dashboard** → Project → **Authentication** → **SMTP Settings**.
 2. Abilita **Custom SMTP**.
 3. Imposta:
    - **Sender email**: `no-reply@pizzamanager.it`
    - **Sender name**: `PizzaManager`
-   - **Host / Port / User / Password**: credenziali del provider SMTP del dominio (es. hosting Koyeb mail, Aruba, Google Workspace relay, ecc.)
-4. Verifica invio con **Send test email** (reset password / magic link).
-5. **Site URL** e **Redirect URLs** devono includere `https://pizzamanager.it` e path cliente (`/cliente/*`).
+   - **Host / Port / User / Password**: casella Register.it della piattaforma (`authsmtp.securemail.pro`, porta `465`, user `no-reply@pizzamanager.it`)
+4. Verifica invio con **Send test email**.
+5. **Site URL** e **Redirect URLs** devono includere `https://pizzamanager.it` e i path cliente.
 
-## Nel codice PizzaManager
+Le mail Auth (conferma account, reset password) usano **sempre** questo SMTP, per tutti i locali.
 
-- Email transazionali **Auth** (registrazione, reset password): gestite da Supabase con SMTP sopra.
-- Email ordine al tenant: **non** via SaaS PizzaManager; per ora:
-  - stampa comanda automatica (`stampa_comanda_ordine_web_automatica`), oppure
-  - adapter `email-smtp.ts` quando il tenant configura SMTP proprio in parametri.
+## 2. Tenant — dominio del locale sul profilo + script
 
-## Adapter notifiche (futuro)
+In Superadmin → Clienti → **Email e SMTP**:
+
+- hostname pubblico (Anagrafica) = dominio comprato da te o già del locale;
+- tre caselle: `no-reply@`, `info@`, `support@` su quel dominio (create a mano su Register.it o altro);
+- SMTP del locale (host/utente/password) per le **comunicazioni** (coda notifiche).
+
+Dopo il salvataggio:
+
+```bash
+npm run supabase:auth:sync-redirects
+```
+
+Lo script legge `public_domain` da `admin.tenants` e aggiorna la allow-list Auth (link di conferma e reset password sul dominio del locale). **Non** cambia l’SMTP Auth globale (altrimenti un tenant sovrascriverebbe tutti gli altri).
+
+## Nel codice
+
+- Auth cliente: `src/features/public/services/clienteAuthService.js`
+- Profilo tenant: `parametri_operativi` (`email_noreply`, `email_info`, `email_support`, `smtp_*`) — chiavi escluse dalla vetrina pubblica
+- Notifiche ordine: `supabase/functions/_shared/notifications/processBatch.ts` usa SMTP del tenant se `smtp_host` è valorizzato, altrimenti `NOTIFY_SMTP_*` di piattaforma
+
+## Adapter notifiche
 
 File: `supabase/functions/_shared/notifications/adapters/email-smtp.ts`
 
-Variabili Edge (tenant o globali):
+Secret di fallback piattaforma:
 
 - `NOTIFY_SMTP_HOST`, `NOTIFY_SMTP_PORT`, `NOTIFY_SMTP_USER`, `NOTIFY_SMTP_PASS`, `NOTIFY_FROM_EMAIL`
-
-Fino ad allora la coda `notifiche_outbox` registra i tentativi con stato `fallito` / `NOT_CONFIGURED` — utile come audit.

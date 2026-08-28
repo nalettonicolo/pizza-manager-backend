@@ -31,6 +31,12 @@ export const PUBLIC_PARAMETRI_FORBIDDEN_KEYS = [
   "stampa_comanda_ordine_web_automatica",
   "cassa_apertura_automatica",
   "smtp_host",
+  "smtp_port",
+  "smtp_user",
+  "smtp_pass",
+  "email_noreply",
+  "email_info",
+  "email_support",
   "stripe_webhook_secret",
   "notifiche_email_attive",
 ]

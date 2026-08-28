@@ -2290,10 +2290,16 @@ button:active:not(:disabled),
     padding: 16px;
   }
   .dashboard-modal--tall.dashboard-modal--wide {
-    max-width: clamp(560px, 82vw, 920px);
+    max-width: min(1100px, 96vw);
     width: 100%;
     max-height: none;
     margin-bottom: 24px;
+  }
+  /* Solo Admin → Menù → Pizze ("Nuova pizza"/"Modifica pizza", .pizza-modal-shell): più compatto e
+     adattivo, richiesta esplicita dell'utente — scoped apposta per NON toccare altri modali "wide
+     tall" come ModificaPizzaModal.jsx in Cassa, il cui layout va mantenuto identico. */
+  .dashboard-modal--tall.dashboard-modal--wide:has(.pizza-modal-shell) {
+    max-width: clamp(560px, 82vw, 920px);
   }
   .dashboard-modal--tall .dashboard-modal-body {
     max-height: none;

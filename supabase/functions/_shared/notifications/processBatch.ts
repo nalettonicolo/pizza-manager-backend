@@ -19,11 +19,47 @@ function envMap(): Record<string, string | undefined> {
   }
 }
 
+function trimStr(v: unknown): string {
+  return String(v ?? "").trim()
+}
+
+/** SMTP del tenant in parametri_operativi, altrimenti secret di piattaforma. */
+async function envForRow(
+  admin: SupabaseClient,
+  row: NotificaOutboxRow,
+  base: Record<string, string | undefined>,
+): Promise<Record<string, string | undefined>> {
+  const tenantId = row.tenant_id
+  if (!tenantId) return base
+  const { data, error } = await admin
+    .from("tenants")
+    .select("parametri_operativi")
+    .eq("id", tenantId)
+    .maybeSingle()
+  if (error || !data) return base
+  const po = (data as { parametri_operativi?: Record<string, unknown> }).parametri_operativi
+  if (!po || typeof po !== "object") return base
+  const host = trimStr(po.smtp_host)
+  if (!host) return base
+  const from = trimStr(po.email_info) || trimStr(po.smtp_user) || base.NOTIFY_FROM_EMAIL
+  const user = trimStr(po.smtp_user) || from
+  const pass = po.smtp_pass != null ? String(po.smtp_pass) : base.NOTIFY_SMTP_PASS
+  const port = trimStr(po.smtp_port) || base.NOTIFY_SMTP_PORT || "465"
+  return {
+    ...base,
+    NOTIFY_SMTP_HOST: host,
+    NOTIFY_SMTP_PORT: port,
+    NOTIFY_SMTP_USER: user || base.NOTIFY_SMTP_USER,
+    NOTIFY_SMTP_PASS: pass,
+    NOTIFY_FROM_EMAIL: from,
+  }
+}
+
 export async function processNotificheOutboxBatch(
   admin: SupabaseClient,
   rows: NotificaOutboxRow[],
 ): Promise<{ sent: number; failed: number; skipped: number }> {
-  const env = envMap()
+  const baseEnv = envMap()
   let sent = 0
   let failed = 0
   let skipped = 0
@@ -41,6 +77,7 @@ export async function processNotificheOutboxBatch(
       continue
     }
 
+    const env = await envForRow(admin, row, baseEnv)
     const result = await adapter.send({ row, channel, env })
 
     if (result.ok) {

@@ -15,15 +15,6 @@ import {
   nuoveStaffRowsStandard,
 } from "@/features/admin/utils/staffAccountRows";
 
-/** Dominio suggerito per il placeholder email (ruolo@dominio): dominio personalizzato del tenant
- * se già impostato, altrimenti il sottodominio piattaforma, altrimenti un fallback generico. */
-function emailDomainForModal(modal) {
-  const custom = (modal?.public_domain || "").trim();
-  if (custom) return custom.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
-  const slug = (modal?.slug || "").trim();
-  if (slug) return `${slug}.pizzamanager.it`;
-  return "illocale.it";
-}
 import {
   createTenant,
   getGoLiveChecklist,
@@ -37,6 +28,18 @@ import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel";
 import { pianoDisplayLabel, tenantListinoLabel } from "@/features/superadmin/utils/pianoLabels";
 import SaListSearchField from "@/features/superadmin/components/SaListSearchField";
 import { normalizeListSearchQuery, rowMatchesListSearch } from "@/utils/listSearchFilter";
+import {
+  REGISTER_IT_SMTP,
+  emailDomainForTenantForm,
+  mergeTenantEmailCanaliIntoParametri,
+  suggestedMailboxAddresses,
+  tenantEmailCanaliFromParametri,
+} from "@/features/superadmin/utils/tenantEmailCanali";
+
+/** Placeholder ruoli@dominio: dominio del locale, sottodominio piattaforma, o fallback. */
+function emailDomainForModal(modal) {
+  return emailDomainForTenantForm(modal) || "illocale.it";
+}
 
 const PIANO_OPTIONS = [
   { value: "TRIAL", label: "Prova (14 gg) — bundle come Pro" },
@@ -49,6 +52,7 @@ const MODAL_TABS = [
   { id: "anagrafica", label: "Anagrafica" },
   { id: "servizi", label: "Contratto e servizi" },
   { id: "fiscale", label: "Fiscale e contatti" },
+  { id: "email", label: "Email e SMTP" },
   { id: "canone", label: "Canone servizio" },
   { id: "account", label: "Account attivi" },
 ];
@@ -104,6 +108,14 @@ function emptyModal(mode, services, reloadInclusioniFromPiano) {
     public_domain: "",
     public_domain_status: "none",
     caricaMenuBase: true,
+    email_noreply: "",
+    email_info: "",
+    email_support: "",
+    smtp_host: "",
+    smtp_port: "",
+    smtp_user: "",
+    smtp_pass: "",
+    smtp_pass_impostata: false,
   };
 }
 
@@ -153,6 +165,7 @@ function tenantToModal(t, mode, services, reloadInclusioniFromPiano) {
     sito_web_cliente: t.sito_web_cliente ?? "",
     public_domain: t.public_domain ?? "",
     public_domain_status: t.public_domain_status ?? "none",
+    ...tenantEmailCanaliFromParametri(po),
   };
 }
 
@@ -484,6 +497,19 @@ export default function Tenants() {
       );
       nextPo.sconto_importo_euro = euroFisso;
 
+      Object.assign(
+        nextPo,
+        mergeTenantEmailCanaliIntoParametri(nextPo, {
+          email_noreply: modal.email_noreply,
+          email_info: modal.email_info,
+          email_support: modal.email_support,
+          smtp_host: modal.smtp_host,
+          smtp_port: modal.smtp_port,
+          smtp_user: modal.smtp_user,
+          smtp_pass: modal.smtp_pass,
+        }),
+      );
+
       const ciclo = Number(modal.abbonamentoCicloGiorni) === 365 ? 365 : 30;
       const payload = {
         nome: modal.nome,
@@ -511,6 +537,12 @@ export default function Tenants() {
       };
       if (modal.mode === "create") {
         const created = await createTenant(payload);
+        const host = payload.public_domain;
+        if (host) {
+          alert(
+            `Cliente creato. Per collegare il dominio ${host} a Supabase Auth (conferma email e reset password) esegui nel progetto:\n\nnpm run supabase:auth:sync-redirects`,
+          );
+        }
         if (modal.caricaMenuBase && created?.id) {
           try {
             const esito = await seedMenuBase(created.id);
@@ -740,7 +772,7 @@ export default function Tenants() {
               {modal.mode === "create" ? "Nuovo cliente" : "Modifica cliente"}
             </h2>
             <p className="sa-modal-subtitle">
-              Struttura cliente a finestre: anagrafica, servizi, fiscale, canone e account attivi.
+              Struttura cliente a finestre: anagrafica, servizi, fiscale, email/SMTP, canone e account attivi.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
               {MODAL_TABS.map((t) => (
@@ -941,6 +973,134 @@ export default function Tenants() {
                   </div>
                 </div>
               </section>
+              ) : null}
+
+              {modalTab === "email" ? (
+                <section className="sa-form-section">
+                  <h3 className="sa-form-section-title">Email del locale e SMTP</h3>
+                  <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
+                    Inserisci il dominio della pizzeria in Anagrafica (acquistato da te o già del locale) e le tre
+                    caselle create su Register.it o altro provider. Lo script{" "}
+                    <code style={{ fontSize: 12 }}>npm run supabase:auth:sync-redirects</code> collega il dominio a
+                    Supabase Auth (link di conferma e reset password). L’SMTP di <strong>registrazione clienti</strong> resta
+                    quello di piattaforma (<code style={{ fontSize: 12 }}>no-reply@pizzamanager.it</code>): non si può
+                    avere un SMTP Auth diverso per ogni tenant. Host e password qui sotto servono alle{" "}
+                    <strong>comunicazioni</strong> (notifiche) con mittente <code style={{ fontSize: 12 }}>info@</code> del
+                    locale.
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                    <button
+                      type="button"
+                      className="sa-btn-ghost"
+                      onClick={() => {
+                        const host = emailDomainForTenantForm(modal);
+                        const suggested = suggestedMailboxAddresses(host);
+                        setModal((m) =>
+                          m
+                            ? {
+                                ...m,
+                                ...suggested,
+                                smtp_host: m.smtp_host || REGISTER_IT_SMTP.host,
+                                smtp_port: m.smtp_port || String(REGISTER_IT_SMTP.port),
+                                smtp_user: m.smtp_user || suggested.email_info,
+                              }
+                            : m,
+                        );
+                      }}
+                    >
+                      Compila no-reply / info / support dal dominio
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+                    <div>
+                      <label style={labelStyle}>Registrazione clienti (no-reply)</label>
+                      <input
+                        type="email"
+                        value={modal.email_noreply}
+                        onChange={(e) => setModalField("email_noreply", e.target.value)}
+                        style={inputStyle}
+                        placeholder="no-reply@dominio-locale.it"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Comunicazioni (info)</label>
+                      <input
+                        type="email"
+                        value={modal.email_info}
+                        onChange={(e) => setModalField("email_info", e.target.value)}
+                        style={inputStyle}
+                        placeholder="info@dominio-locale.it"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Assistenza (support)</label>
+                      <input
+                        type="email"
+                        value={modal.email_support}
+                        onChange={(e) => setModalField("email_support", e.target.value)}
+                        style={inputStyle}
+                        placeholder="support@dominio-locale.it"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>SMTP host</label>
+                      <input
+                        type="text"
+                        value={modal.smtp_host}
+                        onChange={(e) => setModalField("smtp_host", e.target.value)}
+                        style={inputStyle}
+                        placeholder={REGISTER_IT_SMTP.host}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>SMTP porta</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={modal.smtp_port}
+                        onChange={(e) => setModalField("smtp_port", e.target.value)}
+                        style={inputStyle}
+                        placeholder={String(REGISTER_IT_SMTP.port)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>SMTP utente</label>
+                      <input
+                        type="text"
+                        value={modal.smtp_user}
+                        onChange={(e) => setModalField("smtp_user", e.target.value)}
+                        style={inputStyle}
+                        placeholder="info@dominio-locale.it"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={labelStyle}>
+                        SMTP password
+                        {modal.smtp_pass_impostata ? " (già salvata: lascia vuoto per non cambiarla)" : ""}
+                      </label>
+                      <input
+                        type="password"
+                        value={modal.smtp_pass}
+                        onChange={(e) => setModalField("smtp_pass", e.target.value)}
+                        style={inputStyle}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+                  <p style={{ margin: "14px 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                    Dopo il salvataggio, da terminale nella cartella del progetto:{" "}
+                    <code>npm run supabase:auth:sync-redirects</code>
+                    {modal.public_domain
+                      ? ` — include il dominio ${emailDomainForTenantForm(modal)} nella allow-list Auth.`
+                      : " — funziona quando in Anagrafica è compilato l’hostname pubblico."}
+                  </p>
+                </section>
               ) : null}
 
               {modalTab === "account" && modal.mode === "edit" && modal.id ? (
