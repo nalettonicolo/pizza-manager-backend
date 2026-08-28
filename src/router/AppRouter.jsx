@@ -78,6 +78,7 @@ const SuperadminChecklistMesePage = lazy(() => import("@/features/superadmin/pag
 const SuperadminAzioniDaCompletarePage = lazy(() => import("@/features/superadmin/pages/SuperadminAzioniDaCompletarePage"));
 const RegistroAttivitaPage = lazy(() => import("@/features/superadmin/pages/RegistroAttivitaPage"));
 const SuperadminPreventiviContrattiPage = lazy(() => import("@/features/superadmin/pages/SuperadminPreventiviContrattiPage"));
+const SuperadminCatalogoHardwarePage = lazy(() => import("@/features/superadmin/pages/SuperadminCatalogoHardwarePage"));
 const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/ServizioSchedaPage"));
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
 const TestRepartiPanelPage = lazy(() => import("@/features/superadmin/pages/TestRepartiPanelPage"));
@@ -506,6 +507,14 @@ export default function AppRouter() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <SuperadminPreventiviContrattiPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/superadmin/catalogo-hardware"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminCatalogoHardwarePage />
                 </Suspense>
               }
             />
