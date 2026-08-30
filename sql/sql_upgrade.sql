@@ -116,4 +116,41 @@
 -- 47_fix_vista_ordine_security_invoker, 48_magazzino_giacenza_valorizzata,
 -- 49_gestione_tavoli, 50_password_nota_richiesta_conferma.
 -- TODO: esportarle come file sql/modules/ locali per non dipendere solo dalla cronologia remota.
+--
+-- Modulo 113 — Registro attività superadmin (monitoraggio continuo):
+--   sql/modules/113_registro_attivita_monitor.sql
+--
+-- Modulo 114 — Guardia anti privilege-escalation su utenti_ruoli (audit sicurezza):
+--   sql/modules/114_utenti_ruoli_blocca_escalation_superadmin.sql
+--
+-- Modulo 115 — Constraint trigger differito integrità totale ordini web (anti-frode pagamento):
+--   sql/modules/115_web_ordine_totale_integrita.sql
+--
+-- Modulo 116 — RPC atomica movimenti fidelity (lock saldo, no race condition):
+--   sql/modules/116_fidelity_applica_movimento_rpc.sql
+--
+-- Modulo 117 — Autenticazione cron->Edge Function via x-cron-secret dal Vault (audit sicurezza):
+--   sql/modules/117_cron_header_secret.sql
+--   NB: prerequisito una-tantum -> scripts/_setup-cron-secret.mjs (genera CRON_SECRET, Vault + secret edge)
+--
+-- Modulo 118 — Ottimizzazione RLS auth.uid() -> (select auth.uid()) su 7 policy (advisor performance):
+--   sql/modules/118_rls_initplan_auth_uid.sql
+--
+-- Modulo 119 — Consolidamento policy permissive duplicate (advisor multiple_permissive_policies):
+--   sql/modules/119_rls_consolida_policy_permissive.sql
+--
+-- Modulo 124 — Assegna rider su In viaggio + report consegne odierne cassa:
+--   sql/modules/124_cassa_consegne_odierne_e_assegna_rider.sql
+--
+-- Modulo 125 — RPC scrittura parametri_operativi (niente salvataggio silenzioso a 0 righe):
+--   sql/modules/125_admin_update_tenant_parametri_operativi.sql
+--
+-- Modulo 126 — Presa in carico pony + conteggio cassa (anche in viaggio):
+--   sql/modules/126_pony_presa_in_carico_e_conteggio.sql
+--
+-- Modulo 127 — Nome pony di sessione (non account) + assegna da «Non assegnato»:
+--   sql/modules/127_pony_nome_sessione_e_assegna.sql
+--
+-- Modulo 128 — Rider distinto per slot pony (il nome di Pony 1 non sovrascrive Pony 2):
+--   sql/modules/128_pony_slot_nome_sessione.sql
 -- =============================================================================

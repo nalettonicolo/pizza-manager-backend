@@ -64,6 +64,31 @@ function normNome(s) {
  * True se l’ingrediente deve comparire sui monitor Cucina/Bancone.
  * Flag Prep. cucina, oppure categoria (affettato/fritto/…), oppure a fine cottura.
  */
+/** Categorie che non vanno in forno: restano a Cucina/Bancone, non al pizzaiolo. */
+const PIZZAIOLO_NASCONDI_CATEGORIA = new Set(["bibita", "fritto", "dolce"])
+
+/**
+ * Sul monitor pizzaiolo: solo extra/ingredienti da mettere in cottura.
+ * Esclude prodotti interi (bibite, fritti, dolci) e le stesse categorie.
+ */
+export function isPizzaioloCotturaPrepTask(task) {
+  if (!task) return false
+  if (task.kind === "prodotto") return false
+  const cat = normalizeIngredienteCategoria(task.ingredienteCategoria || task.categoria)
+  if (PIZZAIOLO_NASCONDI_CATEGORIA.has(cat)) return false
+  return true
+}
+
+/** Filtra i task prep per fascia: solo ciò che serve in cottura al pizzaiolo. */
+export function filterTasksBySlotForPizzaiolo(tasksBySlot) {
+  const out = {}
+  for (const [slot, tasks] of Object.entries(tasksBySlot || {})) {
+    const kept = (tasks || []).filter(isPizzaioloCotturaPrepTask)
+    if (kept.length) out[slot] = kept
+  }
+  return out
+}
+
 export function ingredientNeedsPrepMonitor(ing) {
   if (!ing) return false
   if (ing.prepCucina === true || ing.prep_cucina === true) return true

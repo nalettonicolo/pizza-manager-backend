@@ -6,7 +6,7 @@ import { listClienteOrdini, getClienteOrdineDettaglio } from "@/features/public/
 import { finalizeSumUpCheckoutOrdine } from "@/features/public/services/onlinePaymentService"
 import {
   clientePagamentoLabel,
-  clienteStatoOrdineLabel,
+  clienteStatoOrdineLabelFull,
   clienteTipoOrdineLabel,
 } from "@/utils/clienteOrdineStato"
 import { formatPrice } from "@/utils/format"
@@ -68,8 +68,19 @@ function statoBadgeStyle(stato) {
   if (s === "ANNULLATO") return { background: "#fef2f2", color: "#b91c1c", border: "1px solid #fecaca" }
   if (s === "CONSEGNATO") return { background: "#ecfdf5", color: "#166534", border: "1px solid #bbf7d0" }
   if (s === "PRONTO") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }
+  if (s === "IN_COTTURA") return { background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }
   if (s === "IN_PREPARAZIONE") return { background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }
   return { background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" }
+}
+
+/** Stile badge considerando la consegna: "In consegna" (rider partito) ha un colore dedicato. */
+function statoBadgeStyleFull(o) {
+  const stato = String(o?.stato ?? "").toUpperCase()
+  const consegna = String(o?.stato_consegna ?? o?.statoConsegna ?? "").toUpperCase()
+  if (stato !== "CONSEGNATO" && stato !== "ANNULLATO" && (consegna === "IN_VIAGGIO" || consegna === "PRESSO_CLIENTE")) {
+    return { background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe" }
+  }
+  return statoBadgeStyle(stato)
 }
 
 export default function ClienteOrdiniPage() {
@@ -277,9 +288,9 @@ export default function ClienteOrdiniPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <strong style={{ fontSize: 15 }}>Ordine #{o.numero ?? "—"}</strong>
                     <span
-                      style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 999, ...statoBadgeStyle(o.stato) }}
+                      style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 999, ...statoBadgeStyleFull(o) }}
                     >
-                      {clienteStatoOrdineLabel(o.stato)}
+                      {clienteStatoOrdineLabelFull(o)}
                     </span>
                   </div>
                   <p style={{ margin: "8px 0 0", fontSize: 13, color: "#1d4ed8" }}>
@@ -343,10 +354,10 @@ export default function ClienteOrdiniPage() {
                         fontWeight: 600,
                         padding: "2px 8px",
                         borderRadius: 999,
-                        ...statoBadgeStyle(o.stato),
+                        ...statoBadgeStyleFull(o),
                       }}
                     >
-                      {clienteStatoOrdineLabel(o.stato)}
+                      {clienteStatoOrdineLabelFull(o)}
                     </span>
                   </div>
                   <p style={{ margin: "8px 0 0", fontSize: 13, color: "#64748b" }}>
@@ -411,8 +422,8 @@ export default function ClienteOrdiniPage() {
 
           <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
             {formatDateTime(detail.created_at)} ·{" "}
-            <span style={{ ...statoBadgeStyle(detail.stato), padding: "2px 8px", borderRadius: 999, fontWeight: 600 }}>
-              {clienteStatoOrdineLabel(detail.stato)}
+            <span style={{ ...statoBadgeStyleFull(detail), padding: "2px 8px", borderRadius: 999, fontWeight: 600 }}>
+              {clienteStatoOrdineLabelFull(detail)}
             </span>
           </p>
 

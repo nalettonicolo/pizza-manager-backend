@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
 import { processNotificheOutboxBatch } from "../_shared/notifications/processBatch.ts"
+import { assertCronCaller } from "../_shared/cronAuth.ts"
 
 /**
  * Worker `notifiche_outbox`: routing per canale (email / sms / whatsapp / in_app).
@@ -10,6 +11,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 })
   }
+  const cronDenied = assertCronCaller(req)
+  if (cronDenied) return cronDenied
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

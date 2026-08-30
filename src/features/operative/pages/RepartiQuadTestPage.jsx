@@ -1,11 +1,13 @@
-import { lazy, Suspense, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { Link, Navigate, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
+import { CassaHeaderContext } from "@/app/contexts/CassaHeaderContext"
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 import { isSuperAdminRole } from "@/utils/superAdminAccess"
 import { isDemoGiroSearch } from "@/utils/demoGiro"
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { RepartiQuadTestProvider } from "@/features/operative/contexts/RepartiQuadTestContext"
+import ScaledOperativeViewport from "@/features/operative/components/ScaledOperativeViewport"
 
 /**
  * Stessa SPA dei route operativi, senza iframe: in Edge (Tracking Prevention) gli iframe
@@ -25,9 +27,22 @@ function DeliveryQuadTestPane() {
   return <DeliveryDashboard mode="quadTestBySlot" />
 }
 
+/** Cassa nel riquadro: toolbar reale (In negozio, Delivery, Ordini…) dentro il viewport in scala. */
+function QuadCassaPane() {
+  const [toolbar, setToolbar] = useState(null)
+  return (
+    <CassaHeaderContext.Provider value={{ setContent: setToolbar, setSidebar: () => {} }}>
+      <div className="reparti-quad-cassa-shell">
+        {toolbar ? <div className="reparti-quad-cassa-toolbar">{toolbar}</div> : null}
+        <CassaPage />
+      </div>
+    </CassaHeaderContext.Provider>
+  )
+}
+
 /** Reparti disponibili per ciascuno dei 4 riquadri: l'utente sceglie liberamente cosa vedere dove. */
 const AVAILABLE_PANES = [
-  { key: "cassa", label: "Cassa", El: CassaPage },
+  { key: "cassa", label: "Cassa", El: QuadCassaPane },
   { key: "pizzaioli", label: "Pizzaioli", El: PizzaioloDashboard },
   { key: "bancone", label: "Bancone", El: Bancone },
   { key: "cucina", label: "Cucina", El: Cucina },
@@ -61,6 +76,7 @@ export default function RepartiQuadTestPage() {
   const location = useLocation()
   const [reloadKey, setReloadKey] = useState(0)
   const [selection, setSelection] = useState(loadStoredSelection)
+  const [expandedIndex, setExpandedIndex] = useState(null)
   const inDemo = isDemoGiroSearch(location.search)
 
   function updatePaneSelection(index, key) {
@@ -75,6 +91,20 @@ export default function RepartiQuadTestPage() {
     })
   }
 
+  useEffect(() => {
+    if (expandedIndex == null) return
+    const onKey = (e) => {
+      if (e.key === "Escape") setExpandedIndex(null)
+    }
+    document.addEventListener("keydown", onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [expandedIndex])
+
   const canAccessQuad =
     isQuadRepartiTestEmail(user?.email) || isSuperAdminRole(ruolo) || inDemo
   if (!canAccessQuad) {
@@ -87,41 +117,21 @@ export default function RepartiQuadTestPage() {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        minHeight: "100%",
-        flex: 1,
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          flexShrink: 0,
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 12px",
-          borderBottom: "1px solid #e2e8f0",
-          background: "#fff",
-        }}
-      >
-        <strong style={{ fontSize: 14, color: "#0f172a" }}>Test 4 reparti</strong>
-        <span style={{ fontSize: 12, color: "#64748b" }}>
-          Scegli il reparto in ciascun riquadro (sessione condivisa, senza iframe)
+    <div className="reparti-quad-page">
+      <div className="reparti-quad-topbar">
+        <strong className="reparti-quad-topbar-title">Test 4 reparti</strong>
+        <span className="reparti-quad-topbar-hint">
+          Ogni riquadro mostra la schermata operativa reale. Usa Ingrandisci per vederla più grande.
         </span>
         <Link
           to={withPreservedSupportSearch("/operative/cassa", location.search)}
-          style={{ fontSize: 13, color: "#0f766e", fontWeight: 600, marginLeft: 8 }}
+          className="reparti-quad-topbar-link reparti-quad-topbar-link--cassa"
         >
           Torna a Cassa
         </Link>
         <Link
           to={withPreservedSupportSearch("/operative/dashboard", location.search)}
-          style={{ fontSize: 13, color: "#c0392b", fontWeight: 600, marginLeft: 8 }}
+          className="reparti-quad-topbar-link reparti-quad-topbar-link--riepilogo"
         >
           Riepilogo
         </Link>
@@ -129,16 +139,7 @@ export default function RepartiQuadTestPage() {
           <button
             type="button"
             onClick={() => navigate("/superadmin/ingresso", { replace: true })}
-            style={{
-              padding: "6px 12px",
-              fontSize: 13,
-              fontWeight: 600,
-              border: "1px solid #fecaca",
-              borderRadius: 6,
-              background: "#fef2f2",
-              color: "#b91c1c",
-              cursor: "pointer",
-            }}
+            className="reparti-quad-topbar-demo-exit"
           >
             Esci demo
           </button>
@@ -146,15 +147,7 @@ export default function RepartiQuadTestPage() {
         <button
           type="button"
           onClick={() => setReloadKey((k) => k + 1)}
-          style={{
-            marginLeft: "auto",
-            padding: "6px 12px",
-            fontSize: 13,
-            border: "1px solid #cbd5e1",
-            borderRadius: 6,
-            background: "#fff",
-            cursor: "pointer",
-          }}
+          className="reparti-quad-topbar-reload"
         >
           Ricarica tutte le viste
         </button>
@@ -169,83 +162,65 @@ export default function RepartiQuadTestPage() {
       </div>
 
       <RepartiQuadTestProvider>
-        <div
-          className="reparti-quad-grid"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gridTemplateRows: "1fr 1fr",
-            gap: 6,
-            padding: 6,
-            background: "#e2e8f0",
-          }}
-        >
+        {expandedIndex != null ? (
+          <button
+            type="button"
+            className="reparti-quad-expand-backdrop"
+            aria-label="Chiudi vista ingrandita"
+            onClick={() => setExpandedIndex(null)}
+          />
+        ) : null}
+        <div className="reparti-quad-grid">
           {selection.map((key, index) => {
             const f = PANE_BY_KEY.get(key) || AVAILABLE_PANES[0]
             const Comp = f.El
+            const expanded = expandedIndex === index
             return (
-              <div
-                key={`slot-${index}-${f.key}-${reloadKey}`}
-                style={{
-                  position: "relative",
-                  minHeight: 0,
-                  minWidth: 0,
-                  background: "#fff",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  border: "1px solid #cbd5e1",
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
+              <div key={`slot-${index}`} className="reparti-quad-slot">
                 <div
-                  style={{
-                    flexShrink: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "4px 6px",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#334155",
-                    background: "#f8fafc",
-                    borderBottom: "1px solid #e2e8f0",
-                  }}
+                  className={`reparti-quad-pane${expanded ? " reparti-quad-pane--expanded" : ""}`}
+                  role={expanded ? "dialog" : undefined}
+                  aria-modal={expanded ? true : undefined}
+                  aria-label={expanded ? `${f.label} — vista ingrandita` : undefined}
                 >
-                  <select
-                    value={f.key}
-                    onChange={(e) => updatePaneSelection(index, e.target.value)}
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "#334155",
-                      padding: "2px 4px",
-                      borderRadius: 4,
-                      border: "1px solid #cbd5e1",
-                      background: "#fff",
-                    }}
-                  >
-                    {AVAILABLE_PANES.map((p) => (
-                      <option key={p.key} value={p.key}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div
-                  className="reparti-quad-panel-body"
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflow: "auto",
-                    WebkitOverflowScrolling: "touch",
-                  }}
-                >
-                  <Suspense fallback={<PanelFallback />}>
-                    <Comp />
-                  </Suspense>
+                  <div className="reparti-quad-pane-chrome">
+                    <select
+                      value={f.key}
+                      onChange={(e) => updatePaneSelection(index, e.target.value)}
+                      aria-label={`Reparto riquadro ${index + 1}`}
+                    >
+                      {AVAILABLE_PANES.map((p) => (
+                        <option key={p.key} value={p.key}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    {expanded ? (
+                      <button
+                        type="button"
+                        className="reparti-quad-expand-btn"
+                        onClick={() => setExpandedIndex(null)}
+                      >
+                        Chiudi
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="reparti-quad-expand-btn"
+                        onClick={() => setExpandedIndex(index)}
+                        title={`Apri ${f.label} più grande`}
+                      >
+                        Ingrandisci
+                      </button>
+                    )}
+                  </div>
+                  <div className="reparti-quad-panel-body">
+                    <ScaledOperativeViewport>
+                      <Suspense fallback={<PanelFallback />}>
+                        <Comp key={`${index}-${f.key}-${reloadKey}`} />
+                      </Suspense>
+                    </ScaledOperativeViewport>
+                  </div>
                 </div>
               </div>
             )

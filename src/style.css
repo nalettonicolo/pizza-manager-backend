@@ -1256,6 +1256,48 @@ button:active:not(:disabled),
   box-sizing: border-box;
 }
 
+/* Cassa: una riga sola. I pulsanti scorrono in orizzontale invece di andare a capo. */
+.dashboard-header:has(.dashboard-header-toolbar) {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  height: 64px;
+}
+
+.dashboard-header-toolbar {
+  min-width: 0;
+}
+
+.cassa-header-toolbar-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  align-self: stretch;
+  padding: 4px 0 8px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+
+.cassa-header-toolbar-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.cassa-header-toolbar-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+.cassa-header-toolbar-scroll .cassa-header-toolbar-inner,
+.cassa-header-toolbar-scroll .cassa-header-toolbar-actions {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.cassa-header-toolbar-scroll button,
+.cassa-header-toolbar-scroll input {
+  flex-shrink: 0;
+}
+
 .dashboard-header-title {
   font-size: 16px;
   font-weight: 600;
@@ -1267,6 +1309,30 @@ button:active:not(:disabled),
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Cassa demo: 2x2 — DEMO | Esci / Stress test | Reset */
+.dashboard-header-actions.cassa-header-utility {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas:
+    "demo esci"
+    "stress reset";
+  gap: 4px 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.dashboard-header-actions.cassa-header-utility .cassa-action-demo {
+  grid-area: demo;
+}
+.dashboard-header-actions.cassa-header-utility .cassa-action-esci {
+  grid-area: esci;
+}
+.dashboard-header-actions.cassa-header-utility .cassa-action-stress {
+  grid-area: stress;
+}
+.dashboard-header-actions.cassa-header-utility .cassa-action-reset {
+  grid-area: reset;
 }
 
 /* Home Super Admin — tasto in alto a destra (operativo / admin / vetrina) */
@@ -1453,12 +1519,12 @@ button:active:not(:disabled),
 
 .dashboard-header .btn-logout,
 .dashboard-header .btn-logout-red {
-  padding: 8px 16px;
+  padding: 5px 10px;
   background: #c0392b;
   color: #fff;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -1472,6 +1538,19 @@ button:active:not(:disabled),
   flex: 1;
   padding: 24px;
   overflow: auto;
+}
+
+.dashboard-content:has(> .cassa-page-root) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dashboard-content > .cassa-page-root {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .dashboard-app-copyright {
@@ -1513,8 +1592,15 @@ button:active:not(:disabled),
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Mappa live: deve restare tutta a vista, senza un secondo scroll di pagina. */
+.dashboard-content.pizzaiolo-content-full--no-scroll {
+  overflow: hidden;
 }
 
 .dashboard-wrap.theme-admin .dashboard-content.pizzaiolo-content-full {
@@ -1524,6 +1610,84 @@ button:active:not(:disabled),
 .dashboard-wrap.theme-admin.tenant-theme-on .dashboard-content.pizzaiolo-content-full,
 .dashboard-wrap.theme-admin[style*="--admin-content-bg"] .dashboard-content.pizzaiolo-content-full {
   background: var(--admin-content-bg) !important;
+}
+
+/* PWA pony: riempie il dispositivo (telefono, tablet, desktop) senza cornice da 480px */
+.rider-pwa-root {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  min-height: 100svh;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.dashboard-content.pizzaiolo-content-full > .rider-pwa-root {
+  flex: 1;
+  min-height: 0;
+}
+
+.rider-pwa-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fff;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px
+    max(16px, env(safe-area-inset-left, 0px));
+}
+
+.rider-pwa-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  padding: 12px max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
+}
+
+.rider-pwa-orders {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 720px) {
+  .rider-pwa-orders {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .rider-pwa-orders {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.rider-pwa-orders > li {
+  margin-bottom: 0 !important;
+}
+
+.rider-pwa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rider-pwa-actions button {
+  min-height: 44px;
+  flex: 1 1 140px;
 }
 
 .pizzaiolo-floating-bar {
@@ -1580,29 +1744,37 @@ button:active:not(:disabled),
 }
 
 .pizzaiolo-dashboard-root {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 52px 12px 12px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.pizzaiolo-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* Test 4 schermate: niente barra flottante, stesso padding del riquadro Bancone. */
+.pizzaiolo-dashboard-root--quad {
+  padding: clamp(12px, 3vw, 16px);
 }
 
 .pizzaiolo-dashboard-columns {
-  flex: 1;
-  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  overflow: hidden;
+  overflow: visible;
   align-content: start;
 }
 
 .pizzaiolo-dashboard-columns > div {
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
 @media (max-width: 700px) {
@@ -2292,8 +2464,8 @@ button:active:not(:disabled),
   .dashboard-modal--tall.dashboard-modal--wide {
     max-width: min(1100px, 96vw);
     width: 100%;
-    max-height: none;
-    margin-bottom: 24px;
+    max-height: min(92dvh, 92vh);
+    margin-bottom: 0;
   }
   /* Solo Admin → Menù → Pizze ("Nuova pizza"/"Modifica pizza", .pizza-modal-shell): più compatto e
      adattivo, richiesta esplicita dell'utente — scoped apposta per NON toccare altri modali "wide
@@ -2302,8 +2474,8 @@ button:active:not(:disabled),
     max-width: clamp(560px, 82vw, 920px);
   }
   .dashboard-modal--tall .dashboard-modal-body {
-    max-height: none;
-    overflow: visible;
+    min-height: 0;
+    overflow-y: auto;
   }
 }
 
@@ -3491,6 +3663,26 @@ ul.pizza-modal-ing-list {
     margin-left: auto !important;
   }
 
+  /* Cassa: non spezzare titolo + toolbar su due righe */
+  .dashboard-wrap:not(.pizzaiolo-fullscreen) .dashboard-header:has(.dashboard-header-toolbar) {
+    flex-wrap: nowrap !important;
+    height: 64px !important;
+    min-height: 64px !important;
+    align-items: center !important;
+    overflow: hidden !important;
+  }
+  .dashboard-wrap:not(.pizzaiolo-fullscreen) .dashboard-header:has(.dashboard-header-toolbar) .dashboard-header-title {
+    flex: 0 1 auto !important;
+    max-width: 160px;
+    overflow: hidden !important;
+    text-overflow: ellipsis;
+    white-space: nowrap !important;
+  }
+  .dashboard-wrap:not(.pizzaiolo-fullscreen) .dashboard-header:has(.dashboard-header-toolbar) .dashboard-header-toolbar {
+    flex: 1 1 auto !important;
+    margin: 0 8px !important;
+  }
+
   .dashboard-wrap:not(.pizzaiolo-fullscreen) .dashboard-content {
     padding: 14px 16px !important;
     max-width: 100% !important;
@@ -3545,13 +3737,230 @@ ul.pizza-modal-ing-list {
   }
 }
 
-/* Test 4 reparti: su telefono la griglia 2×2 diventa colonna scrollabile */
-@media (max-width: 900px) {
-  .reparti-quad-grid {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: none !important;
-    grid-auto-rows: minmax(260px, auto) !important;
-  }
+/* Test 4 reparti: sempre 2×2; ogni riquadro scala la pagina operativa reale */
+.reparti-quad-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100%;
+  flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.reparti-quad-topbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.reparti-quad-topbar-title {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.reparti-quad-topbar-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.reparti-quad-topbar-link {
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.reparti-quad-topbar-link--cassa {
+  color: #0f766e;
+}
+
+.reparti-quad-topbar-link--riepilogo {
+  color: #c0392b;
+}
+
+.reparti-quad-topbar-demo-exit {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.reparti-quad-topbar-reload {
+  margin-left: auto;
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.reparti-quad-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  background: #e2e8f0;
+}
+
+.reparti-quad-slot {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+
+.reparti-quad-pane {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  display: flex;
+  flex-direction: column;
+}
+
+.reparti-quad-pane-chrome {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.reparti-quad-pane-chrome select {
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  min-height: 28px;
+}
+
+.reparti-quad-expand-btn {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #0f766e;
+  border-radius: 4px;
+  background: #f0fdfa;
+  color: #0f766e;
+  cursor: pointer;
+}
+
+.reparti-quad-expand-btn:hover {
+  background: #ccfbf1;
+}
+
+.reparti-quad-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.reparti-quad-scale-clip {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.reparti-quad-scale-stage {
+  transform-origin: top left;
+  background: #f8fafc;
+  overflow: hidden;
+  position: relative;
+}
+
+.reparti-quad-scale-stage > * {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.reparti-quad-scale-stage .cassa-page-root,
+.reparti-quad-cassa-shell {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100%;
+}
+
+.reparti-quad-cassa-shell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reparti-quad-cassa-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  overflow: auto hidden;
+}
+
+.reparti-quad-cassa-shell .cassa-page-root {
+  flex: 1;
+  height: auto !important;
+}
+
+.reparti-quad-expand-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5100;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: rgba(15, 23, 42, 0.5);
+  cursor: pointer;
+}
+
+.reparti-quad-pane--expanded {
+  position: fixed;
+  inset: max(28px, 7vh) max(28px, 6vw);
+  z-index: 5200;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+}
+
+.reparti-quad-pane--expanded .reparti-quad-pane-chrome {
+  padding: 8px 10px;
+}
+
+.reparti-quad-pane--expanded .reparti-quad-expand-btn {
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 13px;
 }
 
 /* ---------- Admin: sidebar raggruppata + impostazioni pagamenti online ---------- */

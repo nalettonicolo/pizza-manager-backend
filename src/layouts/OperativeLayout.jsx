@@ -208,7 +208,11 @@ export default function OperativeLayout() {
   const isPizzaioloPage = location.pathname === "/operative/pizzaioli";
   const isCucinaPage = location.pathname === "/operative/cucina";
   const isBanconePage = location.pathname === "/operative/bancone";
-  const isDeliveryFlowPage = location.pathname === "/operative/delivery" || location.pathname === "/operative/rider";
+  const isDeliveryFlowPage =
+    location.pathname === "/operative/delivery" ||
+    location.pathname === "/operative/rider" ||
+    location.pathname.startsWith("/operative/rider/") ||
+    /^\/operative\/pony\/\d+$/.test(location.pathname);
   const isRepartiQuadTestPage = location.pathname === "/operative/test-reparti-quad";
   const isOperativeIngressoPage = location.pathname.endsWith("-ingresso");
   /** Mappa live pony: ha già la sua intestazione compatta con link "← Lista delivery" — sidebar,
@@ -335,7 +339,6 @@ export default function OperativeLayout() {
   }
   // Sala QA / support_tenant: evita layout cassa-mobile (min-height:0 + overflow hidden)
   // che in iframe/popup collassa il contenuto a schermo beige vuoto.
-  // Stessa condizione di CassaPage (`isQaSupportSearch`), non solo SA+override.
   const qaSupportPreview = isQaSupportSearch(location.search);
   const useCassaMobileShell = isCassaPage && narrowViewport && !qaSupportPreview;
   const wrapClass = [
@@ -497,7 +500,7 @@ export default function OperativeLayout() {
       )}
       <div className={`dashboard-main${operativeFullBleed ? " pizzaiolo-fullscreen-main" : ""}`}>
         <CassaHeaderContext.Provider value={{ setContent: setCassaToolbar, setSidebar: setCassaSidebar }}>
-          {isRepartoTabletPage && operativeFullBleed && (
+          {isRepartoTabletPage && operativeFullBleed && !location.pathname.startsWith("/operative/rider") && !/^\/operative\/pony\/\d+$/.test(location.pathname) && (
             <div className="pizzaiolo-floating-bar" role="toolbar" aria-label="Azioni reparto">
               <LiveClock />
               {tabletLike && (
@@ -540,30 +543,48 @@ export default function OperativeLayout() {
               <h1 className="dashboard-header-title">{narrowViewport ? headerTitleCompact : headerTitle}</h1>
               {isCassaPage && (
                 <div
-                  className={`dashboard-header-toolbar${narrowViewport ? " cassa-header-toolbar-scroll" : ""}`}
+                  className="dashboard-header-toolbar cassa-header-toolbar-scroll"
                   style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, margin: "0 16px", justifyContent: "flex-start" }}
                 >
                   {cassaToolbar}
                 </div>
               )}
-              <div className="dashboard-header-actions">
+              <div
+                className={`dashboard-header-actions${
+                  isCassaPage && (inDemoLive || fullDemoAccess) ? " cassa-header-utility" : ""
+                }`}
+              >
                 {isCassaPage && (inDemoLive || fullDemoAccess) ? <CassaStressTestButton /> : null}
                 {isSaUser ? (
                   // Sull'hub demo stesso "torna all'hub demo" è ridondante (ci siamo già): qui
                   // mostriamo la via di uscita vera verso l'ingresso Super Admin.
-                  <SaHomeButton compact={narrowViewport} mode={inDemoLive && !isDemoHubPage ? "demoHub" : "ingresso"} />
+                  <SaHomeButton
+                    className={isCassaPage ? "cassa-action-demo" : undefined}
+                    compact={isCassaPage || narrowViewport}
+                    mode={inDemoLive && !isDemoHubPage ? "demoHub" : "ingresso"}
+                  />
                 ) : null}
-                <button type="button" className="btn-logout btn-logout-red" onClick={() => void handleLogout()}>
+                <button
+                  type="button"
+                  className={`btn-logout btn-logout-red${isCassaPage ? " cassa-action-esci" : ""}`}
+                  onClick={() => void handleLogout()}
+                >
                   Esci
                 </button>
               </div>
             </header>
           )}
-          <main className={`dashboard-content${operativeFullBleed ? " pizzaiolo-content-full" : ""}`}>
+          <main
+            className={`dashboard-content${operativeFullBleed ? " pizzaiolo-content-full" : ""}${
+              isDeliveryMapPage ? " pizzaiolo-content-full--no-scroll" : ""
+            }`}
+          >
             <Outlet context={{ operatoreLabel, ruolo }} />
           </main>
         </CassaHeaderContext.Provider>
-        <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
+        {location.pathname.startsWith("/operative/rider") || /^\/operative\/pony\/\d+$/.test(location.pathname) ? null : (
+          <p className="dashboard-app-copyright">© 2026 PizzaManager di Naletto Nicolò</p>
+        )}
       </div>
     </div>
   );

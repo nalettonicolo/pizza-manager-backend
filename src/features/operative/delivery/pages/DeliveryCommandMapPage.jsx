@@ -11,9 +11,30 @@ import {
 } from "@/utils/deliveryArea"
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-const POLL_FALLBACK_MS = 30000
-const STATI = ["PRONTO", "IN_PREPARAZIONE"]
+const POLL_FALLBACK_MS = 8000
+const STATI = ["PRONTO", "IN_COTTURA", "IN_PREPARAZIONE"]
 const RIDER_POLL_MS = 20000
+
+/** Palette colori per pony: distinti e leggibili a colpo d'occhio su mappa scura. */
+const RIDER_PALETTE = [
+  "#ef4444", // rosso
+  "#3b82f6", // blu
+  "#22c55e", // verde
+  "#a855f7", // viola
+  "#f97316", // arancio
+  "#14b8a6", // teal
+  "#eab308", // giallo
+  "#ec4899", // rosa
+]
+
+function riderColorForIndex(i) {
+  return RIDER_PALETTE[((i % RIDER_PALETTE.length) + RIDER_PALETTE.length) % RIDER_PALETTE.length]
+}
+
+function ordineRiderId(o) {
+  const v = o?.rider_id ?? o?.riderId
+  return v != null && String(v).trim() !== "" ? String(v) : null
+}
 const POLY_STYLE = {
   fillColor: "#e65100",
   fillOpacity: 0.22,
@@ -106,6 +127,21 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
   const [riders, setRiders] = useState([])
   const [error, setError] = useState(null)
   const [mapReady, setMapReady] = useState(false)
+  /** null = tutti i pony; altrimenti mostra solo il pony selezionato (motorino + suoi ordini). */
+  const [selectedRiderId, setSelectedRiderId] = useState(null)
+
+  /** Colore stabile per ogni pony (ordinati per id): usato per motorino e clienti assegnati. */
+  const riderColorById = useMemo(() => {
+    const map = {}
+    const sorted = [...(riders || [])]
+      .map((r) => String(r.rider_id ?? r.riderId ?? ""))
+      .filter(Boolean)
+      .sort()
+    sorted.forEach((id, i) => {
+      map[id] = riderColorForIndex(i)
+    })
+    return map
+  }, [riders])
 
   const shopCoords = useMemo(
     () => resolveShopCoords(tenantData, activePv),
@@ -245,8 +281,21 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
     for (const o of orders) {
       const c = coords(o)
       if (!c) continue
+      const rid = ordineRiderId(o)
       const sc = String(o.stato_consegna ?? o.statoConsegna ?? "").trim()
-      const color = sc === "IN_VIAGGIO" ? "#f59e0b" : sc === "ASSEGNATO" ? "#7c3aed" : "#16a34a"
+      // Cliente assegnato a un pony → eredita il colore del pony; altrimenti colore per stato.
+      const assignedColor = rid && riderColorById[rid] ? riderColorById[rid] : null
+      let color = assignedColor || (sc === "IN_VIAGGIO" ? "#f59e0b" : sc === "ASSEGNATO" ? "#7c3aed" : "#16a34a")
+      let opacity = 1
+      if (selectedRiderId) {
+        if (rid === selectedRiderId) {
+          color = riderColorById[selectedRiderId] || color
+        } else {
+          // Filtro su un solo pony: gli altri clienti restano visibili ma smorzati.
+          color = "#64748b"
+          opacity = 0.35
+        }
+      }
       const marker = new window.google.maps.Marker({
         map,
         position: c,
@@ -256,14 +305,14 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 14,
           fillColor: color,
-          fillOpacity: 1,
+          fillOpacity: opacity,
           strokeColor: "#fff",
           strokeWeight: 2,
         },
       })
       markersRef.current.push(marker)
     }
-  }, [orders, mapReady])
+  }, [orders, mapReady, riderColorById, selectedRiderId])
 
   useEffect(() => {
     const map = mapRef.current
@@ -324,9 +373,12 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
     riderMarkersRef.current = []
 
     for (const r of riders) {
+      const rid = String(r.rider_id ?? r.riderId ?? "")
+      if (selectedRiderId && rid !== selectedRiderId) continue
       const lat = Number(r.lat)
       const lng = Number(r.lng)
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+      const color = riderColorById[rid] || "#0f172a"
       const marker = new window.google.maps.Marker({
         map,
         position: { lat, lng },
@@ -334,17 +386,17 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
         label: { text: "🛵", fontSize: "16px" },
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 15,
-          fillColor: "#0f172a",
-          fillOpacity: 0.9,
-          strokeColor: "#38bdf8",
-          strokeWeight: 2,
+          scale: 16,
+          fillColor: color,
+          fillOpacity: 0.95,
+          strokeColor: "#ffffff",
+          strokeWeight: 3,
         },
         zIndex: 999,
       })
       riderMarkersRef.current.push(marker)
     }
-  }, [riders, mapReady])
+  }, [riders, mapReady, riderColorById, selectedRiderId])
 
   const triggerMapResize = useCallback(() => {
     const map = mapRef.current
@@ -428,6 +480,65 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
           </Link>
         )}
       </header>
+      {riders.length > 0 ? (
+        <div
+          style={{
+            padding: "8px 14px",
+            background: "#111827",
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginRight: 4 }}>Pony:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedRiderId(null)}
+            style={{
+              border: selectedRiderId === null ? "2px solid #fff" : "1px solid #475569",
+              background: selectedRiderId === null ? "#1d4ed8" : "transparent",
+              color: "#fff",
+              borderRadius: 999,
+              padding: "4px 12px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Tutti
+          </button>
+          {riders.map((r) => {
+            const rid = String(r.rider_id ?? r.riderId ?? "")
+            const color = riderColorById[rid] || "#64748b"
+            const active = selectedRiderId === rid
+            return (
+              <button
+                key={rid}
+                type="button"
+                onClick={() => setSelectedRiderId(active ? null : rid)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  border: active ? "2px solid #fff" : "1px solid #475569",
+                  background: active ? "rgba(255,255,255,0.12)" : "transparent",
+                  color: "#fff",
+                  borderRadius: 999,
+                  padding: "4px 12px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+                title={`Mostra solo ${r.nome_display || "questo pony"}`}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: color, display: "inline-block" }} />
+                {r.nome_display || "Pony"}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
       {error ? (
         <p style={{ padding: 12, margin: 0, background: "#fef2f2", color: "#b91c1c", fontWeight: 600 }}>{error}</p>
       ) : null}
@@ -488,13 +599,13 @@ export default function DeliveryCommandMapPage({ onClose, embedded = false } = {
               width: 14,
               height: 14,
               borderRadius: "50%",
-              background: "#0f172a",
-              border: "2px solid #38bdf8",
+              background: "linear-gradient(90deg,#ef4444,#3b82f6,#22c55e)",
+              border: "2px solid #fff",
               marginRight: 4,
               verticalAlign: "middle",
             }}
           />
-          🛵 Pony (posizione live)
+          🛵 Pony (colore dedicato per ogni pony · posizione live)
         </span>
       </div>
     </div>

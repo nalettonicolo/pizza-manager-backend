@@ -9,6 +9,7 @@ import { useOperativeSaDemoAccess } from "@/app/hooks/useOperativeSaDemoAccess"
 import { useCassaHeader } from "@/app/contexts/CassaHeaderContext"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { isQaSupportSearch } from "@/utils/viewportLayoutPreview"
+import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import { appPrompt } from "@/utils/appDialog"
 import { useFeatureReadiness } from "@/hooks/useFeatureReadiness"
 
@@ -22,6 +23,7 @@ import Cart from "@/features/operative/cassa/components/Cart"
 import CassaModificaOrdineModal from "@/features/operative/cassa/components/CassaModificaOrdineModal"
 import CassaPlanningBoard from "@/features/operative/cassa/components/CassaPlanningBoard"
 import DeliveryCommandMapPage from "@/features/operative/delivery/pages/DeliveryCommandMapPage"
+import CassaDeliveryIncassiPanel from "@/features/operative/cassa/components/CassaDeliveryIncassiPanel"
 import CalibrazioneProposalModal from "@/features/admin/components/CalibrazioneProposalModal"
 import {
   ordineTipoOrdine,
@@ -243,11 +245,35 @@ function ordineIsConsegnato(o) {
 function statoOrdineIconInfo(o) {
   const stato = String(o?.stato ?? "").trim().toUpperCase()
   const statoConsegna = String(o?.stato_consegna ?? o?.statoConsegna ?? "").trim().toUpperCase()
-  if (statoConsegna === "IN_VIAGGIO") return { icon: "🛵", label: "In viaggio" }
+  if (statoConsegna === "IN_VIAGGIO") return { icon: "🛵", label: "In consegna (rider partito)" }
   if (stato === "CONSEGNATO" || statoConsegna === "CONSEGNATO") return { icon: "🏁", label: "Consegnato" }
-  if (stato === "PRONTO") return { icon: "🔥", label: "Pronto — in bancone" }
+  if (stato === "PRONTO")
+    return statoConsegna === "ASSEGNATO"
+      ? { icon: "🛎️", label: "Pronto — assegnato al delivery" }
+      : { icon: "🛎️", label: "Pronto — in bancone" }
+  if (stato === "IN_COTTURA") return { icon: "🔥", label: "In cottura — al forno" }
   if (stato === "IN_PREPARAZIONE") return { icon: "🤚", label: "In preparazione" }
   return null
+}
+
+/** Triangolo giallo con punto esclamativo nero (bordo nero): pagamento online da controllare.
+ * Reso come SVG per avere colori/contorni esatti e nitidi anche a dimensioni piccole. */
+function PaymentAlertTriangle({ size = 16, title = "Pagamento online da controllare" }) {
+  return (
+    <span title={title} role="img" aria-label={title} style={{ display: "inline-flex", lineHeight: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden focusable="false">
+        <path
+          d="M12 2.5 L22.5 21 H1.5 Z"
+          fill="#facc15"
+          stroke="#111111"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <rect x="11" y="9" width="2" height="6" rx="1" fill="#111111" />
+        <circle cx="12" cy="17.6" r="1.25" fill="#111111" />
+      </svg>
+    </span>
+  )
 }
 
 const ORDINI_LISTA_LEGENDA = [
@@ -255,9 +281,11 @@ const ORDINI_LISTA_LEGENDA = [
     title: "Stato ordine",
     items: [
       { mark: "🤚", text: "In preparazione" },
-      { mark: "🔥", text: "Pronto — in bancone" },
-      { mark: "🛵", text: "In viaggio" },
+      { mark: "🔥", text: "In cottura — al forno" },
+      { mark: "🛎️", text: "Pronto (ritiro in bancone / assegnato al delivery)" },
+      { mark: "🛵", text: "In consegna (rider partito)" },
       { mark: "🏁", text: "Consegnato" },
+      { mark: "⚠️", text: "Pagamento online da controllare" },
     ],
   },
   {
@@ -475,9 +503,10 @@ export default function CassaPage() {
     () => cart.length > 0 || (tipoOrdine === TIPO_ORDINE.DELIVERY && Boolean(selectedCliente)),
     [cart.length, tipoOrdine, selectedCliente],
   )
+  const inQuadTest = useRepartiQuadTest()
   const narrowCassaViewport = useMediaQuery("(max-width: 900px)")
-  /** In Sala QA il layout mobile collassa il contenuto (schermo beige): forza desktop. */
-  const cassaMobileLayout = narrowCassaViewport && !isQaSupportSearch(location.search)
+  /** In Sala QA / 4 schermate il layout mobile collassa: forza la cassa desktop reale. */
+  const cassaMobileLayout = narrowCassaViewport && !isQaSupportSearch(location.search) && !inQuadTest
   const [cassaMobileTab, setCassaMobileTab] = useState("menu")
   const [checkoutNote, setCheckoutNote] = useState("")
   const [checkoutTipoPagamento, setCheckoutTipoPagamento] = useState(TIPO_PAGAMENTO_CONTANTI)
@@ -508,7 +537,8 @@ export default function CassaPage() {
   /** Mappa live pony aperta DENTRO Cassa (non una navigazione a un'altra pagina): la topbar di
    * Cassa resta visibile sopra, stesso trattamento di showPlanningBar. */
   const [showLiveMap, setShowLiveMap] = useState(false)
-  const showOverlayPanel = showPlanningBar || showLiveMap
+  const [showDeliveryReport, setShowDeliveryReport] = useState(false)
+  const showOverlayPanel = showPlanningBar || showLiveMap || showDeliveryReport
   const [productIngredientiMap, setProductIngredientiMap] = useState({})
   const [productIngredientIdsMap, setProductIngredientIdsMap] = useState({})
   const [ingredientiEsauritiIds, setIngredientiEsauritiIds] = useState([])
@@ -835,7 +865,7 @@ export default function CassaPage() {
   useOperativeOrdersLiveRefresh({
     tenantId,
     onRefresh: loadOrdini,
-    pollMs: 40000,
+    pollMs: 8000,
   })
 
   useEffect(() => {
@@ -1615,18 +1645,27 @@ export default function CassaPage() {
     const tm = cassaMobileLayout
     const toolbar = (
       <div
+        className="cassa-header-toolbar-inner"
         style={{
           display: "flex",
           alignItems: tm ? "stretch" : "center",
-          gap: 8,
-          flexWrap: "wrap",
+          gap: tm ? 8 : 5,
+          flexWrap: tm ? "wrap" : "nowrap",
           minWidth: 0,
           width: tm ? "100%" : undefined,
           flexDirection: tm ? "column" : "row",
         }}
       >
         {tipoOrdine === TIPO_ORDINE.DELIVERY && (
-          <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: tm ? "none" : 240, width: tm ? "100%" : undefined }}>
+          <div
+            className="cassa-header-cliente-search"
+            style={{
+              flex: tm ? "1 1 auto" : "0 0 160px",
+              minWidth: tm ? 0 : 160,
+              maxWidth: tm ? "none" : 160,
+              width: tm ? "100%" : 160,
+            }}
+          >
             <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
               <input
                 type="text"
@@ -1641,12 +1680,12 @@ export default function CassaPage() {
                 style={{
                   width: "100%",
                   maxWidth: tm ? "none" : 200,
-                  padding: tm ? "12px 14px" : "8px 12px",
+                  padding: tm ? "12px 14px" : "5px 8px",
                   borderRadius: 6,
                   border: "1px solid #ddd",
                   cursor: selectedCliente ? "pointer" : "text",
                   background: selectedCliente ? "#f9f9f9" : "#fff",
-                  fontSize: tm ? 16 : 13,
+                  fontSize: tm ? 16 : 12,
                   minHeight: tm ? 48 : undefined,
                   boxSizing: "border-box",
                 }}
@@ -1730,12 +1769,13 @@ export default function CassaPage() {
           </button>
         )}
         <div
+          className="cassa-header-toolbar-actions"
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: tm ? 8 : 5,
             flexShrink: 0,
-            flexWrap: "wrap",
+            flexWrap: tm ? "wrap" : "nowrap",
             width: tm ? "100%" : undefined,
           }}
         >
@@ -1872,6 +1912,7 @@ export default function CassaPage() {
             onClick={() => {
               setShowPlanningBar((v) => !v)
               setShowLiveMap(false)
+              setShowDeliveryReport(false)
             }}
             style={{
               ...cassaToolbarCompactBtn,
@@ -1889,6 +1930,7 @@ export default function CassaPage() {
             onClick={() => {
               setShowLiveMap((v) => !v)
               setShowPlanningBar(false)
+              setShowDeliveryReport(false)
             }}
             style={{
               ...cassaToolbarCompactBtn,
@@ -1900,6 +1942,24 @@ export default function CassaPage() {
             title="Mappa live: posizione in tempo reale dei pony (resta dentro Cassa)"
           >
             📍 Live
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowDeliveryReport((v) => !v)
+              setShowPlanningBar(false)
+              setShowLiveMap(false)
+            }}
+            style={{
+              ...cassaToolbarCompactBtn,
+              background: showDeliveryReport ? "#0d9488" : "#0f766e",
+              color: "#fff",
+              fontWeight: 600,
+              ...(tm ? { flex: "1 1 100%", minHeight: 48, fontSize: 15 } : {}),
+            }}
+            title="Conteggio pony: chi ha preso le consegne di oggi e i totali per pagamento"
+          >
+            Conteggio pony
           </button>
         </div>
       </div>
@@ -1928,6 +1988,7 @@ export default function CassaPage() {
     checkoutTelefonoCliente,
     checkoutSelectedSlot,
     tenantId,
+    showDeliveryReport,
   ])
 
   /////////////////////////////////////////////////////////
@@ -3815,7 +3876,7 @@ export default function CassaPage() {
       )}
       {/* Planning/Live desktop: nasconde elenco ordini e carrello (come il menù) per usare tutta la larghezza. */}
       {!(showOverlayPanel && !cassaMobileLayout) ? (
-      <div style={{ ...styles.ordiniSection, ...cassaMobileShell.ordiniExtra }}>
+      <div className="cassa-ordini-col" style={{ ...styles.ordiniSection, ...cassaMobileShell.ordiniExtra }}>
         <div style={{ marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
             <h3 style={{ ...styles.ordiniTitle, margin: 0, ...(cassaMobileLayout ? { fontSize: 18 } : {}) }}>Ordini</h3>
@@ -3914,6 +3975,7 @@ export default function CassaPage() {
             const iconPagamento = iconTipoPagamentoLista(o.tipo_pagamento)
             const labelPagamento = labelTipoPagamentoLista(o.tipo_pagamento)
             const statoIcon = statoOrdineIconInfo(o)
+            const pagamentoOnlineProblematico = ordineOnlinePaymentFallito(o)
             const isDelivery = ordineIsDelivery(o)
             const indirizzoSecondaRiga = isDelivery ? deliveryIndirizzoRiga(o) : ""
             const idOrdine = `#${o.numero ?? o.numero_ordine ?? o.numeroOrdine ?? "—"}`
@@ -3977,6 +4039,9 @@ export default function CassaPage() {
                         € {typeof o.totale === "number" ? o.totale.toFixed(2) : o.totale ?? "—"}
                       </span>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: cassaMobileLayout ? 16 : 14 }}>
+                        {pagamentoOnlineProblematico ? (
+                          <PaymentAlertTriangle size={cassaMobileLayout ? 18 : 16} />
+                        ) : null}
                         <span style={{ fontSize: 12 }} title={labelPagamento}>{iconPagamento}</span>
                         {statoIcon ? (
                           <span title={statoIcon.label}>{statoIcon.icon}</span>
@@ -3993,10 +4058,11 @@ export default function CassaPage() {
       ) : null}
       <div
         ref={cassaProductsAreaRef}
+        className="cassa-products-col"
         style={{
           ...styles.productsArea,
           ...cassaMobileShell.productsExtra,
-          ...(showLiveMap
+          ...(showLiveMap || showDeliveryReport
             ? {
                 display: "flex",
                 flexDirection: "column",
@@ -4024,6 +4090,11 @@ export default function CassaPage() {
         {showLiveMap ? (
           <div style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignSelf: "stretch" }}>
             <DeliveryCommandMapPage onClose={() => setShowLiveMap(false)} embedded />
+          </div>
+        ) : null}
+        {showDeliveryReport ? (
+          <div style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignSelf: "stretch" }}>
+            <CassaDeliveryIncassiPanel onClose={() => setShowDeliveryReport(false)} />
           </div>
         ) : null}
         {showPlanningBar ? (
@@ -4250,7 +4321,7 @@ export default function CassaPage() {
       </div>
 
       {!(showOverlayPanel && !cassaMobileLayout) ? (
-      <div style={{ ...styles.riepilogoSection, ...cassaMobileShell.cartExtra }}>
+      <div className="cassa-riepilogo-col" style={{ ...styles.riepilogoSection, ...cassaMobileShell.cartExtra }}>
         <Cart
           cart={cart}
           total={total}
@@ -4939,7 +5010,7 @@ const styles = {
   pageColumn: {
     display: "flex",
     flexDirection: "column",
-    height: "100vh",
+    height: "100%",
     width: "100%",
     minHeight: 0,
   },

@@ -72,6 +72,7 @@ function RedirectToGoLive() {
 }
 const SuperadminGuideHub = lazy(() => import("@/features/superadmin/pages/SuperadminGuideHub"));
 const SuperadminGuideDocPage = lazy(() => import("@/features/superadmin/pages/SuperadminGuideDocPage"));
+const SuperadminFlussiPage = lazy(() => import("@/features/superadmin/pages/SuperadminFlussiPage"));
 const SviluppoPage = lazy(() => import("@/features/superadmin/pages/SviluppoPage"));
 const SuperadminAgentiModuliPage = lazy(() => import("@/features/superadmin/pages/SuperadminAgentiModuliPage"));
 const SuperadminChecklistMesePage = lazy(() => import("@/features/superadmin/pages/SuperadminChecklistMesePage"));
@@ -412,6 +413,14 @@ export default function AppRouter() {
               </Suspense>
             }
           />
+          <Route
+            path="/superadmin/flussi"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <SuperadminFlussiPage />
+              </Suspense>
+            }
+          />
           {/* Studio viewport: fullscreen senza barra superadmin (anteprima tipo builder). */}
           <Route
             path="/superadmin/test-layout/studio"
@@ -715,7 +724,9 @@ export default function AppRouter() {
           <Route path="/operative/pizzaioli" element={<Suspense fallback={<PageFallback />}><PizzaioloDashboard /></Suspense>} />
           <Route path="/operative/delivery" element={<Suspense fallback={<PageFallback />}><DeliveryDashboard /></Suspense>} />
           <Route path="/operative/delivery/mappa" element={<Suspense fallback={<PageFallback />}><DeliveryCommandMapPage /></Suspense>} />
-          <Route path="/operative/rider" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
+          <Route path="/operative/rider" element={<NavigatePreserveSearch to="/operative/rider/1" />} />
+          <Route path="/operative/rider/:ponySlot" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
+          <Route path="/operative/pony/:ponySlot" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
           <Route path="/operative/pony" element={<NavigatePreserveSearch to="/operative/delivery" />} />
           <Route
             path="/operative/pizzaiolo-ingresso"

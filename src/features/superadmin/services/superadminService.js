@@ -893,19 +893,67 @@ export async function resetAccountPasswordReale({ tenantId, userId, password }) 
   return data;
 }
 
+const REGISTRO_SELECT =
+  "id, richiesta, azioni, area, fonte, stato, branch, pr_url, creato_il";
+const REGISTRO_SELECT_LEGACY = "id, richiesta, azioni, area, creato_il";
+
 /**
- * Registro richieste/azioni di sviluppo (log_richieste_sviluppo) — visibile solo superadmin via
- * RLS. Sola lettura da qui: le righe vengono aggiunte da Claude direttamente via SQL dopo ogni
- * richiesta significativa, non tramite l'app.
+ * Registro richieste/azioni di sviluppo — visibile e scrivibile solo superadmin (RLS).
  */
-export async function getRegistroRichiesteSviluppo({ limit = 200 } = {}) {
-  const { data, error } = await supabase
+export async function getRegistroRichiesteSviluppo({ limit = 500 } = {}) {
+  const q = supabase
     .from("log_richieste_sviluppo")
-    .select("id, richiesta, azioni, area, creato_il")
+    .select(REGISTRO_SELECT)
     .order("creato_il", { ascending: false })
     .limit(limit);
+  const { data, error } = await q;
+  if (error && /fonte|stato|branch|pr_url/i.test(error.message || "")) {
+    const fallback = await supabase
+      .from("log_richieste_sviluppo")
+      .select(REGISTRO_SELECT_LEGACY)
+      .order("creato_il", { ascending: false })
+      .limit(limit);
+    if (fallback.error) throw fallback.error;
+    return fallback.data || [];
+  }
   if (error) throw error;
   return data || [];
+}
+
+export async function insertRegistroRichiestaSviluppo({
+  richiesta,
+  azioni,
+  area = null,
+  fonte = "umano",
+  stato = "completato",
+  branch = null,
+  pr_url = null,
+}) {
+  const row = {
+    richiesta: String(richiesta || "").trim(),
+    azioni: String(azioni || "").trim(),
+    area: area ? String(area).trim() : null,
+    fonte: fonte ? String(fonte).trim() : "umano",
+    stato: stato ? String(stato).trim() : "completato",
+    branch: branch ? String(branch).trim() : null,
+    pr_url: pr_url ? String(pr_url).trim() : null,
+  };
+  if (!row.richiesta || !row.azioni) {
+    throw new Error("Servono sia la richiesta sia cosa è stato fatto.");
+  }
+  const { data, error } = await supabase
+    .from("log_richieste_sviluppo")
+    .insert(row)
+    .select(REGISTRO_SELECT)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteRegistroRichiestaSviluppo(id) {
+  if (!id) throw new Error("Id mancante.");
+  const { error } = await supabase.from("log_richieste_sviluppo").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export async function fetchRegistratoreAuditLog(userId, { limit = 20 } = {}) {

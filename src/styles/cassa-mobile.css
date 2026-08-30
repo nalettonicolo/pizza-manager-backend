@@ -8,8 +8,11 @@
   flex-direction: row !important;
   align-items: stretch !important;
   position: relative;
+  height: 100dvh;
+  height: 100vh;
   min-height: 100dvh;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 .dashboard-wrap.dashboard-wrap--drawer-sidebar:not(.pizzaiolo-fullscreen) .dashboard-sidebar--drawer {
@@ -45,6 +48,8 @@
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .operative-drawer-backdrop {
@@ -134,18 +139,53 @@
   padding-top: max(8px, env(safe-area-inset-top, 0px)) !important;
 }
 
+/* Schermo stretto in cassa desktop (Sala QA): niente tab telefono.
+   Menù e carrello a tutta larghezza; Fidelity + Chiudi giornata sotto il carrello. */
+@media (max-width: 900px) {
+  .cassa-page-root:not(.cassa-page-root--mobile) .cassa-main-columns {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .cassa-page-root:not(.cassa-page-root--mobile) .cassa-products-col {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    order: 1;
+  }
+  .cassa-page-root:not(.cassa-page-root--mobile) .cassa-riepilogo-col {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border-left: none !important;
+    border-top: 2px solid #eee;
+    order: 2;
+  }
+  .cassa-page-root:not(.cassa-page-root--mobile) .cassa-ordini-col {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-right: none !important;
+    border-top: 2px solid #eee;
+    order: 3;
+  }
+}
+
 @media (max-width: 900px) {
   .cassa-header-toolbar-scroll {
-    width: 100%;
+    width: auto;
     min-width: 0;
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
+    padding-bottom: 0;
     scrollbar-width: thin;
   }
 
-  .cassa-header-toolbar-scroll > * {
-    min-width: min-content;
+  .cassa-header-toolbar-scroll .cassa-header-toolbar-inner,
+  .cassa-header-toolbar-scroll .cassa-header-toolbar-actions {
+    flex-wrap: nowrap !important;
+    width: max-content;
   }
 
   /* Contenuto cassa: colonna flex, niente doppio scroll esterno */
@@ -246,7 +286,7 @@
     flex-wrap: wrap !important;
     gap: 10px !important;
     width: 100% !important;
-    justify-content: stretch !important;
+    justify-content: flex-end !important;
     align-items: center !important;
   }
 
@@ -284,5 +324,13 @@
   .cassa-main-columns .planningMergedHeader,
   .cassa-main-columns .planningMergedRow {
     min-width: min(100%, 360px);
+  }
+
+  /* Parametri cassa: una colonna. Prima Tempo viaggio + i 2 riquadri, poi capacità. */
+  .cassa-impostazioni-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cassa-impostazioni-grid > .cassa-impostazioni-right {
+    order: -1;
   }
 }

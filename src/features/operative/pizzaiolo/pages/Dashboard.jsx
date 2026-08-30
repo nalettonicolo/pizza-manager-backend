@@ -26,6 +26,7 @@ import {
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { isDeliveryUrgentForno } from "@/utils/riderDeliveryConfig"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
+import { consegnaMapsUrl } from "@/utils/consegnaMapsUrl"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import LiveClock from "@/components/LiveClock"
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
@@ -33,6 +34,7 @@ import { canRepartoStampareRicevutaCortesia } from "@/utils/stampaOperativaConfi
 import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/utils/stampaRicevutaCortesia"
 import {
   buildCucinaPrepTasks,
+  filterTasksBySlotForPizzaiolo,
   slotTabLabel,
   sortedCucinaSlotTabs,
   aggregatePrepTasksBySlot,
@@ -44,13 +46,13 @@ import {
 } from "@/utils/cucinaPrepCategoryTheme"
 
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
-const STATO_PRONTO = "PRONTO"
+/** "In forno" porta l'ordine in cottura; sarà poi il Bancone a chiudere il giro. */
+const STATO_COTTURA = "IN_COTTURA"
 /** Polling di sicurezza se Realtime non arriva */
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 8000
 
 function googleMapsUrl(indirizzo) {
-  if (!indirizzo || !indirizzo.trim()) return null
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(indirizzo.trim())}`
+  return consegnaMapsUrl({ indirizzo })
 }
 
 export default function PizzaioloDashboard() {
@@ -203,22 +205,22 @@ export default function PizzaioloDashboard() {
   }, [orders, pizzePerOrdine])
 
   /**
-   * Ingredienti "fuori linea" (congelati, affettati, dolci, fritti, generici — stessa logica
-   * colore/rilevamento di Cucina): il pizzaiolo li vede per non dimenticarli, anche se la
-   * preparazione fisica spetta a Cucina/Bancone. Click = "pronto", stesso `cucina_prep_stato`
-   * dell'ordine: coordinato con Cucina/Bancone, non una checklist separata.
+   * Extra da forno (affettati, congelati, aggiunte in cottura). Bibite, fritti e dolci
+   * restano a Cucina/Bancone: qui non servono. Click = pronto, stesso `cucina_prep_stato`.
    */
   const tasksBySlot = useMemo(
     () =>
-      buildCucinaPrepTasks(
-        orders,
-        righeAll,
-        productNames,
-        ingredientsByProduct,
-        PLANNING_GRID_SLOT_MINUTES,
-        productPrepCucinaById,
-        productPrepMetaById,
-        ingredientiGlobali,
+      filterTasksBySlotForPizzaiolo(
+        buildCucinaPrepTasks(
+          orders,
+          righeAll,
+          productNames,
+          ingredientsByProduct,
+          PLANNING_GRID_SLOT_MINUTES,
+          productPrepCucinaById,
+          productPrepMetaById,
+          ingredientiGlobali,
+        ),
       ),
     [orders, righeAll, productNames, ingredientsByProduct, productPrepCucinaById, productPrepMetaById, ingredientiGlobali],
   )
@@ -271,12 +273,12 @@ export default function PizzaioloDashboard() {
     [tenantId]
   )
 
-  const markAsPronto = useCallback(
+  const markInForno = useCallback(
     async (ordineId) => {
       if (!ordineId) return
       setActionLoading(true)
       try {
-        await updateOrderStato(ordineId, STATO_PRONTO)
+        await updateOrderStato(ordineId, STATO_COTTURA)
         setOrders((prev) => prev.filter((o) => o.id !== ordineId))
         setDetailOrder(null)
       } catch (err) {
@@ -319,14 +321,14 @@ export default function PizzaioloDashboard() {
               ...styles.btnInForno,
               ...(ritardo > 0 ? styles.btnInFornoRitardo : {}),
             }}
-            onClick={(e) => { e.stopPropagation(); markAsPronto(ord.id); }}
+            onClick={(e) => { e.stopPropagation(); markInForno(ord.id); }}
             disabled={actionLoading}
             title={
               ritardo > 0
                 ? `${ritardo} min oltre la scadenza forno${orarioPronte ? ` (${orarioPronte})` : ""}`
                 : isDelivery && orarioPronte
-                  ? `Pronte entro ${orarioPronte} (consegna ${orarioCliente || "—"})`
-                  : "Segna come pronto"
+                  ? `In forno entro ${orarioPronte} (consegna ${orarioCliente || "—"})`
+                  : "Metti in forno (in cottura)"
             }
           >
             {ritardo > 0 ? `${ritardo} min ritardo` : "In forno"}
@@ -339,7 +341,20 @@ export default function PizzaioloDashboard() {
             onKeyDown={(e) => e.key === "Enter" && openDetail(ord.id)}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <strong>{ord.nome_cliente || "—"}</strong>
+              {isDelivery && mapsUrl ? (
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ ...styles.mapsLink, fontWeight: 700 }}
+                  title="Apri la mappa della consegna"
+                >
+                  {ord.nome_cliente || "—"}
+                </a>
+              ) : (
+                <strong>{ord.nome_cliente || "—"}</strong>
+              )}
               {urgForno ? (
                 <span
                   style={{
@@ -460,7 +475,7 @@ export default function PizzaioloDashboard() {
   }
 
   return (
-    <div className="pizzaiolo-dashboard-root">
+    <div className={`pizzaiolo-dashboard-root${quad ? " pizzaiolo-dashboard-root--quad" : ""}`}>
       {!quad ? (
         <h1 style={styles.title}>Pizzaiolo</h1>
       ) : (
@@ -471,66 +486,63 @@ export default function PizzaioloDashboard() {
 
       {error && <div style={styles.error}>{error}</div>}
 
-      {/* Riquadri orari con numero pizze (tutti gli ordini IN_PREPARAZIONE caricati) — i riquadri
-          stessi bastano a far capire che ci sono ordini più avanti, senza bisogno di un testo. */}
-      {(slotLabels.length > 0 || pizzeSenzaOrarioSlot > 0) && (
-        <div style={styles.slotsWrap}>
-          {slotLabels.map((label) => (
-            <div key={label} style={styles.slotBox}>
-              <span style={styles.slotTime}>{label}</span>
-              <span style={styles.slotCount}>{slotPizze[label]}</span>
-              <span style={styles.slotUnit}>pizze</span>
-            </div>
-          ))}
-          {pizzeSenzaOrarioSlot > 0 ? (
-            <div key="no-time" style={{ ...styles.slotBox, background: "#fff3e0", borderColor: "#ffcc80" }}>
-              <span style={styles.slotTime}>Senza orario</span>
-              <span style={{ ...styles.slotCount, color: "#e65100" }}>{pizzeSenzaOrarioSlot}</span>
-              <span style={styles.slotUnit}>pizze</span>
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {/* Ingredienti fuori linea (congelati, affettati, dolci, fritti, generici — stessi colori
-          e stato "pronto" condiviso con Cucina/Bancone; per non dimenticarli in fase di stesura). */}
-      {hasFuoriLinea && !quad ? (
-        <div style={styles.fuoriLineaWrap}>
-          <h2 style={styles.fuoriLineaTitle}>Ingredienti fuori linea</h2>
-          {fuoriLineaSlotKeys.map((slot) => {
-            const pending = (fuoriLineaBySlot[slot] || []).filter((a) => (a.count || 0) > (a.doneCount || 0))
-            if (pending.length === 0) return null
-            return (
-              <div key={slot} style={styles.fuoriLineaSlotRow}>
-                <span style={styles.fuoriLineaSlotLabel}>{slotTabLabel(slot)}</span>
-                <div style={styles.pickChipWrap}>
-                  {pending.map((agg) => {
-                    const bg = resolvePrepTaskBackgroundColor(
-                      { ingredienteColore: agg.colore, ingredienteCategoria: agg.categoria },
-                      prepCategoryColors,
-                    )
-                    const busy = prepActionKey === agg.pickKey
-                    const remaining = Math.max(0, (agg.count || 0) - (agg.doneCount || 0))
-                    return (
-                      <button
-                        key={agg.pickKey}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => handleMarkFuoriLineaDone(agg)}
-                        style={{ ...styles.fuoriLineaChip, background: bg }}
-                        title="Tocca quando l'hai preso/preparato."
-                      >
-                        {remaining > 1 ? `${remaining}× ` : ""}
-                        {agg.label}
-                      </button>
-                    )
-                  })}
-                </div>
+      <div className="pizzaiolo-top-row">
+        {(slotLabels.length > 0 || pizzeSenzaOrarioSlot > 0) && (
+          <div style={styles.slotsWrap}>
+            {slotLabels.map((label) => (
+              <div key={label} style={styles.slotBox}>
+                <span style={styles.slotTime}>{label}</span>
+                <span style={styles.slotCount}>{slotPizze[label]}</span>
+                <span style={styles.slotUnit}>pizze</span>
               </div>
-            )
-          })}
-        </div>
-      ) : null}
+            ))}
+            {pizzeSenzaOrarioSlot > 0 ? (
+              <div key="no-time" style={{ ...styles.slotBox, background: "#fff3e0", borderColor: "#ffcc80" }}>
+                <span style={styles.slotTime}>Senza orario</span>
+                <span style={{ ...styles.slotCount, color: "#e65100" }}>{pizzeSenzaOrarioSlot}</span>
+                <span style={styles.slotUnit}>pizze</span>
+              </div>
+            ) : null}
+          </div>
+        )}
+        {hasFuoriLinea && !quad ? (
+          <div style={styles.fuoriLineaWrap}>
+            <h2 style={styles.fuoriLineaTitle}>Da mettere in cottura</h2>
+            {fuoriLineaSlotKeys.map((slot) => {
+              const pending = (fuoriLineaBySlot[slot] || []).filter((a) => (a.count || 0) > (a.doneCount || 0))
+              if (pending.length === 0) return null
+              return (
+                <div key={slot} style={styles.fuoriLineaSlotRow}>
+                  <span style={styles.fuoriLineaSlotLabel}>{slotTabLabel(slot)}</span>
+                  <div style={styles.pickChipWrap}>
+                    {pending.map((agg) => {
+                      const bg = resolvePrepTaskBackgroundColor(
+                        { ingredienteColore: agg.colore, ingredienteCategoria: agg.categoria },
+                        prepCategoryColors,
+                      )
+                      const busy = prepActionKey === agg.pickKey
+                      const remaining = Math.max(0, (agg.count || 0) - (agg.doneCount || 0))
+                      return (
+                        <button
+                          key={agg.pickKey}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleMarkFuoriLineaDone(agg)}
+                          style={{ ...styles.fuoriLineaChip, background: bg }}
+                          title="Tocca quando l'hai messo in cottura."
+                        >
+                          {remaining > 1 ? `${remaining}× ` : ""}
+                          {agg.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+      </div>
 
       {/* Due colonne */}
       <div className="pizzaiolo-dashboard-columns">
@@ -561,8 +573,8 @@ export default function PizzaioloDashboard() {
           order={detailOrder}
           loading={detailLoading}
           onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
-          actionLabel={actionLoading ? "Salvataggio..." : "Segna come pronto"}
-          onAction={markAsPronto}
+          actionLabel={actionLoading ? "Salvataggio..." : "Metti in forno"}
+          onAction={markInForno}
           actionDisabled={actionLoading || cortesiaBusy}
           ingredientsByProduct={ingredientsByProduct}
           showPrintCortesia={showPrintCortesia}
@@ -585,7 +597,7 @@ export default function PizzaioloDashboard() {
 const styles = {
   title: { fontSize: 22, margin: "0 0 12px", flexShrink: 0 },
   error: { padding: 12, background: "#ffebee", color: "#c62828", borderRadius: 8, marginBottom: 16 },
-  slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
+  slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, flex: "1 1 180px", minWidth: 0 },
   slotBox: {
     padding: "4px 8px",
     background: "#e8f5e9",
@@ -637,23 +649,28 @@ const styles = {
   ingBold: { fontWeight: 700 },
   ingNormal: { fontWeight: 400 },
   fuoriLineaWrap: {
-    marginBottom: 14,
-    padding: 12,
+    marginBottom: 0,
+    padding: "6px 8px",
     background: "#fafafa",
     border: "1px solid #e0e0e0",
-    borderRadius: 8,
+    borderRadius: 6,
+    width: "fit-content",
+    maxWidth: "min(100%, 420px)",
+    marginLeft: "auto",
+    flex: "0 1 auto",
   },
-  fuoriLineaTitle: { margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#334155" },
-  fuoriLineaSlotRow: { marginBottom: 8 },
-  fuoriLineaSlotLabel: { display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 },
-  pickChipWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
+  fuoriLineaTitle: { margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: "#334155" },
+  fuoriLineaSlotRow: { marginBottom: 4 },
+  fuoriLineaSlotLabel: { display: "block", fontSize: 10, fontWeight: 700, color: "#64748b", marginBottom: 2 },
+  pickChipWrap: { display: "flex", flexWrap: "wrap", gap: 4 },
   fuoriLineaChip: {
-    padding: "6px 10px",
+    padding: "2px 7px",
     borderRadius: 999,
     border: "1px solid #cbd5e1",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     color: "#1a1a1a",
     cursor: "pointer",
+    lineHeight: 1.3,
   },
 }

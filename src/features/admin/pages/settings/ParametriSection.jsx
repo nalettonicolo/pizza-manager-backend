@@ -76,7 +76,7 @@ const defaultParametri = () => ({
 
 export default function ParametriSection() {
   const { settings, setSettings } = useOutletContext();
-  const { tenantId } = useTenant();
+  const { tenantId, refreshTenant } = useTenant();
   const [saving, setSaving] = useState(false);
   const [promoCategories, setPromoCategories] = useState([]);
   const [foodcostCheckLoading, setFoodcostCheckLoading] = useState(false);
@@ -253,6 +253,7 @@ export default function ParametriSection() {
       };
       await updateTenantSettings(tenantId, { parametri_operativi: payload });
       setSettings({ ...settings, parametri_operativi: payload });
+      if (refreshTenant) await refreshTenant();
       alert("Parametri salvati.");
     } catch (err) {
       console.error(err);

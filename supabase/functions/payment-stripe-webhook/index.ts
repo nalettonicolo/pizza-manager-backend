@@ -46,16 +46,15 @@ function extractPaymentIntentId(event: Stripe.Event): string | null {
 }
 
 /**
- * Verifica firma Stripe.
- * Ordine: secret globale → fallback secret per-tenant (da PI già noto nel payload).
- * Se manca solo il globale ma il tenant ha whsec in Admin, il webhook resta operativo (TEST/multi-tenant).
+ * Verifica firma Stripe (obbligatoria).
+ * Ordine: secret globale → fallback secret per-tenant (dal PI già noto nel payload).
+ * Se nessun secret è applicabile l'evento viene RIFIUTATO (nessun bypass, nemmeno in dev).
  */
 async function constructVerifiedEvent(
   body: string,
   sig: string,
   admin: ReturnType<typeof createClient>,
   globalWhSecret: string,
-  isProd: boolean,
 ): Promise<Stripe.Event> {
   const stripeProbe = new Stripe("sk_test_dummy", { apiVersion: "2024-12-18.acacia" })
 
@@ -89,17 +88,13 @@ async function constructVerifiedEvent(
     }
   }
 
-  if (!globalWhSecret) {
-    if (isProd) {
-      throw new Error(
-        "Webhook non configurato: imposta STRIPE_WEBHOOK_SECRET (Edge secrets) oppure salva whsec_ in Admin → Pagamenti online",
-      )
-    }
-    console.warn("STRIPE_WEBHOOK_SECRET mancante: evento non verificato (solo dev)")
-    return parsed
-  }
-
-  throw new Error("Firma webhook non valida")
+  // Nessun secret applicabile (né globale né per-tenant): l'evento NON è verificabile.
+  // Rifiutiamo SEMPRE (anche in dev): accettare eventi non firmati permetterebbe a chiunque di
+  // forgiare `payment_intent.succeeded` e marcare ordini come pagati (OWASP A08). In ambienti di
+  // test configurare STRIPE_WEBHOOK_SECRET o il whsec_ per-tenant in Admin → Pagamenti online.
+  throw new Error(
+    "Webhook non verificabile: STRIPE_WEBHOOK_SECRET mancante e nessun whsec_ per-tenant applicabile",
+  )
 }
 
 Deno.serve(async (req) => {
@@ -110,7 +105,6 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   const globalWhSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") || ""
-  const isProd = Boolean(Deno.env.get("DENO_DEPLOYMENT_ID") || Deno.env.get("SUPABASE_URL")?.includes(".supabase.co"))
 
   const body = await req.text()
   const sig = req.headers.get("stripe-signature") || ""
@@ -118,7 +112,7 @@ Deno.serve(async (req) => {
 
   let event: Stripe.Event
   try {
-    event = await constructVerifiedEvent(body, sig, admin, globalWhSecret, isProd)
+    event = await constructVerifiedEvent(body, sig, admin, globalWhSecret)
   } catch (e) {
     const msg = (e as Error).message || "Webhook error"
     console.error("webhook signature", e)

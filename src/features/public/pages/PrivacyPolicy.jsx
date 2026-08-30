@@ -3,6 +3,7 @@ import LegalPageShell from "@/features/public/components/LegalPageShell";
 import { useLegalEntity } from "@/hooks/useLegalEntity";
 import { PLATFORM_PRODUCT_NAME } from "@/config/legalEntity";
 import { applyLegalPlaceholders } from "@/utils/legalPlaceholders";
+import { sanitizeLegalHtml } from "@/utils/sanitizeLegalHtml";
 
 const GIORNI_CONSERVAZIONE_LOG = "90";
 
@@ -167,10 +168,12 @@ function PrivacyStorefront({ c }) {
   const custom = typeof c.privacy_policy_html === "string" && c.privacy_policy_html.trim();
   if (custom) {
     const html = applyLegalPlaceholders(c.privacy_policy_html, c.legalTenantSnapshot || {}, c.siteLabel);
+    // Sanifica prima di iniettare: neutralizza <script>, handler inline e URL javascript: (stored XSS).
+    const safeHtml = sanitizeLegalHtml(html);
     return (
       <div
         className="legal-custom-html"
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: safeHtml }}
       />
     );
   }

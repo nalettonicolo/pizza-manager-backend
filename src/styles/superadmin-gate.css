@@ -32,6 +32,8 @@
   font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: -0.02em;
+  color: #fff;
+  text-decoration: none;
 }
 
 .sa-gate-badge {
@@ -41,7 +43,8 @@
   text-transform: uppercase;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(230, 126, 34, 0.85);
+  color: #f5b041;
   background: rgba(0, 0, 0, 0.25);
 }
 
@@ -295,4 +298,46 @@ button.sa-gate-card {
 .sa-gate-demo-btn--primary:hover:not(:disabled) {
   filter: brightness(1.08);
   border-color: transparent;
+}
+
+.sa-gate-error {
+  margin: 0 0 20px;
+  max-width: 480px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(185, 28, 28, 0.25);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.sa-gate-navlink {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.8);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.sa-gate-navlink:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.sa-gate--doc .sa-gate-main {
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 28px 24px 72px;
+}
+
+.sa-gate--doc .sa-gate-lede {
+  max-width: 720px;
+  margin-bottom: 22px;
 }

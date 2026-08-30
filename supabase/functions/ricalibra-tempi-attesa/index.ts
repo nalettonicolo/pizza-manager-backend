@@ -11,6 +11,7 @@
 // Invocata da pg_cron una volta a settimana (vedi sql/modules/94_...): POST senza body, protetta
 // solo dalla service_role key nell'header (stesso pattern di notifiche-outbox-processor).
 import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
+import { assertCronCaller } from "../_shared/cronAuth.ts"
 
 const SUPERADMIN_EMAIL_FALLBACK = "info@pizzamanager.it"
 
@@ -18,6 +19,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 })
   }
+  const cronDenied = assertCronCaller(req)
+  if (cronDenied) return cronDenied
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")

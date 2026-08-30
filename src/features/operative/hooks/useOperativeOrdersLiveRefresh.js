@@ -1,22 +1,19 @@
 import { useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { subscribeOperativeOrdersBroadcast } from "@/utils/operativeOrderBroadcast"
 
 let channelSeq = 0
 
 /**
- * Refresh ordini operativi via Supabase Realtime (core.ordini) + polling di sicurezza.
+ * Refresh ordini operativi via Supabase Realtime (core.ordini) + segnale stesso-browser
+ * + polling di sicurezza.
  * @param {object} opts
  * @param {string|null|undefined} opts.tenantId
  * @param {() => void|Promise<void>} opts.onRefresh — tipicamente loadOrders({ silent: true })
- * @param {number} [opts.pollMs=30000] — fallback se Realtime non arriva
- * @param {number} [opts.debounceMs=300] — raggruppa più eventi Realtime ravvicinati (es. il
- *   pizzaiolo che clicca "In forno" su 3 ordini di fila) in un solo reload, invece di far
- *   partire un reload pesante e completo (più query in sequenza) per ognuno: senza questo,
- *   i reload si accavallano e competono per la rete, e lato reparto ricevente (es. Bancone)
- *   gli ordini appena segnati compaiono uno alla volta con un ritardo percepibile invece che
- *   tutti insieme.
+ * @param {number} [opts.pollMs=8000] — fallback se Realtime non arriva (minimo 8s)
+ * @param {number} [opts.debounceMs=80] — raggruppa burst Realtime ravvicinati in un solo reload
  */
-export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30000, debounceMs = 300 }) {
+export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 8000, debounceMs = 80 }) {
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
@@ -24,9 +21,27 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
     if (!tenantId || typeof onRefreshRef.current !== "function") return undefined
 
     let cancelled = false
+    // Un reload alla volta: se ne arriva un altro (evento Realtime/broadcast/poll) mentre uno è
+    // già in corso, non lo affianca (doppia query di rete in parallelo, spreco inutile) — lo mette
+    // in coda e parte una volta sola appena il reload in corso finisce.
+    let inFlight = false
+    let queued = false
     const run = () => {
       if (cancelled) return
-      void Promise.resolve(onRefreshRef.current()).catch(() => {})
+      if (inFlight) {
+        queued = true
+        return
+      }
+      inFlight = true
+      void Promise.resolve(onRefreshRef.current())
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false
+          if (queued && !cancelled) {
+            queued = false
+            run()
+          }
+        })
     }
 
     let debounceTimer = null
@@ -46,8 +61,9 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
     // tenant — prima il topic era identico per tutti e quattro (`operative-ordini:${tenantId}`),
     // e il client Realtime di Supabase non deduplica i join sullo stesso topic: le 4 subscribe
     // concorrenti sullo stesso nome si intralciavano a vicenda, e in pratica gli eventi arrivavano
-    // solo al fallback di polling (30s) invece che in tempo reale — da cui il ritardo percepito
-    // segnalato dal vivo (click "In forno" su Pizzaioli → comparsa su Bancone dopo ~30s).
+    // solo al fallback di polling invece che in tempo reale — da cui il ritardo percepito
+    // segnalato dal vivo (click "In forno" su Pizzaioli → comparsa su Bancone dopo decine di secondi).
+    // Oggi: canale univoco + segnale stesso-browser (BroadcastChannel) + poll 8s di sicurezza.
     channelSeq += 1
     const channel = supabase
       .channel(`operative-ordini:${tenantId}:${channelSeq}`)
@@ -70,9 +86,11 @@ export function useOperativeOrdersLiveRefresh({ tenantId, onRefresh, pollMs = 30
       })
 
     const poll = window.setInterval(run, Math.max(8000, pollMs))
+    const unsubBroadcast = subscribeOperativeOrdersBroadcast(() => scheduleRun())
 
     return () => {
       cancelled = true
+      unsubBroadcast()
       if (debounceTimer) window.clearTimeout(debounceTimer)
       window.clearInterval(poll)
       void supabase.removeChannel(channel)

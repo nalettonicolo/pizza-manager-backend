@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
 import { processFiscalOutboxBatch } from "../_shared/fiscal/processBatch.ts"
+import { assertCronCaller } from "../_shared/cronAuth.ts"
 
 /**
  * Worker fiscal outbox: export file + adapter RT/SDI (stub fino a FISCAL_RT_API_*).
@@ -8,6 +9,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 })
   }
+  const cronDenied = assertCronCaller(req)
+  if (cronDenied) return cronDenied
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

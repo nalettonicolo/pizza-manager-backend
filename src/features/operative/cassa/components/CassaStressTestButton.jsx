@@ -11,10 +11,13 @@ import {
 import { appConfirm } from "@/utils/appDialog"
 import { buildSlotsFullDay, getTodayOrariConsegna } from "@/features/operative/cassa/utils/planningUtils"
 import { resolveDeliveryPolygonOuterRing, pointInPolygonRing } from "@/utils/deliveryArea"
-
-const TARGET_PIZZE = 100
-const TICK_MIN_MS = 20000
-const TICK_MAX_MS = 30000
+import {
+  loadStressTestConfig,
+  normalizeStressTestConfig,
+  saveStressTestConfig,
+  STRESS_TEST_DEFAULTS,
+  stressTestTipiAttivi,
+} from "@/features/operative/cassa/utils/cassaStressTestConfig"
 
 /** Stessa logica "a esclusione" già usata altrove (adminService/vetrina): una categoria conta
  * come pizza a meno che non sia esplicitamente fritti/dolci/bibite/ingredienti. */
@@ -59,10 +62,13 @@ export default function CassaStressTestButton() {
   const [pizzeCreated, setPizzeCreated] = useState(0)
   const [error, setError] = useState(null)
   const [resetting, setResetting] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
+  const [draft, setDraft] = useState(() => loadStressTestConfig())
   const timerRef = useRef(null)
   const catalogRef = useRef(null)
   const pizzeRef = useRef(0)
   const stopRef = useRef(false)
+  const configRef = useRef(loadStressTestConfig())
 
   useEffect(() => {
     return () => {
@@ -122,13 +128,16 @@ export default function CassaStressTestButton() {
     return { pizze: pizze.length ? pizze : disponibili, altro, indirizziReali, fasce }
   }, [tenantId, tenantData, pvList, activePvId])
 
-  const buildOrderPayload = useCallback((catalog, n) => {
-    const tipo = pickRandom(["negozio", "delivery", "online"])
+  const buildOrderPayload = useCallback((catalog, n, cfg) => {
+    const tipi = stressTestTipiAttivi(cfg)
+    const tipo = pickRandom(tipi)
     const isOnline = tipo === "online"
-    const tipoOrdineReale = isOnline ? pickRandom(["negozio", "delivery"]) : tipo
+    const tipoOrdineReale = isOnline
+      ? pickRandom(tipi.filter((t) => t !== "online").length ? tipi.filter((t) => t !== "online") : ["negozio"])
+      : tipo
     const isDelivery = tipoOrdineReale === "delivery"
 
-    const nPizze = randInt(1, 3)
+    const nPizze = randInt(cfg.pizzeMin, cfg.pizzeMax)
     const items = []
     let pizzeInOrdine = 0
     for (let i = 0; i < nPizze; i += 1) {
@@ -187,18 +196,20 @@ export default function CassaStressTestButton() {
 
   const scheduleTick = useCallback(() => {
     if (stopRef.current) return
-    const delay = randInt(TICK_MIN_MS, TICK_MAX_MS)
+    const cfg = configRef.current
+    const delay = randInt(cfg.tickMinSec * 1000, cfg.tickMaxSec * 1000)
     timerRef.current = window.setTimeout(() => void runTick(), delay)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runTick definita sotto, stabile per closure su ref
   }, [])
 
   async function runTick() {
     if (stopRef.current || !catalogRef.current) return
-    const howMany = randInt(1, 2)
+    const cfg = configRef.current
+    const howMany = randInt(cfg.ordersMin, cfg.ordersMax)
     for (let i = 0; i < howMany; i += 1) {
-      if (stopRef.current || pizzeRef.current >= TARGET_PIZZE) break
+      if (stopRef.current || pizzeRef.current >= cfg.targetPizze) break
       const n = pizzeRef.current
-      const { payload, pizze } = buildOrderPayload(catalogRef.current, n)
+      const { payload, pizze } = buildOrderPayload(catalogRef.current, n, cfg)
       try {
         await createOrder(tenantId, payload)
         pizzeRef.current += pizze
@@ -209,20 +220,25 @@ export default function CassaStressTestButton() {
         setError(e?.message || "Errore creazione ordine")
       }
     }
-    if (!stopRef.current && pizzeRef.current < TARGET_PIZZE) {
+    if (!stopRef.current && pizzeRef.current < cfg.targetPizze) {
       scheduleTick()
     } else {
       setRunning(false)
     }
   }
 
-  const start = async () => {
+  const openConfig = () => {
     if (running || !tenantId) return
-    const ok = await appConfirm(
-      `Sei sicuro di avviare questa modalità? Verranno creati ordini reali finché non si raggiungono circa ${TARGET_PIZZE} pizze totali (1-2 ordini ogni 20-30s). Da usare solo in tenant demo.`,
-      { title: "Stress test ordini", okLabel: "Avvia", cancelLabel: "Annulla", variant: "danger" },
-    )
-    if (!ok) return
+    setDraft(loadStressTestConfig())
+    setConfigOpen(true)
+  }
+
+  const startWithDraft = async () => {
+    if (running || !tenantId) return
+    const cfg = saveStressTestConfig(draft)
+    configRef.current = cfg
+    setDraft(cfg)
+    setConfigOpen(false)
     setError(null)
     setOrdersCreated(0)
     setPizzeCreated(0)
@@ -236,6 +252,14 @@ export default function CassaStressTestButton() {
     }
     setRunning(true)
     void runTick()
+  }
+
+  const setDraftField = (key, value) => {
+    setDraft((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const setDraftTipo = (key, checked) => {
+    setDraft((prev) => ({ ...prev, tipi: { ...prev.tipi, [key]: checked } }))
   }
 
   const stop = () => {
@@ -276,21 +300,24 @@ export default function CassaStressTestButton() {
     }
   }
 
+  const targetPizze = configRef.current.targetPizze
+  const preview = normalizeStressTestConfig(draft)
+
   return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+    <>
       <button
         type="button"
-        onClick={() => (running ? stop() : void start())}
+        className="cassa-action-stress"
         title={
           running
-            ? `In corso: ${ordersCreated} ordini, ${pizzeCreated}/${TARGET_PIZZE} pizze — tocca per fermare`
-            : "Simula un carico di ordini casuali (negozio/delivery/online) per stressare il sistema — solo demo"
+            ? `In corso: ${ordersCreated} ordini, ${pizzeCreated}/${targetPizze} pizze — tocca per fermare`
+            : "Apri i parametri e simula un carico di ordini (negozio/delivery/online) — solo demo"
         }
         style={{
-          padding: "6px 12px",
-          fontSize: 12,
+          padding: "4px 8px",
+          fontSize: 11,
           fontWeight: 700,
-          borderRadius: 8,
+          borderRadius: 6,
           border: "1px solid " + (running ? "#b45309" : "#94a3b8"),
           background: running ? "#fff7ed" : "#fff",
           color: running ? "#b45309" : "#475569",
@@ -298,18 +325,19 @@ export default function CassaStressTestButton() {
         }}
         disabled={!tenantId}
       >
-        {running ? `⏸ ${pizzeCreated}/${TARGET_PIZZE} pizze` : "▶ Stress test"}
+        {running ? `⏸ ${pizzeCreated}/${targetPizze} pizze` : "▶ Stress test"}
         {error ? " ⚠" : ""}
       </button>
       <button
         type="button"
+        className="cassa-action-reset"
         onClick={() => void resetStressTest()}
         title="Cancella definitivamente tutti gli ordini creati dallo stress test, per ripartire puliti"
         style={{
-          padding: "6px 10px",
-          fontSize: 12,
+          padding: "4px 8px",
+          fontSize: 11,
           fontWeight: 700,
-          borderRadius: 8,
+          borderRadius: 6,
           border: "1px solid #94a3b8",
           background: "#fff",
           color: "#475569",
@@ -320,6 +348,191 @@ export default function CassaStressTestButton() {
       >
         {resetting ? "…" : "🗑 Reset"}
       </button>
-    </div>
+
+      {configOpen ? (
+        <div
+          className="app-dialog-overlay"
+          role="presentation"
+          onClick={() => setConfigOpen(false)}
+        >
+          <div
+            className="app-dialog app-dialog--danger"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stress-test-title"
+            style={{ width: "min(520px, 100%)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="stress-test-title" className="app-dialog-title">
+              Stress test ordini
+            </h2>
+            <p className="app-dialog-message" style={{ marginBottom: 14 }}>
+              Scegli i parametri. Verranno creati ordini reali sul tenant corrente: usalo solo in demo.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 10,
+                marginBottom: 14,
+              }}
+            >
+              <label style={fieldLabel}>
+                Tetto pizze
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  className="app-dialog-input"
+                  style={{ margin: "4px 0 0" }}
+                  value={draft.targetPizze}
+                  onChange={(e) => setDraftField("targetPizze", e.target.value)}
+                />
+              </label>
+              <label style={fieldLabel}>
+                Pizze per ordine (min–max)
+                <span style={pairRow}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    className="app-dialog-input"
+                    style={{ margin: 0 }}
+                    value={draft.pizzeMin}
+                    onChange={(e) => setDraftField("pizzeMin", e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    className="app-dialog-input"
+                    style={{ margin: 0 }}
+                    value={draft.pizzeMax}
+                    onChange={(e) => setDraftField("pizzeMax", e.target.value)}
+                  />
+                </span>
+              </label>
+              <label style={fieldLabel}>
+                Secondi tra i cicli (min–max)
+                <span style={pairRow}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    className="app-dialog-input"
+                    style={{ margin: 0 }}
+                    value={draft.tickMinSec}
+                    onChange={(e) => setDraftField("tickMinSec", e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    className="app-dialog-input"
+                    style={{ margin: 0 }}
+                    value={draft.tickMaxSec}
+                    onChange={(e) => setDraftField("tickMaxSec", e.target.value)}
+                  />
+                </span>
+              </label>
+              <label style={fieldLabel}>
+                Ordini per ciclo (min–max)
+                <span style={pairRow}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    className="app-dialog-input"
+                    style={{ margin: 0 }}
+                    value={draft.ordersMin}
+                    onChange={(e) => setDraftField("ordersMin", e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    className="app-dialog-input"
+                    style={{ margin: 0 }}
+                    value={draft.ordersMax}
+                    onChange={(e) => setDraftField("ordersMax", e.target.value)}
+                  />
+                </span>
+              </label>
+            </div>
+            <fieldset
+              style={{
+                margin: "0 0 14px",
+                padding: "10px 12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: 10,
+              }}
+            >
+              <legend style={{ fontSize: 12, fontWeight: 700, color: "#475569", padding: "0 6px" }}>
+                Tipi di ordine
+              </legend>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                {[
+                  ["negozio", "Ritiro in negozio"],
+                  ["delivery", "Domicilio"],
+                  ["online", "Online (vetrina)"],
+                ].map(([key, label]) => (
+                  <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#334155" }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.tipi?.[key])}
+                      onChange={(e) => setDraftTipo(key, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <p style={{ margin: "0 0 16px", fontSize: 12, color: "#64748b", lineHeight: 1.45 }}>
+              Con questi valori: circa {preview.targetPizze} pizze, {preview.ordersMin}–{preview.ordersMax}{" "}
+              ordini ogni {preview.tickMinSec}–{preview.tickMaxSec} secondi, {preview.pizzeMin}–{preview.pizzeMax}{" "}
+              pizze per ordine.
+            </p>
+            <div className="app-dialog-actions">
+              <button
+                type="button"
+                className="app-dialog-btn app-dialog-btn--ghost"
+                onClick={() => setDraft({ ...STRESS_TEST_DEFAULTS, tipi: { ...STRESS_TEST_DEFAULTS.tipi } })}
+              >
+                Ripristina
+              </button>
+              <button
+                type="button"
+                className="app-dialog-btn app-dialog-btn--ghost"
+                onClick={() => setConfigOpen(false)}
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                className="app-dialog-btn app-dialog-btn--primary app-dialog-btn--danger"
+                onClick={() => void startWithDraft()}
+              >
+                Avvia
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
+}
+
+const fieldLabel = {
+  display: "flex",
+  flexDirection: "column",
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#475569",
+}
+
+const pairRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 6,
+  marginTop: 4,
 }

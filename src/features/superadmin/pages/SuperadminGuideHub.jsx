@@ -160,6 +160,10 @@ export default function SuperadminGuideHub() {
           modificarlo aggiorna i file in <code>docs/</code>, <code>src/content/</code> o <code>DEPLOY_COMANDI.md</code>{" "}
           e ridistribuisci il build.
         </p>
+        <p className="sa-page-lede" style={{ marginTop: 10 }}>
+          Per i passaggi tra Cassa, Pizzaioli, Cucina, Bancone e Delivery vedi{" "}
+          <Link to="/superadmin/flussi">Piattaforma → Flussi</Link>.
+        </p>
       </header>
 
       <div className="sa-page-toolbar" style={{ marginBottom: 20 }}>

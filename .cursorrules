@@ -11,13 +11,17 @@ chat.
 domande o chiarimenti), esegui questo comando per registrarla:
 
 ```bash
-node scripts/log-attivita.mjs --richiesta "riassunto breve di cosa ha chiesto l'utente" --azioni "riassunto breve di cosa hai effettivamente fatto" --area "categoria"
+node scripts/log-attivita.mjs --richiesta "riassunto breve di cosa ha chiesto l'utente" --azioni "riassunto breve di cosa hai effettivamente fatto" --area "categoria" --fonte cursor --stato completato
 ```
 
 - `--richiesta` e `--azioni`: 1-2 frasi ciascuno, in italiano, concisi ma specifici (non "fix bug",
   ma "corretto il calcolo del totale ordine che ignorava lo sconto fidelity").
 - `--area` (facoltativo): una tra `sicurezza`, `pagamenti`, `audit`, `ai`, `ui`, `dati`,
   `infrastruttura`, `marketing`, `menu`, `bug` — o omettila se nessuna calza.
+- `--fonte`: `cursor` (default da questo script), `claude`, `umano`, `sistema`.
+- `--stato`: `completato` (default), `parziale` se manca un pezzo, `bloccato` se non hai potuto
+  finire (token, deploy, ecc.).
+- `--branch` e `--pr-url` (facoltativi) se il lavoro è su un branch/PR.
 - Non serve nessuna nuova credenziale: lo script riusa lo stesso token di `supabase login` già
   presente sulla macchina (o `SUPABASE_ACCESS_TOKEN` se impostato), lo stesso meccanismo già usato
   da `scripts/apply-sql-module.mjs`.
