@@ -11,6 +11,7 @@ import {
   getCategorieByIds,
   getIngredients,
   updateOrderStato,
+  deliveryUpdateStatoConsegna,
 } from "@/features/admin/services/adminService"
 import {
   aggregateBanconeBibiteBySlot,
@@ -18,6 +19,11 @@ import {
   banconeSlotsFromOrders,
   BANCONE_BIBITE_PICKED_BG,
 } from "@/features/operative/bancone/utils/banconeSlotPick"
+import {
+  isBanconeDeliveryOrder,
+  banconeHandoffLabel,
+  banconeHandoffTitle,
+} from "@/features/operative/bancone/utils/banconeHandoffLabel"
 import {
   resolvePrepTaskBackgroundColor,
   mergeCucinaPrepColorsFromParametri,
@@ -40,9 +46,10 @@ import { printRicevutaCortesiaFromDetail } from "@/features/operative/cassa/util
 import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
 
 const STATO_PRONTO = "PRONTO"
+const STATO_COTTURA = "IN_COTTURA"
 const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
 const STATO_CONSEGNATO = "CONSEGNATO"
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 8000
 const BANCONE_PICK_STORAGE_PREFIX = "pm_bancone_picked_v1"
 
 function getBanconePickStorageKey(tenantId) {
@@ -98,23 +105,20 @@ export default function Bancone() {
       setError(null)
     }
     try {
-      // IN_PREPARAZIONE serve sempre, anche con Cucina attiva: Bancone ora mostra in sola
-      // lettura cosa sta preparando la Cucina (vedi ingredientsBySlot/readOnlyPrep sotto).
-      const [dataPronto, dataPrep] = await Promise.all([
-        getOrders(tenantId, { stato: STATO_PRONTO, todayOnly: true, limit: 100 }),
+      // Card del Bancone = ordini IN_COTTURA (usciti dal "In forno" del pizzaiolo): la comanda
+      // arriva qui appena la pizza va in forno. IN_PREPARAZIONE serve per aggregare le prep
+      // (bibite/ingredienti): con Cucina attiva le mostriamo in sola lettura (readOnlyPrep).
+      const [dataCottura, dataPrep] = await Promise.all([
+        getOrders(tenantId, { stato: STATO_COTTURA, todayOnly: true, limit: 100 }),
         getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 }),
       ])
-      const prontoList = dataPronto || []
+      const prontoList = dataCottura || []
       const prepExtra = dataPrep || []
-      // Un ordine PRONTO a domicilio è già uscito (o sta per uscire con il pony): i suoi chip non
-      // servono più al bancone anche se una bibita non risulta ancora barrata. Un PRONTO ritiro in
-      // negozio invece resta nell'aggregazione finché non si preme "Consegnato" (il cliente non è
-      // ancora passato a prenderlo).
-      const prontoPerAggregazione = prontoList.filter(
-        (o) => (o.tipo_ordine || o.tipoOrdine || "").toLowerCase() !== "delivery",
-      )
+      // I chip di preparazione coprono sia IN_PREPARAZIONE sia IN_COTTURA e restano visibili
+      // finché il Bancone non chiude il giro (consegnato / in consegna): a quel punto i task
+      // dell'ordine spariscono. Vale per negozio e domicilio.
       const prepMergedMap = new Map()
-      for (const o of [...prepExtra, ...prontoPerAggregazione]) {
+      for (const o of [...prepExtra, ...prontoList]) {
         if (o?.id) prepMergedMap.set(o.id, o)
       }
       const prepList = [...prepMergedMap.values()]
@@ -405,15 +409,30 @@ export default function Bancone() {
     [tenantId]
   )
 
-  const markAsConsegnato = useCallback(
-    async (ordineId) => {
+  /**
+   * Tasto verde del Bancone. Chiude il giro con un solo click:
+   *  - ritiro in negozio → CONSEGNATO (la pizza è consegnata al banco);
+   *  - domicilio → PRONTO + assegnazione al Delivery (stato_consegna ASSEGNATO): l'ordine lascia
+   *    il Bancone e compare nella schermata Delivery, dove sarà il rider a metterlo "In viaggio"
+   *    (notificando il cliente) e poi a chiuderlo come consegnato.
+   * In entrambi i casi card e chip dell'ordine spariscono subito dal Bancone.
+   */
+  const handleBanconeHandoff = useCallback(
+    async (ordineId, ordineArg) => {
       if (!ordineId) return
+      const ordine = ordineArg || orders.find((o) => o.id === ordineId) || detailOrder
+      const isDelivery = isBanconeDeliveryOrder(ordine)
       setActionLoading(true)
       try {
-        await updateOrderStato(ordineId, STATO_CONSEGNATO)
+        if (isDelivery) {
+          await updateOrderStato(ordineId, STATO_PRONTO)
+          await deliveryUpdateStatoConsegna(ordineId, "ASSEGNATO")
+        } else {
+          await updateOrderStato(ordineId, STATO_CONSEGNATO)
+        }
         setOrders((prev) => prev.filter((o) => o.id !== ordineId))
         // Rimuove subito anche dall'aggregazione "da preparare" (bibite/ingredienti), senza
-        // aspettare il prossimo refresh: l'ordine è concluso, i suoi chip non servono più.
+        // aspettare il prossimo refresh: l'ordine ha lasciato il Bancone, i suoi chip non servono più.
         setPrepOrders((prev) => prev.filter((o) => o.id !== ordineId))
         setDetailOrder(null)
       } catch (err) {
@@ -423,7 +442,7 @@ export default function Bancone() {
         setActionLoading(false)
       }
     },
-    []
+    [orders, detailOrder]
   )
 
   const renderCard = (ord, isDelivery) => {
@@ -459,11 +478,11 @@ export default function Bancone() {
               ...styles.btnRitirato,
               ...(ritardo > 0 ? styles.btnRitiratoRitardo : {}),
             }}
-            onClick={(e) => { e.stopPropagation(); markAsConsegnato(ord.id); }}
+            onClick={(e) => { e.stopPropagation(); handleBanconeHandoff(ord.id, ord); }}
             disabled={actionLoading}
-            title={ritardo > 0 ? `${ritardo} min in attesa` : "Segna come consegnato"}
+            title={banconeHandoffTitle(ord, ritardo)}
           >
-            {ritardo > 0 ? `${ritardo} min in attesa` : "Consegnato"}
+            {banconeHandoffLabel(ord, ritardo)}
           </button>
           <div
             style={styles.clienteBox}
@@ -582,8 +601,8 @@ export default function Bancone() {
           <h1 style={styles.title}>Bancone</h1>
           <p style={styles.subtitle}>
             {cucinaTabletOn
-              ? "Ordini pronti per il ritiro + anteprima preparazioni Cucina"
-              : "Preparazioni cucina + ordini pronti (tablet cucina non attivo: prep integrate qui)"}
+              ? "Ordini in forno (in cottura) da chiudere + anteprima preparazioni Cucina"
+              : "Preparazioni cucina + ordini in forno da chiudere (tablet cucina non attivo: prep integrate qui)"}
           </p>
         </>
       ) : (
@@ -608,11 +627,7 @@ export default function Bancone() {
       {loading && ordiniVisibili.length === 0 && !hasPrepChips ? (
         quad ? null : <p style={styles.muted}>Caricamento...</p>
       ) : ordiniVisibili.length === 0 && !hasPrepChips ? (
-        <p style={styles.muted}>
-          {quad
-            ? "Nessun ordine PRONTO oggi. Porta un ordine a PRONTO in cassa/pizzaioli per vederlo qui."
-            : "Nessun ordine pronto."}
-        </p>
+        null
       ) : (
         <div
           style={{ ...styles.mainRow, ...(quad ? { flexWrap: "nowrap" } : {}) }}
@@ -761,7 +776,7 @@ export default function Bancone() {
           </aside>
           <div style={styles.rightOrdersColumn}>
             {ordiniVisibili.map((ord) =>
-              renderCard(ord, (ord.tipo_ordine || "").toLowerCase() === "delivery")
+              renderCard(ord, isBanconeDeliveryOrder(ord))
             )}
           </div>
         </div>
@@ -772,8 +787,8 @@ export default function Bancone() {
           order={detailOrder}
           loading={detailLoading}
           onClose={() => !actionLoading && !cortesiaBusy && setDetailOrder(null)}
-          actionLabel={actionLoading ? "Salvataggio..." : "Consegnato"}
-          onAction={markAsConsegnato}
+          actionLabel={actionLoading ? "Salvataggio..." : banconeHandoffLabel(detailOrder)}
+          onAction={(id) => handleBanconeHandoff(id, detailOrder)}
           actionDisabled={actionLoading || cortesiaBusy}
           ingredientsByProduct={ingredientsByProduct}
           showPrintCortesia={showPrintCortesia}
@@ -825,7 +840,7 @@ const styles = {
     background: "#fafafa",
     border: "1px solid #e0e0e0",
     borderRadius: 10,
-    alignSelf: "stretch",
+    alignSelf: "flex-start",
   },
   // In "Test 4 reparti" il riquadro Bancone è stretto: la colonna ingredienti a larghezza piena
   // spingeva gli ordini sotto invece che a fianco. Qui la restringiamo e forziamo la riga a non

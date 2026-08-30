@@ -1,16 +1,21 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
-import { Link, useOutletContext } from "react-router-dom"
+import { Link, useLocation, useOutletContext } from "react-router-dom"
+import { parseRiderPonySlot } from "@/features/operative/delivery/utils/riderPonySlot"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
   markDeliveryConsegnatoWithProof,
   deliveryUpdateStatoConsegna,
+  riderEnsureMe,
 } from "@/features/admin/services/adminService"
+import { filterOrdiniPerPony } from "@/features/operative/delivery/utils/ponyOrderVisibility"
+import { consegnaMapsUrl } from "@/utils/consegnaMapsUrl"
 import { orarioToSlotLabel, orarioToMinutes } from "@/features/operative/pizzaiolo/utils/pizzaioloUtils"
 import { PLANNING_GRID_SLOT_MINUTES } from "@/features/operative/cassa/utils/planningUtils"
 import { formatIndirizzoDisplayItaliano } from "@/utils/formatIndirizzoItaliano"
 import { useRepartiQuadTest } from "@/features/operative/contexts/RepartiQuadTestContext"
 import LiveClock from "@/components/LiveClock"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { sortOrdersByNearestNeighbor } from "@/features/operative/delivery/utils/deliveryRouteUtils"
 import { useRiderPositionSync } from "@/features/operative/delivery/hooks/useRiderPositionSync"
 import ConsegnaProofDialog from "@/features/operative/delivery/components/ConsegnaProofDialog"
@@ -25,7 +30,7 @@ import {
 } from "@/features/operative/cassa/utils/cassaPaymentDisplay"
 
 const STATO_PRONTO = "PRONTO"
-const POLL_FALLBACK_MS = 30000
+const POLL_FALLBACK_MS = 8000
 
 /** Chiave slot per ordini senza orario_ritiro (vista test griglia reparti). */
 const SLOT_SENZA_ORARIO = "__senza_orario__"
@@ -115,11 +120,14 @@ function logDeliveryError(context, err) {
  * - quadTestBySlot: tutte le delivery di oggi per fascia oraria (pagina test 4 reparti); con credenziali pony/delivery si passerà al flusso reale.
  */
 export default function DeliveryDashboard(props) {
-  const { mode } = props || {}
+  const { mode, riderView: riderViewProp, ponyNome: ponyNomeProp } = props || {}
+  const ponyNome = typeof ponyNomeProp === "string" ? ponyNomeProp.trim() : ""
+  const location = useLocation()
   const quadTest = mode === "quadTestBySlot"
   const embedQuad = useRepartiQuadTest()
-  /** Vista test a 4 riquadri: niente titoli né testi esplicativi (anche se mode non passato ma dentro provider). */
-  const stripQuadChrome = quadTest || embedQuad
+  const riderView = riderViewProp === true || parseRiderPonySlot(location.pathname) != null || location.pathname === "/operative/rider"
+  /** Vista test a 4 riquadri / PWA pony: niente titoli né testi esplicativi. */
+  const stripQuadChrome = quadTest || embedQuad || riderView
   const { operatoreLabel } = useOutletContext() || {}
   const { tenantId, tenantData } = useTenant()
   const parametri = tenantData?.parametri_operativi || {}
@@ -132,7 +140,31 @@ export default function DeliveryDashboard(props) {
   const [cortesiaBusyId, setCortesiaBusyId] = useState(null)
   const [riderPos, setRiderPos] = useState(null)
   const [planningOpen, setPlanningOpen] = useState(false)
+  const [myRiderId, setMyRiderId] = useState(null)
   const loadSeqRef = useRef(0)
+  const ponySlot = parseRiderPonySlot(location.pathname)
+
+  useEffect(() => {
+    if (!tenantId || !riderView) {
+      setMyRiderId(null)
+      return undefined
+    }
+    if (!ponyNome) {
+      setMyRiderId(null)
+      return undefined
+    }
+    let cancelled = false
+    riderEnsureMe(tenantId, ponyNome, ponySlot)
+      .then((id) => {
+        if (!cancelled) setMyRiderId(id || null)
+      })
+      .catch(() => {
+        if (!cancelled) setMyRiderId(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId, riderView, ponyNome, ponySlot])
 
   const loadOrders = useCallback(
     async (opts = {}) => {
@@ -169,6 +201,9 @@ export default function DeliveryDashboard(props) {
           // via mentre stato_consegna era rimasto indietro), lo stato generale vince sempre:
           // un ordine con stato CONSEGNATO non deve mai comparire come ancora da consegnare.
           .filter((o) => String(o?.stato ?? "").trim().toUpperCase() !== "CONSEGNATO")
+        if (riderView && !quadTest) {
+          rows = filterOrdiniPerPony(rows, { riderId: myRiderId, ponySlot })
+        }
         if (quadTest) {
           rows = [...rows].sort((a, b) => {
             const ma = orarioToMinutes(a.orario_ritiro ?? a.orarioRitiro) ?? 99999
@@ -188,7 +223,7 @@ export default function DeliveryDashboard(props) {
         if (seq === loadSeqRef.current && !silent) setLoading(false)
       }
     },
-    [tenantId, quadTest],
+    [tenantId, quadTest, riderView, myRiderId, ponySlot],
   )
 
   useOperativeOrdersLiveRefresh({
@@ -196,6 +231,10 @@ export default function DeliveryDashboard(props) {
     onRefresh: () => loadOrders({ silent: true }),
     pollMs: POLL_FALLBACK_MS,
   })
+
+  useEffect(() => {
+    if (tenantId && riderView && myRiderId) void loadOrders({ silent: true })
+  }, [tenantId, riderView, myRiderId, loadOrders])
 
   const { position: syncedRiderPos } = useRiderPositionSync()
   useEffect(() => {
@@ -208,10 +247,18 @@ export default function DeliveryDashboard(props) {
   const setInViaggio = async (ordineId) => {
     if (!ordineId) return
     try {
-      await deliveryUpdateStatoConsegna(ordineId, "IN_VIAGGIO")
+      await deliveryUpdateStatoConsegna(ordineId, "IN_VIAGGIO", {
+        ponySlot,
+        nome: ponyNome || undefined,
+      })
       await loadOrders({ silent: true })
     } catch (err) {
       logDeliveryError("setInViaggio", err)
+      const msg = String(err?.message ?? err ?? "")
+      if (/ordine_gia_preso/i.test(msg)) {
+        window.alert("Questa consegna l'ha già presa un altro pony.")
+        await loadOrders({ silent: true })
+      }
     }
   }
 
@@ -242,9 +289,11 @@ export default function DeliveryDashboard(props) {
   }
 
   const displayOrders = useMemo(() => {
-    if (quadTest) return orders
-    return sortOrdersByNearestNeighbor(orders, riderPos)
-  }, [orders, quadTest, riderPos])
+    const visible =
+      riderView && !quadTest ? filterOrdiniPerPony(orders, { riderId: myRiderId, ponySlot }) : orders
+    if (quadTest) return visible
+    return sortOrdersByNearestNeighbor(visible, riderPos)
+  }, [orders, quadTest, riderPos, riderView, myRiderId, ponySlot])
 
   const bySlot = useMemo(
     () => groupDeliveryBySlot(displayOrders, PLANNING_GRID_SLOT_MINUTES),
@@ -252,7 +301,8 @@ export default function DeliveryDashboard(props) {
   )
   const slotOrder = useMemo(() => sortedSlotKeys(bySlot), [bySlot])
 
-  const pad = quadTest ? 10 : 24
+  const riderNarrow = useMediaQuery("(max-width: 719px)")
+  const pad = riderView ? 0 : quadTest ? 10 : 24
   const titleSize = quadTest ? 15 : undefined
 
   const renderOrderCard = (ord, compact) => {
@@ -262,7 +312,7 @@ export default function DeliveryDashboard(props) {
     const statoOrd = String(ord.stato ?? "").trim() || "—"
     const lat = ordineConsegnaLat(ord)
     const lng = ordineConsegnaLng(ord)
-    const mapsUrl = lat != null && lng != null ? `https://www.google.com/maps?q=${lat},${lng}` : null
+    const mapsUrl = consegnaMapsUrl({ lat, lng, indirizzo: ind })
     const p = compact ? 10 : 16
     const fs = compact ? 12 : 14
     const tipoPagamento = ord.tipo_pagamento ?? ord.tipoPagamento ?? ""
@@ -328,7 +378,19 @@ export default function DeliveryDashboard(props) {
             </span>
           ) : null}
         </div>
-        {nome ? <p style={{ fontSize: fs, margin: "0 0 4px", fontWeight: 600 }}>{nome}</p> : null}
+        {nome && mapsUrl ? (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: fs, margin: "0 0 4px", fontWeight: 600, color: "#1565c0", display: "inline-block" }}
+            title="Apri la mappa della consegna"
+          >
+            {nome}
+          </a>
+        ) : nome ? (
+          <p style={{ fontSize: fs, margin: "0 0 4px", fontWeight: 600 }}>{nome}</p>
+        ) : null}
         {ind ? (
           <p style={{ fontSize: compact ? 12 : 13, color: "#444", margin: "0 0 6px", lineHeight: 1.4 }}>
             {formatIndirizzoDisplayItaliano(ind)}
@@ -358,7 +420,7 @@ export default function DeliveryDashboard(props) {
         {ord.note ? (
           <p style={{ fontSize: compact ? 11 : 13, color: "#555", marginBottom: 6 }}>Note: {ord.note}</p>
         ) : null}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: compact ? 6 : 8 }}>
+        <div className={riderView ? "rider-pwa-actions" : undefined} style={riderView ? undefined : { display: "flex", flexWrap: "wrap", gap: compact ? 6 : 8 }}>
           {sc !== "IN_VIAGGIO" && sc !== "CONSEGNATO" ? (
             <button
               type="button"
@@ -430,10 +492,30 @@ export default function DeliveryDashboard(props) {
   }
 
   return (
-    <div style={{ padding: pad }}>
-      {stripQuadChrome ? (
+    <div className={riderView ? "rider-pwa-body" : undefined} style={riderView ? undefined : { padding: pad }}>
+      {stripQuadChrome && !riderView ? (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
           <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
+        </div>
+      ) : null}
+      {riderView ? (
+        <div className="rider-pwa-actions" style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setPlanningOpen(true)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #0d9488",
+              background: "#0d9488",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            Planning consegne
+          </button>
         </div>
       ) : null}
       {!stripQuadChrome ? (
@@ -485,13 +567,7 @@ export default function DeliveryDashboard(props) {
                   Mappa live
                 </Link>
               </div>
-              <p style={{ color: "#666", marginBottom: 16, lineHeight: 1.55 }}>
-                Solo ordini <strong>delivery</strong> in stato <strong>PRONTO</strong> (creati oggi). Compaiono qui quando cucina/pizzaiolo
-                segnano l’ordine pronto. Flusso consegna:{" "}
-                <strong>Assegnato</strong> → <strong>In viaggio</strong> → <strong>Consegnato</strong>.
-                {riderPos ? " Ordine suggerito per vicinanza GPS." : null}
-                {operatoreLabel ? ` · ${operatoreLabel}` : ""}
-              </p>
+              {null}
             </>
           )}
         </>
@@ -506,11 +582,7 @@ export default function DeliveryDashboard(props) {
           <p style={{ color: "#888", fontSize: quadTest ? 12 : undefined }}>Caricamento...</p>
         )
       ) : orders.length === 0 ? (
-        <p style={{ color: "#888", lineHeight: 1.5, fontSize: quadTest || embedQuad ? 12 : undefined, padding: stripQuadChrome ? "8px 4px" : undefined }}>
-          {quadTest || embedQuad
-            ? "Nessuna consegna a domicilio oggi (annullati esclusi). Crea un ordine delivery in cassa per popolare questo riquadro."
-            : "Nessun ordine delivery in stato PRONTO per oggi. Se hai ordini solo \"ritiro in negozio\", restano in Bancone / Pizzaioli; se sono ancora in preparazione, compariranno qui dopo PRONTO."}
-        </p>
+        null
       ) : quadTest ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {slotOrder.map((slot) => {
@@ -529,16 +601,21 @@ export default function DeliveryDashboard(props) {
           })}
         </div>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>{displayOrders.map((ord) => renderOrderCard(ord, false))}</ul>
+        <ul
+          className={riderView ? "rider-pwa-orders" : undefined}
+          style={riderView ? undefined : { listStyle: "none", padding: 0, margin: 0 }}
+        >
+          {displayOrders.map((ord) => renderOrderCard(ord, riderView ? riderNarrow : false))}
+        </ul>
       )}
       <ConsegnaProofDialog
         open={Boolean(proofOrdine)}
-        ordineNumero={proofOrdine?.numero}
+        nomeCliente={ordineNomeCliente(proofOrdine)}
         busy={proofBusy}
         onCancel={() => !proofBusy && setProofOrdine(null)}
         onConfirm={(prove) => void confirmProof(prove)}
       />
-      {!stripQuadChrome ? (
+      {!stripQuadChrome || riderView ? (
         <DeliveryPlanningPanel
           open={planningOpen}
           onClose={() => setPlanningOpen(false)}

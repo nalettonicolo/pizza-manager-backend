@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.49.2"
 import { isSumUpCheckoutPaid, pickSumUpTransaction, sumupApi, type SumUpCheckout } from "../_shared/sumup.ts"
+import { assertCronCaller } from "../_shared/cronAuth.ts"
 
 /**
  * Job periodico (pg_cron, ogni 5 min): a differenza di Stripe, SumUp qui non ha un webhook come
@@ -15,6 +16,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 })
   }
+  const cronDenied = assertCronCaller(req)
+  if (cronDenied) return cronDenied
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

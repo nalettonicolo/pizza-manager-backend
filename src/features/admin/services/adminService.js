@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 import { logSupabaseError } from "@/utils/logSupabaseError"
+import { notifyOperativeOrdersChanged } from "@/utils/operativeOrderBroadcast"
 import { getTenantSettings } from "@/features/admin/services/parametriService.js"
 import { sortByOrdine } from "@/utils/sortByOrdine"
 import { labelFromEmailPrefix } from "@/utils/emailDisplayLabel"
@@ -112,11 +113,13 @@ export async function getRecentOrders(tenantId, limit = 5) {
  * todayOnly: solo ordini creati nel giorno locale del browser (00:00–24:00, escluso fine intervallo)
  */
 export async function getOrders(tenantId, opts = {}) {
-  const { stato, limit = 50, fromDate, toDate, todayOnly } = opts
+  const { stato, statoIn, limit = 50, fromDate, toDate, todayOnly } = opts
+  const statiMultipli = Array.isArray(statoIn) ? statoIn.filter(Boolean) : null
   if (nestOperativeReadsEnabled()) {
     try {
       const rows = await nestOperativeOrdini(tenantId, {
         stato,
+        statoIn: statiMultipli,
         limit,
         fromDate,
         toDate,
@@ -132,7 +135,8 @@ export async function getOrders(tenantId, opts = {}) {
     .select("*")
     .eq("tenantId", tenantId)
     .order("createdAt", { ascending: false })
-  if (stato) q = q.eq("stato", stato)
+  if (statiMultipli && statiMultipli.length) q = q.in("stato", statiMultipli)
+  else if (stato) q = q.eq("stato", stato)
   if (todayOnly) {
     const { start, end } = getTodayRange()
     q = q.gte("createdAt", start).lt("createdAt", end)
@@ -218,7 +222,9 @@ export async function getTenantVenditeInsights(tenantId, opts = {}) {
 export async function createOrder(tenantId, payload) {
   if (nestOperativeWritesEnabled()) {
     try {
-      return await nestOperativeCreateOrder(tenantId, payload)
+      const created = await nestOperativeCreateOrder(tenantId, payload)
+      notifyOperativeOrdersChanged({ kind: "create" })
+      return created
     } catch (e) {
       console.warn("[adminService] createOrder Nest fallback Supabase:", e?.message ?? e)
     }
@@ -291,6 +297,7 @@ export async function createOrder(tenantId, payload) {
   const { data, error } = await supabase.rpc("create_order_with_items", rpcArgs)
 
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "create" })
   return data
 }
 
@@ -415,6 +422,7 @@ export async function updateOrderStato(ordineId, stato) {
   if (nestOperativeWritesEnabled()) {
     try {
       await nestOperativeUpdateOrderStato(ordineId, stato)
+      notifyOperativeOrdersChanged({ kind: "stato", stato })
       return
     } catch (e) {
       console.warn("[adminService] updateOrderStato Nest fallback Supabase:", e?.message ?? e)
@@ -425,6 +433,7 @@ export async function updateOrderStato(ordineId, stato) {
     p_stato_nuovo: stato,
   })
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "stato", stato })
 }
 
 /**
@@ -449,6 +458,7 @@ export async function markDeliveryConsegnatoAtomic(ordineId) {
   if (!ordineId) throw new Error("ordineId mancante")
   const { error } = await supabase.rpc("delivery_mark_consegnato", { p_ordine_id: ordineId })
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "consegna", stato: "CONSEGNATO" })
 }
 
 const CONSEGNA_PROVE_BUCKET = "consegna-prove"
@@ -518,6 +528,7 @@ export async function markDeliveryConsegnatoWithProof(ordineId, prove = [], tena
     p_prove: prepared,
   })
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "consegna", stato: "CONSEGNATO" })
 }
 
 /** Carico pizze per fascia oggi (checkout vetrina / capacity forno). */
@@ -536,14 +547,68 @@ export async function getRiderPosizioniLive(tenantId) {
   return Array.isArray(data) ? data : []
 }
 
-/** Delivery: ASSEGNATO | IN_VIAGGIO | RICHIESTA | PROBLEMA (+ sync stato_delivery). */
-export async function deliveryUpdateStatoConsegna(ordineId, stato) {
-  if (!ordineId) throw new Error("ordineId mancante")
-  const { error } = await supabase.rpc("delivery_update_stato_consegna", {
+/** Consegne a domicilio chiuse oggi, con rider e pagamento (conteggi cassa). */
+export async function cassaConsegneOdierne(tenantId) {
+  if (!tenantId) return []
+  const { data, error } = await supabase.rpc("cassa_consegne_odierne", { p_tenant_id: tenantId })
+  if (error) throw error
+  return Array.isArray(data) ? data : []
+}
+
+/** Il rider imposta il proprio nome visualizzato (mappa live). Ritorna il nome salvato o null
+ * se l'utente non è un rider mappato. */
+export async function riderSetNomeDisplay(nome, ponySlot = null) {
+  const payload = { p_nome: nome }
+  if (ponySlot === 1 || ponySlot === 2) payload.p_pony_slot = ponySlot
+  const { data, error } = await supabase.rpc("rider_set_nome_display", payload)
+  if (error) throw error
+  return typeof data === "string" ? data : null
+}
+
+/** Trova o crea il rider del chiamante sul tenant (e sullo slot pony). Ritorna l'id. */
+export async function riderEnsureMe(tenantId, nome = null, ponySlot = null) {
+  if (!tenantId) return null
+  const payload = {
+    p_tenant_id: tenantId,
+    p_nome: nome || null,
+  }
+  if (ponySlot === 1 || ponySlot === 2) payload.p_pony_slot = ponySlot
+  const { data, error } = await supabase.rpc("rider_ensure_me", payload)
+  if (error) throw error
+  return data || null
+}
+
+/** Pony attivi del locale (conteggio cassa: assegna consegne libere). */
+export async function cassaElencaPony(tenantId) {
+  if (!tenantId) return []
+  const { data, error } = await supabase.rpc("cassa_elenca_pony", { p_tenant_id: tenantId })
+  if (error) throw error
+  return Array.isArray(data) ? data : []
+}
+
+/** Assegna una consegna ancora libera a un pony. */
+export async function cassaAssegnaConsegnaPony(ordineId, riderId) {
+  if (!ordineId || !riderId) throw new Error("ordine o pony mancante")
+  const { error } = await supabase.rpc("cassa_assegna_consegna_pony", {
     p_ordine_id: ordineId,
-    p_stato: stato,
+    p_rider_id: riderId,
   })
   if (error) throw error
+}
+
+/** Delivery: ASSEGNATO | IN_VIAGGIO | RICHIESTA | PROBLEMA (+ sync stato_delivery). */
+export async function deliveryUpdateStatoConsegna(ordineId, stato, opts = {}) {
+  if (!ordineId) throw new Error("ordineId mancante")
+  const payload = {
+    p_ordine_id: ordineId,
+    p_stato: stato,
+  }
+  if (opts.ponySlot === 1 || opts.ponySlot === 2) payload.p_pony_slot = opts.ponySlot
+  const nome = typeof opts.nome === "string" ? opts.nome.trim() : ""
+  if (nome) payload.p_nome = nome
+  const { error } = await supabase.rpc("delivery_update_stato_consegna", payload)
+  if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "consegna", stato })
 }
 
 export async function listNotificheOutbox(tenantId, limit = 100) {
@@ -579,6 +644,7 @@ export async function updateOrderCucinaPrepStato(ordineId, cucinaPrepStato) {
     .update({ cucina_prep_stato: cucinaPrepStato })
     .eq("id", ordineId)
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "cucina_prep" })
 }
 
 /** Aggiorna il tipo pagamento (es. "Da pagare" → "Contanti" alla riscossione). */
@@ -680,6 +746,7 @@ export async function staffAccettaOrdineWeb(ordineId) {
   if (!ordineId) throw new Error("ordineId mancante")
   const { data, error } = await supabase.rpc("staff_accetta_ordine_web", { p_ordine_id: ordineId })
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "stato", stato: "IN_PREPARAZIONE" })
   return data
 }
 
@@ -691,6 +758,7 @@ export async function staffRifiutaOrdineWeb(ordineId, motivo = null) {
     p_motivo: motivo || null,
   })
   if (error) throw error
+  notifyOperativeOrdersChanged({ kind: "stato", stato: "ANNULLATO" })
   return data
 }
 
@@ -1517,30 +1585,24 @@ export async function applyFidelityMovimento(tenantId, anagraficaClienteId, punt
   if (!tenantId || !anagraficaClienteId) throw new Error("Dati mancanti.")
   const delta = Number(puntiDelta)
   if (!Number.isFinite(delta) || delta === 0) throw new Error("Indica un numero di punti diverso da zero.")
-  const { data: saldoRow, error: e1 } = await supabase
-    .from("fidelity_saldi")
-    .select("id, punti")
-    .eq("tenant_id", tenantId)
-    .eq("anagrafica_cliente_id", anagraficaClienteId)
-    .single()
-  if (e1 || !saldoRow) throw new Error("Cliente non iscritto al programma fidelity.")
-  const nuovi = saldoRow.punti + delta
-  if (nuovi < 0) throw new Error("Saldo punti insufficiente.")
-  const { error: e2 } = await supabase
-    .from("fidelity_saldi")
-    .update({ punti: nuovi, updated_at: new Date().toISOString() })
-    .eq("id", saldoRow.id)
-  if (e2) throw e2
-  const { error: e3 } = await supabase.from("fidelity_movimenti").insert({
-    tenant_id: tenantId,
-    anagrafica_cliente_id: anagraficaClienteId,
-    punti: delta,
-    tipo: tipo || "manuale",
-    ordine_id: ordineId || null,
-    note: note || null,
+  // RPC atomica (lock del saldo lato DB, autorizzazione staff/superadmin, no saldo negativo):
+  // sostituisce il vecchio read-modify-write client, soggetto a race condition (audit sicurezza).
+  const { data, error } = await supabase.rpc("fidelity_applica_movimento", {
+    p_tenant_id: tenantId,
+    p_anagrafica_cliente_id: anagraficaClienteId,
+    p_punti_delta: Math.trunc(delta),
+    p_tipo: tipo || "manuale",
+    p_note: note || null,
+    p_ordine_id: ordineId || null,
   })
-  if (e3) throw e3
-  return { punti: nuovi }
+  if (error) {
+    const msg = String(error.message || "")
+    if (msg.includes("cliente_non_iscritto")) throw new Error("Cliente non iscritto al programma fidelity.")
+    if (msg.includes("saldo_insufficiente")) throw new Error("Saldo punti insufficiente.")
+    if (msg.includes("forbidden")) throw new Error("Non autorizzato a modificare i punti fidelity.")
+    throw error
+  }
+  return { punti: Number(data) }
 }
 
 export async function getFidelityMovimenti(tenantId, anagraficaClienteId, limit = 80) {

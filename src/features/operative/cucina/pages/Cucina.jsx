@@ -26,8 +26,11 @@ import {
 import { useOperativeOrdersLiveRefresh } from "@/features/operative/hooks/useOperativeOrdersLiveRefresh"
 import { isCucinaTabletAbilitato } from "@/utils/cucinaTabletConfig"
 
-const STATO_PREPARAZIONE = "IN_PREPARAZIONE"
-const POLL_FALLBACK_MS = 30000
+// I task Cucina restano visibili finché il Bancone non chiude il giro: coprono sia gli ordini in
+// preparazione sia quelli già in forno (IN_COTTURA). Spariscono quando l'ordine lascia questi
+// stati (Bancone → CONSEGNATO negozio / PRONTO+consegna domicilio).
+const STATI_LAVORAZIONE = ["IN_PREPARAZIONE", "IN_COTTURA"]
+const POLL_FALLBACK_MS = 8000
 
 export default function Cucina() {
   const quad = useRepartiQuadTest()
@@ -77,7 +80,7 @@ export default function Cucina() {
         setError(null)
       }
       try {
-        const data = await getOrders(tenantId, { stato: STATO_PREPARAZIONE, todayOnly: true, limit: 100 })
+        const data = await getOrders(tenantId, { statoIn: STATI_LAVORAZIONE, todayOnly: true, limit: 100 })
         const ids = (data || []).map((o) => o.id).filter(Boolean)
         const righe = ids.length ? await getRigheByOrdineIds(ids) : []
         const prodIds = new Set()

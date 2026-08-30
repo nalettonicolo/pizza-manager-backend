@@ -3,6 +3,7 @@ import LegalPageShell from "@/features/public/components/LegalPageShell";
 import { useLegalEntity } from "@/hooks/useLegalEntity";
 import { PLATFORM_PRODUCT_NAME } from "@/config/legalEntity";
 import { applyLegalPlaceholders } from "@/utils/legalPlaceholders";
+import { sanitizeLegalHtml } from "@/utils/sanitizeLegalHtml";
 
 export default function CookiePolicy() {
   const { loading, isSaaS, config: c } = useLegalEntity();
@@ -21,11 +22,13 @@ export default function CookiePolicy() {
   const customCookie = !isSaaS && typeof c.cookie_policy_html === "string" && c.cookie_policy_html.trim();
   if (customCookie) {
     const html = applyLegalPlaceholders(c.cookie_policy_html, c.legalTenantSnapshot || {}, c.siteLabel);
+    // Sanifica prima di iniettare: neutralizza <script>, handler inline e URL javascript: (stored XSS).
+    const safeHtml = sanitizeLegalHtml(html);
     return (
       <LegalPageShell title="Informativa sui cookie" updatedAt="22 marzo 2026">
         <div
           className="legal-custom-html"
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: safeHtml }}
         />
       </LegalPageShell>
     );

@@ -4,17 +4,17 @@
  */
 
 export const cassaTipoOrdineBtn = {
-  padding: "10px 20px",
+  padding: "5px 10px",
   borderWidth: 1,
   borderStyle: "solid",
   borderColor: "#ddd",
-  borderRadius: 8,
+  borderRadius: 6,
   background: "#fff",
   cursor: "pointer",
-  fontSize: 14,
+  fontSize: 12,
   fontWeight: 500,
   boxSizing: "border-box",
-  lineHeight: 1.25,
+  lineHeight: 1.2,
 }
 
 export const cassaTipoOrdineBtnActive = {
@@ -24,25 +24,25 @@ export const cassaTipoOrdineBtnActive = {
 }
 
 export const cassaNuovoClienteBtn = {
-  padding: "10px 16px",
+  padding: "5px 10px",
   background: "#1976d2",
   color: "#fff",
   border: "none",
-  borderRadius: 8,
+  borderRadius: 6,
   cursor: "pointer",
-  fontSize: 14,
+  fontSize: 12,
   whiteSpace: "nowrap",
   boxSizing: "border-box",
-  lineHeight: 1.25,
+  lineHeight: 1.2,
 }
 
 /** Ordini, Planning e azioni secondarie nella stessa riga della cassa */
 export const cassaToolbarCompactBtn = {
-  padding: "8px 14px",
+  padding: "5px 9px",
   border: "none",
-  borderRadius: 8,
-  fontSize: 13,
+  borderRadius: 6,
+  fontSize: 12,
   boxSizing: "border-box",
-  lineHeight: 1.25,
+  lineHeight: 1.2,
   cursor: "pointer",
 }

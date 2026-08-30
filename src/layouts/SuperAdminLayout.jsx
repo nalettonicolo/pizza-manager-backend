@@ -15,6 +15,7 @@ const PIATTAFORMA_ITEMS_BASE = [
   { to: "/superadmin/azioni-da-completare", label: "⚠️ Azioni da completare" },
   { to: "/superadmin/sala-qa", label: "Sala QA e supporto" },
   { to: "/superadmin/guide", label: "Documentazione" },
+  { to: "/superadmin/flussi", label: "Flussi" },
   { to: "/superadmin/auth-email-templates", label: "Template email Auth" },
   { to: "/superadmin/sviluppo", label: "Roadmap" },
   { to: "/superadmin/agenti-moduli", label: "Moduli agenti" },
@@ -140,6 +141,7 @@ export default function SuperAdminLayout() {
       () => import("@/features/superadmin/pages/Licenses"),
       () => import("@/features/superadmin/pages/SuperadminGoLivePage"),
       () => import("@/features/superadmin/pages/SuperadminGuideHub"),
+      () => import("@/features/superadmin/pages/SuperadminFlussiPage"),
       // SuperadminGuideDocPage esclusa apposta: usa react-markdown (~100KB chunk vendor-markdown)
       // — stesso motivo di ManualeUtentePage in AdminLayout.jsx (vedi commento lì).
       () => import("@/features/superadmin/pages/SviluppoPage"),

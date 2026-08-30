@@ -1,12 +1,11 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Store, LayoutDashboard, LogOut, Presentation, UserRound } from "lucide-react"
-import { useAuth } from "@/app/contexts/AuthContext"
+import { Store, LayoutDashboard, Presentation, UserRound } from "lucide-react"
 import { getTenants } from "@/features/superadmin/services/superadminService"
 import { setSupportTenantOverride, withSupportTenantQuery } from "@/utils/supportTenantOverride"
 import { withDemoGiroQuery, setDemoGiroSessionActive, clearDemoGiroSession } from "@/utils/demoGiro"
 import { openDemoClienteArea } from "@/utils/demoClienteSession"
-import "@/styles/superadmin-gate.css"
+import SuperadminGateChrome from "@/features/superadmin/components/SuperadminGateChrome"
 
 /** Hub iniziale demo: panoramica reparti + admin tenant. */
 const DEMO_START_PATH = "/operative/dashboard"
@@ -16,17 +15,11 @@ const DEMO_CLIENTE_PATH = "/preview"
  * Pagina post-login Super Admin: tre destinazioni — Amministrazione | Vetrina | Area demo.
  */
 export default function SuperadminGatePage() {
-  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [demoStarting, setDemoStarting] = useState(false)
   const [previewStarting, setPreviewStarting] = useState(false)
   const [clienteStarting, setClienteStarting] = useState(false)
   const [demoError, setDemoError] = useState(null)
-
-  const handleLogout = async () => {
-    await logout()
-    navigate("/login", { replace: true })
-  }
 
   const resolveDemoTenantId = async () => {
     const envId = String(import.meta.env.VITE_PUBLIC_DEMO_TENANT_ID || "").trim()
@@ -109,23 +102,7 @@ export default function SuperadminGatePage() {
   }
 
   return (
-    <div className="sa-gate">
-      <header className="sa-gate-top">
-        <div className="sa-gate-brand">
-          <span className="sa-gate-logo">PizzaManager</span>
-          <span className="sa-gate-badge">Super Admin</span>
-        </div>
-        <div className="sa-gate-user">
-          <span className="sa-gate-email" title={user?.email}>
-            {user?.email}
-          </span>
-          <button type="button" className="sa-gate-logout" onClick={() => void handleLogout()}>
-            <LogOut size={18} strokeWidth={2.25} aria-hidden />
-            Esci
-          </button>
-        </div>
-      </header>
-
+    <SuperadminGateChrome>
       <main className="sa-gate-main">
         <p className="sa-gate-kicker">Accesso riservato</p>
         <h1 className="sa-gate-title">Dove vuoi andare?</h1>
@@ -200,6 +177,6 @@ export default function SuperadminGatePage() {
           </div>
         </div>
       </main>
-    </div>
+    </SuperadminGateChrome>
   )
 }

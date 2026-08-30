@@ -1,0 +1,178 @@
+.sa-flussi-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 28px;
+}
+
+.sa-flussi-toc a {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 6px 12px;
+  text-decoration: none;
+}
+
+.sa-flussi-toc a:hover {
+  border-color: rgba(245, 176, 65, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sa-flussi-heading {
+  margin: 8px 0 14px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.sa-flussi-intro {
+  margin: 0 0 14px;
+  max-width: 720px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(248, 250, 252, 0.7);
+}
+
+.sa-flussi-box {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+.sa-flussi-box h2,
+.sa-flussi-box h3 {
+  margin: 0 0 10px;
+  color: #fff;
+}
+
+.sa-flussi-box h2 {
+  font-size: 17px;
+}
+
+.sa-flussi-box h3 {
+  font-size: 15px;
+}
+
+.sa-flussi-box p,
+.sa-flussi-box li,
+.sa-flussi-box dd {
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(248, 250, 252, 0.78);
+}
+
+.sa-flussi-box ol,
+.sa-flussi-box ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sa-flussi-sync {
+  border-color: rgba(13, 148, 136, 0.45);
+  background: rgba(13, 148, 136, 0.12);
+}
+
+.sa-flussi-sync h2 {
+  color: #5eead4;
+}
+
+.sa-flussi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.sa-flussi-percorso li {
+  margin-bottom: 6px;
+}
+
+.sa-flussi-reparto {
+  border-top: 4px solid #64748b;
+}
+
+.sa-flussi-reparto .sa-flussi-path {
+  font-size: 12px;
+  color: rgba(248, 250, 252, 0.5);
+  margin: 0 0 12px;
+}
+
+.sa-flussi-reparto dl {
+  margin: 0;
+}
+
+.sa-flussi-reparto dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f5b041;
+  margin: 10px 0 4px;
+}
+
+.sa-flussi-reparto dd {
+  margin: 0;
+}
+
+.sa-flussi-mismatch {
+  border-color: rgba(230, 126, 34, 0.45);
+  background: rgba(230, 126, 34, 0.12);
+}
+
+.sa-flussi-mismatch h3 {
+  color: #f5b041;
+}
+
+.sa-flussi-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #fdba74;
+}
+
+.sa-flussi-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 24px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sa-flussi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.sa-flussi-table th,
+.sa-flussi-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+  color: rgba(248, 250, 252, 0.82);
+}
+
+.sa-flussi-table th {
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #f5b041;
+}
+
+.sa-flussi-table tr:last-child td {
+  border-bottom: none;
+}
+
+.sa-flussi-reparto--cassa { border-top-color: #14b8a6; }
+.sa-flussi-reparto--pizzaioli { border-top-color: #e67e22; }
+.sa-flussi-reparto--cucina { border-top-color: #f5b041; }
+.sa-flussi-reparto--bancone { border-top-color: #60a5fa; }
+.sa-flussi-reparto--delivery { border-top-color: #c4b5fd; }

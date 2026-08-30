@@ -44,8 +44,36 @@ Deno.serve(async (req) => {
   if (!ordineId) {
     return jsonResponse({ error: "ordine_id obbligatorio" }, 400)
   }
-  if (!redirectUrl || !/^https?:\/\//i.test(redirectUrl)) {
-    return jsonResponse({ error: "redirect_url HTTPS obbligatorio" }, 400)
+  // Anti open-redirect / phishing: il redirect_url deve puntare all'origin da cui arriva la
+  // richiesta (il sito su cui si trova il cliente) oppure a una allowlist esplicita (PUBLIC_APP_ORIGINS).
+  // Senza questo controllo un chiamante autenticato potrebbe far reindirizzare il cliente, dopo il
+  // pagamento, a un sito arbitrario (OWASP A01/A10).
+  const normalizeOrigin = (v: string) => v.trim().replace(/\/+$/, "")
+  const isLocalhost = (o: string) => {
+    try {
+      const h = new URL(o).hostname
+      return h === "localhost" || h === "127.0.0.1"
+    } catch {
+      return false
+    }
+  }
+  const reqOrigin = normalizeOrigin(req.headers.get("origin") || "")
+  const allowlist = String(Deno.env.get("PUBLIC_APP_ORIGINS") || "")
+    .split(",")
+    .map((s) => normalizeOrigin(s))
+    .filter(Boolean)
+  let redirectOrigin = ""
+  try {
+    redirectOrigin = new URL(redirectUrl).origin
+  } catch {
+    redirectOrigin = ""
+  }
+  const protocolOk = /^https:\/\//i.test(redirectUrl) || isLocalhost(redirectUrl)
+  const originAllowed =
+    !!redirectOrigin &&
+    (redirectOrigin === reqOrigin || allowlist.includes(redirectOrigin))
+  if (!redirectUrl || !protocolOk || !originAllowed) {
+    return jsonResponse({ error: "redirect_url non consentito" }, 400)
   }
 
   const admin = createClient(supabaseUrl, serviceKey)

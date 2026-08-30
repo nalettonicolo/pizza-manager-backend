@@ -14,7 +14,10 @@
  */
 import { repoRootFromHere, runSupabaseDatabaseQuery } from "./lib/supabaseProjectAccess.mjs"
 
-const root = repoRootFromHere(import.meta.url)
+// repoRootFromHere() senza argomenti usa la posizione della lib (scripts/lib) per risalire alla
+// root del repo. Passare import.meta.url di QUESTO file darebbe una root errata (un livello troppo
+// in alto), facendo fallire il recupero del token via helper PowerShell su Windows.
+const root = repoRootFromHere()
 
 function parseArgs(argv) {
   const out = {}

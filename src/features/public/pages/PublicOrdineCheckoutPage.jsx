@@ -179,10 +179,17 @@ export default function PublicOrdineCheckoutPage() {
     const po = tenant?.parametri_operativi
     return po && typeof po === "object" ? po : PARAMETRI_OPERATIVI_VUOTI
   }, [tenant?.parametri_operativi])
+  // Con accettazione manuale in cassa il pagamento online NON va offerto in vetrina: se il locale
+  // rifiuta un ordine già pagato, il rimborso è complicato. In manuale il cliente paga solo alla
+  // consegna/ritiro (contanti o carta al POS).
+  const accettazioneManualeCassa =
+    String(parametri.ordini_web_accettazione_mode || "auto").toLowerCase() === "manuale"
   const payContantiOk = isCassaPagamentoContantiAbilitato(parametri)
   const payCartaOk = isCassaPagamentoCartaAbilitato(parametri)
   const payOnlineOk =
-    isCassaPagamentoPagaOnlineAbilitato(parametri) && checkoutLiveProviders.length > 0
+    isCassaPagamentoPagaOnlineAbilitato(parametri) &&
+    checkoutLiveProviders.length > 0 &&
+    !accettazioneManualeCassa
 
   useEffect(() => {
     const allowed = []
@@ -198,8 +205,6 @@ export default function PublicOrdineCheckoutPage() {
   const closedToday = isTodayClosed(tenant?.orari_settimana)
   const calendarClosed = closedToday || !orariOggi.aperto
   const quarterFilterUi = useMemo(() => getWebVetrinaSlotQuarterFilter(parametri), [parametri])
-  const accettazioneManualeCassa =
-    String(parametri.ordini_web_accettazione_mode || "auto").toLowerCase() === "manuale"
 
   const slots = useMemo(() => {
     void slotTick
@@ -763,7 +768,7 @@ export default function PublicOrdineCheckoutPage() {
               Carta (POS alla consegna)
             </label>
           ) : null}
-          {isCassaPagamentoPagaOnlineAbilitato(parametri) ? (
+          {payOnlineOk ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
               <input
                 type="radio"
@@ -774,6 +779,12 @@ export default function PublicOrdineCheckoutPage() {
               />
               Paga online (carta)
             </label>
+          ) : null}
+          {accettazioneManualeCassa && isCassaPagamentoPagaOnlineAbilitato(parametri) ? (
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "#9a3412", lineHeight: 1.4 }}>
+              Il pagamento online non è disponibile perché la pizzeria conferma gli ordini manualmente:
+              pagherai alla consegna o al ritiro.
+            </p>
           ) : null}
           {paymentMode === "online" ? (
             <>

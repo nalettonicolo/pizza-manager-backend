@@ -10,23 +10,22 @@ export default function ProductGrid({
   showModifica = true,
   disabledProductIds = new Set(),
   storefront = false,
-  /** "comfortable" = classi CSS per touch / viewport stretti (cassa mobile) */
+  /** Mantenuto per compatibilità; lo stacking su schermo stretto è via CSS. */
   layoutDensity = "default",
 }) {
   const disabledSet = disabledProductIds instanceof Set ? disabledProductIds : new Set(disabledProductIds || [])
-  const comfortable = layoutDensity === "comfortable"
-  const gridClass = comfortable ? "cassa-product-grid" : undefined
+  void layoutDensity
 
   if (!products.length) {
     return (
-      <div className={comfortable ? "cassa-product-grid p-4 text-gray-500" : "p-4 text-gray-500"}>
+      <div className="cassa-product-grid p-4 text-gray-500">
         Nessun prodotto disponibile
       </div>
     )
   }
 
   return (
-    <div style={styles.list} className={gridClass}>
+    <div style={styles.list} className="cassa-product-grid">
       {products.map((product) => {
         const ingredienti = ingredientiMap?.[product.id] || []
         const descrizione = ingredienti.join(", ")
@@ -34,7 +33,7 @@ export default function ProductGrid({
         return (
           <div
             key={product.id}
-            className={comfortable ? "cassa-product-row" : undefined}
+            className="cassa-product-row"
             style={{
               ...styles.row,
               background: rowBackground,
@@ -44,7 +43,7 @@ export default function ProductGrid({
           >
             <div style={styles.rowLeft}>
               <div style={styles.pizzaNameRow}>
-                <span className={comfortable ? "cassa-product-name" : undefined} style={styles.pizzaName}>
+                <span className="cassa-product-name" style={styles.pizzaName}>
                   {product.nome}
                 </span>
                 {isDisabled && (
@@ -52,19 +51,19 @@ export default function ProductGrid({
                 )}
               </div>
               {descrizione && (
-                <p className={comfortable ? "cassa-product-desc" : undefined} style={styles.pizzaDesc}>
+                <p className="cassa-product-desc" style={styles.pizzaDesc}>
                   {descrizione}
                 </p>
               )}
             </div>
-            <div className={comfortable ? "cassa-product-row-actions" : undefined} style={styles.rowRight}>
+            <div className="cassa-product-row-actions" style={styles.rowRight}>
               {product.prezzo_listino_originale != null &&
               Number(product.prezzo_listino_originale) > Number(product.prezzo) ? (
                 <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
                   <span style={{ fontSize: 12, color: "#94a3b8", textDecoration: "line-through" }}>
                     € {Number(product.prezzo_listino_originale).toFixed(2)}
                   </span>
-                  <span className={comfortable ? "cassa-product-price" : undefined} style={styles.price}>
+                  <span className="cassa-product-price" style={styles.price}>
                     € {Number(product.prezzo).toFixed(2)}
                   </span>
                   {!storefront ? (
@@ -72,7 +71,7 @@ export default function ProductGrid({
                   ) : null}
                 </span>
               ) : (
-                <span className={comfortable ? "cassa-product-price" : undefined} style={styles.price}>
+                <span className="cassa-product-price" style={styles.price}>
                   € {Number(product.prezzo).toFixed(2)}
                 </span>
               )}

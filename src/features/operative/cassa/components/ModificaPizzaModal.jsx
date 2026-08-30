@@ -112,8 +112,20 @@ function normalizeIngredientRow(ing) {
 
 const s = {
   body: {
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
+    flex: "1 1 auto",
+    overflow: "hidden",
     padding: "16px 20px 20px",
     background: "#f3f9f4",
+  },
+  /** Tutto tranne il footer scorre qui dentro: il pulsante "Aggiungi" resta sempre visibile,
+      senza dover scrollare l'intera pagina per raggiungerlo (segnalato su schermi più piccoli). */
+  scrollArea: {
+    flex: "1 1 auto",
+    overflowY: "auto",
+    minHeight: 0,
   },
   chipsRow: {
     display: "flex",
@@ -297,6 +309,7 @@ const s = {
     fontSize: 13,
   },
   footer: {
+    flexShrink: 0,
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
@@ -651,11 +664,12 @@ export default function ModificaPizzaModal({
 
   return (
     <Modal open={open} onClose={onClose} title="" wide tall>
-      <div style={s.body}>
+      <div style={s.body} className="op-modifica-pizza-shell">
         {loading ? (
           <div style={s.loadingWrap}>Caricamento...</div>
         ) : (
           <>
+          <div style={s.scrollArea}>
             {/* Riga superiore: immagine + nome pizza + ingredienti con ingranaggio */}
             <div style={s.topRow}>
               {product.immagine_url ? (
@@ -924,8 +938,9 @@ export default function ModificaPizzaModal({
                 })}
               </div>
             )}
+          </div>
 
-            {/* Footer: Reset, Prezzo, Aggiungi */}
+            {/* Footer: Reset, Prezzo, Aggiungi — sempre visibile, fuori dall'area scrollabile */}
             <div style={s.footer}>
               <button type="button" style={s.btnReset} onClick={handleReset}>
                 ↻ Reset

@@ -96,7 +96,7 @@ function diffChanges(before, after) {
  */
 export default function CassaImpostazioniPage({ onBack }) {
   const location = useLocation()
-  const { tenantId } = useTenant()
+  const { tenantId, refreshTenant } = useTenant()
   const [settings, setSettings] = useState(null)
   const [form, setForm] = useState(() => readOperativeSlice({}))
   const [loading, setLoading] = useState(true)
@@ -161,6 +161,7 @@ export default function CassaImpostazioniPage({ onBack }) {
       await updateTenantSettings(tenantId, { parametri_operativi: payload })
       setSettings({ ...settings, parametri_operativi: payload })
       setForm(readOperativeSlice(payload))
+      if (refreshTenant) await refreshTenant()
       if (Object.keys(changes).length > 0) {
         await logCassaAuditEvent(tenantId, {
           ordineId: null,
@@ -211,7 +212,7 @@ export default function CassaImpostazioniPage({ onBack }) {
         </p>
       </div>
 
-      <div style={styles.twoColGrid}>
+      <div className="cassa-impostazioni-grid" style={styles.twoColGrid}>
       <section style={styles.section}>
           <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Capacità e slot</h3>
         <div style={styles.fields}>
@@ -318,6 +319,7 @@ export default function CassaImpostazioniPage({ onBack }) {
           </label>
         </div>
       </section>
+      <div className="cassa-impostazioni-right" style={styles.rightCol}>
       <section style={styles.section}>
         <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Pizzaiolo e consegne</h3>
         <div style={styles.fields}>
@@ -367,7 +369,6 @@ export default function CassaImpostazioniPage({ onBack }) {
           </label>
         </div>
       </section>
-      </div>
 
       <section style={{ ...styles.section, background: "#f8fafc" }}>
         <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Configurazioni admin (non in cassa)</h3>
@@ -419,6 +420,8 @@ export default function CassaImpostazioniPage({ onBack }) {
           </ul>
         )}
       </section>
+      </div>
+      </div>
 
       <div style={styles.actions}>
         <button type="button" style={styles.saveBtn} onClick={handleSave} disabled={saving}>
@@ -449,6 +452,12 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
     gap: 16,
     marginBottom: 16,
+    alignItems: "start",
+  },
+  rightCol: {
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
   },
   actions: { marginTop: 8 },
   saveBtn: {
