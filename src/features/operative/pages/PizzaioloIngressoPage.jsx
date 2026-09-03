@@ -3,7 +3,7 @@ import { useAuth } from "@/app/contexts/AuthContext"
 import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 
 /**
- * Account test pizzaiolo@pizzamanager.it: dopo login scegli schermata Pizzaiolo a tutto schermo
+ * Account test pizzaiolo/pizzaioli @pizzamanager.it: dopo login scegli schermata Pizzaiolo a tutto schermo
  * oppure vista Test 4 reparti.
  */
 export default function PizzaioloIngressoPage() {

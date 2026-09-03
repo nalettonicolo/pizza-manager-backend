@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { Link, useLocation, useOutletContext } from "react-router-dom"
-import { parseRiderPonySlot } from "@/features/operative/delivery/utils/riderPonySlot"
 import { useTenant } from "@/app/contexts/TenantContext"
 import {
   getOrders,
@@ -125,7 +124,7 @@ export default function DeliveryDashboard(props) {
   const location = useLocation()
   const quadTest = mode === "quadTestBySlot"
   const embedQuad = useRepartiQuadTest()
-  const riderView = riderViewProp === true || parseRiderPonySlot(location.pathname) != null || location.pathname === "/operative/rider"
+  const riderView = riderViewProp === true || location.pathname === "/operative/rider"
   /** Vista test a 4 riquadri / PWA pony: niente titoli né testi esplicativi. */
   const stripQuadChrome = quadTest || embedQuad || riderView
   const { operatoreLabel } = useOutletContext() || {}
@@ -142,7 +141,6 @@ export default function DeliveryDashboard(props) {
   const [planningOpen, setPlanningOpen] = useState(false)
   const [myRiderId, setMyRiderId] = useState(null)
   const loadSeqRef = useRef(0)
-  const ponySlot = parseRiderPonySlot(location.pathname)
 
   useEffect(() => {
     if (!tenantId || !riderView) {
@@ -154,7 +152,7 @@ export default function DeliveryDashboard(props) {
       return undefined
     }
     let cancelled = false
-    riderEnsureMe(tenantId, ponyNome, ponySlot)
+    riderEnsureMe(tenantId, ponyNome)
       .then((id) => {
         if (!cancelled) setMyRiderId(id || null)
       })
@@ -164,7 +162,7 @@ export default function DeliveryDashboard(props) {
     return () => {
       cancelled = true
     }
-  }, [tenantId, riderView, ponyNome, ponySlot])
+  }, [tenantId, riderView, ponyNome])
 
   const loadOrders = useCallback(
     async (opts = {}) => {
@@ -202,7 +200,7 @@ export default function DeliveryDashboard(props) {
           // un ordine con stato CONSEGNATO non deve mai comparire come ancora da consegnare.
           .filter((o) => String(o?.stato ?? "").trim().toUpperCase() !== "CONSEGNATO")
         if (riderView && !quadTest) {
-          rows = filterOrdiniPerPony(rows, { riderId: myRiderId, ponySlot })
+          rows = filterOrdiniPerPony(rows, { riderId: myRiderId })
         }
         if (quadTest) {
           rows = [...rows].sort((a, b) => {
@@ -223,7 +221,7 @@ export default function DeliveryDashboard(props) {
         if (seq === loadSeqRef.current && !silent) setLoading(false)
       }
     },
-    [tenantId, quadTest, riderView, myRiderId, ponySlot],
+    [tenantId, quadTest, riderView, myRiderId],
   )
 
   useOperativeOrdersLiveRefresh({
@@ -248,7 +246,6 @@ export default function DeliveryDashboard(props) {
     if (!ordineId) return
     try {
       await deliveryUpdateStatoConsegna(ordineId, "IN_VIAGGIO", {
-        ponySlot,
         nome: ponyNome || undefined,
       })
       await loadOrders({ silent: true })
@@ -290,10 +287,10 @@ export default function DeliveryDashboard(props) {
 
   const displayOrders = useMemo(() => {
     const visible =
-      riderView && !quadTest ? filterOrdiniPerPony(orders, { riderId: myRiderId, ponySlot }) : orders
+      riderView && !quadTest ? filterOrdiniPerPony(orders, { riderId: myRiderId }) : orders
     if (quadTest) return visible
     return sortOrdersByNearestNeighbor(visible, riderPos)
-  }, [orders, quadTest, riderPos, riderView, myRiderId, ponySlot])
+  }, [orders, quadTest, riderPos, riderView, myRiderId])
 
   const bySlot = useMemo(
     () => groupDeliveryBySlot(displayOrders, PLANNING_GRID_SLOT_MINUTES),

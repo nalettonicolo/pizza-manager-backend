@@ -131,9 +131,11 @@
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  align-items: center;
+  /* start, non center: con testo e card di altezza diversa, centrare le colonne spingeva il
+     testo (colonna più corta) in basso, creando un vuoto vistoso sotto la topbar. */
+  align-items: start;
   gap: clamp(32px, 5vw, 72px);
-  padding: clamp(48px, 8vw, 100px) clamp(20px, 4vw, 56px) clamp(40px, 6vw, 72px);
+  padding: clamp(32px, 5vw, 64px) clamp(20px, 4vw, 56px) clamp(40px, 6vw, 72px);
   max-width: 1280px;
   margin: 0 auto;
 }

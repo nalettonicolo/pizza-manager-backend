@@ -98,7 +98,8 @@ export default function ManualeUtentePage() {
         <p className="guida-utente-lead">
           Riferimento per titolare e staff: struttura a <strong>macro</strong> (temi grandi) e <strong>micro</strong> (singoli
           argomenti). Usa la colonna sinistra per saltare al punto che ti serve; la <strong>mappa concettuale</strong> qui
-          sotto riassume le macro. Il link in barra è <strong>Manuale</strong>.
+          sotto riassume le macro. Il link in barra è <strong>Guida</strong>. Contratti e comunicazioni
+          con PizzaManager sono in <strong>Documenti</strong>.
         </p>
 
         <ConceptMap onNavigate={onNavigate} />

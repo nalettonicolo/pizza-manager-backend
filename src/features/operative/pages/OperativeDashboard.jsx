@@ -167,8 +167,8 @@ export default function OperativeDashboard() {
             Admin del locale
           </h2>
           <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", maxWidth: 560 }}>
-            Apri <strong>Gestione locale</strong> per il pannello completo; oppure vai diretto a menu, ordini,
-            impostazioni o staff.
+            Apri <strong>Gestione locale</strong> per il pannello completo, oppure vai diretto a menu, documenti,
+            guida, report e le altre aree del gestore.
           </p>
           <DashboardNavCards items={adminItems} columns={3} />
         </section>

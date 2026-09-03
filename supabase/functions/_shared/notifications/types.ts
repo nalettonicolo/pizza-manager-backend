@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.49.2"
+
 /** Riga `notifiche_outbox` (subset usato dal worker). */
 export type NotificaOutboxRow = {
   id: string
@@ -13,6 +15,8 @@ export type AdapterSendContext = {
   /** email | sms | whatsapp | in_app */
   channel: string
   env: Record<string, string | undefined>
+  /** Client service-role per allegati Storage (PDF contratti). */
+  admin?: SupabaseClient
 }
 
 export type AdapterSendResult =

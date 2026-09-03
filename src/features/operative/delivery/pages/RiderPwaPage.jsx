@@ -1,28 +1,23 @@
 import { useEffect, useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import DeliveryDashboard from "@/features/operative/delivery/pages/DeliveryDashboard"
 import { riderSetNomeDisplay, riderEnsureMe } from "@/features/admin/services/adminService"
 import { useTenant } from "@/app/contexts/TenantContext"
-import {
-  parseRiderPonySlot,
-  riderNameSessionKey,
-  riderPonySlotColor,
-} from "@/features/operative/delivery/utils/riderPonySlot"
+
+const RIDER_NAME_SESSION_KEY = "pm_rider_nome_confermato_v1"
+const HEADER_COLOR = "#0f172a"
 
 /**
  * Vista rider mobile-first: stesso flusso delivery, layout ottimizzato per smartphone / PWA.
  * Al login chiede il nome del pony (aggiorna core.rider.nome_display, così la cassa lo vede
  * sulla mappa live). Se l'utente non è un rider mappato o il nome non parte, non blocca l'uso.
- * Route `/operative/rider/1` e `/2` (Sala QA) distinguono Pony 1 e Pony 2.
+ * Ogni pony ha il proprio account/login: un solo record rider per utente autenticato.
  */
 export default function RiderPwaPage() {
-  const location = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { tenantId } = useTenant()
-  const ponySlot = parseRiderPonySlot(location.pathname)
-  const slotColor = riderPonySlotColor(ponySlot)
   const [nomeConfermato, setNomeConfermato] = useState("")
 
   const [askName, setAskName] = useState(false)
@@ -45,7 +40,7 @@ export default function RiderPwaPage() {
 
   useEffect(() => {
     try {
-      const stored = window.sessionStorage.getItem(riderNameSessionKey(ponySlot))
+      const stored = window.sessionStorage.getItem(RIDER_NAME_SESSION_KEY)
       if (!stored) {
         setAskName(true)
       } else {
@@ -59,15 +54,15 @@ export default function RiderPwaPage() {
     } catch {
       setAskName(true)
     }
-  }, [ponySlot])
+  }, [])
 
   useEffect(() => {
     if (!tenantId || !nomeConfermato) return undefined
     let cancelled = false
     ;(async () => {
       try {
-        await riderEnsureMe(tenantId, nomeConfermato, ponySlot)
-        await riderSetNomeDisplay(nomeConfermato, ponySlot)
+        await riderEnsureMe(tenantId, nomeConfermato)
+        await riderSetNomeDisplay(nomeConfermato)
       } catch {
         if (!cancelled) {
           /* il nome resta in sessione; il prossimo «In consegna» ritenta */
@@ -77,7 +72,7 @@ export default function RiderPwaPage() {
     return () => {
       cancelled = true
     }
-  }, [tenantId, nomeConfermato, ponySlot])
+  }, [tenantId, nomeConfermato])
 
   const confirmNome = async () => {
     const value = nome.trim()
@@ -86,11 +81,11 @@ export default function RiderPwaPage() {
     setSaveError(null)
     try {
       if (tenantId) {
-        await riderEnsureMe(tenantId, value, ponySlot)
+        await riderEnsureMe(tenantId, value)
       }
-      await riderSetNomeDisplay(value, ponySlot)
+      await riderSetNomeDisplay(value)
       try {
-        window.sessionStorage.setItem(riderNameSessionKey(ponySlot), value)
+        window.sessionStorage.setItem(RIDER_NAME_SESSION_KEY, value)
       } catch {
         /* storage non disponibile: rimane solo lo stato in memoria */
       }
@@ -105,7 +100,7 @@ export default function RiderPwaPage() {
 
   return (
     <div className="rider-pwa-root">
-      <header className="rider-pwa-header" style={{ background: slotColor }}>
+      <header className="rider-pwa-header" style={{ background: HEADER_COLOR }}>
         <strong style={{ fontSize: 16 }}>
           {nomeConfermato || "In consegna"}
         </strong>

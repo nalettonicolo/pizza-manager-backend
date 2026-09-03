@@ -19,6 +19,7 @@ export const SETTINGS_SIDEBAR_GROUPS = [
     items: [
       { to: "/admin/settings/layout", label: "Aspetto vetrina" },
       { to: "/admin/settings/pagamenti-online", label: "Pagamenti online" },
+      { to: "/admin/settings/privacy-cookie", label: "Privacy e cookie" },
     ],
   },
   {

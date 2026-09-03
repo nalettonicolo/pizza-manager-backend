@@ -149,7 +149,8 @@ export default function OperativeLayout() {
   });
   const firstAllowedPath = resolveFirstOperativePath(navItems, defaultPath, permessiForNav, hasServizio);
   const isSaUser = isSuperAdminRole(ruolo);
-  const showQuadLink = isSaUser || inDemoLive || fullDemoAccess;
+  const showQuadLink =
+    isSaUser || inDemoLive || fullDemoAccess || isQuadRepartiTestEmail(user?.email);
   /** Area cliente / vetrina in sidebar: solo Super Admin in Demo live. */
   const showClienteShortcuts = isSaUser && inDemoLive;
   const showAdminLinks = fullDemoAccess || inDemoLive || isSaSupport;
@@ -334,7 +335,15 @@ export default function OperativeLayout() {
       isQuadRepartiTestEmail(user?.email) ? "/operative/pizzaiolo-ingresso" : firstAllowedPath || "/operative/cassa";
     return <Navigate to={`${homeOp}${location.search || ""}`} replace />;
   }
-  if (!canAccessCurrent && firstAllowedPath && ruoloKey !== "superadmin" && !isSaSupport && !fullDemoAccess && !inDemoLive) {
+  if (
+    !canAccessCurrent &&
+    firstAllowedPath &&
+    ruoloKey !== "superadmin" &&
+    !isSaSupport &&
+    !fullDemoAccess &&
+    !inDemoLive &&
+    !isQuadRepartiTestEmail(user?.email)
+  ) {
     return <Navigate to={`${firstAllowedPath}${location.search || ""}`} replace />;
   }
   // Sala QA / support_tenant: evita layout cassa-mobile (min-height:0 + overflow hidden)

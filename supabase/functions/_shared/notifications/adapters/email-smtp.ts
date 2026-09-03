@@ -1,5 +1,11 @@
 import type { AdapterSendContext, AdapterSendResult } from "../types.ts"
 
+type PdfAttachment = {
+  filename: string
+  content: Uint8Array
+  contentType: string
+}
+
 /**
  * Email via SMTP (tenant o piattaforma) oppure relay HTTP interno.
  *
@@ -21,10 +27,31 @@ export async function sendEmailSmtp(ctx: AdapterSendContext): Promise<AdapterSen
       `Notifica ${ctx.row.tipo || "ordine"}`,
   ).slice(0, 200)
   const text = buildEmailBody(ctx)
+  const html = typeof ctx.row.payload?.html === "string" ? ctx.row.payload.html : undefined
+
+  let attachment: PdfAttachment | null = null
+  try {
+    attachment = await loadPdfAttachment(ctx)
+  } catch (e) {
+    return {
+      ok: false,
+      code: "FAILED",
+      message: `email_smtp: allegato PDF: ${e instanceof Error ? e.message : String(e)}`.slice(0, 400),
+    }
+  }
 
   const relay = ctx.env.NOTIFY_EMAIL_RELAY_URL?.trim()
   if (relay) {
-    return sendViaRelay(relay, { from, to, subject, text, row: ctx.row, env: ctx.env })
+    return sendViaRelay(relay, {
+      from,
+      to,
+      subject,
+      text,
+      html,
+      attachment,
+      row: ctx.row,
+      env: ctx.env,
+    })
   }
 
   const host = ctx.env.NOTIFY_SMTP_HOST?.trim()
@@ -37,7 +64,7 @@ export async function sendEmailSmtp(ctx: AdapterSendContext): Promise<AdapterSen
     }
   }
 
-  return sendViaSmtp(host, from, to, subject, text, ctx.env)
+  return sendViaSmtp(host, from, to, subject, text, html, attachment, ctx.env)
 }
 
 function buildEmailBody(ctx: AdapterSendContext): string {
@@ -54,6 +81,36 @@ function buildEmailBody(ctx: AdapterSendContext): string {
   }
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ""
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
+async function loadPdfAttachment(ctx: AdapterSendContext): Promise<PdfAttachment | null> {
+  const path = String(ctx.row.payload?.pdf_storage_path || "").trim()
+  if (!path) return null
+  if (!ctx.admin) {
+    throw new Error("client Storage assente")
+  }
+  const { data, error } = await ctx.admin.storage.from("contratti").download(path)
+  if (error || !data) {
+    throw new Error(error?.message || "download fallito")
+  }
+  const filename =
+    String(ctx.row.payload?.pdf_filename || "").trim() ||
+    path.split("/").pop() ||
+    "documento.pdf"
+  return {
+    filename,
+    content: new Uint8Array(await data.arrayBuffer()),
+    contentType: "application/pdf",
+  }
+}
+
 async function sendViaRelay(
   relayUrl: string,
   args: {
@@ -61,6 +118,8 @@ async function sendViaRelay(
     to: string
     subject: string
     text: string
+    html?: string
+    attachment: PdfAttachment | null
     row: AdapterSendContext["row"]
     env: AdapterSendContext["env"]
   },
@@ -80,10 +139,20 @@ async function sendViaRelay(
         to: args.to,
         subject: args.subject,
         text: args.text,
+        html: args.html,
         tenant_id: args.row.tenant_id,
         notifica_id: args.row.id,
         tipo: args.row.tipo,
         payload: args.row.payload,
+        attachments: args.attachment
+          ? [
+              {
+                filename: args.attachment.filename,
+                contentType: args.attachment.contentType,
+                contentBase64: bytesToBase64(args.attachment.content),
+              },
+            ]
+          : [],
       }),
     })
     if (!res.ok) {
@@ -110,6 +179,8 @@ async function sendViaSmtp(
   to: string,
   subject: string,
   text: string,
+  html: string | undefined,
+  attachment: PdfAttachment | null,
   env: AdapterSendContext["env"],
 ): Promise<AdapterSendResult> {
   try {
@@ -125,12 +196,24 @@ async function sendViaSmtp(
         auth: user ? { username: user, password: pass } : undefined,
       },
     })
-    await client.send({
+    const message: Record<string, unknown> = {
       from,
       to,
       subject,
       content: text,
-    })
+    }
+    if (html && html.trim()) message.html = html
+    if (attachment) {
+      message.attachments = [
+        {
+          filename: attachment.filename,
+          content: attachment.content,
+          encoding: "binary",
+          contentType: attachment.contentType,
+        },
+      ]
+    }
+    await client.send(message)
     await client.close()
     return { ok: true }
   } catch (e) {

@@ -40,7 +40,7 @@ export const DEMO_GIRO_STEPS = [
 
 /**
  * Voci extra in sidebar Demo live: strumenti + Admin del locale (tenant).
- * Poche voci chiare → hub admin; il resto si apre dalla home admin.
+ * Elenco allineato alla barra admin: hub, moduli e Documenti/Guida.
  */
 export const DEMO_GIRO_ADMIN_LINKS = [
   {
@@ -65,8 +65,15 @@ export const DEMO_GIRO_ADMIN_LINKS = [
   { path: "/admin/home", label: "Gestione locale", description: "Hub admin: menu, staff, impostazioni", group: "admin" },
   { path: "/admin/menu", label: "Menu", description: "Categorie, pizze, listini", group: "admin" },
   { path: "/admin/ordini", label: "Ordini", description: "Storico e gestione ordini", group: "admin" },
+  { path: "/admin/report", label: "Report", description: "Incassi e analisi vendite", group: "admin" },
+  { path: "/admin/magazzino", label: "Magazzino", description: "Fornitori, DDT e movimenti", group: "admin" },
+  { path: "/admin/contabilita", label: "Contabilità", description: "Incassi, spese e food cost", group: "admin" },
+  { path: "/admin/fidelity", label: "Fidelity", description: "Carte fedeltà clienti", group: "admin" },
+  { path: "/admin/documenti", label: "Documenti", description: "Contratti, pagamenti e comunicazioni", group: "admin" },
+  { path: "/admin/manuale", label: "Guida", description: "Manuale operativo del gestore", group: "admin" },
   { path: "/admin/settings", label: "Impostazioni", description: "Sede, orari, area consegna, parametri", group: "admin" },
   { path: "/admin/dipendenti", label: "Staff", description: "Dipendenti e accessi", group: "admin" },
+  { path: "/admin/ruoli", label: "Ruoli", description: "Permessi per tipo di operatore", group: "admin" },
 ]
 
 export function isDemoGiroSearch(search) {

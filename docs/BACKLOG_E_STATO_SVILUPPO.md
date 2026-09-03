@@ -25,6 +25,11 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 - **Macrofasi 1–5**: core completato (vedi `MACROFASI_SVILUPPO.md`); **Fase 6** = produzione hard + adapter reali.
 - **2026-08-03**: hardening RPC (34–35); Realtime ordini (36); magazzino hub DB; stampa comanda web Francy; guide DNS; SA gate + Sala QA; proof Storage (37); advisor residui (38); deploy hosting produzione.
 - **2026-08-20**: batch Chek-Sviluppi CA-10/11/12/14, CL-09/10, OP-07, OW-05; checkout profilo + geocode Nominatim-first; logo landing; priorità in `docs/punto-situazione/11_priorita_operative.md`.
+- **2026-08-28**: modale "Modifica pizza" reso adattivo allo schermo (Admin → Menù → Pizze, scoped a `.pizza-modal-shell` per non toccare il modale di personalizzazione Cassa); SMTP/email per tenant (Clienti → Email e SMTP: no-reply/info/support + SMTP locale, usato dalle notifiche outbox se configurato, altrimenti i secret di piattaforma — resta distinto dall'**SMTP Auth** globale, ancora bloccato, vedi §3); registro attività Super Admin in diretta (chi ha fatto cosa, esito, note — modulo SQL 113).
+- **2026-08-30 — audit di sicurezza (moduli SQL 114–119)**: guardia anti-escalation su `utenti_ruoli` (un non-superadmin non può più auto-assegnarsi `superadmin`); trigger di integrità sul totale ordine per gli ordini web (anti-frode pagamenti online); `fidelity_applica_movimento` resa una RPC atomica (eliminata la race read‑modify‑write lato client sul saldo punti); autenticazione dei cron verso le Edge Function via header `x-cron-secret` (prima chiunque conoscesse l'URL poteva invocarle con la sola anon key); ottimizzazione RLS (`auth.uid()` → `(select auth.uid())` su 7 policy) e consolidamento policy permissive ridondanti.
+- **2026-08-30 — flusso ordine allineato al reale (moduli 120–121)**: nuovo stato `IN_COTTURA` tra "In preparazione" e "Pronto" — prima il tasto "In forno" dei Pizzaioli portava l'ordine direttamente a Pronto, saltando la fase di cottura; ora riflette il reparto Bancone come step di chiusura reale (ritiro → Consegnato, domicilio → Pronto poi assegnato al Delivery). Corretti in questo passaggio anche: il tasto "In consegna" di Bancone sul domicilio (prima chiudeva l'ordine come Consegnato invece di passarlo al Delivery), la doppia possibilità di chiudere lo stesso ordine da due schermate diverse, e l'incoerenza chip/card su Bancone. Pagina Super Admin → Flussi aggiornata con la mappa attuale reparto‑per‑reparto e le correzioni applicate.
+- **2026-08-30 — sessione pony/rider (moduli 122–129), corretta in giornata**: prima implementato un meccanismo "pony a slot" (`core.rider.pony_slot`, route `/operative/pony/1` e `/2`) per far condividere a due persone lo stesso login come due rider distinti — **premessa sbagliata**: nella pizzeria reale ogni pony ha il proprio login individuale, quindi il caso d'uso non esiste. Rimosso lo stesso giorno (modulo 129) tornando al modello originale "un login = un rider"; resta invariato tutto il resto introdotto nella stessa sessione (il rider imposta il proprio nome visualizzato, `core.ordini.nome_pony` come snapshot del nome al momento della presa in carico, vista cassa delle consegne odierne, assegnazione manuale di una consegna da cassa).
+- **2026-08-30 — hardening XSS pagine pubbliche**: `BlogPostPage.jsx`, `LandingPageView.jsx`, `FaqSection.jsx`, `SoftwareApplicationSchema.jsx` iniettavano il blocco `<script type="application/ld+json">` con `JSON.stringify()` non escapato — un titolo articolo/domanda FAQ contenente `</script><script>...</script>` avrebbe chiuso il tag in anticipo ed eseguito script arbitrario su ogni visitatore (stored XSS). Nuovo helper `src/utils/safeJsonLd.js` (escape di `<` in `<`) applicato ai 4 punti. Avviato in parallelo un audit di sicurezza sistematico (OWASP Top 10) su tutti i 116 moduli SQL, i ~490 file frontend e le 35 Edge Function — risultati e fix a seguire.
 
 ---
 
@@ -50,7 +55,7 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 | **Consegne** | WIP ~84% | VRP più ricco / signed URL retention se serve (Storage già OK). |
 | **Tablet / Realtime** | WIP ~72% | Audit azione e modalità kiosk (Realtime già attivo). |
 | **Magazzino** | WIP ~78% | Giacenza valorizzata / inventari (fornitori-DDT già DB). |
-| **Sicurezza DB** | Avanzato | Advisor 106→43; HIBP su Pro+; rumore 0028/0029 intenzionale. |
+| **Sicurezza DB** | Avanzato | Moduli 114–119 applicati (escalation, integrità ordine web, fidelity atomica, cron secret, RLS initplan); HIBP su Pro+; il grosso dell'advisor `security_definer_function_executable` è rumore intenzionale (RPC eseguibili da `authenticated`/`anon` per design) — cresce con ogni nuova RPC, non è più un numero singolo tracciato. Audit OWASP applicativo (injection/IDOR/XSS/auth) in corso su tutto il repo, vedi entry 2026-08-30 sopra. |
 | **API pubbliche** | Todo ~42% | Nest OAuth token su `api_oauth_clients`. |
 | **Fiscale IT** | Parziale | Completare `rt-sdi.ts` quando vendor scelto. |
 
@@ -63,6 +68,8 @@ Questo documento fissa **cosa è realistico completare in codice**, cosa è **bl
 2. Stato passa a "In preparazione" solo quando mancano ~30 minuti all'orario di consegna previsto (transizione basata sul tempo, non sull'accettazione).
 3. Gli stati successivi ("In forno" / "In consegna") restano affidati ai tablet operativi (cucina/pizzaioli) o al pony che prende in carico la consegna — non cambia.
 Richiede probabilmente un nuovo stato intermedio (o un calcolo a display basato su `consegna_prevista_at - now()`) sul pannello Delivery — da progettare con calma, non un fix immediato.
+
+**Agente-chat "marketing" senza rate-limit (segnalato 2026-08-30, esplicitamente rimandato):** `supabase/functions/agente-chat/index.ts` in modalità `marketing` è completamente anonima e chiama l'API a pagamento di Anthropic ad ogni messaggio, senza alcun limite per IP/sessione né cap giornaliero — un vettore di esaurimento risorse/costo illimitato a carico di PizzaManager (non del tenant). Anche `sessione_id` (`nuovaSessioneId()` in `agenteChatService.js`) è debole/prevedibile e non autenticato: chi indovina/riusa l'id altrui può accodare messaggi nella conversazione salvata di qualcun altro (inquinamento dati, non lettura). Fix proposto quando si deciderà di procedere: contatore atomico in Postgres per sessione_id/IP con soglia e tetto giornaliero, `sessione_id` generato con `crypto.randomUUID()`.
 
 ---
 
@@ -87,4 +94,4 @@ Richiede probabilmente un nuovo stato intermedio (o un calcolo a display basato 
 
 ---
 
-*Ultima revisione: 2026-08-03*
+*Ultima revisione: 2026-08-30*

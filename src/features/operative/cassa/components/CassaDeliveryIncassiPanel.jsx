@@ -238,11 +238,10 @@ function AssegnaPonyControls({ ordineId, ponies, busy, onAssegna }) {
         >
           {ponies.map((p) => {
             const id = p.rider_id || p.id
-            const slot = p.pony_slot ?? p.ponySlot
             const nome = p.nome_display || p.nome || "Pony"
             return (
               <option key={id} value={id}>
-                {slot === 1 || slot === 2 ? `${nome} (Pony ${slot})` : nome}
+                {nome}
               </option>
             )
           })}

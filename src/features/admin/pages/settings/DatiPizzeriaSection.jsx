@@ -13,29 +13,6 @@ import {
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
-const DEFAULT_PRIVACY_TEMPLATE =
-  `<h2>Informativa privacy</h2>
-<p>La presente informativa descrive il trattamento dei dati personali degli utenti che visitano il sito <strong>{{nome_attivita}}</strong>, ai sensi del Regolamento (UE) 2016/679 (GDPR).</p>
-<h3>Titolare del trattamento</h3>
-<p>Titolare: <strong>{{ragione_sociale}}</strong>. Sede: {{indirizzo}}. Email: {{email}}. PEC: {{pec}}. P.IVA: {{piva}}.</p>
-<h3>Finalita' e base giuridica</h3>
-<p>I dati sono trattati per gestione richieste, ordini online, assistenza clienti e adempimenti di legge (art. 6, par. 1, lett. b, c e f GDPR).</p>
-<h3>Conservazione</h3>
-<p>I dati sono conservati per il tempo necessario all'erogazione del servizio e agli obblighi fiscali/legali applicabili.</p>
-<h3>Diritti dell'interessato</h3>
-<p>L'interessato puo' esercitare i diritti previsti dagli artt. 15-22 GDPR contattando {{email}}. E' sempre possibile proporre reclamo al Garante Privacy.</p>`;
-const DEFAULT_COOKIE_TEMPLATE =
-  `<h2>Cookie policy</h2>
-<p>Il sito <strong>{{nome_attivita}}</strong> utilizza cookie tecnici necessari al corretto funzionamento del menu e delle funzionalita' di navigazione.</p>
-<h3>Tipologie utilizzate</h3>
-<ul>
-  <li>Cookie tecnici di sessione e sicurezza (necessari).</li>
-  <li>Cookie di preferenza, ove attivati.</li>
-</ul>
-<h3>Cookie di profilazione o terze parti</h3>
-<p>Non vengono installati cookie di profilazione senza consenso. Se in futuro verranno introdotti strumenti di analisi/marketing, sara' richiesto il consenso secondo normativa.</p>
-<h3>Gestione cookie</h3>
-<p>E' possibile gestire o disabilitare i cookie dalle impostazioni del browser. La disattivazione dei cookie tecnici puo' compromettere alcune funzionalita'.</p>`;
 
 export default function DatiPizzeriaSection() {
   const { settings, setSettings } = useOutletContext();
@@ -236,13 +213,6 @@ export default function DatiPizzeriaSection() {
       if (settings.legal_ragione_sociale !== undefined) payload.legal_ragione_sociale = settings.legal_ragione_sociale || null;
       if (settings.legal_piva !== undefined) payload.legal_piva = settings.legal_piva || null;
       if (settings.legal_pec !== undefined) payload.legal_pec = settings.legal_pec || null;
-      if (settings.privacy_policy_html !== undefined) payload.privacy_policy_html = settings.privacy_policy_html || null;
-      if (settings.cookie_policy_html !== undefined) payload.cookie_policy_html = settings.cookie_policy_html || null;
-      if (settings.pagamento_online_provider !== undefined)
-        payload.pagamento_online_provider = settings.pagamento_online_provider || null;
-      if (settings.stripe_publishable_key !== undefined) payload.stripe_publishable_key = settings.stripe_publishable_key || null;
-      if (settings.sumup_merchant_public_id !== undefined)
-        payload.sumup_merchant_public_id = settings.sumup_merchant_public_id || null;
       const res = await updateTenantSettings(tenantId, payload);
       if (refreshTenant) await refreshTenant();
       const dropped = Array.isArray(res?.droppedFields) ? res.droppedFields : [];
@@ -368,36 +338,19 @@ export default function DatiPizzeriaSection() {
       </section>
 
       <section className="dashboard-box dashboard-settings-section">
-        <h2 className="dashboard-settings-section-title">Vetrina web — normativa e pagamenti online</h2>
+        <h2 className="dashboard-settings-section-title">Dati fiscali</h2>
         <p className="dati-pizzeria-hint" style={{ marginBottom: 16, lineHeight: 1.55 }}>
-          Testi privacy/cookie con segnaposto tipo <code>{"{{nome_attivita}}"}</code>, <code>{"{{piva}}"}</code>,{" "}
-          <code>{"{{pec}}"}</code>, <code>{"{{indirizzo}}"}</code>, <code>{"{{email}}"}</code>. Se lasci i campi vuoti,
-          resta la policy predefinita dell&apos;app.
+          Usati per contratti e per i segnaposto delle informative sul sito. Stripe, SumUp e gli altri gestori si
+          configurano in{" "}
+          <Link to="/admin/settings/pagamenti-online" style={{ fontWeight: 600 }}>
+            Pagamenti online
+          </Link>
+          . Testi privacy e cookie:{" "}
+          <Link to="/admin/settings/privacy-cookie" style={{ fontWeight: 600 }}>
+            Privacy e cookie
+          </Link>
+          .
         </p>
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "12px 14px",
-            border: "1px solid #dbeafe",
-            background: "#eff6ff",
-            borderRadius: 8,
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "#1e3a8a",
-          }}
-        >
-          <strong>Pagamenti online - come funziona:</strong>
-          <br />
-          <strong>Stripe</strong>: inserisci chiave pubblica <code>pk_...</code> e salva la chiave segreta{" "}
-          <code>sk_...</code>. La segreta viene usata solo lato server.
-          <br />
-          <strong>SumUp</strong>: inserisci il merchant/public id richiesto dalla tua integrazione.
-          <br />
-          Il provider selezionato viene usato dalla vetrina per proporre il checkout online.
-          <br />
-          Guida webhook e checklist:{" "}
-          <a href="/admin/settings/pagamenti-online">Impostazioni → Pagamenti online</a>.
-        </div>
         <div className="dashboard-settings-fields">
           <label>
             Ragione sociale (P.IVA / contratti)
@@ -421,72 +374,6 @@ export default function DatiPizzeriaSection() {
               type="text"
               value={settings?.legal_pec || ""}
               onChange={(e) => setSettings({ ...settings, legal_pec: e.target.value })}
-            />
-          </label>
-          <label>
-            Pagamento online
-            <p className="dati-pizzeria-hint" style={{ marginTop: 6, marginBottom: 8 }}>
-              Provider, chiavi Stripe (test/live) e webhook si configurano in{" "}
-              <Link to="/admin/settings/pagamenti-online" style={{ fontWeight: 600 }}>
-                Impostazioni → Pagamenti online
-              </Link>
-              .
-              {settings?.pagamento_online_provider === "stripe" ? (
-                <span style={{ display: "block", marginTop: 6, color: "#166534" }}>
-                  Provider attuale: Stripe
-                  {settings?.stripe_publishable_key
-                    ? ` · ${String(settings.stripe_publishable_key).startsWith("pk_test_") ? "TEST" : String(settings.stripe_publishable_key).startsWith("pk_live_") ? "LIVE" : "chiave impostata"}`
-                    : " · chiave pubblica da completare"}
-                </span>
-              ) : (
-                <span style={{ display: "block", marginTop: 6, color: "#b45309" }}>
-                  Provider non impostato su Stripe.
-                </span>
-              )}
-            </p>
-          </label>
-          <label>
-            SumUp — merchant / id pubblico
-            <input
-              type="text"
-              value={settings?.sumup_merchant_public_id || ""}
-              onChange={(e) => setSettings({ ...settings, sumup_merchant_public_id: e.target.value })}
-              autoComplete="off"
-            />
-          </label>
-          <label>
-            Privacy policy (HTML, opzionale)
-            <div style={{ marginBottom: 8 }}>
-              <button
-                type="button"
-                className="dashboard-settings-btn-secondary"
-                onClick={() => setSettings({ ...settings, privacy_policy_html: DEFAULT_PRIVACY_TEMPLATE })}
-              >
-                Usa modello professionale privacy
-              </button>
-            </div>
-            <textarea
-              rows={5}
-              value={settings?.privacy_policy_html || ""}
-              onChange={(e) => setSettings({ ...settings, privacy_policy_html: e.target.value })}
-              placeholder="<p>Informativa personalizzata… {{nome_attivita}}</p>"
-            />
-          </label>
-          <label>
-            Cookie policy (HTML, opzionale)
-            <div style={{ marginBottom: 8 }}>
-              <button
-                type="button"
-                className="dashboard-settings-btn-secondary"
-                onClick={() => setSettings({ ...settings, cookie_policy_html: DEFAULT_COOKIE_TEMPLATE })}
-              >
-                Usa modello professionale cookie
-              </button>
-            </div>
-            <textarea
-              rows={5}
-              value={settings?.cookie_policy_html || ""}
-              onChange={(e) => setSettings({ ...settings, cookie_policy_html: e.target.value })}
             />
           </label>
         </div>

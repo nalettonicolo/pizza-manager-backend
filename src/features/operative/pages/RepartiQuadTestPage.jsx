@@ -2,8 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react"
 import { Link, Navigate, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/app/contexts/AuthContext"
 import { CassaHeaderContext } from "@/app/contexts/CassaHeaderContext"
-import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
-import { isSuperAdminRole } from "@/utils/superAdminAccess"
+import { canAccessQuadReparti } from "@/constants/quadRepartiTest"
 import { isDemoGiroSearch } from "@/utils/demoGiro"
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { RepartiQuadTestProvider } from "@/features/operative/contexts/RepartiQuadTestContext"
@@ -105,8 +104,7 @@ export default function RepartiQuadTestPage() {
     }
   }, [expandedIndex])
 
-  const canAccessQuad =
-    isQuadRepartiTestEmail(user?.email) || isSuperAdminRole(ruolo) || inDemo
+  const canAccessQuad = canAccessQuadReparti({ email: user?.email, ruolo, inDemo })
   if (!canAccessQuad) {
     return (
       <Navigate

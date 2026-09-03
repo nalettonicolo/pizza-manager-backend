@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { getFaqPubbliche } from "@/features/public/services/marketingPublicService"
+import { safeJsonLdString } from "@/utils/safeJsonLd"
 
 /**
  * Blocco FAQ per il sito pubblico: legge public.faq_pubbliche e genera sia il contenuto
@@ -34,7 +35,7 @@ export default function FaqSection() {
 
   return (
     <section className="faq-section" aria-labelledby="faq-heading" style={{ padding: "48px 24px", maxWidth: 780, margin: "0 auto" }}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLdString(jsonLd) }} />
       <h2 id="faq-heading" style={{ fontSize: 24, fontWeight: 700, marginBottom: 20 }}>
         Domande frequenti
       </h2>

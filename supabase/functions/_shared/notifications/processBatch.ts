@@ -39,6 +39,8 @@ async function envForRow(
   if (error || !data) return base
   const po = (data as { parametri_operativi?: Record<string, unknown> }).parametri_operativi
   if (!po || typeof po !== "object") return base
+  // Preventivi/contratti: mittente piattaforma, non SMTP del locale.
+  if (row.payload?.usa_smtp_piattaforma === true) return base
   const host = trimStr(po.smtp_host)
   if (!host) return base
   const from = trimStr(po.email_info) || trimStr(po.smtp_user) || base.NOTIFY_FROM_EMAIL
@@ -78,7 +80,7 @@ export async function processNotificheOutboxBatch(
     }
 
     const env = await envForRow(admin, row, baseEnv)
-    const result = await adapter.send({ row, channel, env })
+    const result = await adapter.send({ row, channel, env, admin })
 
     if (result.ok) {
       await admin.rpc("complete_notifiche_outbox_item", {

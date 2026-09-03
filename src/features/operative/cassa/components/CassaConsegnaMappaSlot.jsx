@@ -20,10 +20,36 @@ function pinIcon(color) {
 const GREEN_ICON = pinIcon("#16a34a")
 const RED_ICON = pinIcon("#dc2626")
 
+/**
+ * Escape minimo per inserire una stringa dentro un attributo HTML tra doppi apici. logoUrl è
+ * impostato da un admin del tenant: senza questo escape, un valore tipo `x" onerror="...` uscirebbe
+ * dall'attributo src ed eseguirebbe script arbitrario nel browser di chi apre la mappa (Leaflet
+ * inserisce html come innerHTML, senza sanificazione).
+ */
+function escapeHtmlAttr(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+}
+
+/** True solo per URL http(s) ben formati — blocca javascript:/data: e altri schemi pericolosi. */
+function isSafeHttpUrl(value) {
+  if (typeof value !== "string" || !value) return false
+  try {
+    const u = new URL(value, window.location.origin)
+    return u.protocol === "http:" || u.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
 /** Marcatore negozio: logo del tenant (diverso per ogni locale) in un cerchio, senza logo un emoji negozio. */
 function shopIcon(logoUrl) {
-  const inner = logoUrl
-    ? `<img src="${logoUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
+  const safeUrl = isSafeHttpUrl(logoUrl) ? escapeHtmlAttr(logoUrl) : ""
+  const inner = safeUrl
+    ? `<img src="${safeUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
     : `<span style="font-size:18px;line-height:1;">🏪</span>`
   return L.divIcon({
     className: "cassa-consegna-shop-pin",

@@ -1,44 +1,25 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePwaInstallPrompt } from "@/hooks/usePwaInstallPrompt";
-
-const STORAGE_KEY = "pm_pwa_install_dismiss_v1";
-const DISMISS_DAYS = 14;
-
-function isDismissedRecently() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const ts = Number(raw);
-    if (!Number.isFinite(ts)) return false;
-    return Date.now() - ts < DISMISS_DAYS * 24 * 60 * 60 * 1000;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Banner "Aggiungi a schermata Home" sulla vetrina pubblica: canale primario per le notifiche
  * (push funziona solo da PWA installata, specialmente su iOS 16.4+ — non funziona mai dal solo
  * browser). Testo diverso per piattaforma: Android ha un vero prompt di installazione, iOS no
  * (limite Apple) e va guidato a mano via Condividi → Aggiungi a Home.
+ *
+ * Richiesta esplicita: il banner deve ripresentarsi ad ogni ricarica della pagina, anche se il
+ * cliente lo ha chiuso prima — finché non installa l'app non riceve le notifiche in tempo reale
+ * sui suoi ordini, quindi "chiudi" nasconde il banner solo per la sessione di navigazione
+ * corrente (stato React in memoria, nessuna persistenza in storage): un vero reload lo rimostra.
  */
 export default function PwaInstallBanner() {
   const { isInstalled, isIOS, canPromptInstall, promptInstall } = usePwaInstallPrompt();
-  const [dismissed, setDismissed] = useState(true);
-
-  useEffect(() => {
-    setDismissed(isDismissedRecently());
-  }, []);
+  const [dismissed, setDismissed] = useState(false);
 
   if (isInstalled || dismissed) return null;
   if (!isIOS && !canPromptInstall) return null;
 
   const dismiss = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, String(Date.now()));
-    } catch {
-      /* ignore */
-    }
     setDismissed(true);
   };
 
@@ -56,14 +37,15 @@ export default function PwaInstallBanner() {
         <p className="pwa-install-banner-text">
           {isIOS ? (
             <>
-              <strong>Aggiungi PizzaManager alla schermata Home</strong> per ricevere subito gli
-              aggiornamenti sui tuoi ordini: tocca <strong>Condividi</strong>{" "}
-              <span aria-hidden="true">⬆️</span> e poi <strong>Aggiungi a Home</strong>.
+              <strong>Aggiungi PizzaManager alla schermata Home</strong> per ricevere le notifiche in
+              tempo reale sui tuoi ordini (senza l&apos;app non arrivano): tocca{" "}
+              <strong>Condividi</strong> <span aria-hidden="true">⬆️</span> e poi{" "}
+              <strong>Aggiungi a Home</strong>.
             </>
           ) : (
             <>
-              <strong>Installa PizzaManager</strong> per ricevere subito gli aggiornamenti sui tuoi
-              ordini, come un&apos;app vera.
+              <strong>Installa PizzaManager</strong> per ricevere le notifiche in tempo reale sui tuoi
+              ordini (senza l&apos;app non arrivano) — come un&apos;app vera, in un tocco.
             </>
           )}
         </p>

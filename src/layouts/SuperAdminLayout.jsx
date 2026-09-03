@@ -37,6 +37,7 @@ const NAV_DROPDOWNS = [
       { to: "/superadmin/dashboard", label: "Panoramica" },
       { to: "/superadmin/tenants", label: "Clienti" },
       { to: "/superadmin/preventivi-contratti", label: "Preventivi e contratti" },
+      { to: "/superadmin/documenti-legali", label: "ToS, Privacy e DPA" },
       { to: "/superadmin/piani", label: "Piani e listini" },
       { to: "/superadmin/servizi", label: "Catalogo servizi" },
       { to: "/superadmin/catalogo-hardware", label: "Catalogo Hardware" },

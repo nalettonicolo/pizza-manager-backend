@@ -68,7 +68,12 @@ export const ADMIN_HOME_SECTIONS = Object.freeze([
       {
         to: "/admin/documenti",
         label: "Documenti",
-        description: "Termini, Privacy, Contratto e DPA precompilati, con firma",
+        description: "Contratti, pagamenti e comunicazioni con PizzaManager",
+      },
+      {
+        to: "/admin/manuale",
+        label: "Guida",
+        description: "Manuale operativo per titolare e staff",
       },
     ],
   },

@@ -1,9 +1,6 @@
-// Servizio per la pagina "Documenti" (area admin tenant): genera Termini di Servizio,
-// Privacy Policy, Contratto di Abbonamento e DPA precompilati con i dati del Fornitore
-// (PizzaManager, da fornitore_config) e del Cliente (tenant), con firma su tablet e
-// salvataggio del PDF firmato nel bucket privato "contratti".
-//
-// Vedi sql/modules/76_tenant_documenti_firma.sql per lo schema.
+// Servizio documenti contrattuali (area Superadmin): ToS/Privacy/Contratto/DPA e
+// preventivi/contratti commerciali. Firma su tablet e invio email al cliente.
+// Vedi sql/modules/76_tenant_documenti_firma.sql e 130_contratti_solo_superadmin_e_email.sql.
 import { supabase } from "@/lib/supabaseClient"
 import { logSupabaseError } from "@/utils/logSupabaseError"
 
@@ -15,6 +12,71 @@ export const TIPI_DOCUMENTO = Object.freeze([
   { value: "contratto_abbonamento", label: "Contratto di Abbonamento" },
   { value: "dpa", label: "DPA (Data Processing Agreement)" },
 ])
+
+export const TIPI_DOCUMENTO_ARCHIVIO = Object.freeze([
+  { value: "pagamento", label: "Pagamento / ricevuta" },
+  { value: "comunicazione", label: "Comunicazione" },
+])
+
+export const SEZIONI_ARCHIVIO_DOCUMENTI = Object.freeze([
+  {
+    id: "contratti",
+    title: "Contratti",
+    tipi: ["contratto_commerciale", "contratto_abbonamento", "addendum_noleggio"],
+  },
+  {
+    id: "preventivi",
+    title: "Preventivi",
+    tipi: ["preventivo_commerciale"],
+  },
+  {
+    id: "pagamenti",
+    title: "Pagamenti",
+    tipi: ["pagamento"],
+  },
+  {
+    id: "comunicazioni",
+    title: "Comunicazioni",
+    tipi: ["comunicazione"],
+  },
+  {
+    id: "legali",
+    title: "Documenti legali",
+    tipi: ["termini_servizio", "privacy_policy", "dpa"],
+  },
+])
+
+const LABEL_TIPO = Object.freeze({
+  termini_servizio: "Termini di servizio",
+  privacy_policy: "Informativa privacy",
+  contratto_abbonamento: "Contratto di abbonamento",
+  dpa: "Accordo sul trattamento dei dati (DPA)",
+  addendum_noleggio: "Addendum noleggio",
+  contratto_commerciale: "Contratto commerciale",
+  preventivo_commerciale: "Preventivo",
+  pagamento: "Pagamento",
+  comunicazione: "Comunicazione",
+})
+
+export function labelTipoDocumento(tipo, snapshot) {
+  const titolo = typeof snapshot?.titolo === "string" ? snapshot.titolo.trim() : ""
+  if (titolo) return titolo
+  return LABEL_TIPO[tipo] || tipo || "Documento"
+}
+
+export function labelStatoDocumento(doc) {
+  if (!doc) return ""
+  if (doc.stato === "annullato") return "Annullato"
+  if (doc.stato === "firmato") return "Firmato"
+  if (doc.tipo_documento === "preventivo_commerciale") return "Inviato"
+  if (doc.tipo_documento === "pagamento" || doc.tipo_documento === "comunicazione") {
+    return doc.inviato_email_at ? "Inviato" : "Depositato"
+  }
+  if (doc.tipo_documento === "contratto_commerciale" || doc.tipo_documento === "contratto_abbonamento") {
+    return "Da firmare"
+  }
+  return "Disponibile"
+}
 
 export async function getFornitoreConfig() {
   const { data, error } = await supabase.from("fornitore_config").select("*").maybeSingle()
@@ -212,6 +274,40 @@ export async function annullaDocumento(documentoId) {
     logSupabaseError("tenantDocumentiService.annullaDocumento", error)
     throw error
   }
+}
+
+/**
+ * Superadmin: deposita un PDF (pagamento o comunicazione) nell'archivio del locale.
+ */
+export async function depositaDocumentoArchivio({ tenantId, tipoDocumento, titolo, note, pdfBlob }) {
+  if (!tenantId || !tipoDocumento || !pdfBlob) throw new Error("Parametri mancanti")
+  const bozza = await creaBozzaDocumento({
+    tenantId,
+    tipoDocumento,
+    extra: {
+      titolo: titolo?.trim() || null,
+      note: note?.trim() || null,
+    },
+  })
+  return salvaPdfPreventivo({ documentoId: bozza.id, tenantId, pdfBlob })
+}
+
+/**
+ * Accoda email al cliente con il PDF in allegato (coda notifiche_outbox).
+ * `variante`: preventivo | contratto_da_firmare | contratto_firmato | documento
+ */
+export async function enqueueDocumentoEmail({ documentoId, variante, destinatario }) {
+  if (!documentoId || !variante) throw new Error("Parametri mancanti")
+  const { data, error } = await supabase.rpc("sa_enqueue_documento_email", {
+    p_documento_id: documentoId,
+    p_variante: variante,
+    p_destinatario: destinatario?.trim() || null,
+  })
+  if (error) {
+    logSupabaseError("tenantDocumentiService.enqueueDocumentoEmail", error)
+    throw error
+  }
+  return data
 }
 
 export async function getDocumentoSignedUrl(storagePath, expiresSec = 3600) {

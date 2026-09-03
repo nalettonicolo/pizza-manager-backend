@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { getActivePlansForMarketing } from "@/features/superadmin/catalog/plansStorage"
+import { safeJsonLdString } from "@/utils/safeJsonLd"
 
 /**
  * JSON-LD SoftwareApplication per il sito pubblico (home/prezzi). I piani (nome + prezzo)
@@ -52,5 +53,5 @@ export default function SoftwareApplicationSchema() {
     })),
   }
 
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLdString(jsonLd) }} />
 }

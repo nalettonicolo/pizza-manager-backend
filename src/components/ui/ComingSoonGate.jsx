@@ -1,5 +1,6 @@
 import { useAuth } from "@/app/contexts/AuthContext"
 import { isFeatureVisibleForRuolo, featureReadinessInfo } from "@/config/featureReadiness"
+import { isQuadRepartiTestEmail } from "@/constants/quadRepartiTest"
 
 /**
  * Mostra `children` così come sono al Super Admin (continua a vedere/testare tutto). Per
@@ -10,8 +11,8 @@ import { isFeatureVisibleForRuolo, featureReadinessInfo } from "@/config/feature
  * @param {{ featureKey: string, children: React.ReactNode }} props
  */
 export default function ComingSoonGate({ featureKey, children }) {
-  const { ruolo } = useAuth()
-  if (isFeatureVisibleForRuolo(featureKey, ruolo)) return children
+  const { ruolo, user } = useAuth()
+  if (isQuadRepartiTestEmail(user?.email) || isFeatureVisibleForRuolo(featureKey, ruolo)) return children
 
   const info = featureReadinessInfo(featureKey)
   return (

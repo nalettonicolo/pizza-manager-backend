@@ -63,11 +63,6 @@ export default function Home() {
         label: "Vetrina online",
         description: "Anteprima del menù pubblico",
       },
-      {
-        to: withSearch("/admin/manuale"),
-        label: "Guida",
-        description: "Manuale operativo del gestore",
-      },
     ]
     if (pvList.length > 1) {
       items.unshift({

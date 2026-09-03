@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import { getBlogArticoloBySlug } from "@/features/public/services/marketingPublicService"
+import { safeJsonLdString } from "@/utils/safeJsonLd"
 
 /**
  * Rendering pubblico di UN articolo blog, letto da public.blog_articoli tramite slug.
@@ -55,7 +56,7 @@ export default function BlogPostPage() {
 
   return (
     <article style={{ maxWidth: 720, margin: "0 auto", padding: "48px 24px" }}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLdString(jsonLd) }} />
       {post.categoria && (
         <span style={{ fontSize: 12, fontWeight: 600, color: "#2563eb", textTransform: "uppercase" }}>
           {post.categoria}

@@ -153,4 +153,13 @@
 --
 -- Modulo 128 — Rider distinto per slot pony (il nome di Pony 1 non sovrascrive Pony 2):
 --   sql/modules/128_pony_slot_nome_sessione.sql
+--
+-- Modulo 129 — Bucket Storage pubblico tenant-logos (logo vetrina):
+--   sql/modules/129_storage_tenant_logos.sql
+--
+-- Modulo 130 — Contratti/preventivi solo superadmin + email al cliente:
+--   sql/modules/130_contratti_solo_superadmin_e_email.sql
+--
+-- Modulo 131 — Archivio Documenti tenant (pagamenti, comunicazioni):
+--   sql/modules/131_documenti_archivio_tenant.sql
 -- =============================================================================

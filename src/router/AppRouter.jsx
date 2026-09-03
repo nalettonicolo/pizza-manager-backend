@@ -79,6 +79,7 @@ const SuperadminChecklistMesePage = lazy(() => import("@/features/superadmin/pag
 const SuperadminAzioniDaCompletarePage = lazy(() => import("@/features/superadmin/pages/SuperadminAzioniDaCompletarePage"));
 const RegistroAttivitaPage = lazy(() => import("@/features/superadmin/pages/RegistroAttivitaPage"));
 const SuperadminPreventiviContrattiPage = lazy(() => import("@/features/superadmin/pages/SuperadminPreventiviContrattiPage"));
+const SuperadminDocumentiLegaliPage = lazy(() => import("@/features/superadmin/pages/SuperadminDocumentiLegaliPage"));
 const SuperadminCatalogoHardwarePage = lazy(() => import("@/features/superadmin/pages/SuperadminCatalogoHardwarePage"));
 const ServizioSchedaPage = lazy(() => import("@/features/superadmin/pages/ServizioSchedaPage"));
 const SuperadminRegistratoreCassaPage = lazy(() => import("@/features/superadmin/pages/SuperadminRegistratoreCassaPage"));
@@ -101,6 +102,7 @@ const SettingsLayout = lazy(() => import("@/features/admin/pages/settings/Settin
 const DatiPizzeriaSection = lazy(() => import("@/features/admin/pages/settings/DatiPizzeriaSection"));
 const AccountSection = lazy(() => import("@/features/admin/pages/settings/AccountSection"));
 const PagamentiOnlinePage = lazy(() => import("@/features/admin/pages/settings/PagamentiOnlinePage"));
+const PrivacyCookieSection = lazy(() => import("@/features/admin/pages/settings/PrivacyCookieSection"));
 const LayoutSection = lazy(() => import("@/features/admin/pages/settings/LayoutSection"));
 const OrariSection = lazy(() => import("@/features/admin/pages/settings/OrariSection"));
 const ParametriSection = lazy(() => import("@/features/admin/pages/settings/ParametriSection"));
@@ -121,6 +123,7 @@ const PrepCucinaColoriPage = lazy(() => import("@/features/admin/pages/menu/Prep
 const UserManager = lazy(() => import("@/features/admin/pages/UserManager"));
 const RuoliPage = lazy(() => import("@/features/admin/pages/RuoliPage"));
 const ManualeUtentePage = lazy(() => import("@/features/admin/pages/ManualeUtentePage"));
+const TenantDocumentiPage = lazy(() => import("@/features/admin/pages/TenantDocumentiPage"));
 const MagazzinoHubPage = lazy(() => import("@/features/admin/pages/magazzino/MagazzinoHubPage"));
 const OrdiniFornitoriPage = lazy(() => import("@/features/admin/pages/magazzino/OrdiniFornitoriPage"));
 const DdtPage = lazy(() => import("@/features/admin/pages/magazzino/DdtPage"));
@@ -135,7 +138,6 @@ const GestioneIncassiPage = lazy(() => import("@/features/admin/pages/contabilit
 const FiscalOutboxMonitorPage = lazy(() => import("@/features/admin/pages/fiscal/FiscalOutboxMonitorPage"));
 const NotificheOutboxMonitorPage = lazy(() => import("@/features/admin/pages/notifiche/NotificheOutboxMonitorPage"));
 const FidelityCardPage = lazy(() => import("@/features/admin/pages/FidelityCardPage"));
-const TenantDocumentiPage = lazy(() => import("@/features/admin/pages/TenantDocumentiPage"));
 
 /* ================= OPERATIVE (lazy) ================= */
 const OperativeDashboard = lazy(() => import("@/features/operative/pages/OperativeDashboard"));
@@ -520,6 +522,14 @@ export default function AppRouter() {
               }
             />
             <Route
+              path="/superadmin/documenti-legali"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuperadminDocumentiLegaliPage />
+                </Suspense>
+              }
+            />
+            <Route
               path="/superadmin/catalogo-hardware"
               element={
                 <Suspense fallback={<PageFallback />}>
@@ -669,6 +679,7 @@ export default function AppRouter() {
             <Route path="orari" element={<Suspense fallback={<PageFallback />}><OrariSection /></Suspense>} />
             <Route path="area-consegna" element={<Suspense fallback={<PageFallback />}><AreaConsegnaSection /></Suspense>} />
             <Route path="pagamenti-online" element={<Suspense fallback={<PageFallback />}><PagamentiOnlinePage /></Suspense>} />
+            <Route path="privacy-cookie" element={<Suspense fallback={<PageFallback />}><PrivacyCookieSection /></Suspense>} />
             <Route path="layout" element={<Suspense fallback={<PageFallback />}><LayoutSection /></Suspense>} />
             <Route path="parametri" element={<Suspense fallback={<PageFallback />}><ParametriSection /></Suspense>} />
             <Route path="stampa-operativa" element={<Suspense fallback={<PageFallback />}><StampaOperativaSection /></Suspense>} />
@@ -724,9 +735,7 @@ export default function AppRouter() {
           <Route path="/operative/pizzaioli" element={<Suspense fallback={<PageFallback />}><PizzaioloDashboard /></Suspense>} />
           <Route path="/operative/delivery" element={<Suspense fallback={<PageFallback />}><DeliveryDashboard /></Suspense>} />
           <Route path="/operative/delivery/mappa" element={<Suspense fallback={<PageFallback />}><DeliveryCommandMapPage /></Suspense>} />
-          <Route path="/operative/rider" element={<NavigatePreserveSearch to="/operative/rider/1" />} />
-          <Route path="/operative/rider/:ponySlot" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
-          <Route path="/operative/pony/:ponySlot" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
+          <Route path="/operative/rider" element={<Suspense fallback={<PageFallback />}><RiderPwaPage /></Suspense>} />
           <Route path="/operative/pony" element={<NavigatePreserveSearch to="/operative/delivery" />} />
           <Route
             path="/operative/pizzaiolo-ingresso"

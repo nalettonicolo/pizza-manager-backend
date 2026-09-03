@@ -1,6 +1,6 @@
 <!--
   Manuale titolare / staff (area Admin tenant). Allineare i titoli ## / ### / #### con `src/content/manualeRoadmap.js`.
-  Pagina in app: Admin → Manuale (`/admin/manuale`).
+  Pagina in app: Admin → Guida (`/admin/manuale`).
 -->
 
 > Questo manuale e' pensato per titolare e staff: trovi una roadmap rapida a sinistra e una mappa concettuale per raggiungere subito la sezione che ti serve.
@@ -17,7 +17,7 @@ Accesso con account **admin** del locale: di solito atterri sul **Menu** (listin
 
 ### Manuale in app
 
-Il link **Manuale** in alto apre questa pagina: testo aggiornato con la versione dell’app. A sinistra trovi la **roadmap** (macro e micro) per orientarti e andare dritto al paragrafo.
+Il link **Guida** in alto apre questa pagina: testo aggiornato con la versione dell’app. A sinistra trovi la **roadmap** (macro e micro) per orientarti e andare dritto al paragrafo. **Documenti** è l’archivio di contratti, pagamenti e comunicazioni con PizzaManager.
 
 ### Report vendite
 

@@ -596,20 +596,13 @@ export default function Bancone() {
 
   return (
     <div style={styles.wrapper} className="operative-mobile-pad">
-      {!quad ? (
-        <>
-          <h1 style={styles.title}>Bancone</h1>
-          <p style={styles.subtitle}>
-            {cucinaTabletOn
-              ? "Ordini in forno (in cottura) da chiudere + anteprima preparazioni Cucina"
-              : "Preparazioni cucina + ordini in forno da chiudere (tablet cucina non attivo: prep integrate qui)"}
-          </p>
-        </>
-      ) : (
+      {quad ? (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
           <LiveClock style={{ fontSize: 11, padding: "2px 8px", minHeight: 22, borderRadius: 6 }} />
         </div>
-      )}
+      ) : !hasPrepChips ? (
+        <h1 style={styles.title}>Bancone</h1>
+      ) : null}
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -638,28 +631,17 @@ export default function Bancone() {
             style={{ ...styles.leftPickColumn, ...(quad ? styles.leftPickColumnQuad : {}) }}
             aria-label="Check ingredienti per fascia oraria"
           >
-            {!quad ? (
-              <>
-                <h2 style={styles.pickColumnTitle}>
-                  {cucinaTabletOn ? "Bibite e preparazioni per orario" : "Da preparare (per orario)"}
-                </h2>
-                <p style={styles.pickHint}>
-                  {cucinaTabletOn
-                    ? "Le bibite le prepara il Bancone (tocca quando l'hai presa). Gli altri ingredienti li prepara la Cucina: qui puoi comunque toccarli per barrarli come promemoria personale — non cambia lo stato in Cucina, che resta l'unica a segnarli davvero pronti."
-                    : "Conteggi per fascia (stesso ingrediente = un solo chip con quantità). Compare appena l'ordine è in preparazione. Tocca quando pronto."}
-                </p>
-              </>
-            ) : null}
             {lastPickResetReason && !quad ? <p style={styles.pickResetHint}>{lastPickResetReason}</p> : null}
-            {banconeSlotOrder.map((slot) => {
+            {banconeSlotOrder.map((slot, slotIdx) => {
               const ingList = ingredientsBySlot[slot] || []
               const bibList = bibiteBySlot[slot] || []
+              const showBanconeTitle = !quad && slotIdx === 0
               return (
                 <div key={slot} style={styles.slotPickBox}>
-                  <div style={styles.slotPickTime}>{slot}</div>
-                  {ingList.length === 0 && bibList.length === 0 ? (
-                    quad ? null : <p style={styles.slotPickEmpty}>Nessun ingrediente in elenco per questa fascia.</p>
-                  ) : null}
+                  <div style={styles.slotPickHead}>
+                    {showBanconeTitle ? <h1 style={styles.titleInline}>Bancone</h1> : null}
+                    <div style={styles.slotPickTime}>{slot}</div>
+                  </div>
                   {ingList.length > 0 ? (
                     <div style={styles.pickChipWrap}>
                       {ingList.map((item) => {
@@ -811,7 +793,14 @@ export default function Bancone() {
 const styles = {
   wrapper: { padding: "clamp(12px, 3vw, 16px)", boxSizing: "border-box", maxWidth: "100%" },
   title: { fontSize: 22, marginBottom: 4 },
-  subtitle: { color: "#666", marginBottom: 16 },
+  titleInline: { fontSize: 22, margin: 0, fontWeight: 700, lineHeight: 1.15 },
+  slotPickHead: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
   error: { padding: 12, background: "#ffebee", color: "#c62828", borderRadius: 8, marginBottom: 16 },
   slotsWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
   slotBox: {
@@ -852,8 +841,6 @@ const styles = {
     maxWidth: 190,
     padding: 8,
   },
-  pickColumnTitle: { fontSize: 16, margin: "0 0 6px 0", fontWeight: 700 },
-  pickHint: { fontSize: 11, color: "#666", margin: "0 0 12px 0", lineHeight: 1.35 },
   pickResetHint: {
     fontSize: 11,
     color: "#92400e",
@@ -871,8 +858,7 @@ const styles = {
     border: "1px solid #eee",
     borderRadius: 8,
   },
-  slotPickTime: { fontWeight: 800, fontSize: 14, marginBottom: 8, color: "#1b5e20" },
-  slotPickEmpty: { fontSize: 12, color: "#9e9e9e", margin: 0 },
+  slotPickTime: { fontWeight: 800, fontSize: 14, margin: 0, color: "#1b5e20" },
   pickChipWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
   pickChip: {
     fontSize: 12,

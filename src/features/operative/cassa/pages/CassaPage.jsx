@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useLayoutEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useLocation } from "react-router-dom"
 import { usePreservedNavigate } from "@/hooks/usePreservedNavigate"
 import { useTenant } from "@/app/contexts/TenantContext"
@@ -490,6 +491,10 @@ export default function CassaPage() {
   const [deliveryDraftByClienteId, setDeliveryDraftByClienteId] = useState({})
   const [deliverySearchResults, setDeliverySearchResults] = useState([])
   const [deliverySearchLoading, setDeliverySearchLoading] = useState(false)
+  const [deliverySearchError, setDeliverySearchError] = useState(null)
+  const [deliverySearchDone, setDeliverySearchDone] = useState(false)
+  const deliverySearchInputRef = useRef(null)
+  const [clienteDropdownBox, setClienteDropdownBox] = useState(null)
   /** Geocoding "live" dell'indirizzo in corso, solo per il pallino verde in mappa (Riepilogo
    * ordine a domicilio) — indipendente dal geocode fatto alla conferma per consegna_lat/lng. */
   const [deliveryMapCoords, setDeliveryMapCoords] = useState(null)
@@ -1303,31 +1308,69 @@ export default function CassaPage() {
   useEffect(() => {
     if (tipoOrdine !== TIPO_ORDINE.DELIVERY || !tenantId) {
       setDeliverySearchResults([])
+      setDeliverySearchError(null)
+      setDeliverySearchDone(false)
       return
     }
     const q = deliverySearch.trim()
     if (!q) {
       setDeliverySearchResults([])
+      setDeliverySearchError(null)
+      setDeliverySearchDone(false)
       return
     }
     if (selectedCliente && deliverySearch === displayCliente(selectedCliente)) {
       setDeliverySearchResults([])
       return
     }
+    setDeliverySearchDone(false)
     const t = setTimeout(async () => {
       setDeliverySearchLoading(true)
+      setDeliverySearchError(null)
       try {
         const list = await searchAnagraficaClienti(tenantId, q)
         setDeliverySearchResults(list)
       } catch (err) {
         console.error(err)
         setDeliverySearchResults([])
+        setDeliverySearchError(err?.message || "Ricerca non riuscita")
       } finally {
         setDeliverySearchLoading(false)
+        setDeliverySearchDone(true)
       }
     }, 300)
     return () => clearTimeout(t)
   }, [tenantId, tipoOrdine, deliverySearch, selectedCliente])
+
+  const showClienteDropdown =
+    tipoOrdine === TIPO_ORDINE.DELIVERY &&
+    !selectedCliente &&
+    deliverySearch.trim().length > 0 &&
+    (deliverySearchLoading || deliverySearchDone || deliverySearchResults.length > 0 || !!deliverySearchError)
+
+  useLayoutEffect(() => {
+    if (!showClienteDropdown) {
+      setClienteDropdownBox(null)
+      return undefined
+    }
+    const el = deliverySearchInputRef.current
+    if (!el) return undefined
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      setClienteDropdownBox({
+        top: r.bottom + 4,
+        left: r.left,
+        width: Math.max(r.width, 280),
+      })
+    }
+    update()
+    window.addEventListener("resize", update)
+    window.addEventListener("scroll", update, true)
+    return () => {
+      window.removeEventListener("resize", update)
+      window.removeEventListener("scroll", update, true)
+    }
+  }, [showClienteDropdown, deliverySearch, deliverySearchResults.length, deliverySearchLoading])
 
   // Geocoding "live" per il pallino verde in mappa (Riepilogo): solo quando si è arrivati alla
   // schermata di conferma di un ordine a domicilio, per non geocodificare ad ogni battuta prima.
@@ -1668,6 +1711,7 @@ export default function CassaPage() {
           >
             <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
               <input
+                ref={deliverySearchInputRef}
                 type="text"
                 placeholder="Cerca cliente..."
                 value={deliverySearch}
@@ -1677,6 +1721,7 @@ export default function CassaPage() {
                 }}
                 onClick={selectedCliente ? () => setProfiloClienteModalOpen(true) : undefined}
                 readOnly={!!selectedCliente}
+                autoComplete="off"
                 style={{
                   width: "100%",
                   maxWidth: tm ? "none" : 200,
@@ -1692,34 +1737,6 @@ export default function CassaPage() {
                 title={selectedCliente ? "Clicca per aprire il profilo cliente" : undefined}
               />
               {deliverySearchLoading && <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>Ricerca...</div>}
-              {!deliverySearchLoading && deliverySearchResults.length > 0 && !selectedCliente && (
-                <ul style={{ ...styles.dropdownList, marginTop: 4 }}>
-                  {deliverySearchResults.map((c) => (
-                    <li
-                      key={`${c.fonte || "a"}-${c.id}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSelectCliente(c)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSelectCliente(c)}
-                      style={styles.dropdownItem}
-                    >
-                      <div style={{ fontWeight: 600 }}>
-                        {c.nome || "—"}
-                        {c.fonte === "web" ? (
-                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: "#1565c0" }}>
-                            online
-                          </span>
-                        ) : null}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#666" }}>
-                        {[c.telefono, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""].filter(Boolean).join(" · ") ||
-                          c.email ||
-                          "—"}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           </div>
         )}
@@ -3063,20 +3080,82 @@ export default function CassaPage() {
     }
   }, [cassaMobileLayout, cassaMobileTab])
 
+  const clienteSearchPortal =
+    showClienteDropdown && clienteDropdownBox
+      ? createPortal(
+          <ul
+            role="listbox"
+            aria-label="Clienti trovati"
+            style={{
+              ...styles.dropdownList,
+              position: "fixed",
+              top: clienteDropdownBox.top,
+              left: clienteDropdownBox.left,
+              width: clienteDropdownBox.width,
+              right: "auto",
+              zIndex: 12000,
+              marginTop: 0,
+            }}
+          >
+            {deliverySearchError ? (
+              <li style={{ ...styles.dropdownItem, cursor: "default", color: "#b91c1c" }}>
+                {deliverySearchError}
+              </li>
+            ) : deliverySearchResults.length === 0 && !deliverySearchLoading ? (
+              <li style={{ ...styles.dropdownItem, cursor: "default", color: "#64748b" }}>
+                Nessun cliente con questo nome
+              </li>
+            ) : (
+              deliverySearchResults.map((c) => (
+                <li
+                  key={`${c.fonte || "a"}-${c.id}`}
+                  role="option"
+                  tabIndex={0}
+                  onClick={() => handleSelectCliente(c)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSelectCliente(c)}
+                  style={styles.dropdownItem}
+                >
+                  <div style={{ fontWeight: 600 }}>
+                    {c.nome || "—"}
+                    {c.fonte === "web" ? (
+                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: "#1565c0" }}>
+                        online
+                      </span>
+                    ) : null}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#666" }}>
+                    {[c.telefono, c.indirizzo ? formatIndirizzoDisplayItaliano(c.indirizzo) : ""]
+                      .filter(Boolean)
+                      .join(" · ") ||
+                      c.email ||
+                      "—"}
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>,
+          document.body,
+        )
+      : null
+
   if (showImpostazioniCassa) {
     return (
-      <CassaImpostazioniPage
-        onBack={() => {
-          setShowImpostazioniCassa(false)
-          void refreshTenant()
-        }}
-      />
+      <>
+        {clienteSearchPortal}
+        <CassaImpostazioniPage
+          onBack={() => {
+            setShowImpostazioniCassa(false)
+            void refreshTenant()
+          }}
+        />
+      </>
     )
   }
 
   if (showRiepilogo) {
     return (
       <>
+        {clienteSearchPortal}
         {turnoCassaBloccante ? (
           <div
             role="alert"
@@ -3219,6 +3298,7 @@ export default function CassaPage() {
       style={{ ...styles.pageColumn, ...cassaMobileShell.pageColumnExtra }}
       className={cassaMobileLayout ? "cassa-page-root cassa-page-root--mobile" : "cassa-page-root"}
     >
+      {clienteSearchPortal}
       {turnoCassaBloccante ? (
         <div
           role="alert"

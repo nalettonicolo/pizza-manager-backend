@@ -223,7 +223,7 @@ export default function RuoliPage() {
         setReauthError(v.message || "Verifica non riuscita.");
         return;
       }
-      const rows = await listStaffPasswordNotes(tenantId);
+      const rows = await listStaffPasswordNotes(tenantId, reauthPassword);
       const map = {};
       for (const row of rows) {
         map[row.user_id] = row.password_nota ?? "";

@@ -13,7 +13,11 @@ import {
   firmaEDepositaDocumento,
   salvaPdfPreventivo,
   annullaDocumento,
+  enqueueDocumentoEmail,
   getDocumentoSignedUrl,
+  depositaDocumentoArchivio,
+  TIPI_DOCUMENTO_ARCHIVIO,
+  labelTipoDocumento,
 } from "@/features/admin/services/tenantDocumentiService";
 import {
   listAttrezzatureCatalogo,
@@ -63,6 +67,7 @@ export default function SuperadminPreventiviContrattiPage() {
   const [noleggi, setNoleggi] = useState([]);
   const [contratti, setContratti] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
+  const [archivioDocs, setArchivioDocs] = useState([]);
   const [loadingTenantData, setLoadingTenantData] = useState(false);
 
   const [nuovoNoleggio, setNuovoNoleggio] = useState({ attrezzaturaId: "", quantita: 1, modalita: "noleggio" });
@@ -73,7 +78,13 @@ export default function SuperadminPreventiviContrattiPage() {
   const [firmatoDa, setFirmatoDa] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingPreventivo, setSavingPreventivo] = useState(false);
+  const [sendingEmailId, setSendingEmailId] = useState(null);
+  const [emailDest, setEmailDest] = useState("");
+  const [emailInfo, setEmailInfo] = useState(null);
   const [saveError, setSaveError] = useState(null);
+  const [archivioDraft, setArchivioDraft] = useState({ tipo: "comunicazione", titolo: "", note: "" });
+  const [archivioFile, setArchivioFile] = useState(null);
+  const [savingArchivio, setSavingArchivio] = useState(false);
   const sigRef = useRef(null);
 
   useEffect(() => {
@@ -125,6 +136,8 @@ export default function SuperadminPreventiviContrattiPage() {
       setNoleggi(nol);
       setContratti((docs || []).filter((d) => d.tipo_documento === "contratto_commerciale"));
       setPreventivi((docs || []).filter((d) => d.tipo_documento === "preventivo_commerciale"));
+      setArchivioDocs((docs || []).filter((d) => d.tipo_documento === "pagamento" || d.tipo_documento === "comunicazione"));
+      setEmailDest((prev) => prev || fiscale?.email_fatturazione || fiscale?.pec || "");
     } catch (err) {
       setError(err?.message || "Impossibile caricare i dati del cliente.");
     } finally {
@@ -225,9 +238,10 @@ export default function SuperadminPreventiviContrattiPage() {
     })();
   }
 
-  async function handleSalvaPreventivo() {
+  async function handleSalvaPreventivo(inviaEmail = false) {
     setSavingPreventivo(true);
     setError(null);
+    if (inviaEmail) setEmailInfo(null);
     try {
       const d = buildDatiCorrenti();
       const bozza = await creaBozzaDocumento({
@@ -239,6 +253,14 @@ export default function SuperadminPreventiviContrattiPage() {
       });
       const pdfBlob = await generaContrattoCommercialePdfBlob({ dati: d, titolo: "PREVENTIVO" });
       await salvaPdfPreventivo({ documentoId: bozza.id, tenantId, pdfBlob });
+      if (inviaEmail) {
+        const res = await enqueueDocumentoEmail({
+          documentoId: bozza.id,
+          variante: "preventivo",
+          destinatario: emailDest,
+        });
+        setEmailInfo(`Preventivo accodato per ${res?.destinatario || emailDest}.`);
+      }
       await loadTenantData(tenantId);
     } catch (err) {
       setError(err?.message || "Impossibile salvare il preventivo.");
@@ -254,6 +276,59 @@ export default function SuperadminPreventiviContrattiPage() {
       await loadTenantData(tenantId);
     } catch (err) {
       setError(err?.message || "Operazione non riuscita.");
+    }
+  }
+
+  async function handleInviaEmail(doc, variante) {
+    setSendingEmailId(doc.id);
+    setError(null);
+    setEmailInfo(null);
+    try {
+      const res = await enqueueDocumentoEmail({
+        documentoId: doc.id,
+        variante,
+        destinatario: emailDest,
+      });
+      setEmailInfo(`Email accodata per ${res?.destinatario || emailDest}. L’invio parte dalla coda notifiche (SMTP di piattaforma).`);
+      await loadTenantData(tenantId);
+    } catch (err) {
+      setError(err?.message || "Impossibile accodare l’email.");
+    } finally {
+      setSendingEmailId(null);
+    }
+  }
+
+  async function handleInviaContrattoDaFirmare() {
+    setSaving(true);
+    setError(null);
+    setEmailInfo(null);
+    try {
+      const d = buildDatiCorrenti();
+      const bozza = await creaBozzaDocumento({
+        tenantId,
+        tipoDocumento: "contratto_commerciale",
+        fornitore,
+        tenant: tenantFiscale,
+        extra: {
+          servizi: serviziSelezionati,
+          attrezzature: attrezzatureAttive,
+          dati: d,
+          totale_mensile: totaleServizi + totaleNoleggio,
+        },
+      });
+      const pdfBlob = await generaContrattoCommercialePdfBlob({ dati: d });
+      await salvaPdfPreventivo({ documentoId: bozza.id, tenantId, pdfBlob });
+      const res = await enqueueDocumentoEmail({
+        documentoId: bozza.id,
+        variante: "contratto_da_firmare",
+        destinatario: emailDest,
+      });
+      setEmailInfo(`Contratto da firmare accodato per ${res?.destinatario || emailDest}. Il cliente può firmarlo e rinviarlo via email.`);
+      await loadTenantData(tenantId);
+    } catch (err) {
+      setError(err?.message || "Impossibile inviare il contratto da firmare.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -284,7 +359,18 @@ export default function SuperadminPreventiviContrattiPage() {
         firmaDataUrl,
         firmatoDa,
       });
-      await firmaEDepositaDocumento({ documentoId: bozza.id, tenantId, pdfBlob, firmaDataUrl, firmatoDa });
+      const firmato = await firmaEDepositaDocumento({ documentoId: bozza.id, tenantId, pdfBlob, firmaDataUrl, firmatoDa });
+      try {
+        const res = await enqueueDocumentoEmail({
+          documentoId: firmato.id,
+          variante: "contratto_firmato",
+          destinatario: emailDest,
+        });
+        setEmailInfo(`Copia firmata accodata per ${res?.destinatario || emailDest}.`);
+      } catch (mailErr) {
+        setEmailInfo(null);
+        setSaveError(new Error(`Contratto salvato, ma email non accodata: ${mailErr?.message || mailErr}`));
+      }
       setDatiContratto(null);
       setPreviewUrl((old) => {
         if (old) URL.revokeObjectURL(old);
@@ -297,6 +383,42 @@ export default function SuperadminPreventiviContrattiPage() {
       setSaveError(err);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDepositaArchivio(inviaEmail) {
+    if (!archivioFile) {
+      setError("Seleziona un file PDF da depositare.");
+      return;
+    }
+    setSavingArchivio(true);
+    setError(null);
+    setEmailInfo(null);
+    try {
+      const doc = await depositaDocumentoArchivio({
+        tenantId,
+        tipoDocumento: archivioDraft.tipo,
+        titolo: archivioDraft.titolo,
+        note: archivioDraft.note,
+        pdfBlob: archivioFile,
+      });
+      if (inviaEmail) {
+        const res = await enqueueDocumentoEmail({
+          documentoId: doc.id,
+          variante: "documento",
+          destinatario: emailDest,
+        });
+        setEmailInfo(`Documento accodato per ${res?.destinatario || emailDest}. Compare anche in Documenti del locale.`);
+      } else {
+        setEmailInfo("Documento depositato. Il cliente lo vede in Documenti.");
+      }
+      setArchivioDraft({ tipo: "comunicazione", titolo: "", note: "" });
+      setArchivioFile(null);
+      await loadTenantData(tenantId);
+    } catch (err) {
+      setError(err?.message || "Impossibile depositare il documento.");
+    } finally {
+      setSavingArchivio(false);
     }
   }
 
@@ -316,16 +438,15 @@ export default function SuperadminPreventiviContrattiPage() {
         <p className="sa-page-kicker">Super Admin · commerciale</p>
         <h1 className="dashboard-page-title sa-page-title">Preventivi e contratti</h1>
         <p className="sa-page-lede" style={{ maxWidth: 820 }}>
-          Compila il contratto con i <strong>servizi</strong> e l&apos;<strong>hardware</strong> reali del cliente
-          (prezzi standard di catalogo, noleggio o vendita), salva quanti <strong>preventivi</strong> vuoi per
-          confrontarli, e quando il cliente sceglie genera l&apos;anteprima e fai firmare su tablet. Ogni modifica a
-          servizi o hardware richiede una nuova firma: il contratto già firmato non è mai modificabile, solo
-          sostituibile con uno nuovo.
+          Compila preventivo e contratto con i <strong>servizi</strong> e l&apos;<strong>hardware</strong> del cliente.
+          Puoi inviare il preventivo via email, mandare il contratto da firmare a un cliente distante, oppure
+          far firmare su tablet: in ogni caso la copia parte via email al cliente. Ogni modifica a servizi o
+          hardware richiede una nuova firma: il contratto già firmato non è modificabile, solo sostituibile.
         </p>
         <p style={{ fontSize: 12.5, color: "#b91c1c", marginTop: 8 }}>
-          ⚠️ Le clausole legali generali (durata, recesso, foro competente) restano testo placeholder non validato
-          da un legale — vedi <Link to="/admin/documenti">Documenti</Link>. Solo la parte economica (servizi/
-          hardware) è compilata con dati reali.
+          Le clausole generali (durata, recesso, foro) restano testo placeholder — vedi{" "}
+          <Link to="/superadmin/documenti-legali">ToS, Privacy e DPA</Link>. Solo la parte economica è compilata
+          con dati reali.
         </p>
       </header>
 
@@ -483,17 +604,35 @@ export default function SuperadminPreventiviContrattiPage() {
               {totaleVenditaUnaTantum > 0 ? ` + € ${formatEuro(totaleVenditaUnaTantum)} hardware una tantum` : ""}
             </p>
             <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 12px" }}>
-              Salva un preventivo per tenerne traccia o confrontarne più di uno (puoi salvarne quanti vuoi); quando il
-              cliente sceglie, genera l&apos;anteprima e fai firmare.
+              Salva e invia il preventivo via email. Se il cliente è in sede, genera l&apos;anteprima e fai firmare su
+              tablet (la copia firmata parte automaticamente via email). Se è distante, invia il contratto da firmare
+              e rinviare.
             </p>
+            <div style={{ marginBottom: 12, maxWidth: 420 }}>
+              <label style={labelStyle}>Email del cliente</label>
+              <input
+                type="email"
+                value={emailDest}
+                onChange={(e) => setEmailDest(e.target.value)}
+                placeholder="email@cliente.it"
+                style={inputStyle}
+              />
+            </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button type="button" className="sa-btn-outline" disabled={savingPreventivo} onClick={handleSalvaPreventivo}>
-                {savingPreventivo ? "Salvataggio…" : "💾 Salva come preventivo"}
+              <button type="button" className="sa-btn-outline" disabled={savingPreventivo} onClick={() => handleSalvaPreventivo(false)}>
+                {savingPreventivo ? "Salvataggio…" : "Salva come preventivo"}
+              </button>
+              <button type="button" className="sa-btn-outline" disabled={savingPreventivo} onClick={() => handleSalvaPreventivo(true)}>
+                {savingPreventivo ? "Invio…" : "Salva e invia preventivo via email"}
               </button>
               <button type="button" className="btn-primary-dashboard" onClick={generaAnteprima}>
-                Genera anteprima contratto
+                Anteprima e firma su tablet
+              </button>
+              <button type="button" className="sa-btn-outline" disabled={saving} onClick={handleInviaContrattoDaFirmare}>
+                {saving ? "Invio…" : "Invia contratto da firmare via email"}
               </button>
             </div>
+            {emailInfo ? <p style={{ color: "#166534", fontSize: 13, margin: "10px 0 0" }}>{emailInfo}</p> : null}
 
             {preventivi.length > 0 ? (
               <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0, borderTop: "1px solid #e2e8f0", paddingTop: 12 }}>
@@ -510,6 +649,22 @@ export default function SuperadminPreventiviContrattiPage() {
                       >
                         Apri PDF
                       </button>
+                    ) : null}
+                    {d.stato !== "annullato" && d.pdf_url ? (
+                      <button
+                        type="button"
+                        onClick={() => handleInviaEmail(d, "preventivo")}
+                        disabled={sendingEmailId === d.id}
+                        style={{ marginLeft: 10, background: "none", border: "none", color: "#0f172a", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}
+                      >
+                        {sendingEmailId === d.id ? "Invio…" : "Invia via email"}
+                      </button>
+                    ) : null}
+                    {d.inviato_email_at ? (
+                      <span style={{ marginLeft: 8, fontSize: 12, color: "#64748b" }}>
+                        inviato {new Date(d.inviato_email_at).toLocaleString("it-IT")}
+                        {d.inviato_email_a ? ` a ${d.inviato_email_a}` : ""}
+                      </span>
                     ) : null}
                     {d.stato !== "annullato" ? (
                       <button
@@ -548,7 +703,7 @@ export default function SuperadminPreventiviContrattiPage() {
                   {saveError ? <p style={{ color: "#b91c1c", fontSize: 13, margin: "8px 0" }}>{saveError.message}</p> : null}
                   <div style={{ marginTop: 10 }}>
                     <button type="button" className="btn-primary-dashboard" disabled={saving} onClick={handleFirma}>
-                      {saving ? "Salvataggio…" : "Firma e conferma contratto"}
+                      {saving ? "Salvataggio…" : "Firma su tablet e invia copia al cliente"}
                     </button>
                   </div>
                 </div>
@@ -568,7 +723,7 @@ export default function SuperadminPreventiviContrattiPage() {
                     {" · "}
                     {new Date(d.created_at).toLocaleString("it-IT")}
                     {d.firmato_da ? ` · firmato da ${d.firmato_da}` : ""}
-                    {d.stato === "firmato" && d.pdf_url ? (
+                    {d.pdf_url ? (
                       <button
                         type="button"
                         onClick={() => apriDocumentoPdf(d)}
@@ -577,10 +732,104 @@ export default function SuperadminPreventiviContrattiPage() {
                         Apri PDF
                       </button>
                     ) : null}
+                    {d.pdf_url && d.stato !== "annullato" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleInviaEmail(d, d.stato === "firmato" ? "contratto_firmato" : "contratto_da_firmare")}
+                        disabled={sendingEmailId === d.id}
+                        style={{ marginLeft: 10, background: "none", border: "none", color: "#0f172a", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}
+                      >
+                        {sendingEmailId === d.id ? "Invio…" : "Invia via email"}
+                      </button>
+                    ) : null}
+                    {d.inviato_email_at ? (
+                      <span style={{ marginLeft: 8, fontSize: 12, color: "#64748b" }}>
+                        inviato {new Date(d.inviato_email_at).toLocaleString("it-IT")}
+                        {d.inviato_email_a ? ` a ${d.inviato_email_a}` : ""}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
+          </div>
+
+          <div style={boxStyle}>
+            <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>Pagamenti e comunicazioni</h2>
+            <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 12px" }}>
+              Deposita ricevute, fatture di canone o comunicazioni importanti. Il cliente le trova in{" "}
+              <strong>Documenti</strong> nella console del locale. Puoi anche mandarle via email.
+            </p>
+            <div style={{ display: "grid", gap: 12, maxWidth: 520 }}>
+              <div>
+                <label style={labelStyle}>Tipo</label>
+                <select
+                  value={archivioDraft.tipo}
+                  onChange={(e) => setArchivioDraft((d) => ({ ...d, tipo: e.target.value }))}
+                  style={inputStyle}
+                >
+                  {TIPI_DOCUMENTO_ARCHIVIO.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Titolo (visibile al cliente)</label>
+                <input
+                  type="text"
+                  value={archivioDraft.titolo}
+                  onChange={(e) => setArchivioDraft((d) => ({ ...d, titolo: e.target.value }))}
+                  placeholder="Es. Ricevuta canone agosto 2026"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>File PDF</label>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setArchivioFile(e.target.files?.[0] || null)}
+                />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+              <button type="button" className="sa-btn-outline" disabled={savingArchivio} onClick={() => handleDepositaArchivio(false)}>
+                {savingArchivio ? "Salvataggio…" : "Deposita in Documenti"}
+              </button>
+              <button type="button" className="btn-primary-dashboard" disabled={savingArchivio} onClick={() => handleDepositaArchivio(true)}>
+                {savingArchivio ? "Invio…" : "Deposita e invia via email"}
+              </button>
+            </div>
+            {archivioDocs.length > 0 ? (
+              <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0, borderTop: "1px solid #e2e8f0", paddingTop: 12 }}>
+                {archivioDocs.map((d) => (
+                  <li key={d.id} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13.5, opacity: d.stato === "annullato" ? 0.55 : 1 }}>
+                    <strong>{labelTipoDocumento(d.tipo_documento, d.dati_snapshot)}</strong>
+                    {" · "}
+                    {new Date(d.created_at).toLocaleString("it-IT")}
+                    {d.pdf_url ? (
+                      <button
+                        type="button"
+                        onClick={() => apriDocumentoPdf(d)}
+                        style={{ marginLeft: 10, background: "none", border: "none", color: "#962d22", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}
+                      >
+                        Apri PDF
+                      </button>
+                    ) : null}
+                    {d.pdf_url && d.stato !== "annullato" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleInviaEmail(d, "documento")}
+                        disabled={sendingEmailId === d.id}
+                        style={{ marginLeft: 10, background: "none", border: "none", color: "#0f172a", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}
+                      >
+                        {sendingEmailId === d.id ? "Invio…" : "Invia via email"}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         </>
       ) : null}

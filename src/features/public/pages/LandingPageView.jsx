@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import { getLandingPageBySlug } from "@/features/public/services/marketingPublicService"
+import { safeJsonLdString } from "@/utils/safeJsonLd"
 
 /**
  * Rendering pubblico di UNA landing page (modulo/confronto/generico), letta da
@@ -53,7 +54,7 @@ export default function LandingPageView() {
 
   return (
     <article style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px" }}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLdString(jsonLd) }} />
       <h1 style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.2 }}>{page.titolo}</h1>
       {page.sottotitolo && (
         <p style={{ fontSize: 18, color: "#475569", marginTop: 10 }}>{page.sottotitolo}</p>

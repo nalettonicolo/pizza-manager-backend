@@ -25,6 +25,7 @@ export const NOTIFICATION_CHANNELS = Object.freeze({
 /** Tipi riga outbox (DB `notifiche_outbox.tipo`). */
 export const NOTIFICATION_OUTBOX_TIPOS = Object.freeze({
   NUOVO_ORDINE_WEB: "nuovo_ordine_web",
+  DOCUMENTO_COMMERCIALE: "documento_commerciale",
 })
 
 /**

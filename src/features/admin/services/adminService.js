@@ -557,23 +557,19 @@ export async function cassaConsegneOdierne(tenantId) {
 
 /** Il rider imposta il proprio nome visualizzato (mappa live). Ritorna il nome salvato o null
  * se l'utente non è un rider mappato. */
-export async function riderSetNomeDisplay(nome, ponySlot = null) {
-  const payload = { p_nome: nome }
-  if (ponySlot === 1 || ponySlot === 2) payload.p_pony_slot = ponySlot
-  const { data, error } = await supabase.rpc("rider_set_nome_display", payload)
+export async function riderSetNomeDisplay(nome) {
+  const { data, error } = await supabase.rpc("rider_set_nome_display", { p_nome: nome })
   if (error) throw error
   return typeof data === "string" ? data : null
 }
 
-/** Trova o crea il rider del chiamante sul tenant (e sullo slot pony). Ritorna l'id. */
-export async function riderEnsureMe(tenantId, nome = null, ponySlot = null) {
+/** Trova o crea il rider del chiamante sul tenant. Ritorna l'id. */
+export async function riderEnsureMe(tenantId, nome = null) {
   if (!tenantId) return null
-  const payload = {
+  const { data, error } = await supabase.rpc("rider_ensure_me", {
     p_tenant_id: tenantId,
     p_nome: nome || null,
-  }
-  if (ponySlot === 1 || ponySlot === 2) payload.p_pony_slot = ponySlot
-  const { data, error } = await supabase.rpc("rider_ensure_me", payload)
+  })
   if (error) throw error
   return data || null
 }
@@ -603,7 +599,6 @@ export async function deliveryUpdateStatoConsegna(ordineId, stato, opts = {}) {
     p_ordine_id: ordineId,
     p_stato: stato,
   }
-  if (opts.ponySlot === 1 || opts.ponySlot === 2) payload.p_pony_slot = opts.ponySlot
   const nome = typeof opts.nome === "string" ? opts.nome.trim() : ""
   if (nome) payload.p_nome = nome
   const { error } = await supabase.rpc("delivery_update_stato_consegna", payload)
@@ -1968,15 +1963,28 @@ export async function updateRuoloPizzeriaPermessi(tenantId, userId, updates) {
   if (error) throw mapSupabaseRuoliError(error)
 }
 
-/** Note password dipendenti (archivio titolare; tabella staff_password_note + RLS: tenant admin o superadmin). */
-export async function listStaffPasswordNotes(tenantId) {
+/**
+ * Note password dipendenti (archivio titolare). La select diretta sulla tabella non basta più
+ * per un tenant_admin (modulo SQL 131: solo il superadmin può leggerla direttamente) — l'elenco
+ * di chi ha una nota arriva da `admin_lista_password_note_user_ids` (non è un segreto, dice solo
+ * "esiste una nota"), poi il contenuto di ciascuna nota passa da `admin_richiedi_password_nota`
+ * (verifica password + audit per il tenant_admin; il superadmin passa diretto, `passwordConferma`
+ * resta `null`).
+ */
+export async function listStaffPasswordNotes(tenantId, passwordConferma = null) {
   if (!tenantId) return []
-  const { data, error } = await supabase
-    .from("staff_password_note")
-    .select("user_id, password_nota")
-    .eq("tenant_id", tenantId)
-  if (error) throw mapStaffPasswordNoteError(error)
-  return data || []
+  const { data: idRows, error: idErr } = await supabase.rpc("admin_lista_password_note_user_ids", {
+    p_tenant_id: tenantId,
+  })
+  if (idErr) throw mapStaffPasswordNoteError(idErr)
+  const userIds = Array.from(new Set((idRows || []).map((r) => r?.user_id).filter(Boolean)))
+
+  const rows = []
+  for (const userId of userIds) {
+    const nota = await richiediPasswordNota(tenantId, userId, passwordConferma)
+    if (nota) rows.push({ user_id: userId, password_nota: nota })
+  }
+  return rows
 }
 
 /**
