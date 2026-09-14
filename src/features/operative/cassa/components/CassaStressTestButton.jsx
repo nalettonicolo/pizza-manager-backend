@@ -308,6 +308,7 @@ export default function CassaStressTestButton() {
       <button
         type="button"
         className="cassa-action-stress"
+        onClick={() => (running ? stop() : openConfig())}
         title={
           running
             ? `In corso: ${ordersCreated} ordini, ${pizzeCreated}/${targetPizze} pizze — tocca per fermare`

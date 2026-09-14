@@ -8,6 +8,7 @@ import { ADMIN_TENANT_HOME, adminHomeWithSupportSearch } from "@/constants/admin
 import { devLog } from "@/lib/devLog"
 import { supabase } from "@/lib/supabaseClient"
 import { getIsSaaSClient } from "@/utils/saasHost"
+import { isDesktopApp, getDesktopTenantHint } from "@/utils/desktopApp"
 import { getSaaSLoginUrl } from "@/utils/saasLoginUrl"
 import { isViewportLayoutPreviewSearch, isQaSupportSearch } from "@/utils/viewportLayoutPreview"
 import { isSuperAdminRole, normalizeAppRuolo } from "@/utils/superAdminAccess"
@@ -363,6 +364,11 @@ export default function Login() {
   const layoutPreview =
     isViewportLayoutPreviewSearch(location.search) && !isQaSupportSearch(location.search)
 
+  // App desktop installata riconoscendo una pizzeria via Partita IVA (vedi installer.nsh): mostra
+  // il suo nome/logo al posto del marchio generico PizzaManager, così chi apre l'app vede subito
+  // "la sua area", non quella del gestionale — l'accesso resta comunque email+password come sempre.
+  const desktopTenant = isDesktopApp() ? getDesktopTenantHint() : null
+
   return (
     <div className="login-page">
       <div className="login-page-inner">
@@ -373,11 +379,33 @@ export default function Login() {
             </p>
           ) : null}
           <div className="login-brand">
-            <div className="login-brand-mark" aria-hidden="true">
-              🍕
-            </div>
-            <h1 className="login-brand-title">{isSaaS && !forceClienteMode ? "PizzaManager" : "Accedi"}</h1>
+            {desktopTenant?.logo_url ? (
+              <img
+                src={desktopTenant.logo_url}
+                alt=""
+                className="login-brand-mark login-brand-mark-img"
+              />
+            ) : (
+              <div className="login-brand-mark" aria-hidden="true">
+                🍕
+              </div>
+            )}
+            <h1 className="login-brand-title">
+              {desktopTenant ? desktopTenant.nome : isSaaS && !forceClienteMode ? "PizzaManager" : "Accedi"}
+            </h1>
           </div>
+          {desktopTenant ? (
+            <p className="login-brand-sub" role="status">
+              {[
+                desktopTenant.indirizzo,
+                desktopTenant.sede_legale && desktopTenant.sede_legale !== desktopTenant.indirizzo
+                  ? `Sede legale: ${desktopTenant.sede_legale}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
 
           {staffBlockedOnClienteLogin ? (
             <div
@@ -504,9 +532,14 @@ export default function Login() {
                 </Link>
               </>
             ) : null}
-            <Link to={forceClienteMode ? vetrinaReturnPath : "/"} className="login-back">
-              {forceClienteMode ? "← Torna alla vetrina" : "← Torna alla home"}
-            </Link>
+            {/* Nell'app desktop non c'è una "home" web da cui si è arrivati: il login è l'unica
+                schermata iniziale, tornare a "/" caricherebbe solo la landing marketing dentro
+                la finestra nativa. */}
+            {forceClienteMode || !isDesktopApp() ? (
+              <Link to={forceClienteMode ? vetrinaReturnPath : "/"} className="login-back">
+                {forceClienteMode ? "← Torna alla vetrina" : "← Torna alla home"}
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>

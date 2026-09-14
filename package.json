@@ -1,9 +1,14 @@
 {
   "name": "pizza-manager",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.4",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
+    "icon:electron": "node scripts/build-electron-icon.mjs",
+    "electron:dev": "cross-env ELECTRON_START_URL=http://localhost:5173/login electron .",
+    "electron:start": "electron .",
+    "electron:build:win": "npm run icon:electron && electron-builder --win && node scripts/publish-electron-release.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:unit": "vitest run",
     "test:vitest": "vitest",
@@ -57,6 +62,7 @@
     "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.7.9",
     "dompurify": "^3.4.14",
+    "electron-updater": "^6.8.9",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.575.0",
     "pdf-lib": "^1.17.1",
@@ -73,6 +79,9 @@
     "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^4.2.0",
     "baseline-browser-mapping": "^2.10.0",
+    "cross-env": "^10.1.0",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-react": "^7.37.4",
@@ -88,5 +97,44 @@
     "ts-node": "^10.9.2",
     "vite": "^7.3.1",
     "vitest": "^3.0.9"
+  },
+  "build": {
+    "appId": "it.pizzamanager.desktop",
+    "productName": "PizzaManager",
+    "copyright": "Copyright (C) 2026 PizzaManager",
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "!electron/build/*.png"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "electron/build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PizzaManager",
+      "include": "electron/build/installer.nsh"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://pizzamanager.it/desktop-releases/",
+      "channel": "latest"
+    }
   }
 }

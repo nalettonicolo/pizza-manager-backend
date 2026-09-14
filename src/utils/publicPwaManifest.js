@@ -1,11 +1,25 @@
 /**
- * Manifest PWA della vetrina cliente — iniettato solo sulle pagine pubbliche (vetrina, checkout,
- * area cliente), mai su admin/superadmin/operative. Stesso pattern di tenantFavicon.js: un solo
- * <link> nel <head>, creato se manca e rimosso quando non serve più.
+ * Manifest PWA delle pagine pubbliche (mai su admin/superadmin/operative, che restano dentro
+ * l'app già autenticata — loro caso d'uso è l'app desktop/PWA installata, non questo banner).
+ * Due varianti, scelte dal chiamante (PublicLayout) in base alla pagina:
+ * - "vetrina": storefront del singolo tenant (/negozio, /preview) — installata dal cliente finale
+ *   per riordinare e ricevere le notifiche in tempo reale sui propri ordini (start_url /negozio).
+ * - "app" (default): landing SaaS, /login e pagine pubbliche generiche su pizzamanager.it —
+ *   installata dallo staff (admin/cassa/superadmin di un qualsiasi tenant) per accedere più in
+ *   fretta al gestionale; start_url /login, che se la sessione è già valida reindirizza da solo
+ *   alla home corretta per ruolo (vedi Login.jsx) — un solo ingresso valido per tutti i tenant,
+ *   dato che login/admin/cassa/superadmin vivono tutti sullo stesso dominio pizzamanager.it.
+ * Stesso pattern di tenantFavicon.js: un solo <link> nel <head>, creato se manca e aggiornato/
+ * rimosso quando non serve più.
  */
 let linkEl = null;
 
-export function applyPublicPwaManifest() {
+const MANIFEST_HREF_BY_VARIANT = {
+  vetrina: "/manifest-public.webmanifest",
+  app: "/manifest-app.webmanifest",
+};
+
+export function applyPublicPwaManifest(variant = "app") {
   if (typeof document === "undefined") return;
   if (!linkEl) {
     linkEl = document.querySelector("link[rel='manifest'][data-pm-public]");
@@ -16,7 +30,7 @@ export function applyPublicPwaManifest() {
     linkEl.setAttribute("data-pm-public", "1");
     document.head.appendChild(linkEl);
   }
-  linkEl.setAttribute("href", "/manifest-public.webmanifest");
+  linkEl.setAttribute("href", MANIFEST_HREF_BY_VARIANT[variant] || MANIFEST_HREF_BY_VARIANT.app);
 }
 
 export function removePublicPwaManifest() {

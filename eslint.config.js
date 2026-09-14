@@ -43,6 +43,16 @@ export default [
     },
   },
   {
+    // Processo main/preload Electron: Node CommonJS (require/__dirname/process), non il browser
+    // né i moduli ESM di src/ — .cjs forza CommonJS a prescindere da "type": "module".
+    files: ["electron/**/*.cjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: { ...globals.node },
+    },
+  },
+  {
     // Service worker serviti staticamente da public/ (fuori dal bundle Vite, mai importati da
     // src/): girano in ServiceWorkerGlobalScope, non nel browser DOM — self/caches/clients ecc.
     files: ["public/**/*.js"],

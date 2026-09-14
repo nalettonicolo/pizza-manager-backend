@@ -90,3 +90,7 @@ playwright/.cache/
 
 # Stato locale del Supabase CLI: non e' una migrazione ne' configurazione condivisa.
 supabase/.temp/
+
+# Output di electron-builder (installer .exe NSIS, unpacked, ecc.) - binari grandi, rigenerabili
+release/
+public/desktop-releases/

@@ -1,0 +1,22 @@
+{
+  "name": "PizzaManager",
+  "short_name": "PizzaManager",
+  "description": "Gestionale PizzaManager — accesso staff, cassa, amministrazione e superadmin",
+  "start_url": "/login",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#c0392b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

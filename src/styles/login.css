@@ -85,6 +85,13 @@
   box-shadow: 0 12px 28px rgba(192, 57, 43, 0.35);
 }
 
+/* App desktop che ha riconosciuto una pizzeria via Partita IVA: logo vero al posto del
+   monogramma generico, stesso ingombro/forma. */
+.login-brand-mark-img {
+  background: #fff;
+  object-fit: cover;
+}
+
 .login-brand-title {
   margin: 0;
   font-size: 1.5rem;

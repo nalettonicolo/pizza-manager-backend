@@ -143,6 +143,7 @@ function tenantToModal(t, mode, services, reloadInclusioniFromPiano) {
     email_fatturazione: t.email_fatturazione ?? "",
     pec: t.pec ?? "",
     codice_univoco_sdi: t.codice_univoco_sdi ?? "",
+    sede_legale: t.sede_legale ?? "",
     addebito_automatico_mensile: !!t.addebito_automatico_mensile,
     data_attivazione_abbonamento: toDateInputValue(t.data_attivazione_abbonamento),
     sconto_percentuale:
@@ -442,11 +443,13 @@ export default function Tenants() {
   }
 
   const openCreate = () => {
+    setError(null);
     setModalTab("anagrafica");
     setModal(emptyModal("create", catalogServices, reloadInclusioniFromPiano));
   };
 
   const openEdit = (t) => {
+    setError(null);
     setModalTab("anagrafica");
     const base = tenantToModal(t, "edit", catalogServices, reloadInclusioniFromPiano);
     setModal(base);
@@ -520,6 +523,7 @@ export default function Tenants() {
         email_fatturazione: modal.email_fatturazione,
         pec: modal.pec,
         codice_univoco_sdi: modal.codice_univoco_sdi,
+        sede_legale: modal.sede_legale,
         addebito_automatico_mensile: modal.addebito_automatico_mensile,
         data_attivazione_abbonamento: modal.data_attivazione_abbonamento || null,
         sconto_percentuale: modal.sconto_percentuale,
@@ -774,6 +778,14 @@ export default function Tenants() {
             <p className="sa-modal-subtitle">
               Struttura cliente a finestre: anagrafica, servizi, fiscale, email/SMTP, canone e account attivi.
             </p>
+            {/* Il modale è un overlay a schermo intero (z-index sopra la pagina): l'errore di
+                salvataggio va ripetuto qui dentro, altrimenti il div "dashboard-error" della
+                pagina resta coperto e invisibile — il salvataggio sembra non fare nulla. */}
+            {error && (
+              <div className="dashboard-error" style={{ marginBottom: 14 }}>
+                {error}
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
               {MODAL_TABS.map((t) => (
                 <button
@@ -970,6 +982,21 @@ export default function Tenants() {
                       placeholder="es. codice destinatario o '0000000'"
                       autoComplete="off"
                     />
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={labelStyle}>Sede legale (se diversa dalla sede operativa)</label>
+                    <input
+                      type="text"
+                      value={modal.sede_legale}
+                      onChange={(e) => setModalField("sede_legale", e.target.value)}
+                      style={inputStyle}
+                      placeholder="es. Via Roma 1, 20100 Milano MI — lascia vuoto se coincide con l'indirizzo del locale"
+                      autoComplete="off"
+                    />
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                      Mostrata, insieme alla sede operativa, quando l'app desktop riconosce la pizzeria via Partita
+                      IVA in fase di installazione.
+                    </p>
                   </div>
                 </div>
               </section>

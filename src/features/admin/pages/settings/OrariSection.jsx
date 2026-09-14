@@ -51,7 +51,7 @@ function parseOrari(val) {
 
 export default function OrariSection() {
   const { settings, setSettings } = useOutletContext();
-  const { tenantId } = useTenant();
+  const { tenantId, refreshTenant } = useTenant();
   const [saving, setSaving] = useState(false);
 
   const orari = useMemo(() => parseOrari(settings?.orari_settimana), [settings?.orari_settimana]);
@@ -66,6 +66,11 @@ export default function OrariSection() {
     try {
       setSaving(true);
       await updateTenantSettings(tenantId, { orari_settimana: orari });
+      // Senza questo, il TenantContext condiviso (letto da cassa/planning/checkout) resta con gli
+      // orari vecchi in memoria finché non si ricarica la pagina — bug osservato: rimuovendo il
+      // pranzo, la tabella planning continuava a mostrarlo. Stesso pattern già usato dalle altre
+      // sezioni di Impostazioni (Dati pizzeria, Parametri, Layout...), qui mancava.
+      if (refreshTenant) await refreshTenant();
       alert("Giorni e orari salvati.");
     } catch (err) {
       console.error(err);

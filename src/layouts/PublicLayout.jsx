@@ -24,6 +24,7 @@ import ThemeToggle from "@/components/ThemeToggle"
 import { isDemoGiroSearch, isDemoGiroSessionActive } from "@/utils/demoGiro"
 import { withPreservedSupportSearch } from "@/utils/supportTenantOverride"
 import { setCurrentTenantId } from "@/utils/currentTenantContext"
+import { isDesktopApp, getDesktopTenantHint } from "@/utils/desktopApp"
 import logoPizzaManager from "@/assets/logo/logo-pizzamanager.png"
 import "@/styles/public-layout.css"
 
@@ -35,6 +36,10 @@ export default function PublicLayout() {
   const isLanding = isSaaS && pathname === "/"
   /** Pagina vendita online: nav centrale (landing la mostra solo su `/`). */
   const isVetrinaPage = pathname === "/negozio" || pathname === "/preview"
+  /** Contesto staff (login/admin/cassa/superadmin di un qualsiasi tenant): solo sul dominio SaaS
+   * e mai sulla vetrina/preview — un cliente finale sul dominio dedicato del proprio tenant (dove
+   * `isSaaS` è sempre false) resta sempre nel contesto "vetrina", anche sulla home "/". */
+  const isStaffAppContext = isSaaS && !isVetrinaPage
   const customerAuthQuery = (() => {
     const qs = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
     qs.set("cliente", "1")
@@ -149,8 +154,20 @@ export default function PublicLayout() {
     setModalDismissed(true)
   }
 
-  const logoLabel = isLanding ? "PizzaManager" : (tenantName || "PizzaManager")
-  const logoUrl = isLanding ? logoPizzaManager : (publicTenantRow?.logo_url ?? null)
+  // App desktop che ha riconosciuto una pizzeria via Partita IVA in fase di installazione (vedi
+  // installer.nsh): mostra il suo nome/logo in intestazione al posto del marchio generico
+  // PizzaManager, su qualunque pagina pubblica — non solo sul login.
+  const desktopTenantHeader = isDesktopApp() ? getDesktopTenantHint() : null
+  const logoLabel = desktopTenantHeader
+    ? desktopTenantHeader.nome
+    : isLanding
+      ? "PizzaManager"
+      : (tenantName || "PizzaManager")
+  const logoUrl = desktopTenantHeader
+    ? (desktopTenantHeader.logo_url ?? logoPizzaManager)
+    : isLanding
+      ? logoPizzaManager
+      : (publicTenantRow?.logo_url ?? null)
 
   useEffect(() => {
     void applyTenantFavicon(logoUrl || logoPizzaManager)
@@ -162,11 +179,13 @@ export default function PublicLayout() {
 
   // Manifest PWA solo sulle pagine pubbliche (vetrina/checkout/area cliente) — mai su
   // admin/superadmin/operative, che hanno le loro schermate dedicate (es. manifest-rider).
+  // Variante "vetrina" (start_url /negozio) sulla storefront del tenant, "app" (start_url /login)
+  // ovunque altro sul dominio SaaS: vedi commento su isStaffAppContext e publicPwaManifest.js.
   useEffect(() => {
-    applyPublicPwaManifest()
+    applyPublicPwaManifest(isStaffAppContext ? "app" : "vetrina")
     registerPublicServiceWorker()
     return () => removePublicPwaManifest()
-  }, [])
+  }, [isStaffAppContext])
 
   const prefetchLogin = () => {
     void import("@/features/public/pages/Login")
@@ -312,7 +331,8 @@ export default function PublicLayout() {
         </div>
       </header>
 
-      <PwaInstallBanner />
+      {/* Già dentro l'app desktop: proporre di "installarla" non avrebbe senso. */}
+      {isDesktopApp() ? null : <PwaInstallBanner variant={isStaffAppContext ? "app" : "vetrina"} />}
 
       <main className="public-layout-main">
         <Outlet />

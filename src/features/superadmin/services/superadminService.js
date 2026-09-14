@@ -79,20 +79,22 @@ function fromCore(table) {
 
 const TENANT_SELECT_FULL =
   "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
-  "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
+  "partita_iva, email_fatturazione, pec, codice_univoco_sdi, sede_legale, " +
   "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, sconto_scadenza, prova_valida_fino, " +
   "public_domain, public_domain_status, public_domain_requested_at, sito_web_cliente, parametri_operativi";
 
 /** Come FULL ma senza sito_web_cliente (DB non ancora migrato). */
 const TENANT_SELECT_NO_SITO_WEB =
   "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at, " +
-  "partita_iva, email_fatturazione, pec, codice_univoco_sdi, " +
+  "partita_iva, email_fatturazione, pec, codice_univoco_sdi, sede_legale, " +
   "addebito_automatico_mensile, data_attivazione_abbonamento, sconto_percentuale, sconto_scadenza, prova_valida_fino, " +
   "public_domain, public_domain_status, public_domain_requested_at, parametri_operativi";
 
 const TENANT_SELECT_LEGACY = "id, nome, slug, piano, attivo, created_at, updated_at, deleted_at";
 
-const TENANT_SELECT_CACHE_KEY = "sa_tenants_select_cache_v1";
+// v2: bump per invalidare la cache di chi era rimasto bloccato su TENANT_SELECT_LEGACY (bug
+// risolto sotto — quel fallback non va più ricordato per sempre, vedi getTenants()).
+const TENANT_SELECT_CACHE_KEY = "sa_tenants_select_cache_v2";
 const SUBSCRIPTIONS_PUBLIC_KEY = "sa_public_subscriptions_available_v1";
 
 function canUseStorage() {
@@ -120,8 +122,12 @@ function writeStorage(key, value) {
 let TENANT_SELECT_CACHE = (() => {
   const v = readStorage(TENANT_SELECT_CACHE_KEY);
   if (v === TENANT_SELECT_FULL || v === TENANT_SELECT_NO_SITO_WEB || v === TENANT_SELECT_LEGACY) return v;
-  // Default conservativo: evita 400 quando la view public.tenants non espone tutte le colonne.
-  return TENANT_SELECT_LEGACY;
+  // Default ottimista: TENANT_SELECT_LEGACY manca campi reali (prova_valida_fino, partita_iva,
+  // sito_web_cliente, ...) ed è una query "sempre valida" — se fosse il default anche solo finché
+  // non esiste ancora un valore in cache, il primo tentativo in getTenants() riesce banalmente e
+  // il ciclo non arriva mai a provare TENANT_SELECT_FULL, che pure funziona. Bug osservato: dati
+  // salvati correttamente nel database ma sempre invisibili riaprendo il modale di modifica.
+  return TENANT_SELECT_FULL;
 })();
 
 let PUBLIC_SUBSCRIPTIONS_AVAILABLE = (() => {
@@ -157,7 +163,10 @@ async function fetchTenantsList(selectCols, { quiet = false } = {}) {
  * Elenco di tutti i tenant (solo superadmin).
  */
 export async function getTenants() {
-  const attempts = [TENANT_SELECT_CACHE, TENANT_SELECT_FULL, TENANT_SELECT_NO_SITO_WEB, TENANT_SELECT_LEGACY].filter(
+  // FULL sempre per primo: qualunque valore abbia TENANT_SELECT_CACHE (anche il fallback più
+  // povero), non deve mai impedire di provare prima le colonne complete, che sono quelle che
+  // servono davvero al form di modifica.
+  const attempts = [TENANT_SELECT_FULL, TENANT_SELECT_NO_SITO_WEB, TENANT_SELECT_CACHE, TENANT_SELECT_LEGACY].filter(
     (v, i, arr) => arr.indexOf(v) === i,
   );
   const quiet = !VERBOSE_TENANTS_LIST;
@@ -165,8 +174,16 @@ export async function getTenants() {
   for (const cols of attempts) {
     try {
       const rows = await fetchTenantsList(cols, { quiet });
-      TENANT_SELECT_CACHE = cols;
-      writeStorage(TENANT_SELECT_CACHE_KEY, cols);
+      // TENANT_SELECT_LEGACY manca campi reali (prova_valida_fino, partita_iva, sito_web_cliente,
+      // ...): va bene come ultima spiaggia per non lasciare la pagina vuota, ma non va MAI
+      // ricordato come "colonne buone" — altrimenti un solo fallimento transitorio (es. schema
+      // cache di PostgREST non ancora aggiornata) blocca per sempre quel browser sulla versione
+      // più povera, facendo sembrare "non salvati" dati che invece nel database ci sono (bug
+      // osservato: prova_valida_fino salvato correttamente ma sempre vuoto riaprendo il modale).
+      if (cols !== TENANT_SELECT_LEGACY) {
+        TENANT_SELECT_CACHE = cols;
+        writeStorage(TENANT_SELECT_CACHE_KEY, cols);
+      }
       return rows;
     } catch (e) {
       lastErr = e;
@@ -215,6 +232,7 @@ function tenantRowFromPayload(payload) {
     email_fatturazione: payload.email_fatturazione?.trim() || null,
     pec: payload.pec?.trim() || null,
     codice_univoco_sdi: payload.codice_univoco_sdi?.trim() || null,
+    sede_legale: payload.sede_legale?.trim() || null,
     addebito_automatico_mensile: !!payload.addebito_automatico_mensile,
     data_attivazione_abbonamento: payload.data_attivazione_abbonamento || null,
     sconto_percentuale:
