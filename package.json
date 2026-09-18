@@ -1,14 +1,15 @@
 {
   "name": "pizza-manager",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "icon:electron": "node scripts/build-electron-icon.mjs",
     "electron:dev": "cross-env ELECTRON_START_URL=http://localhost:5173/login electron .",
     "electron:start": "electron .",
-    "electron:build:win": "npm run icon:electron && electron-builder --win && node scripts/publish-electron-release.mjs",
+    "electron:build:win": "npm run icon:electron && electron-builder --win",
+    "electron:release:github": "npm run electron:build:win && node scripts/publish-github-release.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:unit": "vitest run",
     "test:vitest": "vitest",
@@ -132,9 +133,10 @@
       "include": "electron/build/installer.nsh"
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://pizzamanager.it/desktop-releases/",
-      "channel": "latest"
+      "provider": "github",
+      "owner": "nalettonicolo",
+      "repo": "pizza-manager-backend",
+      "releaseType": "release"
     }
   }
 }
