@@ -1,5 +1,9 @@
 # Comandi per il deploy dell’intero progetto
 
+**Ambiente di riferimento:** Ubuntu 24.04 LTS e Node.js 22 LTS (server di casa, runner CI, build locale). Dettagli in `DEPLOY.md`.
+
+**In sospeso:** la lettura ordini del pony è **aperta** fino al rilascio del modulo **Database**; gli stati ordine delivery restano nel **set corto** attuale.
+
 ---
 
 ## Deploy predefinito (completo: Koyeb + Firebase)
@@ -148,4 +152,4 @@ Legge `.env.production` / `.env` se le variabili non sono già in ambiente.
 
 ---
 
-*Ultima revisione documento: 2026-05-16*
+*Ultima revisione documento: 2026-11-12*

@@ -4,6 +4,24 @@ Backend su **Koyeb** (GitHub), frontend su **Firebase Hosting** (tuo dominio).
 
 ---
 
+## Requisiti di ambiente
+
+| Componente | Versione di riferimento |
+|------------|-------------------------|
+| Sistema operativo (server di casa e runner CI) | **Ubuntu 24.04 LTS** |
+| Node.js (sviluppo, build e CI) | **22 LTS** |
+
+- Sul server Ubuntu installa Node 22 prima di fare `npm ci` e il build di `server/pizzeria-backend`.
+- Nei workflow GitHub Actions (`.github/workflows/`) il runner è `ubuntu-24.04` e `actions/setup-node` usa `node-version: "22"`.
+- L’immagine Docker usata da Koyeb (`Dockerfile.koyeb`) ha la propria versione di Node nella riga `FROM`: tienila allineata a quella indicata qui.
+
+## Note operative in sospeso
+
+- **Lettura ordini lato pony:** resta **aperta** (i pony vedono gli ordini del locale) fino al rilascio del modulo **Database**, che la restringerà. Non cambiare i permessi di lettura prima di quel rilascio e provala sempre con un account pony reale.
+- **Stati ordine delivery:** restano nel **set corto** attuale. Il flusso con lo stato intermedio “In attesa” → “In preparazione” a ~30 minuti dalla consegna non è ancora previsto (vedi `docs/BACKLOG_E_STATO_SVILUPPO.md`).
+
+---
+
 ## Comandi da dare in VS Code (terminale)
 
 Apri il terminale in VS Code (`` Ctrl+` `` oppure View → Terminal). Dalla **root del progetto** (`PizzaManagerApp`).
@@ -272,7 +290,7 @@ Koyeb mostra **“An error occurred while deploying your application”**. Contr
    L’immagine in esecuzione non contiene `dist/` o il comando di avvio punta al path sbagliato. Su Koyeb è probabile che venga usata una **vecchia immagine in cache** (build precedente).  
    - Nel **Dockerfile.koyeb** il build verifica `dist/src/main.js` (output Nest con il tsconfig attuale).  
    - **Cosa fare**: su Koyeb vai nel servizio → **Settings** (o **Build**) → cerca **Clear build cache** / **Rebuild without cache** e avvia un nuovo deploy. Poi fai **Redeploy**.  
-   - Verifica che sul repo GitHub ci sia l’ultima versione del **Dockerfile.koyeb** (multi-stage con Node 20) e che il build su Koyeb **non** sia fallito (se fallisce, controlla i log del build).
+   - Verifica che sul repo GitHub ci sia l’ultima versione del **Dockerfile.koyeb** (multi-stage; controlla che la versione di Node nel `FROM` sia quella dei requisiti sopra) e che il build su Koyeb **non** sia fallito (se fallisce, controlla i log del build).
 
 ---
 
