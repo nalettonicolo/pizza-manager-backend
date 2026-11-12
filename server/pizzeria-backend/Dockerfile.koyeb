@@ -1,5 +1,5 @@
-# Build stage (Node 20: richiesto da NestJS 11)
-FROM node:20-alpine AS builder
+# Build stage (Node 22; NestJS 11 richiede almeno Node 20)
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN npm run build
 RUN test -f /app/dist/src/main.js || (echo "ERRORE: dist/src/main.js non trovato dopo npm run build" && exit 1)
 
 # Run stage: solo dist + dipendenze necessarie
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
