@@ -1,0 +1,31 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager — modello post quadrato</title>
+  <desc>Modello 1080x1080 con segnaposto tra parentesi quadre da sostituire. Nessun prezzo.</desc>
+  <!-- Zona sicura: il contenuto resta entro x 135–945 (anteprima 3:4 nel profilo Instagram) -->
+  <rect width="1080" height="1080" fill="#faf7f2"/>
+  <circle cx="930" cy="150" r="250" fill="#c0392b" fill-opacity="0.08"/>
+  <circle cx="90" cy="700" r="160" fill="#d35400" fill-opacity="0.08"/>
+
+  <!-- Logo -->
+  <g transform="translate(135 110) scale(0.2344)">
+    <rect width="512" height="512" rx="112" fill="#c0392b"/>
+    <path fill-rule="evenodd" fill="#faf7f2" d="M69 148H160C208 148 236 176 236 220S208 294 160 294H116V348H69Z M116 191V251H158C178 251 189 240 189 221S178 191 158 191Z"/>
+    <path fill="#faf7f2" d="M253 148H295L350 223L408 148H446V348H399V236L350 299L300 233V348H253Z"/>
+    <rect x="69" y="380" width="369" height="18" rx="9" fill="#d35400"/>
+  </g>
+  <text x="275" y="186" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="44" font-weight="800" fill="#241a12">PizzaManager</text>
+
+  <!-- Titolo (segnaposto) -->
+  <rect x="135" y="392" width="120" height="10" rx="5" fill="#d35400"/>
+  <text x="135" y="505" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="76" font-weight="800" fill="#241a12">[Titolo del post]</text>
+  <text x="135" y="595" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="76" font-weight="800" fill="#c0392b">[riga in evidenza]</text>
+  <text x="135" y="680" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="30" font-weight="600" fill="#241a12" fill-opacity="0.64">[Testo breve: una frase, massimo 20 parole]</text>
+
+  <!-- Claim -->
+  <text x="135" y="815" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="26" font-weight="600" fill="#241a12" fill-opacity="0.64">La tua pizzeria, finalmente sotto controllo.</text>
+
+  <!-- Banda invito all'azione -->
+  <rect x="0" y="860" width="1080" height="220" fill="#c0392b"/>
+  <text x="135" y="950" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="48" font-weight="800" fill="#faf7f2">Richiedi informazioni</text>
+  <text x="135" y="1006" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="32" font-weight="600" fill="#faf7f2">[indirizzo web]</text>
+</svg>
