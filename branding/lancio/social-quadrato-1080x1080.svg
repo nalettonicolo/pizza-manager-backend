@@ -1,0 +1,43 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager — modello post quadrato (1080 × 1080)</title>
+  <desc>Modello di lancio. I riquadri tratteggiati sono segnaposto per titolo, testo, sito e QR: sostituirli prima di pubblicare. Nessun prezzo.</desc>
+
+  <!-- Fondo e forme (solo colori del brief, con trasparenza) -->
+  <rect width="1080" height="1080" fill="#faf7f2"/>
+  <circle cx="960" cy="120" r="260" fill="#c0392b" fill-opacity="0.08"/>
+  <circle cx="90" cy="800" r="180" fill="#d35400" fill-opacity="0.08"/>
+
+  <!-- Marchio + nome (margine di sicurezza 80 px) -->
+  <g transform="translate(80,80) scale(0.234375)">
+    <rect width="512" height="512" rx="112" fill="#c0392b"/>
+    <path fill="#faf7f2" d="M108 112h140c82 0 134 46 134 126s-52 126-134 126H172v86H108V112zm64 58v136h70c44 0 70-24 70-68s-26-68-70-68H172z"/>
+    <path fill="#faf7f2" d="M302 438V232l48 98 48-98v206h-50V334l-23 46-23-46v104h-50z"/>
+    <rect x="108" y="456" width="296" height="18" rx="9" fill="#d35400"/>
+  </g>
+  <text x="225" y="168" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="40" font-weight="800" letter-spacing="3" fill="#241a12">PIZZAMANAGER</text>
+
+  <!-- Segnaposto titolo -->
+  <rect x="80" y="290" width="920" height="300" rx="24" fill="none" stroke="#241a12" stroke-opacity="0.4" stroke-width="3" stroke-dasharray="14 10"/>
+  <text x="540" y="425" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="54" font-weight="800" fill="#241a12" fill-opacity="0.75">[Titolo del post]</text>
+  <text x="540" y="490" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="26" font-weight="600" fill="#241a12" fill-opacity="0.75">massimo 2 righe, circa 40 caratteri per riga</text>
+
+  <!-- Barra accento -->
+  <rect x="80" y="630" width="120" height="10" rx="5" fill="#d35400"/>
+
+  <!-- Segnaposto testo di supporto -->
+  <rect x="80" y="670" width="920" height="130" rx="24" fill="none" stroke="#241a12" stroke-opacity="0.4" stroke-width="3" stroke-dasharray="14 10"/>
+  <text x="540" y="745" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="30" font-weight="600" fill="#241a12" fill-opacity="0.75">[Testo di supporto: 1–2 righe]</text>
+
+  <!-- Fascia in basso -->
+  <rect x="0" y="860" width="1080" height="220" fill="#241a12"/>
+  <text x="80" y="945" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="32" font-weight="600" fill="#faf7f2">La tua pizzeria, finalmente</text>
+  <text x="80" y="989" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="32" font-weight="800" fill="#faf7f2">sotto controllo.</text>
+  <rect x="80" y="1013" width="90" height="6" rx="3" fill="#d35400"/>
+  <rect x="440" y="1006" width="300" height="48" rx="12" fill="none" stroke="#faf7f2" stroke-opacity="0.55" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <text x="590" y="1039" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="24" font-weight="700" fill="#faf7f2">[sito web]</text>
+
+  <!-- Segnaposto QR (zona di rispetto crema inclusa) -->
+  <rect x="800" y="880" width="180" height="180" rx="16" fill="#faf7f2"/>
+  <rect x="816" y="896" width="148" height="148" rx="8" fill="none" stroke="#241a12" stroke-opacity="0.4" stroke-width="3" stroke-dasharray="10 8"/>
+  <text x="890" y="964" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="28" font-weight="800" fill="#241a12" fill-opacity="0.75">[QR]</text>
+</svg>
