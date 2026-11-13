@@ -6,6 +6,7 @@ import {
   isCassaSlotLocked,
   isSlotFull,
   isSlotPast,
+  maxPizzePerSlot,
 } from "@/features/operative/cassa/utils/slotCapacityUtils"
 
 function slotAt(h, m) {
@@ -39,5 +40,44 @@ describe("slotCapacityUtils online/cassa", () => {
     const at1930 = new Date(2026, 7, 20, 19, 30, 0, 0)
     expect(isCassaSlotLocked(slot, at1915, CASSA_SLOT_GRACE_AFTER_START_MIN)).toBe(false)
     expect(isCassaSlotLocked(slot, at1930, CASSA_SLOT_GRACE_AFTER_START_MIN)).toBe(true)
+  })
+})
+
+describe("maxPizzePerSlot (capacità forno)", () => {
+  it("usa il valore impostato", () => {
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: 12 })).toBe(12)
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: "10" })).toBe(10)
+  })
+
+  // Il form Parametri salva "" come 0: in lato client 0 significa "non impostato" → default 8.
+  // (Il SQL assert_slot_capacity_for_ordine invece con 0 usa il minimo 1: vedi report.)
+  it("pizze_ogni_15_min = 0 (numero o testo) ricade sul default 8", () => {
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: 0 })).toBe(8)
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: "0" })).toBe(8)
+  })
+
+  it("valori mancanti o non numerici ricadono sul default 8", () => {
+    expect(maxPizzePerSlot(undefined)).toBe(8)
+    expect(maxPizzePerSlot(null)).toBe(8)
+    expect(maxPizzePerSlot({})).toBe(8)
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: "" })).toBe(8)
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: "abc" })).toBe(8)
+  })
+
+  it("negativi e frazioni sotto 0,5 non scendono sotto 1", () => {
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: -3 })).toBe(1)
+    expect(maxPizzePerSlot({ pizze_ogni_15_min: 0.4 })).toBe(1)
+  })
+
+  it("con capacità 0 passata direttamente a isSlotFull nessuna fascia risulta piena", () => {
+    expect(isSlotFull("k", { k: 99 }, 4, 0)).toBe(false)
+  })
+
+  it("con pizze_ogni_15_min = 0 il filtro fasce usa 8, non zero", () => {
+    const slots = [slotAt(19, 30), slotAt(19, 45)]
+    const max = maxPizzePerSlot({ pizze_ogni_15_min: 0 })
+    const carico = { [slots[0].key]: 5 }
+    expect(filterSlotsExcludingFull(slots, carico, 4, max).map((s) => s.label)).toEqual(["19:45"])
+    expect(filterSlotsExcludingFull(slots, carico, 3, max).map((s) => s.label)).toEqual(["19:30", "19:45"])
   })
 })
