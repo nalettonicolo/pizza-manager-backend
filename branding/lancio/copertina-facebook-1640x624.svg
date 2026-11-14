@@ -1,0 +1,21 @@
+<svg width="1640" height="624" viewBox="0 0 1640 624" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager — copertina Facebook</title>
+  <desc>Copertina 1640x624 (doppio di 820x312). Contenuto nella zona sicura x 420–1220: la foto profilo copre in basso a sinistra, il telefono ritaglia i lati. Nessun prezzo.</desc>
+  <rect width="1640" height="624" fill="#faf7f2"/>
+  <circle cx="1500" cy="60" r="320" fill="#c0392b" fill-opacity="0.08"/>
+  <circle cx="140" cy="600" r="200" fill="#d35400" fill-opacity="0.08"/>
+
+  <!-- Logo -->
+  <g transform="translate(420 150) scale(0.2930)">
+    <rect width="512" height="512" rx="112" fill="#c0392b"/>
+    <path fill-rule="evenodd" fill="#faf7f2" d="M69 148H160C208 148 236 176 236 220S208 294 160 294H116V348H69Z M116 191V251H158C178 251 189 240 189 221S178 191 158 191Z"/>
+    <path fill="#faf7f2" d="M253 148H295L350 223L408 148H446V348H399V236L350 299L300 233V348H253Z"/>
+    <rect x="69" y="380" width="369" height="18" rx="9" fill="#d35400"/>
+  </g>
+  <text x="600" y="262" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="84" font-weight="800" fill="#241a12">PizzaManager</text>
+
+  <!-- Claim -->
+  <text x="420" y="395" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="48" font-weight="600" fill="#241a12" fill-opacity="0.64">La tua pizzeria, finalmente</text>
+  <text x="420" y="458" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="48" font-weight="800" fill="#c0392b">sotto controllo.</text>
+  <rect x="420" y="500" width="160" height="10" rx="5" fill="#d35400"/>
+</svg>

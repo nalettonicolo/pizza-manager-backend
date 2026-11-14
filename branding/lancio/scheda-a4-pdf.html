@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PizzaManager — scheda A4 fronte/retro (PDF)</title>
+  <link rel="stylesheet" href="scheda-a4.css">
+  <style>
+    /* A4 netto: da Chrome/Edge «Stampa» → «Salva come PDF», margini: Nessuno, scala 100%, grafica di sfondo attiva */
+    @page { size: 210mm 297mm; margin: 0; }
+  </style>
+</head>
+<body class="pdf">
+<main>
+
+  <!-- FRONTE -->
+  <section class="foglio fronte" aria-label="Scheda A4 — fronte">
+    <div class="fondo"><div class="rifilo">
+      <div class="cerchio terra" style="width:150mm;height:150mm;right:-45mm;top:-50mm" aria-hidden="true"></div>
+      <div class="cerchio aranc" style="width:80mm;height:80mm;left:-30mm;top:150mm" aria-hidden="true"></div>
+      <div class="banda" aria-hidden="true"></div>
+
+      <div class="contenuto">
+        <header class="marchio">
+          <svg viewBox="0 0 512 512" role="img" aria-label="Logo PizzaManager" xmlns="http://www.w3.org/2000/svg">
+            <rect width="512" height="512" rx="112" fill="#c0392b"/>
+            <path fill-rule="evenodd" fill="#faf7f2" d="M69 148H160C208 148 236 176 236 220S208 294 160 294H116V348H69Z M116 191V251H158C178 251 189 240 189 221S178 191 158 191Z"/>
+            <path fill="#faf7f2" d="M253 148H295L350 223L408 148H446V348H399V236L350 299L300 233V348H253Z"/>
+            <rect x="69" y="380" width="369" height="18" rx="9" fill="#d35400"/>
+          </svg>
+          <span class="nome">PizzaManager</span>
+        </header>
+
+        <div class="titolo-blocco">
+          <p class="sopra">Software gestionale per pizzerie</p>
+          <h1>La tua pizzeria, finalmente <em>sotto controllo.</em></h1>
+          <span class="barra" aria-hidden="true"></span>
+          <p class="sotto seg">[Frase di apertura: un solo sistema in tempo reale per cassa, cucina, banco e consegne. 20–30 parole]</p>
+        </div>
+
+        <ul class="pilastri">
+          <li><strong>Cassa</strong><span class="seg">[Una riga]</span></li>
+          <li><strong>Cucina</strong><span class="seg">[Una riga]</span></li>
+          <li><strong>Banco</strong><span class="seg">[Una riga]</span></li>
+          <li><strong>Consegne</strong><span class="seg">[Una riga]</span></li>
+        </ul>
+
+        <div class="invito">
+          <div class="invito-testi">
+            <p class="cta">Richiedi informazioni</p>
+            <p class="seg">[Telefono · email · indirizzo web]</p>
+          </div>
+          <div class="qr"><div class="qr-area" role="img" aria-label="Spazio per il codice QR">QR<small>30 × 30 mm</small></div></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- RETRO -->
+  <section class="foglio retro" aria-label="Scheda A4 — retro">
+    <div class="fondo"><div class="rifilo">
+      <div class="cerchio terra" style="width:120mm;height:120mm;left:-50mm;top:-45mm" aria-hidden="true"></div>
+      <div class="banda inchiostro" aria-hidden="true"></div>
+
+      <div class="contenuto">
+        <header class="marchio piccolo">
+          <svg viewBox="0 0 512 512" role="img" aria-label="Logo PizzaManager" xmlns="http://www.w3.org/2000/svg">
+            <rect width="512" height="512" rx="112" fill="#c0392b"/>
+            <path fill-rule="evenodd" fill="#faf7f2" d="M69 148H160C208 148 236 176 236 220S208 294 160 294H116V348H69Z M116 191V251H158C178 251 189 240 189 221S178 191 158 191Z"/>
+            <path fill="#faf7f2" d="M253 148H295L350 223L408 148H446V348H399V236L350 299L300 233V348H253Z"/>
+            <rect x="69" y="380" width="369" height="18" rx="9" fill="#d35400"/>
+          </svg>
+          <span class="nome">PizzaManager</span>
+        </header>
+
+        <h2 class="seg">[Titolo del retro, massimo 12 parole]</h2>
+
+        <div class="griglia">
+          <article><span class="barra" aria-hidden="true"></span><h3 class="seg">[Titolo blocco 1]</h3><p class="seg">[Testo di 25–35 parole]</p></article>
+          <article><span class="barra" aria-hidden="true"></span><h3 class="seg">[Titolo blocco 2]</h3><p class="seg">[Testo di 25–35 parole]</p></article>
+          <article><span class="barra" aria-hidden="true"></span><h3 class="seg">[Titolo blocco 3]</h3><p class="seg">[Testo di 25–35 parole]</p></article>
+          <article><span class="barra" aria-hidden="true"></span><h3 class="seg">[Titolo blocco 4]</h3><p class="seg">[Testo di 25–35 parole]</p></article>
+          <article><span class="barra" aria-hidden="true"></span><h3 class="seg">[Titolo blocco 5]</h3><p class="seg">[Testo di 25–35 parole]</p></article>
+          <article><span class="barra" aria-hidden="true"></span><h3 class="seg">[Titolo blocco 6]</h3><p class="seg">[Testo di 25–35 parole]</p></article>
+        </div>
+
+        <div class="invito">
+          <div class="invito-testi">
+            <p class="frase">La cucina non aspetta, e nemmeno il tuo gestionale dovrebbe farlo.</p>
+            <p class="cta">Richiedi informazioni</p>
+            <p class="seg">[Telefono · email · indirizzo web]</p>
+            <p class="seg legale">[Ragione sociale · P.IVA · sede]</p>
+          </div>
+          <div class="qr"><div class="qr-area" role="img" aria-label="Spazio per il codice QR">QR<small>30 × 30 mm</small></div></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+</main>
+</body>
+</html>

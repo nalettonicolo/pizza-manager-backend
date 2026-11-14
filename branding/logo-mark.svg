@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>PizzaManager</title>
+  <rect width="512" height="512" rx="112" fill="#c0392b"/>
+  <!-- P -->
+  <path fill-rule="evenodd" fill="#faf7f2" d="M69 148H160C208 148 236 176 236 220S208 294 160 294H116V348H69Z M116 191V251H158C178 251 189 240 189 221S178 191 158 191Z"/>
+  <!-- M -->
+  <path fill="#faf7f2" d="M253 148H295L350 223L408 148H446V348H399V236L350 299L300 233V348H253Z"/>
+  <!-- barra accento -->
+  <rect x="69" y="380" width="369" height="18" rx="9" fill="#d35400"/>
+</svg>
