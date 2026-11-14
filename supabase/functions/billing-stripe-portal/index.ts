@@ -6,7 +6,7 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts"
  * Completare con Stripe Billing API + webhook su tenants.stripe_customer_id.
  *
  * Autorizzazione (già attiva, anche se la parte Stripe non c'è ancora): solo un admin attivo del
- * tenant richiesto. Si decide sul token dell'utente (Authorization), non sul corpo: il tenant_id del
+ * tenant richiesto, oppure un superadmin (assistenza). Si decide sul token dell'utente (Authorization), non sul corpo: il tenant_id del
  * body è solo il bersaglio, e il ruolo si legge da utenti_ruoli con la service_role.
  * La chiave Stripe (STRIPE_BILLING_SECRET_KEY) va letta SOLO dopo questi controlli, quando si
  * implementerà la sessione del Billing Portal.
@@ -53,7 +53,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Errore verifica permessi" }, 500)
   }
   const isAdminTenant = String(ruoloRow?.ruolo || "").trim().toLowerCase() === "admin" && ruoloRow?.attivo !== false
-  if (!isAdminTenant) {
+  // Superadmin (assistenza): ruolo letto da app_metadata del token, modificabile solo lato server.
+  const isSuperAdmin =
+    String(userData.user.app_metadata?.ruolo || userData.user.app_metadata?.role || "").toLowerCase() === "superadmin"
+  if (!isAdminTenant && !isSuperAdmin) {
     return jsonResponse({ error: "Non autorizzato per questo tenant" }, 403)
   }
 
