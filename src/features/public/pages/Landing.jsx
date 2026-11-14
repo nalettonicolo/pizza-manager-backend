@@ -1,90 +1,138 @@
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { Link } from "react-router-dom"
+import gsap from "gsap"
+import Lenis from "lenis"
 import LandingPlansSection from "@/features/public/components/LandingPlansSection"
 import FaqSection from "@/features/public/components/FaqSection"
 import SoftwareApplicationSchema from "@/features/public/components/SoftwareApplicationSchema"
+import "@fontsource-variable/fraunces/wght.css"
+import "@fontsource-variable/fraunces/wght-italic.css"
+import "@fontsource/ibm-plex-sans/400.css"
+import "@fontsource/ibm-plex-sans/600.css"
+import "@fontsource/ibm-plex-mono/500.css"
+import "@fontsource/ibm-plex-mono/700.css"
+import "lenis/dist/lenis.css"
 import "../../../styles/landing.css"
+import "../../../styles/landing-forno.css"
 
 export default function Landing() {
+  const heroRef = useRef(null)
+
+  // Entrata dell'apertura: il testo sale, il forno si accende, le comande scendono dalla rotaia.
+  // Con "riduci movimento" non parte nulla e tutto resta fermo al suo posto.
+  useLayoutEffect(() => {
+    const mm = gsap.matchMedia()
+    mm.add(
+      "(prefers-reduced-motion: no-preference)",
+      () => {
+        const tl = gsap.timeline({ defaults: { ease: "power3.out" } })
+        tl.from(".forno-hero__testo > *", { autoAlpha: 0, y: 24, duration: 0.7, stagger: 0.08 })
+          .from(".forno-arco", { autoAlpha: 0, y: 40, duration: 0.8 }, 0.15)
+          .from(
+            ".forno-comande__voce",
+            {
+              autoAlpha: 0,
+              y: -60,
+              rotation: (i) => [-6, 5, -4][i % 3],
+              transformOrigin: "50% 0",
+              duration: 0.9,
+              ease: "back.out(1.4)",
+              stagger: 0.14,
+            },
+            0.5,
+          )
+          .from(".forno-hero__piede", { autoAlpha: 0, duration: 0.6 }, "-=0.3")
+      },
+      heroRef,
+    )
+    return () => mm.revert()
+  }, [])
+
+  // Scorrimento fluido solo con mouse (computer): su telefono resta quello nativo.
+  // Lenis rispetta da solo "riduci movimento"; allowNestedScroll lascia scorrere la chat dell'assistente.
+  useEffect(() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return undefined
+    const lenis = new Lenis({ autoRaf: true, allowNestedScroll: true })
+    return () => lenis.destroy()
+  }, [])
+
   return (
     <div className="landing-wrapper">
       <div className="landing-bg" aria-hidden="true" />
 
-      <section className="hero">
-        <div className="hero-text">
-          <p className="hero-badge">Gestionale per pizzerie</p>
-          <h1>
-            La tua pizzeria,{" "}
-            <span className="hero-gradient">finalmente sotto controllo</span>
-          </h1>
-          <p className="hero-desc">
-            Basta comande urlate in cucina, ordini persi su un foglietto, il fattorino che non sai
-            dove sia arrivato. PizzaManager mette cassa, cucina, banco e consegne sullo stesso
-            sistema, in tempo reale: quando prendi un ordine, tutto il tuo staff lo vede all’istante.
-          </p>
+      <section className="forno-hero" ref={heroRef}>
+        <div className="forno-hero__inner">
+          <div className="forno-hero__testo">
+            <p className="forno-etichetta">Gestionale per pizzerie</p>
+            <h1>
+              La tua pizzeria, <em>finalmente sotto controllo</em>
+            </h1>
+            <p className="forno-hero__desc">
+              Basta comande urlate in cucina, ordini persi su un foglietto, il fattorino che non sai
+              dove sia arrivato. PizzaManager mette cassa, cucina, banco e consegne sullo stesso
+              sistema, in tempo reale: quando prendi un ordine, tutto il tuo staff lo vede all’istante.
+            </p>
 
-          <div className="hero-buttons">
-            <Link to="/contatti#prova-gratuita" className="btn-primary big">
-              Registrati ora
-            </Link>
-            <Link to="/login" className="btn-outline big">
-              Accedi al pannello
-            </Link>
+            <div className="forno-hero__azioni">
+              <Link to="/contatti#prova-gratuita" className="forno-btn forno-btn--pieno">
+                Registrati ora
+              </Link>
+              <Link to="/login" className="forno-btn">
+                Accedi al pannello
+              </Link>
+            </div>
+            <p className="forno-hero__nota">
+              La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per
+              entrare in app.
+            </p>
+
+            <ul className="forno-punti" aria-label="Punti di forza">
+              <li>Tempo reale tra le postazioni</li>
+              <li>Consegne e forno sotto controllo</li>
+            </ul>
           </div>
-          <p className="hero-hint">
-            La licenza di prova si attiva contattando l’admin: ricevi credenziali dedicate per
-            entrare in app.
-          </p>
 
-          <ul className="hero-trust" aria-label="Punti di forza">
-            <li>
-              <span className="trust-dot" /> Tempo reale tra le postazioni
-            </li>
-            <li>
-              <span className="trust-dot" /> Cassa anche senza internet
-            </li>
-            <li>
-              <span className="trust-dot" /> Consegne e forno sotto controllo
-            </li>
-          </ul>
-        </div>
-
-        <div className="hero-visual">
-          <div className="hero-card hero-card-float">
-            <div className="mock-kpi-row">
-              <div className="mock-kpi">
-                <span className="mock-kpi-label">Ordini live</span>
-                <span className="mock-kpi-value">24</span>
+          <div className="forno-arco">
+            <div className="forno-arco__bocca">
+              <div className="forno-dato">
+                <span className="forno-dato__etichetta">In coda cucina</span>
+                <span className="forno-dato__valore">7</span>
               </div>
-              <div className="mock-kpi mock-kpi-accent">
-                <span className="mock-kpi-label">In coda cucina</span>
-                <span className="mock-kpi-value">7</span>
+              <div className="forno-dato">
+                <span className="forno-dato__etichetta">Ordini live</span>
+                <span className="forno-dato__valore">24</span>
               </div>
-            </div>
-            <div className="mock-pipeline">
-              <div className="mock-stage">
-                <span className="mock-stage-title">Cassa</span>
-                <div className="mock-chip">#1042 Bancone</div>
-                <div className="mock-chip dim">#1043 Delivery</div>
-              </div>
-              <div className="mock-stage mock-stage-hot">
-                <span className="mock-stage-title">Cucina</span>
-                <div className="mock-chip">3 in lavorazione</div>
-              </div>
-              <div className="mock-stage">
-                <span className="mock-stage-title">Consegna</span>
-                <div className="mock-chip ok">2 in viaggio</div>
-              </div>
-            </div>
-            <div className="mock-footer-bar">
-              <span className="mock-sync">Sync attivo</span>
-              <span className="mock-dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
             </div>
           </div>
-          <p className="hero-visual-caption">Un ordine preso → tutto lo staff lo vede subito</p>
+
+          <div className="forno-rail">
+            <ul className="forno-comande">
+              <li className="forno-comande__voce" style={{ "--r": "-1.5deg" }}>
+                <div className="forno-comanda">
+                  <span className="forno-comanda__titolo">Cassa</span>
+                  <p className="forno-comanda__riga">#1042 Bancone</p>
+                  <p className="forno-comanda__riga">#1043 Delivery</p>
+                </div>
+              </li>
+              <li className="forno-comande__voce" style={{ "--r": "1deg" }}>
+                <div className="forno-comanda forno-comanda--calda">
+                  <span className="forno-comanda__titolo">Cucina</span>
+                  <p className="forno-comanda__riga">3 in lavorazione</p>
+                </div>
+              </li>
+              <li className="forno-comande__voce" style={{ "--r": "-1deg" }}>
+                <div className="forno-comanda">
+                  <span className="forno-comanda__titolo">Consegna</span>
+                  <p className="forno-comanda__riga">2 in viaggio</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <p className="forno-hero__piede">
+            <span>Un ordine preso → tutto lo staff lo vede subito</span>
+            <span className="forno-sync">Sync attivo</span>
+          </p>
         </div>
       </section>
 
