@@ -24,7 +24,7 @@ export default function Landing() {
 
           <div className="hero-buttons">
             <Link to="/contatti#prova-gratuita" className="btn-primary big">
-              Registrati ora
+              Richiedi la prova
             </Link>
             <Link to="/login" className="btn-outline big">
               Accedi al pannello
@@ -40,7 +40,7 @@ export default function Landing() {
               <span className="trust-dot" /> Tempo reale tra le postazioni
             </li>
             <li>
-              <span className="trust-dot" /> Cassa anche senza internet
+              <span className="trust-dot" /> Senza internet, gli ordini in cassa restano in coda
             </li>
             <li>
               <span className="trust-dot" /> Consegne e forno sotto controllo
@@ -117,10 +117,11 @@ export default function Landing() {
 
         <div className="bento-grid">
           <article className="bento bento-large">
-            <h3>Non perdi mai un ordine</h3>
+            <h3>Se salta internet, l’ordine in cassa non si perde</h3>
             <p>
-              Anche se salta internet un venerdì sera pieno, la cassa continua a funzionare e invia
-              tutto da sola appena torna la rete.
+              Se la rete cade mentre sei in cassa, l’ordine viene salvato sul dispositivo e inviato
+              da solo appena la connessione torna. Finché non è inviato, gli altri schermi non lo
+              vedono.
             </p>
           </article>
           <article className="bento">
@@ -133,8 +134,8 @@ export default function Landing() {
           <article className="bento">
             <h3>I clienti ordinano da soli</h3>
             <p>
-              Vetrina online, pagamento con carta o link WhatsApp, o contanti alla consegna —
-              decidi tu. Tu risparmi tempo al telefono.
+              Vetrina online per ordinare da casa, con pagamento alla consegna (contanti o carta al
+              POS). Tu risparmi tempo al telefono.
             </p>
           </article>
           <article className="bento bento-wide">
