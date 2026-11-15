@@ -43,6 +43,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "ordine_id obbligatorio" }, 400)
   }
   const partialAmount = body.amount_cent != null ? Math.floor(Number(body.amount_cent)) : null
+  // Un importo presente ma non valido non deve diventare un rimborso totale.
+  if (partialAmount != null && (!Number.isFinite(partialAmount) || partialAmount <= 0)) {
+    return jsonResponse({ error: "amount_cent non valido" }, 400)
+  }
 
   const admin = createClient(supabaseUrl, serviceKey)
 

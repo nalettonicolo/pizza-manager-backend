@@ -45,6 +45,20 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceKey)
 
+  // Prima l'appartenenza dell'ordine all'utente del token (la RPC la controlla prima dello stato),
+  // poi si legge lo stato del pagamento: così un ordine altrui non rivela nulla.
+  const { data: snapRows, error: snapErr } = await admin.rpc("edge_ordine_snapshot_for_sumup", {
+    p_ordine_id: ordineId,
+    p_user_id: userId,
+  })
+  const snapMsg = snapErr?.message || ""
+  if (snapErr && !snapMsg.includes("non in attesa")) {
+    return jsonResponse({ error: snapMsg || "Ordine non valido" }, 400)
+  }
+  if (!snapErr && (!Array.isArray(snapRows) || !snapRows[0])) {
+    return jsonResponse({ error: "Ordine non trovato" }, 400)
+  }
+
   const { data: ctxRows, error: ctxErr } = await admin.rpc("edge_get_ordine_payment_context", {
     p_ordine_id: ordineId,
   })
@@ -59,25 +73,12 @@ Deno.serve(async (req) => {
   if (onlinePayment?.status === "succeeded") {
     return jsonResponse({ ok: true, alreadyConfirmed: true })
   }
+  if (snapErr) {
+    // "non in attesa" ma pagamento non riuscito: stesso esito di prima.
+    return jsonResponse({ error: snapMsg }, 400)
+  }
   if (!checkoutId || !tenantId) {
     return jsonResponse({ error: "Checkout SumUp non associato all'ordine" }, 400)
-  }
-
-  const { data: snapRows, error: snapErr } = await admin.rpc("edge_ordine_snapshot_for_sumup", {
-    p_ordine_id: ordineId,
-    p_user_id: userId,
-  })
-  if (snapErr) {
-    const msg = snapErr.message || ""
-    if (msg.includes("non in attesa")) {
-      if (onlinePayment?.status === "succeeded") {
-        return jsonResponse({ ok: true, alreadyConfirmed: true })
-      }
-    }
-    return jsonResponse({ error: snapErr.message || "Ordine non valido" }, 400)
-  }
-  if (!Array.isArray(snapRows) || !snapRows[0]) {
-    return jsonResponse({ error: "Ordine non trovato" }, 400)
   }
 
   const { data: secret, error: secErr } = await admin.rpc("get_sumup_secret_for_tenant_edge", {
